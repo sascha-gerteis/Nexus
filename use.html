@@ -1,0 +1,2264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus.ai | AI-Powered Social Media Reports for Growth-Focused Teams</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2d4a8a;
+            --accent: #0ea5e9;
+            --accent-light: #7dd3fc;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 0.5rem;
+            --radius-lg: 0.75rem;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--neutral-800);
+            background-color: white;
+            overflow-x: hidden;
+        }
+
+        img {
+            max-width: 100%;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        .section-title h2 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .section-title p {
+            font-size: 1.125rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.875rem 2rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: var(--primary);
+            border: 2px solid var(--neutral-200);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background-color: var(--neutral-50);
+        }
+
+        .card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            border-bottom: 1px solid var(--neutral-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--neutral-700);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        /* Hero */
+        .hero {
+            padding: 6rem 0 5rem;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 60%;
+            height: 150%;
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.05) 0%, rgba(29, 78, 216, 0.05) 100%);
+            border-radius: 50%;
+            z-index: 0;
+        }
+
+        .hero-content {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1.1;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto 2.5rem;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .trust-badges {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .trust-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--neutral-700);
+            font-weight: 500;
+        }
+
+        /* About Nexus */
+        .about-nexus {
+            background-color: white;
+        }
+
+        .about-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .about-content h3 {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .about-content p {
+            color: var(--neutral-600);
+            margin-bottom: 1.5rem;
+        }
+
+        .highlight-box {
+            background-color: var(--neutral-50);
+            border-left: 4px solid var(--accent);
+            padding: 1.5rem;
+            border-radius: 0 var(--radius) var(--radius) 0;
+            margin-top: 2rem;
+        }
+
+        .highlight-box h4 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Product Section */
+        .product-section {
+            background-color: var(--neutral-50);
+        }
+
+        .product-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 4rem;
+        }
+
+        .feature-card {
+            text-align: center;
+            padding: 2rem 1.5rem;
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 1.5rem;
+            background-color: rgba(14, 165, 233, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+        }
+
+        /* Pricing */
+        .pricing-section {
+            background-color: white;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 4rem;
+        }
+
+        .pricing-card {
+            text-align: center;
+            position: relative;
+        }
+
+        .pricing-card.featured {
+            border: 2px solid var(--accent);
+            transform: scale(1.05);
+        }
+
+        .pricing-card.featured .pricing-badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--accent);
+            color: white;
+            padding: 0.25rem 1rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .pricing-header {
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--neutral-200);
+            margin-bottom: 1.5rem;
+        }
+
+        .pricing-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-price {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .pricing-period {
+            color: var(--neutral-600);
+        }
+
+        .pricing-features {
+            list-style: none;
+            text-align: left;
+            margin-bottom: 2rem;
+        }
+
+        .pricing-features li {
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .pricing-features li::before {
+            content: '';
+            width: 20px;
+            height: 20px;
+            background-color: rgba(16, 185, 129, 0.1);
+            border-radius: 50%;
+            flex-shrink: 0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310b981' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 12px;
+        }
+
+        /* Report Samples */
+        .report-samples {
+            background-color: var(--neutral-50);
+        }
+
+        .sample-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .sample-tab {
+            padding: 0.75rem 1.5rem;
+            background-color: white;
+            border: 2px solid var(--neutral-200);
+            border-radius: var(--radius);
+            font-weight: 600;
+            color: var(--neutral-700);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sample-tab:hover {
+            border-color: var(--accent-light);
+        }
+
+        .sample-tab.active {
+            background-color: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .sample-content {
+            display: none;
+        }
+
+        .sample-content.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .sample-preview-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .sample-info h3 {
+            font-size: 1.75rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .sample-info p {
+            color: var(--neutral-600);
+            margin-bottom: 1.5rem;
+        }
+
+        .sample-features {
+            list-style: none;
+            margin-bottom: 2rem;
+        }
+
+        .sample-features li {
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .sample-features li::before {
+            content: '';
+            width: 20px;
+            height: 20px;
+            background-color: rgba(14, 165, 233, 0.1);
+            border-radius: 50%;
+            flex-shrink: 0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230ea5e9' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 12px;
+        }
+
+        .pdf-preview {
+            background-color: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow-xl);
+            border: 1px solid var(--neutral-200);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pdf-header {
+            height: 40px;
+            background-color: var(--primary);
+            border-radius: var(--radius);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            padding: 0 1rem;
+            color: white;
+            font-weight: 600;
+        }
+
+        .pdf-content {
+            height: 400px;
+            overflow-y: auto;
+            padding: 1rem;
+            background-color: var(--neutral-50);
+            border-radius: var(--radius);
+        }
+
+        .pdf-page {
+            background-color: white;
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+        }
+
+        .pdf-page h4 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--neutral-200);
+        }
+
+        .pdf-line {
+            height: 8px;
+            background-color: var(--neutral-200);
+            border-radius: 4px;
+            margin-bottom: 0.75rem;
+            width: 100%;
+        }
+
+        .pdf-line.short {
+            width: 70%;
+        }
+
+        .pdf-line.medium {
+            width: 85%;
+        }
+
+        .pdf-chart {
+            height: 120px;
+            background: linear-gradient(90deg, var(--accent-light) 0%, var(--accent) 100%);
+            border-radius: var(--radius);
+            margin: 1rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pdf-chart::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: linear-gradient(to right, transparent 50%, rgba(255,255,255,0.1) 50%);
+            background-size: 20px 20px;
+        }
+
+        .pdf-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .pdf-table th {
+            background-color: var(--neutral-100);
+            padding: 0.75rem;
+            text-align: left;
+            color: var(--primary);
+            font-weight: 600;
+            border-bottom: 2px solid var(--neutral-200);
+        }
+
+        .pdf-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--neutral-200);
+        }
+
+        .pdf-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Addons */
+        .addons-section {
+            background-color: white;
+            padding-top: 0;
+        }
+
+        .addons-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .addon-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem;
+        }
+
+        .addon-info h4 {
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .addon-price {
+            font-weight: 700;
+            color: var(--accent);
+            font-size: 1.25rem;
+            white-space: nowrap;
+            margin-left: 1rem;
+        }
+
+        /* Builder */
+        .builder-section {
+            background-color: var(--neutral-50);
+        }
+
+        .builder-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+        }
+
+        .builder-controls {
+            background-color: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+        }
+
+        .package-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .package-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem;
+            border: 2px solid var(--neutral-200);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .package-option:hover {
+            border-color: var(--accent-light);
+        }
+
+        .package-option.selected {
+            border-color: var(--accent);
+            background-color: rgba(14, 165, 233, 0.05);
+        }
+
+        .package-name {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .package-price {
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .addons-selector {
+            margin-bottom: 2.5rem;
+        }
+
+        .addons-selector h4 {
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+
+        .addon-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--neutral-200);
+        }
+
+        .addon-option:last-child {
+            border-bottom: none;
+        }
+
+        .addon-checkbox {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 2px solid var(--neutral-300);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .addon-checkbox.checked {
+            background-color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .addon-checkbox.checked::after {
+            content: '';
+            width: 12px;
+            height: 12px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
+        .builder-summary {
+            background-color: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            position: sticky;
+            top: 6rem;
+        }
+
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--neutral-200);
+        }
+
+        .summary-header h3 {
+            color: var(--primary);
+        }
+
+        .total-price {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--accent);
+        }
+
+        .summary-items {
+            margin-bottom: 2rem;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--neutral-200);
+        }
+
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+
+        .summary-items .total {
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        /* How it works */
+        .how-it-works {
+            background-color: white;
+        }
+
+        .steps-container {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .steps-container::before {
+            content: '';
+            position: absolute;
+            top: 40px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: var(--neutral-300);
+            z-index: 1;
+        }
+
+        .step {
+            text-align: center;
+            position: relative;
+            z-index: 2;
+            width: 20%;
+        }
+
+        .step-number {
+            width: 80px;
+            height: 80px;
+            background-color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--accent);
+            border: 2px solid var(--neutral-300);
+            margin: 0 auto 1.5rem;
+        }
+
+        .step h4 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Problems */
+        .problems-section {
+            background-color: var(--neutral-50);
+        }
+
+        .problems-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+
+        .problem-card {
+            padding: 2rem;
+            background-color: white;
+            border-radius: var(--radius);
+        }
+
+        .problem-icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 1.5rem;
+            background-color: rgba(239, 68, 68, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ef4444;
+        }
+
+        /* FAQ */
+        .faq-section {
+            background-color: white;
+        }
+
+        .faq-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            background-color: var(--neutral-50);
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            border: 1px solid var(--neutral-200);
+        }
+
+        .faq-question {
+            padding: 1.5rem;
+            font-weight: 600;
+            color: var(--primary);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .faq-answer {
+            padding: 0 1.5rem;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+        }
+
+        .faq-answer.active {
+            padding: 0 1.5rem 1.5rem;
+            max-height: 500px;
+        }
+
+        .faq-toggle {
+            width: 24px;
+            height: 24px;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .faq-toggle::before,
+        .faq-toggle::after {
+            content: '';
+            position: absolute;
+            background-color: var(--neutral-600);
+            transition: transform 0.3s ease;
+        }
+
+        .faq-toggle::before {
+            width: 14px;
+            height: 2px;
+            top: 11px;
+            left: 5px;
+        }
+
+        .faq-toggle::after {
+            width: 2px;
+            height: 14px;
+            top: 5px;
+            left: 11px;
+        }
+
+        .faq-item.active .faq-toggle::after {
+            transform: rotate(90deg);
+        }
+
+        /* CTA */
+        .cta-section {
+            background-color: var(--primary);
+            color: white;
+            text-align: center;
+            padding: 6rem 0;
+        }
+
+        .cta-content {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .cta-content h2 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+        }
+
+        .cta-content p {
+            font-size: 1.125rem;
+            color: var(--neutral-200);
+            margin-bottom: 2.5rem;
+        }
+
+        .cta-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-width: 500px;
+            margin: 0 auto 2rem;
+        }
+
+        .form-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        input, textarea {
+            padding: 0.875rem 1rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--neutral-300);
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            width: 100%;
+        }
+
+        .cta-form input, .cta-form textarea {
+            background-color: white;
+            border: 1px solid var(--neutral-300);
+        }
+
+        .cta-form textarea {
+            grid-column: 1 / -1;
+            min-height: 120px;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-light {
+            background-color: white;
+            color: var(--primary);
+        }
+
+        .btn-outline-light {
+            background-color: transparent;
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-outline-light:hover {
+            border-color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--neutral-900);
+            color: white;
+            padding: 3rem 0 2rem;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--neutral-300);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            color: var(--neutral-400);
+            font-size: 0.875rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--neutral-800);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sample-preview-container {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+            
+            .builder-container {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+            
+            .about-grid {
+                gap: 3rem;
+            }
+            
+            .steps-container {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 2rem;
+            }
+            
+            .steps-container::before {
+                display: none;
+            }
+            
+            .step {
+                width: 45%;
+                margin-bottom: 2rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.75rem;
+            }
+            
+            .section-title h2 {
+                font-size: 2rem;
+            }
+            
+            .hero-cta {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+            }
+            
+            .about-grid {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+            
+            .form-group {
+                grid-template-columns: 1fr;
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .footer-links {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .pdf-content {
+                height: 300px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            section {
+                padding: 3rem 0;
+            }
+            
+            .hero {
+                padding: 4rem 0 3rem;
+            }
+            
+            .pricing-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .pricing-card.featured {
+                transform: none;
+            }
+            
+            .step {
+                width: 100%;
+            }
+            
+            .cta-content h2 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="container header-container">
+            <a href="#" class="logo">Nexus<span>.ai</span></a>
+            <nav class="nav-links">
+                <a href="#product">Product</a>
+                <a href="#samples">Samples</a>
+                <a href="#pricing">Pricing</a>
+                <a href="#faq">FAQ</a>
+                <a href="#cta" class="btn btn-primary">Request Sample</a>
+            </nav>
+            <button class="mobile-menu-btn">
+                <svg class="icon" viewBox="0 0 24 24">
+                    <path d="M3 12h18M3 6h18M3 18h18"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="container hero-content">
+            <h1>Social Media Reports That Drive Decisions, Not Just Data</h1>
+            <p class="hero-subtitle">AI-powered analysis delivers visual, actionable insights for agencies, brands, and marketing teams. Move beyond vanity metrics to strategy-ready recommendations.</p>
+            <div class="hero-cta">
+                <a href="#builder" class="btn btn-primary">Build Your Report</a>
+                <a href="#samples" class="btn btn-secondary">View Sample Reports</a>
+            </div>
+            <div class="trust-badges">
+                <div class="trust-item">
+                    <svg class="icon" viewBox="0 0 24 24">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span>24-48 Hour Delivery</span>
+                </div>
+                <div class="trust-item">
+                    <svg class="icon" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v4M12 16h.01"/>
+                    </svg>
+                    <span>Professional PDF + Slides</span>
+                </div>
+                <div class="trust-item">
+                    <svg class="icon" viewBox="0 0 24 24">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <span>Scalable for Teams</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Nexus -->
+    <section class="about-nexus">
+        <div class="container">
+            <div class="about-grid">
+                <div class="about-content">
+                    <h3>What is Nexus.ai?</h3>
+                    <p><strong>Nexus</strong> means "a central link" or "connection point." That's our mission: to connect businesses to the practical power of AI and automation.</p>
+                    <p>Select, deploy, and scale workflows without the complexity. We're building the central hub for business automation.</p>
+                    <div class="highlight-box">
+                        <h4>Our First Product: Social Media Reports</h4>
+                        <p>While we build the full Nexus automation platform, we're starting with a focused, high-value solution: professional social media reports that turn data into decisions.</p>
+                    </div>
+                </div>
+                <div class="about-visual">
+                    <div class="card">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                            <div style="width: 48px; height: 48px; background-color: rgba(14, 165, 233, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--accent);">
+                                <svg class="icon" viewBox="0 0 24 24">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                </svg>
+                            </div>
+                            <h3 style="color: var(--primary);">The Reporting Problem</h3>
+                        </div>
+                        <ul style="list-style: none; color: var(--neutral-700);">
+                            <li style="margin-bottom: 0.75rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 20px; height: 20px; color: #ef4444; flex-shrink: 0;">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                                <span>Manual reporting steals hours each week</span>
+                            </li>
+                            <li style="margin-bottom: 0.75rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 20px; height: 20px; color: #ef4444; flex-shrink: 0;">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                                <span>Data without insights = no action taken</span>
+                            </li>
+                            <li style="margin-bottom: 0.75rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 20px; height: 20px; color: #ef4444; flex-shrink: 0;">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                                <span>Inconsistent quality depends on who creates it</span>
+                            </li>
+                            <li style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 20px; height: 20px; color: #ef4444; flex-shrink: 0;">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                                <span>Leadership can't see ROI from standard metrics</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Product Section -->
+    <section class="product-section" id="product">
+        <div class="container">
+            <div class="section-title">
+                <h2>Social Media Reports Built for Action</h2>
+                <p>We transform raw metrics into visual, decision-ready insights. No more guessing what to do next.</p>
+            </div>
+            <div class="product-features">
+                <div class="card feature-card">
+                    <div class="feature-icon">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </div>
+                    <h3>For Agencies</h3>
+                    <p>Deliver premium, white-label reports to clients that justify your value and retain business.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                            <line x1="7" y1="2" x2="7" y2="22"/>
+                            <line x1="17" y1="2" x2="17" y2="22"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <line x1="2" y1="7" x2="7" y2="7"/>
+                            <line x1="2" y1="17" x2="7" y2="17"/>
+                            <line x1="17" y1="17" x2="22" y2="17"/>
+                            <line x1="17" y1="7" x2="22" y2="7"/>
+                        </svg>
+                    </div>
+                    <h3>For Marketing Teams</h3>
+                    <p>Get leadership-ready insights that connect social performance to business outcomes.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                        </svg>
+                    </div>
+                    <h3>For Brands</h3>
+                    <p>Scale reporting across platforms and regions with consistent, actionable analysis.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Report Samples -->
+    <section class="report-samples" id="samples">
+        <div class="container">
+            <div class="section-title">
+                <h2>See Exactly What You'll Receive</h2>
+                <p>Interactive previews of each package's report. Download full sample PDFs.</p>
+            </div>
+            
+            <div class="sample-tabs">
+                <button class="sample-tab active" onclick="showSample('starter')">Starter Report</button>
+                <button class="sample-tab" onclick="showSample('growth')">Growth Report</button>
+                <button class="sample-tab" onclick="showSample('executive')">Executive Report</button>
+            </div>
+
+            <!-- Starter Sample -->
+            <div class="sample-content active" id="starter-sample">
+                <div class="sample-preview-container">
+                    <div class="sample-info">
+                        <h3>Starter Report Sample</h3>
+                        <p>Perfect for small brands or first-time audits. Get a quick snapshot of performance with clear next steps.</p>
+                        <ul class="sample-features">
+                            <li>Quick performance snapshot with key metrics</li>
+                            <li>Top 5 content pieces analysis</li>
+                            <li>Audience growth and engagement trends</li>
+                            <li>3-5 clear, actionable next steps</li>
+                            <li>48-hour delivery guarantee</li>
+                        </ul>
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <a href="#" class="btn btn-primary" onclick="downloadSample('starter')">
+                                <svg class="icon" style="margin-right: 0.5rem;" viewBox="0 0 24 24">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                Download Starter PDF Sample
+                            </a>
+                            <a href="#builder" class="btn btn-secondary">Select This Package</a>
+                        </div>
+                    </div>
+                    <div class="pdf-preview">
+                        <div class="pdf-header">Social Media Report - Starter Package</div>
+                        <div class="pdf-content">
+                            <div class="pdf-page">
+                                <h4>Executive Summary</h4>
+                                <div class="pdf-line medium"></div>
+                                <div class="pdf-line short"></div>
+                                <div class="pdf-line"></div>
+                                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                                    <div style="flex: 1; padding: 1rem; background-color: var(--neutral-100); border-radius: var(--radius);">
+                                        <div style="font-size: 0.875rem; color: var(--neutral-600);">Followers</div>
+                                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">+247</div>
+                                    </div>
+                                    <div style="flex: 1; padding: 1rem; background-color: var(--neutral-100); border-radius: var(--radius);">
+                                        <div style="font-size: 0.875rem; color: var(--neutral-600);">Engagement</div>
+                                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">+3.2%</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="pdf-page">
+                                <h4>Top Performing Content</h4>
+                                <table class="pdf-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Content</th>
+                                            <th>Engagement</th>
+                                            <th>Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Product Launch Video</td>
+                                            <td>4.8%</td>
+                                            <td>Video</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Customer Testimonial</td>
+                                            <td>3.2%</td>
+                                            <td>Image</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Behind-the-Scenes</td>
+                                            <td>2.9%</td>
+                                            <td>Carousel</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="pdf-page">
+                                <h4>Recommended Actions</h4>
+                                <div class="pdf-line"></div>
+                                <div class="pdf-line short"></div>
+                                <div class="pdf-line"></div>
+                                <div class="pdf-line short"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Growth Sample -->
+            <div class="sample-content" id="growth-sample">
+                <div class="sample-preview-container">
+                    <div class="sample-info">
+                        <h3>Growth Report Sample</h3>
+                        <p>Designed for weekly/monthly improvement tracking. Deep analysis with timing and format insights.</p>
+                        <ul class="sample-features">
+                            <li>Everything in Starter, plus deeper insights</li>
+                            <li>Top 10 content breakdown with engagement drivers</li>
+                            <li>Optimal posting time analysis</li>
+                            <li>Format performance winners (video, image, carousel)</li>
+                            <li>Engagement rate trend analysis</li>
+                            <li>24-hour delivery</li>
+                        </ul>
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <a href="#" class="btn btn-primary" onclick="downloadSample('growth')">
+                                <svg class="icon" style="margin-right: 0.5rem;" viewBox="0 0 24 24">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                Download Growth PDF Sample
+                            </a>
+                            <a href="#builder" class="btn btn-secondary">Select This Package</a>
+                        </div>
+                    </div>
+                    <div class="pdf-preview">
+                        <div class="pdf-header">Social Media Report - Growth Package</div>
+                        <div class="pdf-content">
+                            <div class="pdf-page">
+                                <h4>Performance Overview</h4>
+                                <div class="pdf-chart"></div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                                    <div style="padding: 1rem; background-color: var(--neutral-100); border-radius: var(--radius);">
+                                        <div style="font-size: 0.875rem; color: var(--neutral-600);">Best Day</div>
+                                        <div style="font-size: 1.25rem; font-weight: 700; color: var(--primary);">Wednesday</div>
+                                    </div>
+                                    <div style="padding: 1rem; background-color: var(--neutral-100); border-radius: var(--radius);">
+                                        <div style="font-size: 0.875rem; color: var(--neutral-600);">Best Time</div>
+                                        <div style="font-size: 1.25rem; font-weight: 700; color: var(--primary);">2-4 PM</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="pdf-page">
+                                <h4>Content Format Analysis</h4>
+                                <div style="display: flex; align-items: flex-end; gap: 0.5rem; height: 100px; margin: 1rem 0;">
+                                    <div style="flex: 1; height: 80%; background-color: var(--accent); border-radius: var(--radius);"></div>
+                                    <div style="flex: 1; height: 60%; background-color: var(--accent-light); border-radius: var(--radius);"></div>
+                                    <div style="flex: 1; height: 40%; background-color: var(--neutral-300); border-radius: var(--radius);"></div>
+                                </div>
+                                <div class="pdf-line short"></div>
+                                <div class="pdf-line short"></div>
+                            </div>
+                            <div class="pdf-page">
+                                <h4>Engagement Drivers</h4>
+                                <div class="pdf-line"></div>
+                                <div class="pdf-line short"></div>
+                                <div class="pdf-line"></div>
+                                <div class="pdf-line short"></div>
+                                <div class="pdf-line"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Executive Sample -->
+            <div class="sample-content" id="executive-sample">
+                <div class="sample-preview-container">
+                    <div class="sample-info">
+                        <h3>Executive Report Sample</h3>
+                        <p>Leadership-ready with ROI focus, competitor benchmarks, and 30-day action plan.</p>
+                        <ul class="sample-features">
+                            <li>Everything in Growth, plus executive insights</li>
+                            <li>ROI-focused performance analysis</li>
+                            <li>Competitor benchmark (3 competitors)</li>
+                            <li>30-day strategic action plan</li>
+                            <li>Executive summary slide deck included</li>
+                            <li>12-hour priority delivery</li>
+                        </ul>
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <a href="#" class="btn btn-primary" onclick="downloadSample('executive')">
+                                <svg class="icon" style="margin-right: 0.5rem;" viewBox="0 0 24 24">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                Download Executive PDF Sample
+                            </a>
+                            <a href="#builder" class="btn btn-secondary">Select This Package</a>
+                        </div>
+                    </div>
+                    <div class="pdf-preview">
+                        <div class="pdf-header">Social Media Report - Executive Package</div>
+                        <div class="pdf-content">
+                            <div class="pdf-page">
+                                <h4>ROI & Business Impact</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0;">
+                                    <div style="padding: 1rem; background-color: var(--success); color: white; border-radius: var(--radius);">
+                                        <div style="font-size: 0.875rem;">Content ROI</div>
+                                        <div style="font-size: 1.5rem; font-weight: 700;">$3.42</div>
+                                    </div>
+                                    <div style="padding: 1rem; background-color: var(--primary); color: white; border-radius: var(--radius);">
+                                        <div style="font-size: 0.875rem;">Lead Cost</div>
+                                        <div style="font-size: 1.5rem; font-weight: 700;">$12.50</div>
+                                    </div>
+                                </div>
+                                <div class="pdf-line"></div>
+                                <div class="pdf-line short"></div>
+                            </div>
+                            <div class="pdf-page">
+                                <h4>Competitor Benchmark</h4>
+                                <div style="display: flex; align-items: flex-end; gap: 0.5rem; height: 100px; margin: 1rem 0;">
+                                    <div style="flex: 1; height: 70%; background-color: var(--accent); border-radius: var(--radius);">
+                                        <div style="text-align: center; color: white; padding-top: 0.5rem;">You</div>
+                                    </div>
+                                    <div style="flex: 1; height: 60%; background-color: var(--neutral-300); border-radius: var(--radius);">
+                                        <div style="text-align: center; padding-top: 0.5rem;">Comp A</div>
+                                    </div>
+                                    <div style="flex: 1; height: 50%; background-color: var(--neutral-300); border-radius: var(--radius);">
+                                        <div style="text-align: center; padding-top: 0.5rem;">Comp B</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="pdf-page">
+                                <h4>30-Day Action Plan</h4>
+                                <div class="pdf-line medium"></div>
+                                <div class="pdf-line"></div>
+                                <div class="pdf-line short"></div>
+                                <div class="pdf-line medium"></div>
+                                <div class="pdf-line"></div>
+                                <div style="margin-top: 1rem; padding: 1rem; background-color: var(--warning); color: white; border-radius: var(--radius); font-weight: 600;">
+                                    Priority: Increase video content by 40%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="pricing-section" id="pricing">
+        <div class="container">
+            <div class="section-title">
+                <h2>Packages & Pricing</h2>
+                <p>Choose the depth of analysis that matches your needs. All packages include AI-powered insights and professional formatting.</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="card pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Starter</h3>
+                        <div class="pricing-price">$89</div>
+                        <div class="pricing-period">per report</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Quick performance snapshot</li>
+                        <li>Top 5 content pieces analysis</li>
+                        <li>Clear next steps (3-5 actions)</li>
+                        <li>Audience growth tracking</li>
+                        <li>48-hour delivery</li>
+                    </ul>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem; margin-bottom: 1.5rem; text-align: center;"><strong>Best for:</strong> Small brands or first-time audits</p>
+                    <a href="#samples" class="btn btn-secondary" style="width: 100%;" onclick="showSample('starter')">View Sample</a>
+                </div>
+                <div class="card pricing-card featured">
+                    <div class="pricing-badge">Most Popular</div>
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Growth</h3>
+                        <div class="pricing-price">$179</div>
+                        <div class="pricing-period">per report</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Everything in Starter</li>
+                        <li>Deeper content breakdown (top 10)</li>
+                        <li>Optimal posting timing analysis</li>
+                        <li>Format winners (video, image, carousel)</li>
+                        <li>Engagement rate drivers</li>
+                        <li>24-hour delivery</li>
+                    </ul>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem; margin-bottom: 1.5rem; text-align: center;"><strong>Best for:</strong> Weekly/monthly improvement tracking</p>
+                    <a href="#samples" class="btn btn-primary" style="width: 100%;" onclick="showSample('growth')">View Sample</a>
+                </div>
+                <div class="card pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Executive</h3>
+                        <div class="pricing-price">$299</div>
+                        <div class="pricing-period">per report</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Everything in Growth</li>
+                        <li>ROI-focused view</li>
+                        <li>Competitor benchmark (3 competitors)</li>
+                        <li>30-day action plan</li>
+                        <li>Executive summary slide</li>
+                        <li>12-hour priority delivery</li>
+                    </ul>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem; margin-bottom: 1.5rem; text-align: center;"><strong>Best for:</strong> Teams spending on content/ads</p>
+                    <a href="#samples" class="btn btn-secondary" style="width: 100%;" onclick="showSample('executive')">View Sample</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Addons -->
+    <section class="addons-section">
+        <div class="container">
+            <div class="section-title">
+                <h2>Customize Your Report</h2>
+                <p>Add specialized modules to any package. Mix and match to create the perfect report for your needs.</p>
+            </div>
+            <div class="addons-grid">
+                <div class="card addon-card">
+                    <div class="addon-info">
+                        <h4>White-label + Cover Page</h4>
+                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Your branding, no Nexus.ai mentions</p>
+                    </div>
+                    <div class="addon-price">+$39</div>
+                </div>
+                <div class="card addon-card">
+                    <div class="addon-info">
+                        <h4>Post Ideas Pack</h4>
+                        <p style="color: var(--neutral-600); font-size: 0.875rem;">10 hooks + 10 captions based on top content</p>
+                    </div>
+                    <div class="addon-price">+$49</div>
+                </div>
+                <div class="card addon-card">
+                    <div class="addon-info">
+                        <h4>Content Calendar (2 weeks)</h4>
+                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Ready-to-use schedule with posting times</p>
+                    </div>
+                    <div class="addon-price">+$59</div>
+                </div>
+                <div class="card addon-card">
+                    <div class="addon-info">
+                        <h4>Paid Ads Check</h4>
+                        <p style="color: var(--neutral-600); font-size: 0.875rem;">CPM/CPC/CTR recommendations</p>
+                    </div>
+                    <div class="addon-price">+$49</div>
+                </div>
+                <div class="card addon-card">
+                    <div class="addon-info">
+                        <h4>UTM + Tracking Setup Guide</h4>
+                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Step-by-step attribution setup</p>
+                    </div>
+                    <div class="addon-price">+$29</div>
+                </div>
+                <div class="card addon-card">
+                    <div class="addon-info">
+                        <h4>Competitor Snapshot (3)</h4>
+                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Detailed analysis of 3 competitors</p>
+                    </div>
+                    <div class="addon-price">+$59</div>
+                </div>
+                <div class="card addon-card">
+                    <div class="addon-info">
+                        <h4>Audience Insights + Heatmap</h4>
+                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Demographics and optimal timing heatmap</p>
+                    </div>
+                    <div class="addon-price">+$39</div>
+                </div>
+                <div class="card addon-card">
+                    <div class="addon-info">
+                        <h4>Crisis Response Templates</h4>
+                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Comment and crisis response guides</p>
+                    </div>
+                    <div class="addon-price">+$29</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Builder -->
+    <section class="builder-section" id="builder">
+        <div class="container">
+            <div class="section-title">
+                <h2>Build Your Report</h2>
+                <p>Select your package and add-ons. Watch the preview and total update in real-time.</p>
+            </div>
+            <div class="builder-container">
+                <div class="builder-controls">
+                    <div class="package-selector">
+                        <h4 style="color: var(--primary); margin-bottom: 0.5rem;">1. Choose Package</h4>
+                        <div class="package-option" data-package="starter" onclick="selectPackage('starter')">
+                            <div class="package-name">Starter</div>
+                            <div class="package-price">$89</div>
+                        </div>
+                        <div class="package-option selected" data-package="growth" onclick="selectPackage('growth')">
+                            <div class="package-name">Growth</div>
+                            <div class="package-price">$179</div>
+                        </div>
+                        <div class="package-option" data-package="executive" onclick="selectPackage('executive')">
+                            <div class="package-name">Executive</div>
+                            <div class="package-price">$299</div>
+                        </div>
+                    </div>
+                    <div class="addons-selector">
+                        <h4>2. Select Add-ons</h4>
+                        <div class="addon-option" onclick="toggleAddon('whitelabel')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="whitelabel-check"></div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--primary);">White-label + Cover Page</div>
+                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">Your branding, no Nexus.ai mentions</div>
+                                </div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent);">+$39</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleAddon('postideas')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="postideas-check"></div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--primary);">Post Ideas Pack</div>
+                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">10 hooks + 10 captions based on top content</div>
+                                </div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent);">+$49</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleAddon('calendar')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="calendar-check"></div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--primary);">Content Calendar (2 weeks)</div>
+                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">Ready-to-use schedule with posting times</div>
+                                </div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent);">+$59</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleAddon('adscheck')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="adscheck-check"></div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--primary);">Paid Ads Check</div>
+                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">CPM/CPC/CTR recommendations</div>
+                                </div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent);">+$49</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="builder-summary">
+                    <div class="summary-header">
+                        <h3>Your Report</h3>
+                        <div class="total-price" id="total-price">$179</div>
+                    </div>
+                    <div class="summary-items">
+                        <div class="summary-item">
+                            <span>Growth Package</span>
+                            <span>$179</span>
+                        </div>
+                        <div id="addons-list">
+                            <!-- Addons will be added here dynamically -->
+                        </div>
+                        <div class="summary-item total">
+                            <span>Total</span>
+                            <span id="display-total">$179</span>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--primary); margin-bottom: 0.75rem;">Preview What's Included:</h4>
+                        <ul style="list-style: none; color: var(--neutral-700);" id="preview-list">
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--success); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Deeper content breakdown (top 10)</span>
+                            </li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--success); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Optimal posting timing analysis</span>
+                            </li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--success); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Format winners (video, image, carousel)</span>
+                            </li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--success); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Engagement rate drivers</span>
+                            </li>
+                            <li style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--success); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>24-hour delivery</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <a href="#cta" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;">Proceed to Checkout</a>
+                    <a href="#samples" class="btn btn-secondary" style="width: 100%;" onclick="showSample('growth')">View Sample First</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="how-it-works">
+        <div class="container">
+            <div class="section-title">
+                <h2>How It Works</h2>
+                <p>Simple process from order to delivery.</p>
+            </div>
+            <div class="steps-container">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h4>Choose Package</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Select report type and add-ons</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h4>Share Access</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Provide analytics access or exports</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h4>We Analyze</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">AI + expert analysis of your data</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h4>Receive Report</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">PDF + optional slides delivered</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <h4>Optional Retainer</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Monthly reports available</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problems Solved -->
+    <section class="problems-section">
+        <div class="container">
+            <div class="section-title">
+                <h2>Problems We Solve</h2>
+                <p>Stop wasting time on reporting that doesn't drive decisions.</p>
+            </div>
+            <div class="problems-grid">
+                <div class="problem-card">
+                    <div class="problem-icon">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="10" y1="15" x2="10" y2="9"/>
+                            <line x1="14" y1="15" x2="14" y2="9"/>
+                        </svg>
+                    </div>
+                    <h4>Manual Reporting</h4>
+                    <p>Teams stuck for hours in spreadsheets and screenshots each week.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                    </div>
+                    <h4>Data Without Decisions</h4>
+                    <p>Metrics without insights mean no actionable next steps.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M14.83 9.17l3.53-3.53M4.93 19.07l4.24-4.24"/>
+                        </svg>
+                    </div>
+                    <h4>Inconsistent Quality</h4>
+                    <p>Report quality depends on who creates it, not a standard.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M16.5 9.5l-9 9M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h4>Hard to Sell Reporting</h4>
+                    <p>Agencies struggle to justify reporting as a premium service.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq-section" id="faq">
+        <div class="container">
+            <div class="section-title">
+                <h2>Frequently Asked Questions</h2>
+                <p>Clear answers to common questions about our reports.</p>
+            </div>
+            <div class="faq-container">
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>What platforms do you support?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>We support Instagram, Facebook, LinkedIn, Twitter/X, TikTok, and YouTube. You can provide access through analytics platforms, exports, or screenshots.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>What do you need from us to start?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>We need access to your analytics (read-only) or exported data. For most platforms, we can work with screenshots if needed. We'll provide clear instructions after purchase.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>What's the turnaround time?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Starter: 48 hours. Growth: 24 hours. Executive: 12 hours (priority). Add-ons may add 2-4 hours depending on complexity.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Can we white-label the reports?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yes, the White-label + Cover Page add-on (+$39) removes all Nexus.ai branding and adds your logo, colors, and company information.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Can we do this monthly?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yes, we offer monthly retainers at a discounted rate. Contact us after your first report to set up a recurring schedule.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Can you include ads/ROI analysis?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>The Executive package includes ROI analysis. For ads-specific insights, add the "Paid Ads Check" add-on (+$49) to any package.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>What if our data is incomplete?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>We'll work with what you have and note any data limitations in the report. Our analysis focuses on actionable insights from available data.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Is this a template or customized?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Each report is customized to your data. We use a professional framework but all insights, visuals, and recommendations are specific to your performance.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section" id="cta">
+        <div class="container">
+            <div class="cta-content">
+                <h2>Ready for Decision-Ready Reports?</h2>
+                <p>Stop wasting time on manual reporting. Get AI-powered insights that drive real strategy.</p>
+                <form class="cta-form" id="contact-form">
+                    <div class="form-group">
+                        <input type="text" placeholder="First Name" required>
+                        <input type="text" placeholder="Last Name" required>
+                    </div>
+                    <div class="form-group">
+                        <input type="email" placeholder="Email Address" required>
+                        <input type="text" placeholder="Company Name" required>
+                    </div>
+                    <textarea placeholder="Tell us about your reporting needs (optional)"></textarea>
+                    <button type="submit" class="btn btn-light">Request Sample Report</button>
+                </form>
+                <div class="cta-buttons">
+                    <a href="#builder" class="btn btn-primary">Build Your Report Now</a>
+                    <a href="#samples" class="btn btn-outline-light">View All Samples</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="#" class="logo" style="color: white;">Nexus<span>.ai</span></a>
+                <p style="color: var(--neutral-300); max-width: 400px;">Connecting businesses to the practical power of AI and automation.</p>
+                <div class="footer-links">
+                    <a href="#product">Product</a>
+                    <a href="#samples">Samples</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="#faq">FAQ</a>
+                </div>
+            </div>
+            <div class="copyright">
+                &copy; 2023 Nexus.ai. All rights reserved. This is our first product offering as we build the Nexus automation platform.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Interactive Pricing Module
+        let selectedPackage = 'growth';
+        let packagePrices = {
+            'starter': 89,
+            'growth': 179,
+            'executive': 299
+        };
+        
+        let addonPrices = {
+            'whitelabel': 39,
+            'postideas': 49,
+            'calendar': 59,
+            'adscheck': 49
+        };
+        
+        let selectedAddons = {};
+        
+        function selectPackage(packageId) {
+            selectedPackage = packageId;
+            
+            // Update UI
+            document.querySelectorAll('.package-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            document.querySelector(`[data-package="${packageId}"]`).classList.add('selected');
+            
+            updateTotal();
+            updatePreview();
+        }
+        
+        function toggleAddon(addonId) {
+            const checkbox = document.getElementById(`${addonId}-check`);
+            
+            if (selectedAddons[addonId]) {
+                delete selectedAddons[addonId];
+                checkbox.classList.remove('checked');
+            } else {
+                selectedAddons[addonId] = addonPrices[addonId];
+                checkbox.classList.add('checked');
+            }
+            
+            updateTotal();
+            updateAddonsList();
+        }
+        
+        function updateTotal() {
+            let total = packagePrices[selectedPackage];
+            
+            for (const addon in selectedAddons) {
+                total += selectedAddons[addon];
+            }
+            
+            document.getElementById('total-price').textContent = `$${total}`;
+            document.getElementById('display-total').textContent = `$${total}`;
+        }
+        
+        function updateAddonsList() {
+            const addonsList = document.getElementById('addons-list');
+            addonsList.innerHTML = '';
+            
+            for (const addon in selectedAddons) {
+                const div = document.createElement('div');
+                div.className = 'summary-item';
+                
+                let addonName = '';
+                switch(addon) {
+                    case 'whitelabel': addonName = 'White-label + Cover Page'; break;
+                    case 'postideas': addonName = 'Post Ideas Pack'; break;
+                    case 'calendar': addonName = 'Content Calendar'; break;
+                    case 'adscheck': addonName = 'Paid Ads Check'; break;
+                }
+                
+                div.innerHTML = `<span>${addonName}</span><span>+$${selectedAddons[addon]}</span>`;
+                addonsList.appendChild(div);
+            }
+        }
+        
+        function updatePreview() {
+            const previewList = document.getElementById('preview-list');
+            
+            let items = [];
+            
+            if (selectedPackage === 'starter') {
+                items = [
+                    'Quick performance snapshot',
+                    'Top 5 content pieces analysis',
+                    'Clear next steps (3-5 actions)',
+                    'Audience growth tracking',
+                    '48-hour delivery'
+                ];
+            } else if (selectedPackage === 'growth') {
+                items = [
+                    'Deeper content breakdown (top 10)',
+                    'Optimal posting timing analysis',
+                    'Format winners (video, image, carousel)',
+                    'Engagement rate drivers',
+                    '24-hour delivery'
+                ];
+            } else if (selectedPackage === 'executive') {
+                items = [
+                    'Everything in Growth',
+                    'ROI-focused view',
+                    'Competitor benchmark (3 competitors)',
+                    '30-day action plan',
+                    'Executive summary slide',
+                    '12-hour priority delivery'
+                ];
+            }
+            
+            previewList.innerHTML = '';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.style.marginBottom = '0.5rem';
+                li.style.display = 'flex';
+                li.style.alignItems = 'flex-start';
+                li.style.gap = '0.5rem';
+                
+                li.innerHTML = `
+                    <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--success); flex-shrink: 0;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>${item}</span>
+                `;
+                
+                previewList.appendChild(li);
+            });
+        }
+
+        // Sample Report Tabs
+        function showSample(sampleId) {
+            // Update tabs
+            document.querySelectorAll('.sample-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll(`.sample-tab`).forEach(tab => {
+                if (tab.textContent.toLowerCase().includes(sampleId)) {
+                    tab.classList.add('active');
+                }
+            });
+            
+            // Update content
+            document.querySelectorAll('.sample-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${sampleId}-sample`).classList.add('active');
+            
+            // Scroll to samples section
+            document.getElementById('samples').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function downloadSample(packageType) {
+            alert(`Downloading ${packageType} PDF sample...\n\nIn a real implementation, this would download a PDF file.\n\nFor now, we're showing you a preview. To get actual samples, use the "Request Sample" form below.`);
+            
+            // Track download in a real implementation
+            // analytics.track('sample_downloaded', { package: packageType });
+        }
+        
+        // FAQ Toggle
+        function toggleFAQ(item) {
+            const answer = item.querySelector('.faq-answer');
+            const isActive = answer.classList.contains('active');
+            
+            // Close all FAQ items
+            document.querySelectorAll('.faq-item').forEach(faq => {
+                faq.querySelector('.faq-answer').classList.remove('active');
+                faq.classList.remove('active');
+            });
+            
+            // Open clicked item if it was closed
+            if (!isActive) {
+                answer.classList.add('active');
+                item.classList.add('active');
+            }
+        }
+        
+        // Mobile Menu Toggle
+        document.querySelector('.mobile-menu-btn').addEventListener('click', function() {
+            const navLinks = document.querySelector('.nav-links');
+            const isVisible = navLinks.style.display === 'flex';
+            
+            if (isVisible) {
+                navLinks.style.display = 'none';
+            } else {
+                navLinks.style.display = 'flex';
+                navLinks.style.flexDirection = 'column';
+                navLinks.style.position = 'absolute';
+                navLinks.style.top = '100%';
+                navLinks.style.left = '0';
+                navLinks.style.right = '0';
+                navLinks.style.backgroundColor = 'white';
+                navLinks.style.padding = '1.5rem';
+                navLinks.style.borderBottom = '1px solid var(--neutral-200)';
+                navLinks.style.boxShadow = 'var(--shadow-lg)';
+                navLinks.style.gap = '1rem';
+            }
+        });
+        
+        // Form Submission
+        document.getElementById('contact-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Thank you for your request! We\'ll send sample reports to your email within 24 hours.');
+            this.reset();
+        });
+        
+        // Initialize
+        updateAddonsList();
+        document.getElementById('whitelabel-check').classList.add('checked');
+        selectedAddons['whitelabel'] = 39;
+        updateTotal();
+        updateAddonsList();
+    </script>
+</body>
+</html>
