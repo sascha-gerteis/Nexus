@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexus.ai | AI-Powered Social Media Reports for Growth-Focused Teams</title>
+    <title>Nexus.ai | AI-Powered Social Media Reports + Chatbot Solutions</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -13,6 +13,8 @@
             --primary-light: #2d4a8a;
             --accent: #0ea5e9;
             --accent-light: #7dd3fc;
+            --accent-chatbot: #8b5cf6;
+            --accent-chatbot-light: #c4b5fd;
             --neutral-50: #f9fafb;
             --neutral-100: #f3f4f6;
             --neutral-200: #e5e7eb;
@@ -108,6 +110,17 @@
             box-shadow: var(--shadow-lg);
         }
 
+        .btn-chatbot {
+            background-color: var(--accent-chatbot);
+            color: white;
+        }
+
+        .btn-chatbot:hover {
+            background-color: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
         .btn-secondary {
             background-color: white;
             color: var(--primary);
@@ -199,6 +212,7 @@
             background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             position: relative;
             overflow: hidden;
+            height: 100vh;
         }
 
         .hero::before {
@@ -260,6 +274,130 @@
             font-weight: 500;
         }
 
+        /* NEW: Chatbot Demo */
+        .chatbot-demo {
+            background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chatbot-demo::before {
+            content: '';
+            position: absolute;
+            top: -30%;
+            left: -10%;
+            width: 40%;
+            height: 160%;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(124, 58, 237, 0.05) 100%);
+            border-radius: 50%;
+            z-index: 0;
+        }
+
+        .chatbot-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .chatbot-window {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            overflow: hidden;
+            border: 1px solid var(--neutral-200);
+        }
+
+        .chatbot-header {
+            background: linear-gradient(135deg, var(--accent-chatbot) 0%, #7c3aed 100%);
+            color: white;
+            padding: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .chatbot-avatar {
+            width: 36px;
+            height: 36px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-chatbot);
+        }
+
+        .chatbot-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 1rem;
+            border-radius: 1rem;
+            line-height: 1.5;
+        }
+
+        .message.bot {
+            background: var(--neutral-100);
+            border-bottom-left-radius: 0.25rem;
+            align-self: flex-start;
+        }
+
+        .message.user {
+            background: linear-gradient(135deg, var(--accent-chatbot) 0%, #7c3aed 100%);
+            color: white;
+            border-bottom-right-radius: 0.25rem;
+            align-self: flex-end;
+        }
+
+        .chatbot-input {
+            padding: 1.25rem;
+            border-top: 1px solid var(--neutral-200);
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .chatbot-input input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--neutral-300);
+            border-radius: var(--radius);
+            font-family: 'Inter', sans-serif;
+        }
+
+        .chatbot-input button {
+            background: var(--accent-chatbot);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .chatbot-features {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .chatbot-feature {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--neutral-700);
+        }
+
         /* About Nexus */
         .about-nexus {
             background-color: white;
@@ -297,9 +435,48 @@
             margin-bottom: 0.5rem;
         }
 
-        /* Product Section */
-        .product-section {
-            background-color: var(--neutral-50);
+        /* Product Tabs */
+        .product-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .product-tab {
+            padding: 1rem 2rem;
+            background-color: white;
+            border: 2px solid var(--neutral-200);
+            border-radius: var(--radius);
+            font-weight: 600;
+            color: var(--neutral-700);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .product-tab:hover {
+            border-color: var(--accent);
+        }
+
+        .product-tab.active {
+            background-color: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .product-content {
+            display: none;
+        }
+
+        .product-content.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .product-features {
@@ -326,6 +503,11 @@
             color: var(--accent);
         }
 
+        .feature-icon.chatbot {
+            background-color: rgba(139, 92, 246, 0.1);
+            color: var(--accent-chatbot);
+        }
+
         /* Pricing */
         .pricing-section {
             background-color: white;
@@ -348,17 +530,29 @@
             transform: scale(1.05);
         }
 
-        .pricing-card.featured .pricing-badge {
+        .pricing-card.chatbot-featured {
+            border: 2px solid var(--accent-chatbot);
+            transform: scale(1.05);
+        }
+
+        .pricing-card .pricing-badge {
             position: absolute;
             top: -12px;
             left: 50%;
             transform: translateX(-50%);
-            background-color: var(--accent);
             color: white;
             padding: 0.25rem 1rem;
             border-radius: 20px;
             font-size: 0.875rem;
             font-weight: 600;
+        }
+
+        .pricing-badge.report {
+            background-color: var(--accent);
+        }
+
+        .pricing-badge.chatbot {
+            background-color: var(--accent-chatbot);
         }
 
         .pricing-header {
@@ -411,6 +605,11 @@
             background-size: 12px;
         }
 
+        .pricing-features.chatbot li::before {
+            background-color: rgba(139, 92, 246, 0.1);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b5cf6' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
         /* Report Samples */
         .report-samples {
             background-color: var(--neutral-50);
@@ -452,11 +651,6 @@
         .sample-content.active {
             display: block;
             animation: fadeIn 0.5s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         .sample-preview-container {
@@ -501,6 +695,33 @@
             background-repeat: no-repeat;
             background-size: 12px;
         }
+        /* Add to your existing CSS */
+.typing-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--neutral-600);
+    animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+@keyframes typingBounce {
+    0%, 80%, 100% {
+        transform: scale(0);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
 
         .pdf-preview {
             background-color: white;
@@ -645,10 +866,48 @@
             background-color: var(--neutral-50);
         }
 
+        .product-selector {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .product-selector-btn {
+            padding: 1rem 2rem;
+            background-color: white;
+            border: 2px solid var(--neutral-200);
+            border-radius: var(--radius);
+            font-weight: 600;
+            color: var(--neutral-700);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .product-selector-btn:hover {
+            border-color: var(--accent);
+        }
+
+        .product-selector-btn.active {
+            background-color: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .product-selector-btn.chatbot.active {
+            background-color: var(--accent-chatbot);
+            border-color: var(--accent-chatbot);
+        }
+
         .builder-container {
-            display: grid;
+            display: none;
             grid-template-columns: 1fr 1fr;
             gap: 3rem;
+        }
+
+        .builder-container.active {
+            display: grid;
         }
 
         .builder-controls {
@@ -684,6 +943,11 @@
             background-color: rgba(14, 165, 233, 0.05);
         }
 
+        .package-option.chatbot.selected {
+            border-color: var(--accent-chatbot);
+            background-color: rgba(139, 92, 246, 0.05);
+        }
+
         .package-name {
             font-weight: 600;
             color: var(--primary);
@@ -692,6 +956,10 @@
         .package-price {
             font-weight: 700;
             color: var(--accent);
+        }
+
+        .package-price.chatbot {
+            color: var(--accent-chatbot);
         }
 
         .addons-selector {
@@ -731,6 +999,11 @@
             border-color: var(--accent);
         }
 
+        .addon-checkbox.checked.chatbot {
+            background-color: var(--accent-chatbot);
+            border-color: var(--accent-chatbot);
+        }
+
         .addon-checkbox.checked::after {
             content: '';
             width: 12px;
@@ -763,6 +1036,10 @@
             font-size: 2rem;
             font-weight: 800;
             color: var(--accent);
+        }
+
+        .total-price.chatbot {
+            color: var(--accent-chatbot);
         }
 
         .summary-items {
@@ -1058,6 +1335,14 @@
             border-top: 1px solid var(--neutral-800);
         }
 
+        .report-samples .pdf-content iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+    background: white;
+}
+
         /* Responsive */
         @media (max-width: 1024px) {
             .sample-preview-container {
@@ -1071,6 +1356,11 @@
             }
             
             .about-grid {
+                gap: 3rem;
+            }
+            
+            .chatbot-container {
+                grid-template-columns: 1fr;
                 gap: 3rem;
             }
             
@@ -1134,6 +1424,14 @@
             .pdf-content {
                 height: 300px;
             }
+            
+            .chatbot-messages {
+                height: 300px;
+            }
+            
+            .chatbot-features {
+                grid-template-columns: 1fr;
+            }
         }
 
         @media (max-width: 640px) {
@@ -1149,7 +1447,8 @@
                 grid-template-columns: 1fr;
             }
             
-            .pricing-card.featured {
+            .pricing-card.featured,
+            .pricing-card.chatbot-featured {
                 transform: none;
             }
             
@@ -1160,6 +1459,16 @@
             .cta-content h2 {
                 font-size: 2rem;
             }
+            
+            .product-selector {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .product-selector-btn {
+                width: 100%;
+                text-align: center;
+            }
         }
     </style>
 </head>
@@ -1169,11 +1478,12 @@
         <div class="container header-container">
             <a href="#" class="logo">Nexus<span>.ai</span></a>
             <nav class="nav-links">
-                <a href="#product">Product</a>
+                <a href="#product">Products</a>
                 <a href="#samples">Samples</a>
+                <a href="#chatbot-demo">Chatbot Demo</a>
                 <a href="#pricing">Pricing</a>
                 <a href="#faq">FAQ</a>
-                <a href="#cta" class="btn btn-primary">Request Sample</a>
+                <a href="#cta" class="btn btn-primary">Get Started</a>
             </nav>
             <button class="mobile-menu-btn">
                 <svg class="icon" viewBox="0 0 24 24">
@@ -1186,11 +1496,12 @@
     <!-- Hero -->
     <section class="hero">
         <div class="container hero-content">
-            <h1>Social Media Reports That Drive Decisions, Not Just Data</h1>
-            <p class="hero-subtitle">AI-powered analysis delivers visual, actionable insights for agencies, brands, and marketing teams. Move beyond vanity metrics to strategy-ready recommendations.</p>
+            <h1>AI Solutions That Drive Decisions & Engagement</h1>
+            <p class="hero-subtitle">From automated social media reports to intelligent chatbots, we deliver AI-powered tools for agencies, brands, and marketing teams.</p>
             <div class="hero-cta">
-                <a href="#builder" class="btn btn-primary">Build Your Report</a>
-                <a href="#samples" class="btn btn-secondary">View Sample Reports</a>
+                <a href="#builder" class="btn btn-primary">Build Your Solution</a>
+                <a href="#chatbot-demo" class="btn btn-chatbot">Try Chatbot Demo</a>
+                <a href="#samples" class="btn btn-secondary">View Report Samples</a>
             </div>
             <div class="trust-badges">
                 <div class="trust-item">
@@ -1204,7 +1515,7 @@
                         <circle cx="12" cy="12" r="10"/>
                         <path d="M12 8v4M12 16h.01"/>
                     </svg>
-                    <span>Professional PDF + Slides</span>
+                    <span>Professional Results</span>
                 </div>
                 <div class="trust-item">
                     <svg class="icon" viewBox="0 0 24 24">
@@ -1216,8 +1527,7 @@
             </div>
         </div>
     </section>
-
-    <!-- About Nexus -->
+      <!-- About Nexus -->
     <section class="about-nexus">
         <div class="container">
             <div class="about-grid">
@@ -1280,64 +1590,189 @@
         </div>
     </section>
 
+
+    <!-- Chatbot Demo -->
+    <section class="chatbot-demo" id="chatbot-demo">
+        <div class="container">
+            <div class="section-title">
+                <h2>AI Chatbot Solutions</h2>
+                <p>Intelligent chatbots that understand context, handle complex queries, and provide 24/7 customer support.</p>
+            </div>
+            <div class="chatbot-container">
+                <div class="chatbot-window">
+                    <div class="chatbot-header">
+                        <div class="chatbot-avatar">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-weight: 700;">Nexus AI Assistant</div>
+                            <div style="font-size: 0.875rem; opacity: 0.9;">Online • 24/7 Support</div>
+                        </div>
+                    </div>
+                    <div class="chatbot-messages" id="chatbot-messages">
+                        <div class="message bot">
+                            Hello! I'm your Nexus AI assistant. How can I help you today?
+                        </div>
+                        <div class="message user">
+                            What chatbot features do you offer?
+                        </div>
+                        <div class="message bot">
+                            We offer custom AI chatbots with natural language processing, multi-platform integration, custom training on your data, and 24/7 automated support.
+                        </div>
+                        <div class="message user">
+                            Can you handle customer support?
+                        </div>
+                        <div class="message bot">
+                            Absolutely! Our chatbots can handle FAQ resolution, ticket creation, order tracking, appointment scheduling, and can escalate to human agents when needed.
+                        </div>
+                    </div>
+                    <div class="chatbot-input">
+                        <input type="text" id="chatbot-input" placeholder="Type your message..." onkeypress="if(event.key=='Enter') sendChatMessage()">
+                        <button onclick="sendChatMessage()">Send</button>
+                    </div>
+                </div>
+                <div>
+                    <h3 style="font-size: 2rem; color: var(--primary); margin-bottom: 1.5rem;">Smart Chatbots That Learn & Adapt</h3>
+                    <p style="color: var(--neutral-600); margin-bottom: 2rem;">Our AI chatbots understand context, handle complex queries, and provide personalized responses based on your business data.</p>
+                    
+                    <div class="chatbot-features">
+                        <div class="chatbot-feature">
+                            <svg class="icon" viewBox="0 0 24 24" style="color: var(--accent-chatbot);">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                            <span>Natural Language Processing</span>
+                        </div>
+                        <div class="chatbot-feature">
+                            <svg class="icon" viewBox="0 0 24 24" style="color: var(--accent-chatbot);">
+                                <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+                                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+                                <line x1="6" y1="1" x2="6" y2="4"/>
+                                <line x1="10" y1="1" x2="10" y2="4"/>
+                                <line x1="14" y1="1" x2="14" y2="4"/>
+                            </svg>
+                            <span>24/7 Automated Support</span>
+                        </div>
+                        <div class="chatbot-feature">
+                            <svg class="icon" viewBox="0 0 24 24" style="color: var(--accent-chatbot);">
+                                <path d="M12 20h9"/>
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                            </svg>
+                            <span>Custom Training</span>
+                        </div>
+                        <div class="chatbot-feature">
+                            <svg class="icon" viewBox="0 0 24 24" style="color: var(--accent-chatbot);">
+                                <polyline points="16 18 22 12 16 6"/>
+                                <polyline points="8 6 2 12 8 18"/>
+                            </svg>
+                            <span>Multi-Platform Integration</span>
+                        </div>
+                    </div>
+                    
+                    <a href="#builder" class="btn btn-chatbot" style="margin-top: 2rem; width: 100%;" onclick="selectProduct('chatbot')">Build Your Chatbot</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Product Section -->
     <section class="product-section" id="product">
         <div class="container">
             <div class="section-title">
-                <h2>Social Media Reports Built for Action</h2>
-                <p>We transform raw metrics into visual, decision-ready insights. No more guessing what to do next.</p>
+                <h2>Our AI Solutions</h2>
+                <p>Choose the AI solution that fits your business needs. Both designed for action and results.</p>
             </div>
-            <div class="product-features">
-                <div class="card feature-card">
-                    <div class="feature-icon">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                            <circle cx="9" cy="7" r="4"/>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-                        </svg>
+            
+            <div class="product-tabs">
+                <button class="product-tab active" onclick="showProduct('reports')">Social Media Reports</button>
+                <button class="product-tab" onclick="showProduct('chatbot')">AI Chatbots</button>
+            </div>
+            
+            <!-- Reports Product Content -->
+            <div class="product-content active" id="reports-product">
+                <div class="product-features">
+                    <div class="card feature-card">
+                        <div class="feature-icon">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                        </div>
+                        <h3>For Agencies</h3>
+                        <p>Deliver premium, white-label reports to clients that justify your value and retain business.</p>
                     </div>
-                    <h3>For Agencies</h3>
-                    <p>Deliver premium, white-label reports to clients that justify your value and retain business.</p>
+                    <div class="card feature-card">
+                        <div class="feature-icon">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                                <line x1="7" y1="2" x2="7" y2="22"/>
+                                <line x1="17" y1="2" x2="17" y2="22"/>
+                                <line x1="2" y1="12" x2="22" y2="12"/>
+                                <line x1="2" y1="7" x2="7" y2="7"/>
+                                <line x1="2" y1="17" x2="7" y2="17"/>
+                                <line x1="17" y1="17" x2="22" y2="17"/>
+                                <line x1="17" y1="7" x2="22" y2="7"/>
+                            </svg>
+                        </div>
+                        <h3>For Marketing Teams</h3>
+                        <p>Get leadership-ready insights that connect social performance to business outcomes.</p>
+                    </div>
+                    <div class="card feature-card">
+                        <div class="feature-icon">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                            </svg>
+                        </div>
+                        <h3>For Brands</h3>
+                        <p>Scale reporting across platforms and regions with consistent, actionable analysis.</p>
+                    </div>
                 </div>
-                <div class="card feature-card">
-                    <div class="feature-icon">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
-                            <line x1="7" y1="2" x2="7" y2="22"/>
-                            <line x1="17" y1="2" x2="17" y2="22"/>
-                            <line x1="2" y1="12" x2="22" y2="12"/>
-                            <line x1="2" y1="7" x2="7" y2="7"/>
-                            <line x1="2" y1="17" x2="7" y2="17"/>
-                            <line x1="17" y1="17" x2="22" y2="17"/>
-                            <line x1="17" y1="7" x2="22" y2="7"/>
-                        </svg>
+            </div>
+            
+            <!-- Chatbot Product Content -->
+            <div class="product-content" id="chatbot-product">
+                <div class="product-features">
+                    <div class="card feature-card">
+                        <div class="feature-icon chatbot">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                            </svg>
+                        </div>
+                        <h3>Customer Support</h3>
+                        <p>24/7 automated support with natural language understanding and human escalation.</p>
                     </div>
-                    <h3>For Marketing Teams</h3>
-                    <p>Get leadership-ready insights that connect social performance to business outcomes.</p>
-                </div>
-                <div class="card feature-card">
-                    <div class="feature-icon">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                        </svg>
+                    <div class="card feature-card">
+                        <div class="feature-icon chatbot">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <rect x="2" y="7" width="20" height="15" rx="2" ry="2"/>
+                                <polyline points="17 2 12 7 7 2"/>
+                            </svg>
+                        </div>
+                        <h3>Lead Generation</h3>
+                        <p>Engage website visitors, qualify leads, and book appointments automatically.</p>
                     </div>
-                    <h3>For Brands</h3>
-                    <p>Scale reporting across platforms and regions with consistent, actionable analysis.</p>
+                    <div class="card feature-card">
+                        <div class="feature-icon chatbot">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                        </div>
+                        <h3>E-commerce</h3>
+                        <p>Product recommendations, order tracking, and personalized shopping assistance.</p>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Report Samples -->
-  <!-- ============================================================================ -->
-<!-- REPORT SAMPLES SECTION -->
-<!-- ============================================================================ -->
-<!-- This section displays three interactive report samples with PDF previews -->
-<!-- To add actual PDFs: Replace iframe src attributes with your Base64 PDFs -->
-<!-- Format: src="data:application/pdf;base64,JVBERi0xLjQKJeLjz9MK..." -->
-<!-- ============================================================================ -->
-
-<section class="report-samples" id="samples">
+ <section class="report-samples" id="samples">
     <div class="container">
         <div class="section-title">
             <h2>See Exactly What You'll Receive</h2>
@@ -1465,325 +1900,17 @@
     </div>
 </section>
 
-<!-- ============================================================================ -->
-<!-- REQUIRED JAVASCRIPT -->
-<!-- ============================================================================ -->
-<!-- Add this script tag before closing </body> tag -->
-
-<script>
-    // Tab switching function
-    function showSample(type) {
-        // Hide all sample contents
-        const contents = document.querySelectorAll('.sample-content');
-        contents.forEach(content => content.classList.remove('active'));
-        
-        // Remove active class from all tabs
-        const tabs = document.querySelectorAll('.sample-tab');
-        tabs.forEach(tab => tab.classList.remove('active'));
-        
-        // Show selected content
-        const selectedContent = document.getElementById(type + '-sample');
-        if (selectedContent) {
-            selectedContent.classList.add('active');
-        }
-        
-        // Activate selected tab
-        event.target.classList.add('active');
-    }
-
-    // Download PDF function
-    function downloadSample(type) {
-        const iframeId = type + '-pdf';
-        const iframe = document.getElementById(iframeId);
-        
-        if (!iframe || !iframe.src) {
-            alert('PDF not available');
-            return;
-        }
-        
-        const src = iframe.src;
-        
-        // Check if it's a PDF (not placeholder HTML)
-        if (!src.includes('application/pdf')) {
-            alert('Please replace the iframe src with your actual PDF Base64 data.\n\nFormat: src="data:application/pdf;base64,YOUR_BASE64_STRING"');
-            return;
-        }
-        
-        // Extract the base64 data
-        const base64Data = src.split(',')[1];
-        
-        try {
-            // Convert Base64 to binary
-            const binaryString = atob(base64Data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            
-            // Create blob and download
-            const blob = new Blob([bytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            
-            // Set filename based on type
-            const filenames = {
-                'starter': 'Social-Media-Report-Starter-Sample.pdf',
-                'growth': 'Social-Media-Report-Growth-Sample.pdf',
-                'executive': 'Social-Media-Report-Executive-Sample.pdf'
-            };
-            a.download = filenames[type] || 'Social-Media-Report-Sample.pdf';
-            
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Error downloading PDF:', error);
-            alert('Error downloading PDF. Please check that the Base64 data is valid.');
-        }
-    }
-</script>
-
-<!-- ============================================================================ -->
-<!-- REQUIRED CSS -->
-<!-- ============================================================================ -->
-<!-- Add this style tag in your <head> section or external CSS file -->
-
-<style>
-  .report-samples .sample-tabs {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-bottom: 3rem;
-    flex-wrap: wrap;
-}
-
-.report-samples .sample-tab {
-    padding: 0.75rem 1.5rem;
-    background-color: white;
-    border: 2px solid var(--neutral-200);
-    border-radius: var(--radius);
-    font-weight: 600;
-    color: var(--neutral-700);
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    font-size: 1rem;
-}
-
-.report-samples .sample-tab:hover {
-    border-color: var(--accent-light);
-    transform: none; /* Prevent conflicts */
-}
-
-.report-samples .sample-tab.active {
-    background-color: var(--accent);
-    color: white;
-    border-color: var(--accent);
-}
-
-/* Sample Content */
-.report-samples .sample-content {
-    display: none;
-}
-
-.report-samples .sample-content.active {
-    display: block;
-    animation: reportSamplesFadeIn 0.5s ease;
-}
-
-@keyframes reportSamplesFadeIn {
-    from { 
-        opacity: 0; 
-        transform: translateY(10px); 
-    }
-    to { 
-        opacity: 1; 
-        transform: translateY(0); 
-    }
-}
-
-/* Sample Preview Container */
-.report-samples .sample-preview-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 3rem;
-    align-items: start;
-}
-
-/* Sample Info */
-.report-samples .sample-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.report-samples .sample-info h3 {
-    font-size: 1.75rem;
-    color: var(--primary);
-    margin-bottom: 1rem;
-    font-weight: 700;
-}
-
-.report-samples .sample-info p {
-    color: var(--neutral-600);
-    margin-bottom: 1.5rem;
-    line-height: 1.6;
-}
-
-/* Sample Features List - Specific to avoid conflicts */
-.report-samples .sample-features {
-    list-style: none;
-    margin-bottom: 2rem;
-    padding: 0;
-}
-
-.report-samples .sample-features li {
-    margin-bottom: 0.75rem;
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding-left: 0;
-}
-
-.report-samples .sample-features li::before {
-    content: '';
-    width: 20px;
-    height: 20px;
-    min-width: 20px;
-    background-color: rgba(14, 165, 233, 0.1);
-    border-radius: 50%;
-    flex-shrink: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230ea5e9' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: 12px;
-    margin-top: 2px;
-}
-
-/* PDF Preview Container */
-.report-samples .pdf-preview {
-    background-color: white;
-    border-radius: var(--radius-lg);
-    padding: 0;
-    box-shadow: var(--shadow-xl);
-    border: 1px solid var(--neutral-200);
-    position: relative;
-    overflow: hidden;
-}
-
-.report-samples .pdf-header {
-    height: 50px;
-    background-color: var(--primary);
-    border-radius: 0;
-    margin-bottom: 0;
-    display: flex;
-    align-items: center;
-    padding: 0 1.5rem;
-    color: white;
-    font-weight: 600;
-    font-size: 1rem;
-}
-
-.report-samples .pdf-content {
-    height: 600px;
-    overflow: hidden;
-    padding: 0;
-    background-color: #f5f5f5;
-    border-radius: 0;
-    position: relative;
-}
-
-.report-samples .pdf-content iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-    display: block;
-    background: white;
-}
-
-/* Icon styling for download buttons */
-.report-samples .icon {
-    width: 20px;
-    height: 20px;
-    stroke: currentColor;
-    stroke-width: 2;
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-/* Button container */
-.report-samples .sample-info > div {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-/* Responsive Design */
-@media (max-width: 1024px) {
-    .report-samples .sample-preview-container {
-        grid-template-columns: 1fr;
-        gap: 2rem;
-    }
-    
-    .report-samples .pdf-content {
-        height: 500px;
-    }
-}
-
-@media (max-width: 768px) {
-    .report-samples .sample-tabs {
-        gap: 0.5rem;
-    }
-    
-    .report-samples .sample-tab {
-        padding: 0.625rem 1.25rem;
-        font-size: 0.9rem;
-    }
-    
-    .report-samples .sample-info h3 {
-        font-size: 1.5rem;
-    }
-    
-    .report-samples .pdf-content {
-        height: 400px;
-    }
-}
-
-@media (max-width: 640px) {
-    .report-samples .sample-tabs {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .report-samples .sample-tab {
-        width: 100%;
-        text-align: center;
-    }
-    
-    .report-samples .pdf-content {
-        height: 350px;
-    }
-    
-    .report-samples .sample-info > div {
-        flex-direction: column;
-    }
-    
-    .report-samples .sample-info > div .btn {
-        width: 100%;
-    }
-}
-</style>
-
     <!-- Pricing -->
     <section class="pricing-section" id="pricing">
         <div class="container">
             <div class="section-title">
                 <h2>Packages & Pricing</h2>
-                <p>Choose the depth of analysis that matches your needs. All packages include AI-powered insights and professional formatting.</p>
+                <p>Choose the solution that fits your needs. All packages include professional results and AI-powered insights.</p>
             </div>
-            <div class="pricing-grid">
+            
+            <!-- Reports Pricing -->
+            <h3 style="text-align: center; color: var(--primary); margin-bottom: 2rem;">Social Media Reports</h3>
+            <div class="pricing-grid" style="margin-bottom: 4rem;">
                 <div class="card pricing-card">
                     <div class="pricing-header">
                         <h3 class="pricing-name">Starter</h3>
@@ -1801,7 +1928,7 @@
                     <a href="#samples" class="btn btn-secondary" style="width: 100%;" onclick="showSample('starter')">View Sample</a>
                 </div>
                 <div class="card pricing-card featured">
-                    <div class="pricing-badge">Most Popular</div>
+                    <div class="pricing-badge report">Most Popular</div>
                     <div class="pricing-header">
                         <h3 class="pricing-name">Growth</h3>
                         <div class="pricing-price">$179</div>
@@ -1836,72 +1963,43 @@
                     <a href="#samples" class="btn btn-secondary" style="width: 100%;" onclick="showSample('executive')">View Sample</a>
                 </div>
             </div>
-        </div>
-    </section>
-
-    <!-- Addons -->
-    <section class="addons-section">
-        <div class="container">
-            <div class="section-title">
-                <h2>Customize Your Report</h2>
-                <p>Add specialized modules to any package. Mix and match to create the perfect report for your needs.</p>
-            </div>
-            <div class="addons-grid">
-                <div class="card addon-card">
-                    <div class="addon-info">
-                        <h4>White-label + Cover Page</h4>
-                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Your branding, no Nexus.ai mentions</p>
+            
+            <!-- Chatbot Pricing -->
+            <h3 style="text-align: center; color: var(--accent-chatbot); margin-bottom: 2rem;">AI Chatbot Solutions</h3>
+            <div class="pricing-grid">
+                <div class="card pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Starter Chatbot</h3>
+                        <div class="pricing-price">$299</div>
+                        <div class="pricing-period">per month</div>
                     </div>
-                    <div class="addon-price">+$39</div>
+                    <ul class="pricing-features chatbot">
+                        <li>Basic FAQ chatbot</li>
+                        <li>Up to 100 conversations/month</li>
+                        <li>Website integration</li>
+                        <li>Basic analytics dashboard</li>
+                        <li>Email support</li>
+                    </ul>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem; margin-bottom: 1.5rem; text-align: center;"><strong>Best for:</strong> Small businesses starting with AI</p>
+                    <a href="#chatbot-demo" class="btn btn-secondary" style="width: 100%;">Try Demo</a>
                 </div>
-                <div class="card addon-card">
-                    <div class="addon-info">
-                        <h4>Post Ideas Pack</h4>
-                        <p style="color: var(--neutral-600); font-size: 0.875rem;">10 hooks + 10 captions based on top content</p>
+                <div class="card pricing-card chatbot-featured">
+                    <div class="pricing-badge chatbot">Most Popular</div>
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Pro Chatbot</h3>
+                        <div class="pricing-price">$599</div>
+                        <div class="pricing-period">per month</div>
                     </div>
-                    <div class="addon-price">+$49</div>
-                </div>
-                <div class="card addon-card">
-                    <div class="addon-info">
-                        <h4>Content Calendar (2 weeks)</h4>
-                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Ready-to-use schedule with posting times</p>
-                    </div>
-                    <div class="addon-price">+$59</div>
-                </div>
-                <div class="card addon-card">
-                    <div class="addon-info">
-                        <h4>Paid Ads Check</h4>
-                        <p style="color: var(--neutral-600); font-size: 0.875rem;">CPM/CPC/CTR recommendations</p>
-                    </div>
-                    <div class="addon-price">+$49</div>
-                </div>
-                <div class="card addon-card">
-                    <div class="addon-info">
-                        <h4>UTM + Tracking Setup Guide</h4>
-                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Step-by-step attribution setup</p>
-                    </div>
-                    <div class="addon-price">+$29</div>
-                </div>
-                <div class="card addon-card">
-                    <div class="addon-info">
-                        <h4>Competitor Snapshot (3)</h4>
-                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Detailed analysis of 3 competitors</p>
-                    </div>
-                    <div class="addon-price">+$59</div>
-                </div>
-                <div class="card addon-card">
-                    <div class="addon-info">
-                        <h4>Audience Insights + Heatmap</h4>
-                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Demographics and optimal timing heatmap</p>
-                    </div>
-                    <div class="addon-price">+$39</div>
-                </div>
-                <div class="card addon-card">
-                    <div class="addon-info">
-                        <h4>Crisis Response Templates</h4>
-                        <p style="color: var(--neutral-600); font-size: 0.875rem;">Comment and crisis response guides</p>
-                    </div>
-                    <div class="addon-price">+$29</div>
+                    <ul class="pricing-features chatbot">
+                        <li>Advanced AI conversations</li>
+                        <li>Up to 1000 conversations/month</li>
+                        <li>Multi-platform integration</li>
+                        <li>Custom training on your data</li>
+                        <li>Priority support</li>
+                        <li>Advanced analytics</li>
+                    </ul>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem; margin-bottom: 1.5rem; text-align: center;"><strong>Best for:</strong> Growing businesses & agencies</p>
+                    <a href="#chatbot-demo" class="btn btn-chatbot" style="width: 100%;">Try Demo</a>
                 </div>
             </div>
         </div>
@@ -1911,10 +2009,17 @@
     <section class="builder-section" id="builder">
         <div class="container">
             <div class="section-title">
-                <h2>Build Your Report</h2>
-                <p>Select your package and add-ons. Watch the preview and total update in real-time.</p>
+                <h2>Build Your Solution</h2>
+                <p>Select your product, package, and add-ons. Watch the preview and total update in real-time.</p>
             </div>
-            <div class="builder-container">
+            
+            <div class="product-selector">
+                <button class="product-selector-btn active" onclick="selectProduct('reports')">Social Media Reports</button>
+                <button class="product-selector-btn chatbot" onclick="selectProduct('chatbot')">AI Chatbot</button>
+            </div>
+            
+            <!-- Reports Builder -->
+            <div id="reports-builder" class="builder-container active">
                 <div class="builder-controls">
                     <div class="package-selector">
                         <h4 style="color: var(--primary); margin-bottom: 0.5rem;">1. Choose Package</h4>
@@ -1949,26 +2054,6 @@
                                 <div>
                                     <div style="font-weight: 600; color: var(--primary);">Post Ideas Pack</div>
                                     <div style="font-size: 0.875rem; color: var(--neutral-600);">10 hooks + 10 captions based on top content</div>
-                                </div>
-                            </div>
-                            <div style="font-weight: 700; color: var(--accent);">+$49</div>
-                        </div>
-                        <div class="addon-option" onclick="toggleAddon('calendar')">
-                            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                <div class="addon-checkbox" id="calendar-check"></div>
-                                <div>
-                                    <div style="font-weight: 600; color: var(--primary);">Content Calendar (2 weeks)</div>
-                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">Ready-to-use schedule with posting times</div>
-                                </div>
-                            </div>
-                            <div style="font-weight: 700; color: var(--accent);">+$59</div>
-                        </div>
-                        <div class="addon-option" onclick="toggleAddon('adscheck')">
-                            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                <div class="addon-checkbox" id="adscheck-check"></div>
-                                <div>
-                                    <div style="font-weight: 600; color: var(--primary);">Paid Ads Check</div>
-                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">CPM/CPC/CTR recommendations</div>
                                 </div>
                             </div>
                             <div style="font-weight: 700; color: var(--accent);">+$49</div>
@@ -2032,6 +2117,112 @@
                     <a href="#samples" class="btn btn-secondary" style="width: 100%;" onclick="showSample('growth')">View Sample First</a>
                 </div>
             </div>
+            
+            <!-- Chatbot Builder -->
+            <div id="chatbot-builder" class="builder-container">
+                <div class="builder-controls">
+                    <div class="package-selector">
+                        <h4 style="color: var(--primary); margin-bottom: 0.5rem;">1. Choose Package</h4>
+                        <div class="package-option chatbot" data-package="starter-chatbot" onclick="selectChatbotPackage('starter-chatbot')">
+                            <div class="package-name">Starter Chatbot</div>
+                            <div class="package-price chatbot">$299</div>
+                        </div>
+                        <div class="package-option chatbot selected" data-package="pro-chatbot" onclick="selectChatbotPackage('pro-chatbot')">
+                            <div class="package-name">Pro Chatbot</div>
+                            <div class="package-price chatbot">$599</div>
+                        </div>
+                    </div>
+                    <div class="addons-selector">
+                        <h4>2. Select Add-ons</h4>
+                        <div class="addon-option" onclick="toggleChatbotAddon('training')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox chatbot" id="training-check"></div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--primary);">Additional Training</div>
+                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">Custom training on your specific data</div>
+                                </div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent-chatbot);">+$199</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleChatbotAddon('multilanguage')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox chatbot" id="multilanguage-check"></div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--primary);">Multi-language Support</div>
+                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">Add additional language capabilities</div>
+                                </div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent-chatbot);">+$149</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleChatbotAddon('integration')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox chatbot" id="integration-check"></div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--primary);">Custom Integration</div>
+                                    <div style="font-size: 0.875rem; color: var(--neutral-600);">Connect to your existing systems</div>
+                                </div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent-chatbot);">+$299</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="builder-summary">
+                    <div class="summary-header">
+                        <h3>Your Chatbot</h3>
+                        <div class="total-price chatbot" id="chatbot-total-price">$599</div>
+                    </div>
+                    <div class="summary-items">
+                        <div class="summary-item">
+                            <span>Pro Chatbot Package</span>
+                            <span>$599</span>
+                        </div>
+                        <div id="chatbot-addons-list">
+                            <!-- Chatbot addons will be added here dynamically -->
+                        </div>
+                        <div class="summary-item total">
+                            <span>Monthly Total</span>
+                            <span id="chatbot-display-total">$599</span>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--primary); margin-bottom: 0.75rem;">Preview What's Included:</h4>
+                        <ul style="list-style: none; color: var(--neutral-700);" id="chatbot-preview-list">
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--accent-chatbot); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Advanced AI conversations</span>
+                            </li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--accent-chatbot); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Up to 1000 conversations/month</span>
+                            </li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--accent-chatbot); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Multi-platform integration</span>
+                            </li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--accent-chatbot); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Custom training on your data</span>
+                            </li>
+                            <li style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--accent-chatbot); flex-shrink: 0;">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                <span>Priority support</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <a href="#cta" class="btn btn-chatbot" style="width: 100%; margin-bottom: 1rem;">Proceed to Checkout</a>
+                    <a href="#chatbot-demo" class="btn btn-secondary" style="width: 100%;">Try Demo First</a>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -2045,82 +2236,28 @@
             <div class="steps-container">
                 <div class="step">
                     <div class="step-number">1</div>
-                    <h4>Choose Package</h4>
-                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Select report type and add-ons</p>
+                    <h4>Choose Product</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Select reports or chatbot solution</p>
                 </div>
                 <div class="step">
                     <div class="step-number">2</div>
-                    <h4>Share Access</h4>
-                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Provide analytics access or exports</p>
+                    <h4>Customize</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Select package and add-ons</p>
                 </div>
                 <div class="step">
                     <div class="step-number">3</div>
-                    <h4>We Analyze</h4>
-                    <p style="color: var(--neutral-600); font-size: 0.875rem;">AI + expert analysis of your data</p>
+                    <h4>Provide Data</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Share access or requirements</p>
                 </div>
                 <div class="step">
                     <div class="step-number">4</div>
-                    <h4>Receive Report</h4>
-                    <p style="color: var(--neutral-600); font-size: 0.875rem;">PDF + optional slides delivered</p>
+                    <h4>We Build</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">AI + expert implementation</p>
                 </div>
                 <div class="step">
                     <div class="step-number">5</div>
-                    <h4>Optional Retainer</h4>
-                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Monthly reports available</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Problems Solved -->
-    <section class="problems-section">
-        <div class="container">
-            <div class="section-title">
-                <h2>Problems We Solve</h2>
-                <p>Stop wasting time on reporting that doesn't drive decisions.</p>
-            </div>
-            <div class="problems-grid">
-                <div class="problem-card">
-                    <div class="problem-icon">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="10" y1="15" x2="10" y2="9"/>
-                            <line x1="14" y1="15" x2="14" y2="9"/>
-                        </svg>
-                    </div>
-                    <h4>Manual Reporting</h4>
-                    <p>Teams stuck for hours in spreadsheets and screenshots each week.</p>
-                </div>
-                <div class="problem-card">
-                    <div class="problem-icon">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="12" y1="8" x2="12" y2="12"/>
-                            <line x1="12" y1="16" x2="12.01" y2="16"/>
-                        </svg>
-                    </div>
-                    <h4>Data Without Decisions</h4>
-                    <p>Metrics without insights mean no actionable next steps.</p>
-                </div>
-                <div class="problem-card">
-                    <div class="problem-icon">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M14.83 9.17l3.53-3.53M4.93 19.07l4.24-4.24"/>
-                        </svg>
-                    </div>
-                    <h4>Inconsistent Quality</h4>
-                    <p>Report quality depends on who creates it, not a standard.</p>
-                </div>
-                <div class="problem-card">
-                    <div class="problem-icon">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M16.5 9.5l-9 9M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                    <h4>Hard to Sell Reporting</h4>
-                    <p>Agencies struggle to justify reporting as a premium service.</p>
+                    <h4>Receive Solution</h4>
+                    <p style="color: var(--neutral-600); font-size: 0.875rem;">Reports or chatbot delivered</p>
                 </div>
             </div>
         </div>
@@ -2131,12 +2268,12 @@
         <div class="container">
             <div class="section-title">
                 <h2>Frequently Asked Questions</h2>
-                <p>Clear answers to common questions about our reports.</p>
+                <p>Clear answers to common questions about our solutions.</p>
             </div>
             <div class="faq-container">
                 <div class="faq-item" onclick="toggleFAQ(this)">
                     <div class="faq-question">
-                        <span>What platforms do you support?</span>
+                        <span>What platforms do you support for reports?</span>
                         <div class="faq-toggle"></div>
                     </div>
                     <div class="faq-answer">
@@ -2145,16 +2282,16 @@
                 </div>
                 <div class="faq-item" onclick="toggleFAQ(this)">
                     <div class="faq-question">
-                        <span>What do you need from us to start?</span>
+                        <span>Where can I deploy the chatbot?</span>
                         <div class="faq-toggle"></div>
                     </div>
                     <div class="faq-answer">
-                        <p>We need access to your analytics (read-only) or exported data. For most platforms, we can work with screenshots if needed. We'll provide clear instructions after purchase.</p>
+                        <p>Our chatbots can be deployed on websites, Facebook Messenger, WhatsApp, Slack, and through API integration with custom applications.</p>
                     </div>
                 </div>
                 <div class="faq-item" onclick="toggleFAQ(this)">
                     <div class="faq-question">
-                        <span>What's the turnaround time?</span>
+                        <span>What's the turnaround time for reports?</span>
                         <div class="faq-toggle"></div>
                     </div>
                     <div class="faq-answer">
@@ -2163,47 +2300,29 @@
                 </div>
                 <div class="faq-item" onclick="toggleFAQ(this)">
                     <div class="faq-question">
-                        <span>Can we white-label the reports?</span>
+                        <span>How long does chatbot setup take?</span>
                         <div class="faq-toggle"></div>
                     </div>
                     <div class="faq-answer">
-                        <p>Yes, the White-label + Cover Page add-on (+$39) removes all Nexus.ai branding and adds your logo, colors, and company information.</p>
+                        <p>Basic setup: 2-3 days. Pro with custom training: 5-7 days.</p>
                     </div>
                 </div>
                 <div class="faq-item" onclick="toggleFAQ(this)">
                     <div class="faq-question">
-                        <span>Can we do this monthly?</span>
+                        <span>Can we white-label the solutions?</span>
                         <div class="faq-toggle"></div>
                     </div>
                     <div class="faq-answer">
-                        <p>Yes, we offer monthly retainers at a discounted rate. Contact us after your first report to set up a recurring schedule.</p>
+                        <p>Yes, both reports and chatbots can be white-labeled. Reports have a +$39 add-on, chatbots include white-labeling in the Pro package.</p>
                     </div>
                 </div>
                 <div class="faq-item" onclick="toggleFAQ(this)">
                     <div class="faq-question">
-                        <span>Can you include ads/ROI analysis?</span>
+                        <span>Can we do monthly retainers?</span>
                         <div class="faq-toggle"></div>
                     </div>
                     <div class="faq-answer">
-                        <p>The Executive package includes ROI analysis. For ads-specific insights, add the "Paid Ads Check" add-on (+$49) to any package.</p>
-                    </div>
-                </div>
-                <div class="faq-item" onclick="toggleFAQ(this)">
-                    <div class="faq-question">
-                        <span>What if our data is incomplete?</span>
-                        <div class="faq-toggle"></div>
-                    </div>
-                    <div class="faq-answer">
-                        <p>We'll work with what you have and note any data limitations in the report. Our analysis focuses on actionable insights from available data.</p>
-                    </div>
-                </div>
-                <div class="faq-item" onclick="toggleFAQ(this)">
-                    <div class="faq-question">
-                        <span>Is this a template or customized?</span>
-                        <div class="faq-toggle"></div>
-                    </div>
-                    <div class="faq-answer">
-                        <p>Each report is customized to your data. We use a professional framework but all insights, visuals, and recommendations are specific to your performance.</p>
+                        <p>Yes! Both reports and chatbots offer monthly subscription models with discounted rates for long-term commitments.</p>
                     </div>
                 </div>
             </div>
@@ -2214,8 +2333,8 @@
     <section class="cta-section" id="cta">
         <div class="container">
             <div class="cta-content">
-                <h2>Ready for Decision-Ready Reports?</h2>
-                <p>Stop wasting time on manual reporting. Get AI-powered insights that drive real strategy.</p>
+                <h2>Ready for AI-Powered Solutions?</h2>
+                <p>Stop wasting time on manual processes. Get AI-powered insights and automation that drive real results.</p>
                 <form class="cta-form" id="contact-form">
                     <div class="form-group">
                         <input type="text" placeholder="First Name" required>
@@ -2225,12 +2344,21 @@
                         <input type="email" placeholder="Email Address" required>
                         <input type="text" placeholder="Company Name" required>
                     </div>
-                    <textarea placeholder="Tell us about your reporting needs (optional)"></textarea>
-                    <button type="submit" class="btn btn-light">Request Sample Report</button>
+                    <div class="form-group">
+                        <select style="padding: 0.875rem 1rem; border-radius: var(--radius); border: 1px solid var(--neutral-300); font-family: 'Inter', sans-serif; font-size: 1rem; width: 100%; background-color: white; grid-column: 1 / -1;">
+                            <option value="">I'm interested in...</option>
+                            <option value="reports">Social Media Reports</option>
+                            <option value="chatbot">AI Chatbot Solutions</option>
+                            <option value="both">Both Solutions</option>
+                        </select>
+                    </div>
+                    <textarea placeholder="Tell us about your specific needs (optional)"></textarea>
+                    <button type="submit" class="btn btn-light">Request Consultation</button>
                 </form>
                 <div class="cta-buttons">
-                    <a href="#builder" class="btn btn-primary">Build Your Report Now</a>
-                    <a href="#samples" class="btn btn-outline-light">View All Samples</a>
+                    <a href="#builder" class="btn btn-primary">Build Your Report</a>
+                    <a href="#chatbot-demo" class="btn btn-chatbot">Try Chatbot Demo</a>
+                    <a href="#samples" class="btn btn-outline-light">View Report Samples</a>
                 </div>
             </div>
         </div>
@@ -2243,229 +2371,720 @@
                 <a href="#" class="logo" style="color: white;">Nexus<span>.ai</span></a>
                 <p style="color: var(--neutral-300); max-width: 400px;">Connecting businesses to the practical power of AI and automation.</p>
                 <div class="footer-links">
-                    <a href="#product">Product</a>
+                    <a href="#product">Products</a>
                     <a href="#samples">Samples</a>
+                    <a href="#chatbot-demo">Chatbot</a>
                     <a href="#pricing">Pricing</a>
                     <a href="#faq">FAQ</a>
                 </div>
             </div>
             <div class="copyright">
-                &copy; 2023 Nexus.ai. All rights reserved. This is our first product offering as we build the Nexus automation platform.
+                &copy; 2023 Nexus.ai. All rights reserved. AI-powered reports and chatbots for modern businesses.
             </div>
         </div>
     </footer>
 
-    <script>
-        // Interactive Pricing Module
-        let selectedPackage = 'growth';
-        let packagePrices = {
-            'starter': 89,
-            'growth': 179,
-            'executive': 299
+  
+<script>
+    // Product Selection
+    let currentProduct = 'reports';
+    let selectedPackage = 'growth';
+    let selectedChatbotPackage = 'pro-chatbot';
+    
+    // Reports Pricing
+    let packagePrices = {
+        'starter': 89,
+        'growth': 179,
+        'executive': 299
+    };
+    
+    let addonPrices = {
+        'whitelabel': 39,
+        'postideas': 49
+    };
+    
+    let selectedAddons = {};
+    
+    // Chatbot Pricing
+    let chatbotPackagePrices = {
+        'starter-chatbot': 299,
+        'pro-chatbot': 599
+    };
+    
+    let chatbotAddonPrices = {
+        'training': 199,
+        'multilanguage': 149,
+        'integration': 299
+    };
+    
+    let selectedChatbotAddons = {};
+    
+    // ==================== CHATBOT CONFIGURATION ====================
+    // Set USE_MOCK_WEBHOOK to true for local testing, false for real webhook
+    const USE_MOCK_WEBHOOK = false; // Set to false when you have a real webhook
+    const MOCK_DELAY = 1000; // Simulate network delay in ms
+    
+    // Your real webhook URL (change this when ready)
+    const REAL_WEBHOOK_URL = 'https://saschag.app.n8n.cloud/webhook/chat';
+    
+    // Current webhook to use
+    const WEBHOOK_URL = USE_MOCK_WEBHOOK ? null : REAL_WEBHOOK_URL;
+    
+    let isBotTyping = false;
+    let messageHistory = [
+        { role: 'assistant', content: "Hello! I'm your Nexus AI assistant. How can I help you today?" },
+        { role: 'user', content: "What chatbot features do you offer?" },
+        { role: 'assistant', content: "We offer custom AI chatbots with natural language processing, multi-platform integration, custom training on your data, and 24/7 automated support." },
+        { role: 'user', content: "Can you handle customer support?" },
+        { role: 'assistant', content: "Absolutely! Our chatbots can handle FAQ resolution, ticket creation, order tracking, appointment scheduling, and can escalate to human agents when needed." }
+    ];
+    
+    // ==================== MOCK WEBHOOK SIMULATION ====================
+    // This simulates a webhook response for local testing
+    function simulateWebhookResponse(userMessage) {
+        const responses = {
+            // Greetings
+            'hello': "Hello! How can I help you with Nexus.ai today?",
+            'hi': "Hi there! Interested in our AI solutions?",
+            
+            // Questions about features
+            'feature': "Our AI chatbots offer: 1) Natural language processing 2) 24/7 customer support 3) Lead generation 4) E-commerce integration 5) Custom training on your data.",
+            'what can you do': "I can help you learn about Nexus.ai's services: AI-powered social media reports and intelligent chatbots. What interests you most?",
+            'help': "I can help you with information about our AI solutions. Ask me about pricing, features, or how to get started!",
+            
+            // Pricing questions
+            'price': "Our chatbot solutions start at $299/month for basic FAQ bots and go up to $599/month for advanced AI with custom training. Reports start at $89 per report.",
+            'cost': "Chatbot pricing: Starter $299/mo, Pro $599/mo. Reports: Starter $89, Growth $179, Executive $299.",
+            'how much': "For chatbots: $299-599/month. For social media reports: $89-299 per report.",
+            
+            // Specific features
+            'integration': "Yes! We integrate with websites, Facebook Messenger, WhatsApp, Slack, and custom APIs.",
+            'training': "We train chatbots on your specific data - FAQs, product info, support docs - to provide accurate responses.",
+            'support': "Our chatbots handle 24/7 customer support with human escalation when needed.",
+            
+            // Getting started
+            'start': "Great! You can build your solution in the 'Build Your Solution' section or request a consultation using the form below.",
+            'demo': "You're already in the demo! Try asking me questions about features, pricing, or how it works.",
+            'contact': "Use the contact form below or click 'Request Consultation' to get in touch with our team.",
+            
+            // Default response
+            'default': "Thanks for your message! I'm a demo AI assistant for Nexus.ai. In production, I'd connect to a real AI service. You can ask about: pricing, features, integration, or how to get started."
         };
         
-        let addonPrices = {
-            'whitelabel': 39,
-            'postideas': 49,
-            'calendar': 59,
-            'adscheck': 49
-        };
+        const message = userMessage.toLowerCase();
         
-        let selectedAddons = {};
-        
-        function selectPackage(packageId) {
-            selectedPackage = packageId;
-            
-            // Update UI
-            document.querySelectorAll('.package-option').forEach(option => {
-                option.classList.remove('selected');
-            });
-            document.querySelector(`[data-package="${packageId}"]`).classList.add('selected');
-            
-            updateTotal();
-            updatePreview();
-        }
-        
-        function toggleAddon(addonId) {
-            const checkbox = document.getElementById(`${addonId}-check`);
-            
-            if (selectedAddons[addonId]) {
-                delete selectedAddons[addonId];
-                checkbox.classList.remove('checked');
-            } else {
-                selectedAddons[addonId] = addonPrices[addonId];
-                checkbox.classList.add('checked');
+        // Check for keywords
+        for (const [keyword, response] of Object.entries(responses)) {
+            if (message.includes(keyword)) {
+                return response;
             }
-            
-            updateTotal();
-            updateAddonsList();
         }
         
-        function updateTotal() {
-            let total = packagePrices[selectedPackage];
-            
-            for (const addon in selectedAddons) {
-                total += selectedAddons[addon];
-            }
-            
-            document.getElementById('total-price').textContent = `$${total}`;
-            document.getElementById('display-total').textContent = `$${total}`;
+        // Check specific patterns
+        if (message.includes('report')) {
+            return "Our AI-powered social media reports analyze performance across platforms and provide actionable insights. Packages start at $89.";
         }
         
-        function updateAddonsList() {
-            const addonsList = document.getElementById('addons-list');
-            addonsList.innerHTML = '';
-            
-            for (const addon in selectedAddons) {
-                const div = document.createElement('div');
-                div.className = 'summary-item';
+        if (message.includes('chatbot') || message.includes('bot')) {
+            return "Our AI chatbots provide 24/7 customer support, lead generation, and can be trained on your specific business data.";
+        }
+        
+        if (message.includes('social media')) {
+            return "We create detailed social media reports with performance analysis, content insights, and strategic recommendations.";
+        }
+        
+        // Return default response
+        return responses.default;
+    }
+    
+    // ==================== TYPING INDICATOR ====================
+    function showTypingIndicator() {
+        const messagesDiv = document.getElementById('chatbot-messages');
+        const typingIndicator = document.createElement('div');
+        typingIndicator.id = 'typing-indicator';
+        typingIndicator.className = 'message bot';
+        typingIndicator.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 4px;">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        `;
+        messagesDiv.appendChild(typingIndicator);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        const typingIndicator = document.getElementById('typing-indicator');
+        if (typingIndicator) {
+            typingIndicator.remove();
+        }
+    }
+    
+    // ==================== MAIN CHAT FUNCTION ====================
+    async function sendChatMessage() {
+        const input = document.getElementById('chatbot-input');
+        const message = input.value.trim();
+        const messagesDiv = document.getElementById('chatbot-messages');
+        
+        if (!message || isBotTyping) return;
+        
+        // Add user message to UI
+        const userMessage = document.createElement('div');
+        userMessage.className = 'message user';
+        userMessage.textContent = message;
+        messagesDiv.appendChild(userMessage);
+        
+        // Add to message history
+        messageHistory.push({ role: 'user', content: message });
+        
+        // Clear input
+        input.value = '';
+        
+        // Show typing indicator
+        showTypingIndicator();
+        isBotTyping = true;
+        
+        // ==================== DECISION: Use Mock or Real Webhook ====================
+        if (USE_MOCK_WEBHOOK || !WEBHOOK_URL) {
+            // Use mock webhook for local testing
+            setTimeout(() => {
+                removeTypingIndicator();
                 
-                let addonName = '';
-                switch(addon) {
-                    case 'whitelabel': addonName = 'White-label + Cover Page'; break;
-                    case 'postideas': addonName = 'Post Ideas Pack'; break;
-                    case 'calendar': addonName = 'Content Calendar'; break;
-                    case 'adscheck': addonName = 'Paid Ads Check'; break;
+                // Get response from mock webhook
+                const botResponse = simulateWebhookResponse(message);
+                
+                // Add bot response
+                const botMessage = document.createElement('div');
+                botMessage.className = 'message bot';
+                botMessage.textContent = botResponse;
+                messagesDiv.appendChild(botMessage);
+                
+                // Add to message history
+                messageHistory.push({ role: 'assistant', content: botResponse });
+                
+                isBotTyping = false;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }, MOCK_DELAY);
+            
+        } else {
+            // Use real webhook
+            try {
+                console.log('Sending to real webhook:', WEBHOOK_URL);
+                
+                // Prepare request data
+                const requestData = {
+                    message: message,
+                    messageHistory: messageHistory.slice(-10),
+                    timestamp: new Date().toISOString(),
+                    sessionId: getSessionId(),
+                    source: 'nexus-website'
+                };
+                
+                // Send to real webhook
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error: ${response.status}`);
                 }
                 
-                div.innerHTML = `<span>${addonName}</span><span>+$${selectedAddons[addon]}</span>`;
-                addonsList.appendChild(div);
-            }
-        }
-        
-        function updatePreview() {
-            const previewList = document.getElementById('preview-list');
-            
-            let items = [];
-            
-            if (selectedPackage === 'starter') {
-                items = [
-                    'Quick performance snapshot',
-                    'Top 5 content pieces analysis',
-                    'Clear next steps (3-5 actions)',
-                    'Audience growth tracking',
-                    '48-hour delivery'
-                ];
-            } else if (selectedPackage === 'growth') {
-                items = [
-                    'Deeper content breakdown (top 10)',
-                    'Optimal posting timing analysis',
-                    'Format winners (video, image, carousel)',
-                    'Engagement rate drivers',
-                    '24-hour delivery'
-                ];
-            } else if (selectedPackage === 'executive') {
-                items = [
-                    'Everything in Growth',
-                    'ROI-focused view',
-                    'Competitor benchmark (3 competitors)',
-                    '30-day action plan',
-                    'Executive summary slide',
-                    '12-hour priority delivery'
-                ];
-            }
-            
-            previewList.innerHTML = '';
-            items.forEach(item => {
-                const li = document.createElement('li');
-                li.style.marginBottom = '0.5rem';
-                li.style.display = 'flex';
-                li.style.alignItems = 'flex-start';
-                li.style.gap = '0.5rem';
+                const data = await response.json();
                 
-                li.innerHTML = `
-                    <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--success); flex-shrink: 0;">
-                        <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                    <span>${item}</span>
-                `;
+                // Remove typing indicator
+                removeTypingIndicator();
                 
-                previewList.appendChild(li);
-            });
-        }
-
-        // Sample Report Tabs
-        function showSample(sampleId) {
-            // Update tabs
-            document.querySelectorAll('.sample-tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll(`.sample-tab`).forEach(tab => {
-                if (tab.textContent.toLowerCase().includes(sampleId)) {
-                    tab.classList.add('active');
-                }
-            });
-            
-            // Update content
-            document.querySelectorAll('.sample-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.getElementById(`${sampleId}-sample`).classList.add('active');
-            
-            // Scroll to samples section
-            document.getElementById('samples').scrollIntoView({ behavior: 'smooth' });
-        }
-
-        function downloadSample(packageType) {
-            alert(`Downloading ${packageType} PDF sample...\n\nIn a real implementation, this would download a PDF file.\n\nFor now, we're showing you a preview. To get actual samples, use the "Request Sample" form below.`);
-            
-            // Track download in a real implementation
-            // analytics.track('sample_downloaded', { package: packageType });
-        }
-        
-        // FAQ Toggle
-        function toggleFAQ(item) {
-            const answer = item.querySelector('.faq-answer');
-            const isActive = answer.classList.contains('active');
-            
-            // Close all FAQ items
-            document.querySelectorAll('.faq-item').forEach(faq => {
-                faq.querySelector('.faq-answer').classList.remove('active');
-                faq.classList.remove('active');
-            });
-            
-            // Open clicked item if it was closed
-            if (!isActive) {
-                answer.classList.add('active');
-                item.classList.add('active');
+                // Extract response
+                let botResponse = data.reply || data.message || data.response || 
+                                 data.text || data.answer || "I received your message.";
+                
+                // Add bot response
+                const botMessage = document.createElement('div');
+                botMessage.className = 'message bot';
+                botMessage.textContent = botResponse;
+                messagesDiv.appendChild(botMessage);
+                
+                // Add to message history
+                messageHistory.push({ role: 'assistant', content: botResponse });
+                
+            } catch (error) {
+                console.error('Webhook error:', error);
+                
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                // Fallback to mock response if webhook fails
+                const botResponse = simulateWebhookResponse(message) + " (Note: Using fallback response - webhook connection failed)";
+                
+                const botMessage = document.createElement('div');
+                botMessage.className = 'message bot';
+                botMessage.textContent = botResponse;
+                messagesDiv.appendChild(botMessage);
+                
+                messageHistory.push({ role: 'assistant', content: botResponse });
+            } finally {
+                isBotTyping = false;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
         }
-        
-        // Mobile Menu Toggle
-        document.querySelector('.mobile-menu-btn').addEventListener('click', function() {
-            const navLinks = document.querySelector('.nav-links');
-            const isVisible = navLinks.style.display === 'flex';
+    }
+    
+    // ==================== HELPER FUNCTIONS ====================
+    function getSessionId() {
+        let sessionId = localStorage.getItem('chatbot_session_id');
+        if (!sessionId) {
+            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('chatbot_session_id', sessionId);
+        }
+        return sessionId;
+    }
+    
+    function clearChatHistory() {
+        if (confirm("Clear chat history? This will reset the conversation to the beginning.")) {
+            messageHistory = [
+                { role: 'assistant', content: "Hello! I'm your Nexus AI assistant. How can I help you today?" }
+            ];
             
-            if (isVisible) {
-                navLinks.style.display = 'none';
-            } else {
-                navLinks.style.display = 'flex';
-                navLinks.style.flexDirection = 'column';
-                navLinks.style.position = 'absolute';
-                navLinks.style.top = '100%';
-                navLinks.style.left = '0';
-                navLinks.style.right = '0';
-                navLinks.style.backgroundColor = 'white';
-                navLinks.style.padding = '1.5rem';
-                navLinks.style.borderBottom = '1px solid var(--neutral-200)';
-                navLinks.style.boxShadow = 'var(--shadow-lg)';
-                navLinks.style.gap = '1rem';
+            const messagesDiv = document.getElementById('chatbot-messages');
+            messagesDiv.innerHTML = '';
+            
+            // Re-add initial message
+            const initialMessage = document.createElement('div');
+            initialMessage.className = 'message bot';
+            initialMessage.textContent = "Hello! I'm your Nexus AI assistant. How can I help you today?";
+            messagesDiv.appendChild(initialMessage);
+            
+            // Clear session ID
+            localStorage.removeItem('chatbot_session_id');
+            
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    }
+    
+    // ==================== EXISTING WEBSITE FUNCTIONS ====================
+    // Product Tabs
+    function showProduct(product) {
+        currentProduct = product;
+        
+        // Update product tabs
+        document.querySelectorAll('.product-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        
+        // Update product content
+        document.querySelectorAll('.product-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`${product}-product`).classList.add('active');
+    }
+    
+    function selectProduct(product) {
+        currentProduct = product;
+        
+        // Update product selector buttons
+        document.querySelectorAll('.product-selector-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.textContent.includes('Reports') && product === 'reports') {
+                btn.classList.add('active');
+            } else if (btn.textContent.includes('Chatbot') && product === 'chatbot') {
+                btn.classList.add('active');
             }
         });
         
-        // Form Submission
-        document.getElementById('contact-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            alert('Thank you for your request! We\'ll send sample reports to your email within 24 hours.');
-            this.reset();
-        });
+        // Show/hide builders
+        document.getElementById('reports-builder').classList.remove('active');
+        document.getElementById('chatbot-builder').classList.remove('active');
         
-        // Initialize
+        if (product === 'reports') {
+            document.getElementById('reports-builder').classList.add('active');
+        } else {
+            document.getElementById('chatbot-builder').classList.add('active');
+        }
+        
+        // Scroll to builder
+        document.getElementById('builder').scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    // Reports Builder Functions
+    function selectPackage(packageId) {
+        selectedPackage = packageId;
+        
+        // Update UI
+        document.querySelectorAll('.package-option:not(.chatbot)').forEach(option => {
+            option.classList.remove('selected');
+        });
+        document.querySelector(`[data-package="${packageId}"]`).classList.add('selected');
+        
+        updateTotal();
+        updatePreview();
+    }
+    
+    function toggleAddon(addonId) {
+        const checkbox = document.getElementById(`${addonId}-check`);
+        
+        if (selectedAddons[addonId]) {
+            delete selectedAddons[addonId];
+            checkbox.classList.remove('checked');
+        } else {
+            selectedAddons[addonId] = addonPrices[addonId];
+            checkbox.classList.add('checked');
+        }
+        
+        updateTotal();
         updateAddonsList();
+    }
+    
+    function updateTotal() {
+        let total = packagePrices[selectedPackage];
+        
+        for (const addon in selectedAddons) {
+            total += selectedAddons[addon];
+        }
+        
+        document.getElementById('total-price').textContent = `$${total}`;
+        document.getElementById('display-total').textContent = `$${total}`;
+    }
+    
+    function updateAddonsList() {
+        const addonsList = document.getElementById('addons-list');
+        addonsList.innerHTML = '';
+        
+        for (const addon in selectedAddons) {
+            const div = document.createElement('div');
+            div.className = 'summary-item';
+            
+            let addonName = '';
+            switch(addon) {
+                case 'whitelabel': addonName = 'White-label + Cover Page'; break;
+                case 'postideas': addonName = 'Post Ideas Pack'; break;
+            }
+            
+            div.innerHTML = `<span>${addonName}</span><span>+$${selectedAddons[addon]}</span>`;
+            addonsList.appendChild(div);
+        }
+    }
+    
+    function updatePreview() {
+        const previewList = document.getElementById('preview-list');
+        
+        let items = [];
+        
+        if (selectedPackage === 'starter') {
+            items = [
+                'Quick performance snapshot',
+                'Top 5 content pieces analysis',
+                'Clear next steps (3-5 actions)',
+                'Audience growth tracking',
+                '48-hour delivery'
+            ];
+        } else if (selectedPackage === 'growth') {
+            items = [
+                'Deeper content breakdown (top 10)',
+                'Optimal posting timing analysis',
+                'Format winners (video, image, carousel)',
+                'Engagement rate drivers',
+                '24-hour delivery'
+            ];
+        } else if (selectedPackage === 'executive') {
+            items = [
+                'Everything in Growth',
+                'ROI-focused view',
+                'Competitor benchmark (3 competitors)',
+                '30-day action plan',
+                'Executive summary slide',
+                '12-hour priority delivery'
+            ];
+        }
+        
+        previewList.innerHTML = '';
+        items.forEach(item => {
+            const li = document.createElement('li');
+            li.style.marginBottom = '0.5rem';
+            li.style.display = 'flex';
+            li.style.alignItems = 'flex-start';
+            li.style.gap = '0.5rem';
+            
+            li.innerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--success); flex-shrink: 0;">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>${item}</span>
+            `;
+            
+            previewList.appendChild(li);
+        });
+    }
+
+    // Chatbot Builder Functions
+    function selectChatbotPackage(packageId) {
+        selectedChatbotPackage = packageId;
+        
+        // Update UI
+        document.querySelectorAll('.package-option.chatbot').forEach(option => {
+            option.classList.remove('selected');
+        });
+        document.querySelector(`[data-package="${packageId}"]`).classList.add('selected');
+        
+        updateChatbotTotal();
+        updateChatbotPreview();
+    }
+    
+    function toggleChatbotAddon(addonId) {
+        const checkbox = document.getElementById(`${addonId}-check`);
+        
+        if (selectedChatbotAddons[addonId]) {
+            delete selectedChatbotAddons[addonId];
+            checkbox.classList.remove('checked');
+        } else {
+            selectedChatbotAddons[addonId] = chatbotAddonPrices[addonId];
+            checkbox.classList.add('checked');
+        }
+        
+        updateChatbotTotal();
+        updateChatbotAddonsList();
+    }
+    
+    function updateChatbotTotal() {
+        let total = chatbotPackagePrices[selectedChatbotPackage];
+        
+        for (const addon in selectedChatbotAddons) {
+            total += selectedChatbotAddons[addon];
+        }
+        
+        document.getElementById('chatbot-total-price').textContent = `$${total}`;
+        document.getElementById('chatbot-display-total').textContent = `$${total}`;
+    }
+    
+    function updateChatbotAddonsList() {
+        const addonsList = document.getElementById('chatbot-addons-list');
+        addonsList.innerHTML = '';
+        
+        for (const addon in selectedChatbotAddons) {
+            const div = document.createElement('div');
+            div.className = 'summary-item';
+            
+            let addonName = '';
+            switch(addon) {
+                case 'training': addonName = 'Additional Training'; break;
+                case 'multilanguage': addonName = 'Multi-language Support'; break;
+                case 'integration': addonName = 'Custom Integration'; break;
+            }
+            
+            div.innerHTML = `<span>${addonName}</span><span>+$${selectedChatbotAddons[addon]}</span>`;
+            addonsList.appendChild(div);
+        }
+    }
+    
+    function updateChatbotPreview() {
+        const previewList = document.getElementById('chatbot-preview-list');
+        
+        let items = [];
+        
+        if (selectedChatbotPackage === 'starter-chatbot') {
+            items = [
+                'Basic FAQ chatbot',
+                'Up to 100 conversations/month',
+                'Website integration',
+                'Basic analytics dashboard',
+                'Email support'
+            ];
+        } else if (selectedChatbotPackage === 'pro-chatbot') {
+            items = [
+                'Advanced AI conversations',
+                'Up to 1000 conversations/month',
+                'Multi-platform integration',
+                'Custom training on your data',
+                'Priority support',
+                'Advanced analytics'
+            ];
+        }
+        
+        previewList.innerHTML = '';
+        items.forEach(item => {
+            const li = document.createElement('li');
+            li.style.marginBottom = '0.5rem';
+            li.style.display = 'flex';
+            li.style.alignItems = 'flex-start';
+            li.style.gap = '0.5rem';
+            
+            li.innerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: var(--accent-chatbot); flex-shrink: 0;">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>${item}</span>
+            `;
+            
+            previewList.appendChild(li);
+        });
+    }
+
+    // Sample Report Tabs
+    function showSample(sampleId) {
+        // Update tabs
+        document.querySelectorAll('.sample-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelectorAll(`.sample-tab`).forEach(tab => {
+            if (tab.textContent.toLowerCase().includes(sampleId)) {
+                tab.classList.add('active');
+            }
+        });
+        
+        // Update content
+        document.querySelectorAll('.sample-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`${sampleId}-sample`).classList.add('active');
+    }
+
+    function downloadSample(packageType) {
+        alert(`Downloading ${packageType} PDF sample...\n\nIn a real implementation, this would download a PDF file.\n\nFor now, we're showing you a preview. To get actual samples, use the "Request Consultation" form below.`);
+    }
+    
+    // FAQ Toggle
+    function toggleFAQ(item) {
+        const answer = item.querySelector('.faq-answer');
+        const isActive = answer.classList.contains('active');
+        
+        // Close all FAQ items
+        document.querySelectorAll('.faq-item').forEach(faq => {
+            faq.querySelector('.faq-answer').classList.remove('active');
+            faq.classList.remove('active');
+        });
+        
+        // Open clicked item if it was closed
+        if (!isActive) {
+            answer.classList.add('active');
+            item.classList.add('active');
+        }
+    }
+    
+    // Mobile Menu Toggle
+    document.querySelector('.mobile-menu-btn').addEventListener('click', function() {
+        const navLinks = document.querySelector('.nav-links');
+        const isVisible = navLinks.style.display === 'flex';
+        
+        if (isVisible) {
+            navLinks.style.display = 'none';
+        } else {
+            navLinks.style.display = 'flex';
+            navLinks.style.flexDirection = 'column';
+            navLinks.style.position = 'absolute';
+            navLinks.style.top = '100%';
+            navLinks.style.left = '0';
+            navLinks.style.right = '0';
+            navLinks.style.backgroundColor = 'white';
+            navLinks.style.padding = '1.5rem';
+            navLinks.style.borderBottom = '1px solid var(--neutral-200)';
+            navLinks.style.boxShadow = 'var(--shadow-lg)';
+            navLinks.style.gap = '1rem';
+        }
+    });
+    
+    // Form Submission
+    document.getElementById('contact-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Collect form data
+        const formData = {
+            firstName: this.querySelector('input[placeholder="First Name"]').value,
+            lastName: this.querySelector('input[placeholder="Last Name"]').value,
+            email: this.querySelector('input[type="email"]').value,
+            company: this.querySelector('input[placeholder="Company Name"]').value,
+            interest: this.querySelector('select').value,
+            message: this.querySelector('textarea').value,
+            timestamp: new Date().toISOString(),
+            selectedProduct: currentProduct
+        };
+        
+        // Show success message
+        alert('Thank you for your request! We\'ll contact you within 24 hours to schedule a consultation.');
+        
+        this.reset();
+    });
+    
+    // ==================== INITIALIZATION ====================
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize chatbot with messages
+        const messagesDiv = document.getElementById('chatbot-messages');
+        messagesDiv.innerHTML = '';
+        
+        messageHistory.forEach(msg => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${msg.role === 'assistant' ? 'bot' : 'user'}`;
+            messageDiv.textContent = msg.content;
+            messagesDiv.appendChild(messageDiv);
+        });
+        
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        
+        // Initialize builders
+        updateAddonsList();
+        updateChatbotAddonsList();
+        
+        // Initialize with some selected addons for demo
         document.getElementById('whitelabel-check').classList.add('checked');
         selectedAddons['whitelabel'] = 39;
         updateTotal();
         updateAddonsList();
-    </script>
+        
+        // Initialize chatbot with training addon
+        document.getElementById('training-check').classList.add('checked');
+        selectedChatbotAddons['training'] = 199;
+        updateChatbotTotal();
+        updateChatbotAddonsList();
+        
+        // Add clear button to chatbot
+        const chatInputDiv = document.querySelector('.chatbot-input');
+        if (chatInputDiv && !chatInputDiv.querySelector('.clear-btn')) {
+            const clearBtn = document.createElement('button');
+            clearBtn.className = 'clear-btn';
+            clearBtn.textContent = 'Clear Chat';
+            clearBtn.style.marginLeft = '5px';
+            clearBtn.style.background = 'var(--neutral-200)';
+            clearBtn.style.color = 'var(--neutral-700)';
+            clearBtn.style.cursor = 'pointer';
+            clearBtn.style.padding = '0.75rem 1rem';
+            clearBtn.style.border = 'none';
+            clearBtn.style.borderRadius = 'var(--radius)';
+            clearBtn.style.fontWeight = '600';
+            clearBtn.onclick = clearChatHistory;
+            chatInputDiv.appendChild(clearBtn);
+        }
+        
+        // Add enter key support
+        document.getElementById('chatbot-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+        
+        // Show mode indicator
+        const chatbotHeader = document.querySelector('.chatbot-header');
+        const modeIndicator = document.createElement('div');
+        modeIndicator.style.cssText = `
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: ${USE_MOCK_WEBHOOK ? '#10b981' : '#0ea5e9'};
+            color: white;
+            font-weight: 600;
+        `;
+        modeIndicator.textContent = USE_MOCK_WEBHOOK ? 'Local Demo Mode' : 'Live Mode';
+        chatbotHeader.style.position = 'relative';
+        chatbotHeader.appendChild(modeIndicator);
+    });
+</script>
 </body>
 </html>
