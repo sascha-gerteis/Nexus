@@ -1374,6 +1374,7 @@
             justify-content: center;
             color: #ef4444;
         }
+        
 
         /* FAQ */
         .faq-section {
@@ -1448,64 +1449,94 @@
             transform: rotate(90deg);
         }
 
-        /* CTA */
-        .cta-section {
-            background-color: var(--primary);
-            color: white;
-            text-align: center;
-            padding: 6rem 0;
-        }
+       /* CTA */
+.cta-section {
+  background-color: var(--primary);
+  color: white;
+  text-align: center;
+  padding: 6rem 0;
+}
 
-        .cta-content {
-            max-width: 700px;
-            margin: 0 auto;
-        }
+.cta-content {
+  max-width: 900px;              /* wider content area */
+  margin: 0 auto;
+  padding: 0 1.25rem;            /* prevents edge-squish on small screens */
+}
 
-        .cta-content h2 {
-            font-size: 2.5rem;
-            font-weight: 800;
-            margin-bottom: 1.5rem;
-        }
+.cta-content h2 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin-bottom: 1.25rem;
+}
 
-        .cta-content p {
-            font-size: 1.125rem;
-            color: var(--neutral-200);
-            margin-bottom: 2.5rem;
-        }
+.cta-content p {
+  font-size: 1.125rem;
+  color: var(--neutral-200);
+  margin-bottom: 2.25rem;
+}
 
-        .cta-form {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            max-width: 500px;
-            margin: 0 auto 2rem;
-        }
+/* Make the form feel less cramped */
+.cta-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;                  /* more vertical spacing */
+  max-width: 640px;              /* wider form */
+  margin: 0 auto 2rem;
+}
 
-        input, textarea {
-            padding: 0.875rem 1rem;
-            border-radius: var(--radius);
-            border: 1px solid var(--neutral-300);
-            font-family: 'Inter', sans-serif;
-            font-size: 1rem;
-            width: 100%;
-        }
+/* Two-column rows for paired inputs */
+.cta-form .form-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
 
-        .cta-form input, .cta-form textarea {
-            background-color: white;
-            border: 1px solid var(--neutral-300);
-        }
+/* Scope input styles to CTA only (avoid affecting other sections) */
+.cta-form input,
+.cta-form textarea,
+.cta-form select {
+  padding: 1rem 1.1rem;          /* slightly bigger, less squished */
+  border-radius: var(--radius);
+  border: 1px solid var(--neutral-300);
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+  width: 100%;
+  background-color: white;
+  box-sizing: border-box;
+}
 
-        .cta-form textarea {
-            grid-column: 1 / -1;
-            min-height: 120px;
-        }
+.cta-form textarea {
+  min-height: 140px;
+  resize: vertical;
+}
 
-        .cta-buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
+/* Button looks more "premium" and less tight */
+.cta-form button {
+  padding: 1rem 1.25rem;
+  min-height: 52px;
+}
+
+/* Responsive: stack columns on mobile */
+@media (max-width: 640px) {
+  .cta-section { padding: 4.5rem 0; }
+  .cta-content h2 { font-size: 2rem; }
+
+  .cta-form {
+    max-width: 520px;
+  }
+
+  .cta-form .form-group {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cta-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 
         .btn-light {
             background-color: white;
@@ -3282,42 +3313,75 @@
     </section>
 
     <!-- CTA -->
-    <section class="cta-section" id="cta">
-        <div class="container">
-            <div class="cta-content">
-                <h2>Ready for AI-Powered Solutions?</h2>
-                <p>Stop wasting time on manual processes. Get AI-powered insights and automation that drive real results.</p>
-                <form class="cta-form" id="contact-form">
-                    <div class="form-group">
-                        <input type="text" placeholder="First Name" required>
-                        <input type="text" placeholder="Last Name" required>
-                    </div>
-                    <div class="form-group">
-                        <input type="email" placeholder="Email Address" required>
-                        <input type="text" placeholder="Company Name" required>
-                    </div>
-                    <div class="form-group">
-                        <select style="padding: 0.875rem 1rem; border-radius: var(--radius); border: 1px solid var(--neutral-300); font-family: 'Inter', sans-serif; font-size: 1rem; width: 100%; background-color: white; grid-column: 1 / -1;">
-                            <option value="">I'm interested in...</option>
-                            <option value="listening">Social Listening</option>
-                            <option value="reports">Social Media Reports</option>
-                            <option value="chatbot">AI Chatbot Solutions</option>
-                            <option value="duo">The Insight Duo (Listening + Reports)</option>
-                            <option value="complete">Complete Connection Suite (All 3)</option>
-                        </select>
-                    </div>
-                    <textarea placeholder="Tell us about your specific needs (optional)"></textarea>
-                    <button type="submit" class="btn btn-light">Request Consultation</button>
-                </form>
-                <div class="cta-buttons">
-                    <a href="#builder" class="btn btn-primary">Build Your Solution</a>
-                    <a href="#chatbot-demo" class="btn btn-chatbot">Try Chatbot Demo</a>
-                    <a href="#listening-demo" class="btn btn-listening">Try Listening Demo</a>
-                    <a href="#samples" class="btn btn-outline-light">View Report Samples</a>
-                </div>
-            </div>
+   <section class="cta-section" id="cta">
+  <div class="container">
+    <div class="cta-content">
+      <h2>Ready for AI-Powered Solutions?</h2>
+      <p>Stop wasting time on manual processes. Get AI-powered insights and automation that drive real results.</p>
+
+      <form
+        class="cta-form"
+        id="cta-contact-form"
+        action="https://formspree.io/f/xnjbvobw"
+        method="POST"
+      >
+        <input type="hidden" name="_subject" value="New Consultation Request (CTA Form)" />
+        <input type="text" name="_gotcha" style="display:none" tabindex="-1" autocomplete="off" />
+
+        <div class="form-group">
+          <input type="text" name="first_name" placeholder="First Name" required>
+          <input type="text" name="last_name" placeholder="Last Name" required>
         </div>
-    </section>
+
+        <div class="form-group">
+          <input type="email" name="email" placeholder="Email Address" required>
+          <input type="text" name="company" placeholder="Company Name" required>
+        </div>
+
+        <div class="form-group">
+          <select
+            name="interest"
+            required
+            style="padding: 0.875rem 1rem; border-radius: var(--radius); border: 1px solid var(--neutral-300); font-family: 'Inter', sans-serif; font-size: 1rem; width: 100%; background-color: white; grid-column: 1 / -1;"
+          >
+            <option value="" disabled selected>I'm interested in...</option>
+            <option value="listening">Social Listening</option>
+            <option value="reports">Social Media Reports</option>
+            <option value="chatbot">AI Chatbot Solutions</option>
+            <option value="duo">The Insight Duo (Listening + Reports)</option>
+            <option value="complete">Complete Connection Suite (All 3)</option>
+          </select>
+        </div>
+
+        <textarea name="message" placeholder="Tell us about your specific needs (optional)"></textarea>
+
+        <button type="submit" class="btn btn-light" id="cta-submit-btn">
+          Request Consultation
+        </button>
+
+        <!-- Inline status (errors / sending) -->
+        <p id="cta-form-status" class="cta-form-status" aria-live="polite"></p>
+      </form>
+
+      <!-- Inline success box -->
+      <div id="cta-form-success" class="cta-form-success" hidden>
+        <h3 style="margin: 0 0 0.5rem;">Submitted ✅</h3>
+        <p style="margin: 0;">
+          Thank you! We received your request and will contact you within 24 hours to schedule a consultation.
+        </p>
+      </div>
+
+      <div class="cta-buttons">
+        <a href="#builder" class="btn btn-primary">Build Your Solution</a>
+        <a href="#chatbot-demo" class="btn btn-chatbot">Try Chatbot Demo</a>
+        <a href="#listening-demo" class="btn btn-listening">Try Listening Demo</a>
+        <a href="#samples" class="btn btn-outline-light">View Report Samples</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+
 
     <!-- Footer -->
     <footer>
@@ -3341,6 +3405,71 @@
     </footer>
 
     <script>
+          document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("cta-contact-form");
+    if (!form) return;
+
+    const statusEl = document.getElementById("cta-form-status");
+    const successEl = document.getElementById("cta-form-success");
+    const submitBtn = document.getElementById("cta-submit-btn");
+
+    // Capture phase + stopImmediatePropagation prevents other submit handlers (and popups)
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      statusEl.textContent = "";
+      statusEl.className = "cta-form-status";
+      successEl.hidden = true;
+
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = "0.7";
+      submitBtn.textContent = "Sending...";
+
+      try {
+        const formData = new FormData(form);
+
+        // Optional: include page URL for context
+        formData.set("page_url", window.location.href);
+
+        const res = await fetch(form.action, {
+          method: "POST",
+          body: formData,
+          headers: { "Accept": "application/json" }
+        });
+
+        if (res.ok) {
+          // Show success inside the section (no alerts)
+          form.reset();
+          form.style.display = "none";
+          successEl.hidden = false;
+        } else {
+          let data = null;
+          try { data = await res.json(); } catch (_) {}
+
+          statusEl.textContent =
+            data?.errors?.[0]?.message || "Something went wrong. Please try again.";
+          statusEl.classList.add("is-error");
+        }
+      } catch (err) {
+        statusEl.textContent = "Network error. Please try again.";
+        statusEl.classList.add("is-error");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = "1";
+        submitBtn.textContent = "Request Consultation";
+      }
+    }, true); // <-- capture = true
+  });
+
+
+
+
+
+
+
+
+
          // Bundle selection function
     function selectBundle(bundleType) {
         if (bundleType === 'duo') {
