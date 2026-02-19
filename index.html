@@ -3401,7 +3401,7 @@
     </footer>
 
     <script>
-          document.addEventListener("DOMContentLoaded", () => {
+                document.addEventListener("DOMContentLoaded", () => {
     const form = document.getElementById("cta-contact-form");
     if (!form) return;
 
@@ -3567,7 +3567,7 @@
         // Listening Pricing
         let listeningAddonPrices = {
             'competitor': 39,
-            'historical': 49
+            'historical': 39
         };
         
         let selectedListeningAddons = {};
@@ -3575,6 +3575,7 @@
         // Chatbot Pricing
         
         let chatbotAddonPrices = {
+            'training': 19,
             'multilanguage': 29,
             'integration': 19
         };
@@ -3867,7 +3868,7 @@
         }
         
         function updateListeningTotal() {
-            let total = 299; // Base price for listening
+            let total = 59; // Base price for listening
             for (const addon in selectedListeningAddons) {
                 total += selectedListeningAddons[addon];
             }
@@ -4032,17 +4033,17 @@
             
             // Initialize with some selected addons for demo
             document.getElementById('whitelabel-check').classList.add('checked');
-            selectedAddons['whitelabel'] = 39;
+            selectedAddons['whitelabel'] = 9;
             updateTotal();
             updateAddonsList();
             
             document.getElementById('competitor-check').classList.add('checked');
-            selectedListeningAddons['competitor'] = 99;
+            selectedListeningAddons['competitor'] = 39;
             updateListeningTotal();
             updateListeningAddonsList();
             
             document.getElementById('training-check').classList.add('checked');
-            selectedChatbotAddons['training'] = 199;
+            selectedChatbotAddons['training'] = 19;
             updateChatbotTotal();
             updateChatbotAddonsList();
             
@@ -4090,9 +4091,11 @@
             chatbotHeader.style.position = 'relative';
             chatbotHeader.appendChild(modeIndicator);
         });
+
     </script>
 </body>
 </html>
+
 
 
 
