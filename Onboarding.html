@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus.ai | Onboarding – How It Works</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ========== FULL CSS (same as homepage) ========== */
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2d4a8a;
+            --accent: #0ea5e9;
+            --accent-light: #7dd3fc;
+            --accent-chatbot: #8b5cf6;
+            --accent-chatbot-light: #c4b5fd;
+            --accent-listening: #10b981;
+            --accent-listening-light: #a7f3d0;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 0.5rem;
+            --radius-lg: 0.75rem;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--neutral-800);
+            background-color: white;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        .section-title h2 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .section-title p {
+            font-size: 1.125rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.875rem 2rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-chatbot {
+            background-color: var(--accent-chatbot);
+            color: white;
+        }
+
+        .btn-chatbot:hover {
+            background-color: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-listening {
+            background-color: var(--accent-listening);
+            color: white;
+        }
+
+        .btn-listening:hover {
+            background-color: #059669;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: var(--primary);
+            border: 2px solid var(--neutral-200);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background-color: var(--neutral-50);
+        }
+
+        .card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            border-bottom: 1px solid var(--neutral-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--neutral-700);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        /* Hero */
+        .onboarding-hero {
+            padding: 4rem 0;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            text-align: center;
+        }
+        .onboarding-hero h1 {
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+        .onboarding-hero p {
+            font-size: 1.25rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* Timeline */
+        .timeline-compact {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin: 3rem 0;
+        }
+        .timeline-step {
+            flex: 1;
+            min-width: 150px;
+            text-align: center;
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+        }
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: var(--accent-listening);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin: 0 auto 1rem;
+        }
+
+        /* Product onboarding grid */
+        .product-onboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .onboard-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            border: 1px solid var(--neutral-200);
+        }
+        .onboard-card h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+        .onboard-card ol {
+            padding-left: 1.5rem;
+            margin: 1rem 0;
+        }
+        .onboard-card li {
+            margin-bottom: 0.75rem;
+        }
+
+        /* Integration grid */
+        .integration-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        .integration-item {
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--neutral-200);
+            text-align: center;
+        }
+        .integration-item span {
+            font-size: 2rem;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Resources */
+        .resources-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--neutral-900);
+            color: white;
+            padding: 3rem 0 2rem;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--neutral-300);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            color: var(--neutral-400);
+            font-size: 0.875rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--neutral-800);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .onboarding-hero h1 {
+                font-size: 2.5rem;
+            }
+            .nav-links {
+                display: none;
+            }
+            .mobile-menu-btn {
+                display: block;
+            }
+            .timeline-compact {
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 640px) {
+            section {
+                padding: 3rem 0;
+            }
+        }
+
+        .nav-links a.active {
+            color: var(--accent);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <a href="index.html" class="logo">Nexus<span>.ai</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="products.html">Products</a>
+                <a href="listening.html">Listening</a>
+                <a href="reports.html">Reports</a>
+                <a href="chatbot.html">Chatbot</a>
+                <a href="about.html">About</a>
+                <a href="onboarding.html" class="active">How It Works</a>
+                <a href="index.html#cta" class="btn btn-primary">Get Started</a>
+            </nav>
+            <button class="mobile-menu-btn">☰</button>
+        </div>
+    </header>
+
+    <section class="onboarding-hero">
+        <div class="container">
+            <h1>Get started with Nexus.ai in minutes</h1>
+            <p>Follow our simple onboarding process – from sign‑up to full‑powered AI tools. We'll guide you every step.</p>
+        </div>
+    </section>
+
+    <!-- High‑level steps -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Your journey to AI‑powered marketing</h2>
+                <p>Four steps to unlock the full potential of Nexus.ai.</p>
+            </div>
+            <div class="timeline-compact">
+                <div class="timeline-step">
+                    <div class="step-number">1</div>
+                    <h4>Sign up & choose product</h4>
+                    <p>Create your account and select the solution that fits your needs – or bundle them.</p>
+                </div>
+                <div class="timeline-step">
+                    <div class="step-number">2</div>
+                    <h4>Connect your data</h4>
+                    <p>Link social accounts, define keywords, or upload training data for your chatbot.</p>
+                </div>
+                <div class="timeline-step">
+                    <div class="step-number">3</div>
+                    <h4>Configure & customize</h4>
+                    <p>Set up alerts, design report templates, or train your chatbot on your brand voice.</p>
+                </div>
+                <div class="timeline-step">
+                    <div class="step-number">4</div>
+                    <h4>Go live & get insights</h4>
+                    <p>Start monitoring, receive reports, or deploy your chatbot – and see results immediately.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Detailed product onboarding -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Onboarding by product</h2>
+                <p>Specific steps for each solution – choose the one you're setting up.</p>
+            </div>
+            <div class="product-onboard">
+                <!-- Social Listening -->
+                <div class="onboard-card">
+                    <span class="product-badge badge-listening" style="display: inline-block; padding: 0.25rem 1rem; background: #d1fae5; color: #065f46; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">Social Listening</span>
+                    <ol>
+                        <li><strong>Define your keywords</strong> – brand names, products, competitors, or industry terms. Use Boolean operators for precision.</li>
+                        <li><strong>Select sources</strong> – choose from 100M+ sources: Twitter, Reddit, news, forums, review sites. You can also add custom RSS feeds.</li>
+                        <li><strong>Set up alerts</strong> – get notified via email or Slack when mentions spike, sentiment shifts, or crises are detected.</li>
+                        <li><strong>Review the dashboard</strong> – your real‑time monitor is live. Explore sentiment trends, top influencers, and share of voice.</li>
+                        <li><strong>Export or share</strong> – download reports, create shared dashboards, or integrate with your CRM.</li>
+                    </ol>
+                    <div style="margin-top: 1.5rem;">
+                        <a href="listening.html" class="btn btn-listening btn-small">Go to Listening →</a>
+                    </div>
+                </div>
+                <!-- Social Media Reports -->
+                <div class="onboard-card">
+                    <span class="product-badge badge-report" style="display: inline-block; padding: 0.25rem 1rem; background: #e0f2fe; color: #0369a1; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">Social Media Reports</span>
+                    <ol>
+                        <li><strong>Connect your accounts</strong> – link Instagram, LinkedIn, TikTok, Facebook, and X (Twitter) via OAuth. We support all major platforms.</li>
+                        <li><strong>Choose report template</strong> – select from standard templates or create a custom white‑label design with your logo and colors.</li>
+                        <li><strong>Set the date range</strong> – choose weekly, monthly, or custom periods. You can also schedule recurring reports.</li>
+                        <li><strong>Select metrics</strong> – pick which KPIs to include: engagement rate, follower growth, ROI, top posts, etc.</li>
+                        <li><strong>Generate and deliver</strong> – your report is ready in 48 hours (or instantly for Pro plans). Download PDF or get a shareable link.</li>
+                    </ol>
+                    <div style="margin-top: 1.5rem;">
+                        <a href="reports.html" class="btn btn-primary btn-small">Go to Reports →</a>
+                    </div>
+                </div>
+                <!-- AI Chatbot -->
+                <div class="onboard-card">
+                    <span class="product-badge badge-chatbot" style="display: inline-block; padding: 0.25rem 1rem; background: #ede9fe; color: #5b21b6; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">AI Chatbot</span>
+                    <ol>
+                        <li><strong>Train your bot</strong> – upload FAQs, support docs, product catalogs, or link to your knowledge base. Our AI learns your content.</li>
+                        <li><strong>Configure personality</strong> – set tone (friendly, professional, etc.) and fallback responses for unrecognized queries.</li>
+                        <li><strong>Integrate channels</strong> – deploy on your website via embed code, or connect to Messenger, WhatsApp, Slack, and more.</li>
+                        <li><strong>Test thoroughly</strong> – use the live preview to simulate conversations and refine answers.</li>
+                        <li><strong>Go live and monitor</strong> – your chatbot handles conversations 24/7. Review analytics to improve over time.</li>
+                    </ol>
+                    <div style="margin-top: 1.5rem;">
+                        <a href="chatbot.html" class="btn btn-chatbot btn-small">Go to Chatbot →</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Data & Integrations -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Connect your data sources</h2>
+                <p>Nexus.ai integrates with the tools you already use.</p>
+            </div>
+            <div class="integration-grid">
+                <div class="integration-item"><span>🐦</span> Twitter/X</div>
+                <div class="integration-item"><span>📘</span> Facebook</div>
+                <div class="integration-item"><span>📷</span> Instagram</div>
+                <div class="integration-item"><span>💼</span> LinkedIn</div>
+                <div class="integration-item"><span>🎵</span> TikTok</div>
+                <div class="integration-item"><span>📰</span> RSS feeds</div>
+                <div class="integration-item"><span>💬</span> Slack</div>
+                <div class="integration-item"><span>📧</span> Email</div>
+                <div class="integration-item"><span>☁️</span> HubSpot</div>
+                <div class="integration-item"><span>📞</span> Salesforce</div>
+                <div class="integration-item"><span>🔌</span> Zapier</div>
+                <div class="integration-item"><span>📊</span> Google Analytics</div>
+            </div>
+            <p style="text-align: center; margin-top: 2rem;">And many more via our API. <a href="#" style="color: var(--accent);">See all integrations →</a></p>
+        </div>
+    </section>
+
+    <!-- Setup examples / Use cases -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Real‑world onboarding examples</h2>
+                <p>How different teams get started with Nexus.ai.</p>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+                <div class="card">
+                    <h3>📈 Marketing agency</h3>
+                    <p>"We onboarded all five clients in one day. Connected their social accounts, set up white‑label reports, and scheduled monthly deliveries."</p>
+                </div>
+                <div class="card">
+                    <h3>🛍️ E‑commerce brand</h3>
+                    <p>"Trained our chatbot on product specs and return policy. It now handles 40% of support tickets without human intervention."</p>
+                </div>
+                <div class="card">
+                    <h3>🏢 Enterprise PR team</h3>
+                    <p>"We monitor 15 brands across 20 countries. The listening setup took two hours – now we get real‑time crisis alerts."</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Resources & Support -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Resources to help you succeed</h2>
+                <p>We're here for you at every step.</p>
+            </div>
+            <div class="resources-grid">
+                <div class="card" style="text-align: center;">
+                    <div style="font-size: 2.5rem; margin-bottom: 1rem;">📚</div>
+                    <h3>Documentation</h3>
+                    <p>Detailed guides, API references, and tutorials.</p>
+                    <a href="#" class="btn btn-secondary" style="margin-top: 1rem;">Read docs</a>
+                </div>
+                <div class="card" style="text-align: center;">
+                    <div style="font-size: 2.5rem; margin-bottom: 1rem;">🎥</div>
+                    <h3>Video tutorials</h3>
+                    <p>Watch step‑by‑step walkthroughs for each product.</p>
+                    <a href="#" class="btn btn-secondary" style="margin-top: 1rem;">Watch now</a>
+                </div>
+                <div class="card" style="text-align: center;">
+                    <div style="font-size: 2.5rem; margin-bottom: 1rem;">💬</div>
+                    <h3>Support</h3>
+                    <p>Chat with our team or email us – we respond within hours.</p>
+                    <a href="#" class="btn btn-secondary" style="margin-top: 1rem;">Contact support</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ (quick onboarding questions) -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Onboarding FAQs</h2>
+            </div>
+            <div style="max-width: 800px; margin: 0 auto;">
+                <div class="faq-item" style="margin-bottom: 1rem; background: white; border-radius: var(--radius); padding: 1.5rem;">
+                    <h4 style="color: var(--primary);">How long does it take to get started?</h4>
+                    <p>Most users are up and running within 30 minutes. Social Listening and Reports require minimal setup; Chatbot training may take a few hours depending on data size.</p>
+                </div>
+                <div class="faq-item" style="margin-bottom: 1rem; background: white; border-radius: var(--radius); padding: 1.5rem;">
+                    <h4 style="color: var(--primary);">What if I need help during setup?</h4>
+                    <p>Our support team is available via live chat and email. We also offer onboarding calls for Enterprise customers.</p>
+                </div>
+                <div class="faq-item" style="margin-bottom: 1rem; background: white; border-radius: var(--radius); padding: 1.5rem;">
+                    <h4 style="color: var(--primary);">Can I switch products later?</h4>
+                    <p>Yes! You can add or remove products at any time from your dashboard. Billing adjusts automatically.</p>
+                </div>
+                <div class="faq-item" style="background: white; border-radius: var(--radius); padding: 1.5rem;">
+                    <h4 style="color: var(--primary);">Is there a free trial?</h4>
+                    <p>Absolutely. All products come with a 14‑day free trial – no credit card required.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="cta-section" style="background: var(--primary); color: white; text-align: center;">
+        <div class="container">
+            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Ready to get started?</h2>
+            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--neutral-200);">Create your account in minutes – no credit card required.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="#" class="btn btn-listening">Start Free Trial</a>
+                <a href="index.html#cta" class="btn btn-light">Request Consultation</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="index.html" class="logo" style="color: white;">Nexus<span>.ai</span></a>
+                <p style="color: var(--neutral-300); max-width: 400px;">Your AI partner for marketing intelligence – from listening to reporting to conversational AI.</p>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="products.html">Products</a>
+                    <a href="listening.html">Listening</a>
+                    <a href="reports.html">Reports</a>
+                    <a href="chatbot.html">Chatbot</a>
+                    <a href="about.html">About</a>
+                    <a href="onboarding.html">How It Works</a>
+                </div>
+            </div>
+            <div class="copyright">
+                &copy; 2025 Nexus.ai. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        document.querySelector('.mobile-menu-btn')?.addEventListener('click', function() {
+            const nav = document.querySelector('.nav-links');
+            if (nav.style.display === 'flex') {
+                nav.style.display = 'none';
+            } else {
+                nav.style.display = 'flex';
+                nav.style.flexDirection = 'column';
+                nav.style.position = 'absolute';
+                nav.style.top = '100%';
+                nav.style.left = '0';
+                nav.style.right = '0';
+                nav.style.backgroundColor = 'white';
+                nav.style.padding = '1.5rem';
+                nav.style.boxShadow = 'var(--shadow-lg)';
+                nav.style.zIndex = '99';
+            }
+        });
+    </script>
+</body>
+</html>
