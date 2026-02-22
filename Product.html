@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus.ai | All Products – AI Solutions for Marketing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ========== FULL CSS (same as homepage) ========== */
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2d4a8a;
+            --accent: #0ea5e9;
+            --accent-light: #7dd3fc;
+            --accent-chatbot: #8b5cf6;
+            --accent-chatbot-light: #c4b5fd;
+            --accent-listening: #10b981;
+            --accent-listening-light: #a7f3d0;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 0.5rem;
+            --radius-lg: 0.75rem;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--neutral-800);
+            background-color: white;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        .section-title h2 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .section-title p {
+            font-size: 1.125rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.875rem 2rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-chatbot {
+            background-color: var(--accent-chatbot);
+            color: white;
+        }
+
+        .btn-chatbot:hover {
+            background-color: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-listening {
+            background-color: var(--accent-listening);
+            color: white;
+        }
+
+        .btn-listening:hover {
+            background-color: #059669;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: var(--primary);
+            border: 2px solid var(--neutral-200);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background-color: var(--neutral-50);
+        }
+
+        .card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            border-bottom: 1px solid var(--neutral-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--neutral-700);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        /* Hero */
+        .hero {
+            padding: 6rem 0 5rem;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-content {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 900;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto 2.5rem;
+        }
+
+        /* Product badges */
+        .product-badge {
+            display: inline-block;
+            padding: 0.5rem 1.25rem;
+            border-radius: 30px;
+            font-size: 0.875rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 1.25rem;
+            text-transform: uppercase;
+        }
+        .badge-listening {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .badge-report {
+            background-color: #e0f2fe;
+            color: #0369a1;
+        }
+        .badge-chatbot {
+            background-color: #ede9fe;
+            color: #5b21b6;
+        }
+
+        /* Product row layout */
+        .product-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: start;
+            margin-bottom: 6rem;
+        }
+        .product-row.reverse {
+            direction: rtl;
+        }
+        .product-row.reverse > div {
+            direction: ltr;
+        }
+        .product-info {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+        }
+        .product-visual {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            border: 1px solid var(--neutral-200);
+            overflow: hidden;
+            height: fit-content;
+        }
+        .visual-header {
+            background: linear-gradient(135deg, var(--accent-listening) 0%, #059669 100%);
+            color: white;
+            padding: 1.25rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .visual-content {
+            padding: 1.5rem;
+            min-height: 240px;
+        }
+
+        /* Feature list with icons */
+        .feature-list {
+            list-style: none;
+            margin: 1.5rem 0;
+        }
+        .feature-list li {
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+        .feature-icon-small {
+            width: 24px;
+            height: 24px;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-listening);
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+        .report-icon {
+            background: rgba(14, 165, 233, 0.1);
+            color: var(--accent);
+        }
+        .chatbot-icon {
+            background: rgba(139, 92, 246, 0.1);
+            color: var(--accent-chatbot);
+        }
+
+        .price-tag {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin: 1rem 0 0.5rem;
+        }
+        .price-tag small {
+            font-size: 1rem;
+            font-weight: 400;
+            color: var(--neutral-600);
+        }
+
+        .testimonial {
+            background: var(--neutral-50);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            margin: 1.5rem 0;
+            border-left: 4px solid var(--accent-listening);
+        }
+        .testimonial p {
+            font-style: italic;
+            margin-bottom: 0.5rem;
+        }
+        .testimonial .author {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* Why choose us grid */
+        .why-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .why-card {
+            text-align: center;
+            padding: 2rem;
+        }
+        .why-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1.5rem;
+            background: var(--neutral-100);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+
+        /* Comparison table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        .comparison-table th {
+            background: var(--primary);
+            color: white;
+            padding: 1.25rem;
+            text-align: left;
+        }
+        .comparison-table td {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--neutral-200);
+        }
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+        .comparison-table .feature-name {
+            font-weight: 600;
+            color: var(--primary);
+        }
+        .comparison-table .check {
+            color: var(--success);
+            font-weight: 700;
+        }
+        .comparison-table .plus {
+            color: var(--accent);
+            font-size: 0.9rem;
+        }
+
+        /* Bundle offer */
+        .bundle-card {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #f59e0b;
+            text-align: center;
+            padding: 3rem;
+        }
+        .bundle-price {
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--primary);
+            margin: 1rem 0;
+        }
+        .bundle-save {
+            background: #f59e0b;
+            color: white;
+            display: inline-block;
+            padding: 0.25rem 1.5rem;
+            border-radius: 30px;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+        }
+
+        /* FAQ */
+        .faq-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+        .faq-item {
+            background: var(--neutral-50);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--neutral-200);
+        }
+        .faq-item h4 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--neutral-900);
+            color: white;
+            padding: 3rem 0 2rem;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--neutral-300);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            color: var(--neutral-400);
+            font-size: 0.875rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--neutral-800);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .product-row {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+            .product-row.reverse {
+                direction: ltr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.75rem;
+            }
+            .nav-links {
+                display: none;
+            }
+            .mobile-menu-btn {
+                display: block;
+            }
+            .faq-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            section {
+                padding: 3rem 0;
+            }
+            .hero {
+                padding: 4rem 0 3rem;
+            }
+        }
+
+        .nav-links a.active {
+            color: var(--accent);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <a href="index.html" class="logo">Nexus<span>.ai</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="products.html" class="active">Products</a>
+                <a href="listening.html">Listening</a>
+                <a href="reports.html">Reports</a>
+                <a href="chatbot.html">Chatbot</a>
+                <a href="index.html#pricing">Pricing</a>
+                <a href="index.html#faq">FAQ</a>
+                <a href="index.html#cta" class="btn btn-primary">Get Started</a>
+            </nav>
+            <button class="mobile-menu-btn">☰</button>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="container hero-content">
+            <h1>AI Solutions for Every Marketing Need</h1>
+            <p class="hero-subtitle">Choose from three powerful AI‑driven tools – or combine them for complete intelligence. Each product is built to deliver actionable results.</p>
+        </div>
+    </section>
+
+    <!-- Product 1: Social Listening -->
+    <div class="container">
+        <div class="product-row">
+            <div class="product-info">
+                <span class="product-badge badge-listening">Social Listening</span>
+                <h2 style="font-size: 2.2rem; color: var(--primary); margin-bottom: 1rem;">Know Every Conversation</h2>
+                <p style="color: var(--neutral-600); margin-bottom: 1.5rem;">Real‑time brand monitoring, sentiment analysis, and competitive intelligence across 100+ million sources. Understand what people are saying about your brand – instantly.</p>
+                
+                <div class="price-tag">From $199<span style="font-size: 1rem;">/month</span></div>
+                
+                <ul class="feature-list">
+                    <li><span class="feature-icon-small">🔊</span> <strong>Real‑time mentions</strong> – Monitor Twitter, Reddit, news, forums, and review sites as they happen.</li>
+                    <li><span class="feature-icon-small">🧠</span> <strong>AI sentiment analysis</strong> – 94% accuracy, detects sarcasm and context.</li>
+                    <li><span class="feature-icon-small">🏆</span> <strong>Competitor benchmarking</strong> – Compare share of voice and sentiment against up to 5 rivals.</li>
+                    <li><span class="feature-icon-small">🚨</span> <strong>Crisis detection</strong> – Instant alerts when negative mentions spike.</li>
+                    <li><span class="feature-icon-small">📈</span> <strong>Trend forecasting</strong> – Identify emerging topics and influencers before they peak.</li>
+                    <li><span class="feature-icon-small">🔌</span> <strong>Integrations</strong> – Connect with Slack, Teams, Zapier, and your CRM.</li>
+                </ul>
+
+                <div class="testimonial">
+                    <p>"Nexus listening caught a brewing PR crisis before it exploded. We were able to respond in minutes."</p>
+                    <div class="author">— CMO, TechBrand</div>
+                </div>
+
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <a href="listening.html" class="btn btn-listening">Learn More →</a>
+                    <a href="listening.html#builder" class="btn btn-secondary">Build Your Package</a>
+                </div>
+            </div>
+            <div class="product-visual">
+                <div class="visual-header" style="background: linear-gradient(135deg, var(--accent-listening) 0%, #059669 100%);">
+                    <span>🔊 Live Brand Monitor</span>
+                </div>
+                <div class="visual-content">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                        <span><strong>1,284</strong> mentions (24h)</span>
+                        <span><strong>74%</strong> positive</span>
+                        <span><strong>12</strong> alerts</span>
+                    </div>
+                    <div style="height: 100px; background: linear-gradient(90deg, #ef4444 0%, #f59e0b 30%, #10b981 70%); border-radius: var(--radius); margin-bottom: 1rem;"></div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <span style="width: 10px; height: 10px; background: #10b981; border-radius: 50%;"></span>
+                            @techcrunch: "Nexus.ai revolutionizes social listening"
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <span style="width: 10px; height: 10px; background: #f59e0b; border-radius: 50%;"></span>
+                            @marketer: Anyone compared Nexus to Brandwatch?
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="width: 10px; height: 10px; background: #10b981; border-radius: 50%;"></span>
+                            @user123: Love the new sentiment analysis feature!
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product 2: Social Media Reports -->
+        <div class="product-row reverse">
+            <div class="product-info">
+                <span class="product-badge badge-report">Social Media Reports</span>
+                <h2 style="font-size: 2.2rem; color: var(--primary); margin-bottom: 1rem;">Turn Data into Decisions</h2>
+                <p style="color: var(--neutral-600); margin-bottom: 1.5rem;">Professional, white‑label reports delivered in 48 hours with AI‑powered insights and ROI tracking. Impress clients and leadership with clear, actionable data.</p>
+                
+                <div class="price-tag">From $199<span style="font-size: 1rem;">/month</span></div>
+                
+                <ul class="feature-list">
+                    <li><span class="feature-icon-small report-icon">📊</span> <strong>Cross‑platform analytics</strong> – Combine Instagram, LinkedIn, TikTok, Facebook, and X into one unified report.</li>
+                    <li><span class="feature-icon-small report-icon">📈</span> <strong>Engagement & ROI</strong> – Track engagement rates, conversions, and calculate return on investment.</li>
+                    <li><span class="feature-icon-small report-icon">🎨</span> <strong>Custom templates</strong> – White‑label reports with your branding and logo.</li>
+                    <li><span class="feature-icon-small report-icon">👥</span> <strong>Audience insights</strong> – Demographics, growth trends, and top followers.</li>
+                    <li><span class="feature-icon-small report-icon">🏆</span> <strong>Content performance</strong> – Identify your best‑performing posts and replicate success.</li>
+                    <li><span class="feature-icon-small report-icon">⏱️</span> <strong>48‑hour delivery</strong> – Guaranteed turnaround, even for complex reports.</li>
+                </ul>
+
+                <div class="testimonial" style="border-left-color: var(--accent);">
+                    <p>"We use Nexus reports in every client pitch. The insights are always on point, and the design is stunning."</p>
+                    <div class="author">— Agency Director, SocialFlow</div>
+                </div>
+
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <a href="reports.html" class="btn btn-primary">Learn More →</a>
+                    <a href="reports.html#builder" class="btn btn-secondary">Build Your Report</a>
+                </div>
+            </div>
+            <div class="product-visual">
+                <div class="visual-header" style="background: linear-gradient(135deg, var(--accent) 0%, #0284c7 100%);">
+                    <span>📊 Sample Report Preview</span>
+                </div>
+                <div class="visual-content">
+                    <div style="background: var(--neutral-100); padding: 1rem; border-radius: var(--radius);">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                            <span><strong>Instagram</strong> +12%</span>
+                            <span><strong>LinkedIn</strong> +8%</span>
+                            <span><strong>TikTok</strong> +24%</span>
+                        </div>
+                        <div style="height: 8px; background: var(--neutral-300); border-radius: 4px; margin-bottom: 0.5rem; width: 80%;"></div>
+                        <div style="height: 8px; background: var(--neutral-300); border-radius: 4px; margin-bottom: 1rem; width: 60%;"></div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                            <div style="height: 60px; background: var(--neutral-300); border-radius: var(--radius);"></div>
+                            <div style="height: 60px; background: var(--neutral-300); border-radius: var(--radius);"></div>
+                        </div>
+                        <div style="margin-top: 1rem; font-size: 0.9rem; color: var(--neutral-600);">Engagement by platform • Apr 2025</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product 3: AI Chatbot -->
+        <div class="product-row">
+            <div class="product-info">
+                <span class="product-badge badge-chatbot">AI Chatbot</span>
+                <h2 style="font-size: 2.2rem; color: var(--primary); margin-bottom: 1rem;">Intelligent Conversations, 24/7</h2>
+                <p style="color: var(--neutral-600); margin-bottom: 1.5rem;">Custom‑trained chatbots that understand your business and customers – for support, lead generation, and e‑commerce. Reduce response times and increase satisfaction.</p>
+                
+                <div class="price-tag">From $299<span style="font-size: 1rem;">/month</span></div>
+                
+                <ul class="feature-list">
+                    <li><span class="feature-icon-small chatbot-icon">🧠</span> <strong>Natural language processing</strong> – Understands context, intent, and can handle complex queries.</li>
+                    <li><span class="feature-icon-small chatbot-icon">🔌</span> <strong>Multi‑platform integration</strong> – Deploy on your website, Messenger, WhatsApp, Slack, and more.</li>
+                    <li><span class="feature-icon-small chatbot-icon">📚</span> <strong>Custom training</strong> – Train on your FAQs, product catalog, support docs, and knowledge base.</li>
+                    <li><span class="feature-icon-small chatbot-icon">⏰</span> <strong>24/7 automated support</strong> – Answer questions instantly, escalate to humans when needed.</li>
+                    <li><span class="feature-icon-small chatbot-icon">🎯</span> <strong>Lead generation</strong> – Qualify leads, book appointments, and capture contact info.</li>
+                    <li><span class="feature-icon-small chatbot-icon">📊</span> <strong>Analytics dashboard</strong> – Track conversation volume, satisfaction, and resolution rates.</li>
+                </ul>
+
+                <div class="testimonial" style="border-left-color: var(--accent-chatbot);">
+                    <p>"Our chatbot handles 60% of support queries without human intervention. Setup was incredibly easy."</p>
+                    <div class="author">— Support Lead, EcomStore</div>
+                </div>
+
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <a href="chatbot.html" class="btn btn-chatbot">Learn More →</a>
+                    <a href="chatbot.html#builder" class="btn btn-secondary">Build Your Chatbot</a>
+                </div>
+            </div>
+            <div class="product-visual">
+                <div class="visual-header" style="background: linear-gradient(135deg, var(--accent-chatbot) 0%, #7c3aed 100%);">
+                    <span>💬 Chatbot Demo</span>
+                </div>
+                <div class="visual-content">
+                    <div style="background: #f3f4f6; padding: 1rem; border-radius: 1rem 1rem 1rem 0.25rem; margin-bottom: 1rem; max-width: 80%;">
+                        Hello! How can I help you today?
+                    </div>
+                    <div style="background: linear-gradient(135deg, var(--accent-chatbot) 0%, #7c3aed 100%); color: white; padding: 1rem; border-radius: 1rem 1rem 0.25rem 1rem; max-width: 80%; margin-left: auto; margin-bottom: 1rem;">
+                        What are your business hours?
+                    </div>
+                    <div style="background: #f3f4f6; padding: 1rem; border-radius: 1rem 1rem 1rem 0.25rem; max-width: 80%;">
+                        We're open 24/7! I can help you anytime. You can also schedule a call with our team.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Why Choose Nexus.ai -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Why Choose Nexus.ai?</h2>
+                <p>We combine powerful AI with practical business applications.</p>
+            </div>
+            <div class="why-grid">
+                <div class="card why-card">
+                    <div class="why-icon">⚡</div>
+                    <h3>Fast Implementation</h3>
+                    <p>Get up and running in hours, not weeks. Our solutions are designed for quick deployment.</p>
+                </div>
+                <div class="card why-card">
+                    <div class="why-icon">🎯</div>
+                    <h3>Actionable Insights</h3>
+                    <p>We don't just give you data – we tell you what it means and what to do next.</p>
+                </div>
+                <div class="card why-card">
+                    <div class="why-icon">🔒</div>
+                    <h3>Enterprise Security</h3>
+                    <p>Your data is encrypted and never shared. SOC2 compliant infrastructure.</p>
+                </div>
+                <div class="card why-card">
+                    <div class="why-icon">🌍</div>
+                    <h3>Global Scale</h3>
+                    <p>Monitor conversations in 50+ languages, reports for any region, chatbots that speak your customers' language.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison Table -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Compare Products</h2>
+                <p>Find the right tool for your team.</p>
+            </div>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Social Listening</th>
+                        <th>Social Media Reports</th>
+                        <th>AI Chatbot</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td class="feature-name">Real‑time monitoring</td><td class="check">✓</td><td>—</td><td>—</td></tr>
+                    <tr><td class="feature-name">Sentiment analysis</td><td class="check">✓ (94% accuracy)</td><td class="check">✓ (in reports)</td><td>—</td></tr>
+                    <tr><td class="feature-name">Competitor tracking</td><td class="check">✓</td><td class="check">✓</td><td>—</td></tr>
+                    <tr><td class="feature-name">Crisis alerts</td><td class="check">✓</td><td>—</td><td>—</td></tr>
+                    <tr><td class="feature-name">Custom report templates</td><td>—</td><td class="check">✓</td><td>—</td></tr>
+                    <tr><td class="feature-name">White‑label / branding</td><td class="plus">+ add‑on</td><td class="check">✓</td><td class="check">✓ (Pro plan)</td></tr>
+                    <tr><td class="feature-name">24/7 automated conversations</td><td>—</td><td>—</td><td class="check">✓</td></tr>
+                    <tr><td class="feature-name">Multi‑platform integration</td><td class="check">✓ (Slack, Zapier)</td><td class="check">✓ (data sources)</td><td class="check">✓ (deployment)</td></tr>
+                    <tr><td class="feature-name">API access</td><td class="plus">+ add‑on</td><td class="plus">+ add‑on</td><td class="check">✓ (Enterprise)</td></tr>
+                    <tr><td class="feature-name">Starting price</td><td>$199/mo</td><td>$199/mo</td><td>$299/mo</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Bundle Offer -->
+    <section style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+        <div class="container">
+            <div class="card bundle-card">
+                <h2 style="font-size: 2.5rem; color: var(--primary);">Save with Bundles</h2>
+                <p style="font-size: 1.2rem; max-width: 600px; margin: 0 auto;">Combine two or more products and save up to 20%.</p>
+                <div class="bundle-price">$399<span style="font-size: 1.2rem;">/month</span></div>
+                <div class="bundle-save">Save $99</div>
+                <p><strong>Insight Duo:</strong> Social Listening + Social Media Reports</p>
+                <p style="margin-top: 1rem;"><strong>Complete Connection:</strong> All three products for $699/mo (save $198)</p>
+                <div style="margin-top: 2rem;">
+                    <a href="index.html#cta" class="btn btn-primary">Contact Us for Bundle</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Product FAQ -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Product FAQ</h2>
+            </div>
+            <div class="faq-grid">
+                <div class="faq-item">
+                    <h4>Can I try before I buy?</h4>
+                    <p>Yes! Every product offers a 14‑day free trial. No credit card required.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Do you offer discounts for annual commitments?</h4>
+                    <p>Absolutely. Save 15% when you pay yearly. Contact sales for details.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Can I switch plans later?</h4>
+                    <p>Yes, you can upgrade or downgrade at any time. Changes take effect immediately.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>What kind of support do you provide?</h4>
+                    <p>All plans include email support. Pro and Enterprise plans include priority chat and phone support.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Is my data secure?</h4>
+                    <p>We use enterprise‑grade encryption (AES‑256) and are SOC2 compliant. Your data is never shared.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Can I get a custom bundle?</h4>
+                    <p>Yes, we offer tailored packages for large teams. Contact us to discuss your needs.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="cta-section" style="background: var(--primary); color: white; text-align: center;">
+        <div class="container">
+            <h2 style="font-size: 2.5rem; margin-bottom: 1.25rem;">Ready to supercharge your marketing?</h2>
+            <p style="font-size: 1.125rem; color: var(--neutral-200); margin-bottom: 2.25rem;">Choose the product that fits your needs, or contact us for a custom bundle.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="listening.html" class="btn btn-listening">Explore Listening</a>
+                <a href="reports.html" class="btn btn-primary">Explore Reports</a>
+                <a href="chatbot.html" class="btn btn-chatbot">Explore Chatbot</a>
+                <a href="index.html#cta" class="btn btn-light">Request Consultation</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="index.html" class="logo" style="color: white;">Nexus<span>.ai</span></a>
+                <p style="color: var(--neutral-300); max-width: 400px;">Connecting businesses to the practical power of AI and automation. Three powerful tools for complete digital intelligence.</p>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="products.html">Products</a>
+                    <a href="listening.html">Listening</a>
+                    <a href="reports.html">Reports</a>
+                    <a href="chatbot.html">Chatbot</a>
+                </div>
+            </div>
+            <div class="copyright">
+                &copy; 2025 Nexus.ai. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        document.querySelector('.mobile-menu-btn')?.addEventListener('click', function() {
+            const nav = document.querySelector('.nav-links');
+            if (nav.style.display === 'flex') {
+                nav.style.display = 'none';
+            } else {
+                nav.style.display = 'flex';
+                nav.style.flexDirection = 'column';
+                nav.style.position = 'absolute';
+                nav.style.top = '100%';
+                nav.style.left = '0';
+                nav.style.right = '0';
+                nav.style.backgroundColor = 'white';
+                nav.style.padding = '1.5rem';
+                nav.style.boxShadow = 'var(--shadow-lg)';
+                nav.style.zIndex = '99';
+            }
+        });
+    </script>
+</body>
+</html>
