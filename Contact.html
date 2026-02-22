@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus.ai | Contact – Get in Touch with Our Team</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ========== FULL CSS (same as homepage) ========== */
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2d4a8a;
+            --accent: #0ea5e9;
+            --accent-light: #7dd3fc;
+            --accent-chatbot: #8b5cf6;
+            --accent-chatbot-light: #c4b5fd;
+            --accent-listening: #10b981;
+            --accent-listening-light: #a7f3d0;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 0.5rem;
+            --radius-lg: 0.75rem;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--neutral-800);
+            background-color: white;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        .section-title h2 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .section-title p {
+            font-size: 1.125rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.875rem 2rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-chatbot {
+            background-color: var(--accent-chatbot);
+            color: white;
+        }
+
+        .btn-chatbot:hover {
+            background-color: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-listening {
+            background-color: var(--accent-listening);
+            color: white;
+        }
+
+        .btn-listening:hover {
+            background-color: #059669;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: var(--primary);
+            border: 2px solid var(--neutral-200);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background-color: var(--neutral-50);
+        }
+
+        .btn-light {
+            background-color: white;
+            color: var(--primary);
+        }
+
+        .btn-light:hover {
+            background-color: var(--neutral-100);
+        }
+
+        .card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            border-bottom: 1px solid var(--neutral-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--neutral-700);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        /* Contact Hero */
+        .contact-hero {
+            padding: 4rem 0;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            text-align: center;
+        }
+        .contact-hero h1 {
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+        .contact-hero p {
+            font-size: 1.25rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* Contact methods grid */
+        .contact-methods {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        .method-card {
+            text-align: center;
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+            box-shadow: var(--shadow);
+        }
+        .method-icon {
+            width: 64px;
+            height: 64px;
+            background: var(--neutral-100);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin: 0 auto 1.5rem;
+        }
+        .method-card h3 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+        .method-card p {
+            color: var(--neutral-600);
+            margin-bottom: 1.5rem;
+        }
+        .method-link {
+            color: var(--accent);
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .method-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Main contact area */
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: start;
+        }
+        .contact-form {
+            background: white;
+            padding: 2.5rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--neutral-200);
+        }
+        .contact-form h3 {
+            font-size: 1.75rem;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--neutral-700);
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            border: 1px solid var(--neutral-300);
+            border-radius: var(--radius);
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            transition: border 0.2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .checkbox-group input {
+            width: auto;
+        }
+
+        .contact-info {
+            background: white;
+            padding: 2.5rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--neutral-200);
+        }
+        .info-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .info-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--neutral-100);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+        .info-item h4 {
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+
+        /* Trust badges */
+        .trust-badges {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+        .trust-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--neutral-700);
+        }
+
+        /* Office locations */
+        .locations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .location-card {
+            text-align: center;
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+        }
+        .location-flag {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Testimonials */
+        .testimonials {
+            background: var(--neutral-50);
+        }
+        .testimonial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        .testimonial-card {
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+        }
+        .testimonial-card p {
+            font-style: italic;
+            margin-bottom: 1rem;
+        }
+        .testimonial-author {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* FAQ */
+        .faq-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        .faq-item {
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--neutral-200);
+        }
+        .faq-item h4 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--neutral-900);
+            color: white;
+            padding: 3rem 0 2rem;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--neutral-300);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            color: var(--neutral-400);
+            font-size: 0.875rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--neutral-800);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .contact-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .contact-hero h1 {
+                font-size: 2.5rem;
+            }
+            .nav-links {
+                display: none;
+            }
+            .mobile-menu-btn {
+                display: block;
+            }
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .faq-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            section {
+                padding: 3rem 0;
+            }
+        }
+
+        .nav-links a.active {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* Form status */
+        .form-status {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: var(--radius);
+            display: none;
+        }
+        .form-status.success {
+            display: block;
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        .form-status.error {
+            display: block;
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <a href="index.html" class="logo">Nexus<span>.ai</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="products.html">Products</a>
+                <a href="listening.html">Listening</a>
+                <a href="reports.html">Reports</a>
+                <a href="chatbot.html">Chatbot</a>
+                <a href="about.html">About</a>
+                <a href="onboarding.html">How It Works</a>
+                <a href="contact.html" class="active">Contact</a>
+                <a href="#cta" class="btn btn-primary">Get Started</a>
+            </nav>
+            <button class="mobile-menu-btn">☰</button>
+        </div>
+    </header>
+
+    <section class="contact-hero">
+        <div class="container">
+            <h1>We're here to help</h1>
+            <p>Whether you're ready to buy, need a demo, or have questions – our team is ready to assist.</p>
+        </div>
+    </section>
+
+    <!-- Quick contact methods -->
+    <section style="padding-top: 0;">
+        <div class="container">
+            <div class="contact-methods">
+                <div class="method-card">
+                    <div class="method-icon">💬</div>
+                    <h3>Live chat</h3>
+                    <p>Chat with our team right now. Average response: 2 minutes.</p>
+                    <a href="#" class="method-link">Start chat →</a>
+                </div>
+                <div class="method-card">
+                    <div class="method-icon">📞</div>
+                    <h3>Call us</h3>
+                    <p>Speak directly to a sales representative.</p>
+                    <a href="tel:+18005551234" class="method-link">+1 (800) 555-1234</a>
+                </div>
+                <div class="method-card">
+                    <div class="method-icon">📧</div>
+                    <h3>Email</h3>
+                    <p>For general inquiries or support.</p>
+                    <a href="mailto:hello@nexus.ai" class="method-link">hello@nexus.ai</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main contact form + info -->
+    <section>
+        <div class="container">
+            <div class="contact-grid">
+                <!-- Contact form -->
+                <div class="contact-form">
+                    <h3>Send us a message</h3>
+                    <p style="color: var(--neutral-600); margin-bottom: 2rem;">Fill out the form and we'll get back to you within 24 hours.</p>
+                    
+                    <form id="contact-form" action="https://formspree.io/f/your-form-id" method="POST">
+                        <input type="hidden" name="_subject" value="New contact from nexus.ai website">
+                        <input type="text" name="_gotcha" style="display:none" tabindex="-1" autocomplete="off">
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="first_name">First name *</label>
+                                <input type="text" id="first_name" name="first_name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="last_name">Last name *</label>
+                                <input type="text" id="last_name" name="last_name" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="email">Work email *</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="company">Company name</label>
+                            <input type="text" id="company" name="company">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="interest">I'm interested in *</label>
+                            <select id="interest" name="interest" required>
+                                <option value="" disabled selected>Select an option</option>
+                                <option value="listening">Social Listening</option>
+                                <option value="reports">Social Media Reports</option>
+                                <option value="chatbot">AI Chatbot</option>
+                                <option value="bundle">Bundle / Multiple products</option>
+                                <option value="demo">Request a demo</option>
+                                <option value="support">Support</option>
+                                <option value="partnership">Partnership</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="message">Message *</label>
+                            <textarea id="message" name="message" rows="5" required placeholder="Tell us about your needs, timeline, or questions..."></textarea>
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <input type="checkbox" id="gdpr" name="gdpr" required>
+                            <label for="gdpr" style="display: inline; margin: 0;">I agree to the <a href="#" style="color: var(--accent);">privacy policy</a> and consent to being contacted. *</label>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Send message</button>
+                        <div id="form-status" class="form-status"></div>
+                    </form>
+                </div>
+
+                <!-- Contact info -->
+                <div class="contact-info">
+                    <h3 style="font-size: 1.75rem; color: var(--primary); margin-bottom: 2rem;">Get in touch</h3>
+                    
+                    <div class="info-item">
+                        <div class="info-icon">📍</div>
+                        <div>
+                            <h4>Global headquarters</h4>
+                            <p>548 Market St, PMB 72296<br>San Francisco, CA 94104</p>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-icon">📞</div>
+                        <div>
+                            <h4>Phone</h4>
+                            <p>Sales: +1 (800) 555-1234<br>Support: +1 (800) 555-5678</p>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-icon">📧</div>
+                        <div>
+                            <h4>Email</h4>
+                            <p>Sales: sales@nexus.ai<br>Support: support@nexus.ai<br>Partnerships: partners@nexus.ai</p>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-icon">⏰</div>
+                        <div>
+                            <h4>Hours</h4>
+                            <p>Monday – Friday: 9am – 8pm ET<br>Saturday – Sunday: 10am – 4pm ET</p>
+                        </div>
+                    </div>
+
+                    <hr style="margin: 2rem 0; border-color: var(--neutral-200);">
+
+                    <h4 style="color: var(--primary); margin-bottom: 1rem;">Follow us</h4>
+                    <div style="display: flex; gap: 1.5rem;">
+                        <a href="#" style="color: var(--neutral-600); text-decoration: none;">𝕏</a>
+                        <a href="#" style="color: var(--neutral-600); text-decoration: none;">LinkedIn</a>
+                        <a href="#" style="color: var(--neutral-600); text-decoration: none;">GitHub</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust badges -->
+    <section style="padding-top: 0;">
+        <div class="container">
+            <div class="trust-badges">
+                <div class="trust-badge"><span>🔒</span> GDPR compliant</div>
+                <div class="trust-badge"><span>⚡</span> 24h response time</div>
+                <div class="trust-badge"><span>💬</span> Live chat support</div>
+                <div class="trust-badge"><span>⭐</span> 98% satisfaction</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Office locations -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Our global offices</h2>
+                <p>We're remote‑first with hubs around the world.</p>
+            </div>
+            <div class="locations-grid">
+                <div class="location-card">
+                    <div class="location-flag">🇺🇸</div>
+                    <h4>San Francisco</h4>
+                    <p>Headquarters</p>
+                </div>
+                <div class="location-card">
+                    <div class="location-flag">🇬🇧</div>
+                    <h4>London</h4>
+                    <p>EMEA</p>
+                </div>
+                <div class="location-card">
+                    <div class="location-flag">🇸🇬</div>
+                    <h4>Singapore</h4>
+                    <p>APAC</p>
+                </div>
+                <div class="location-card">
+                    <div class="location-flag">🇦🇺</div>
+                    <h4>Sydney</h4>
+                    <p>Australia</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="testimonials">
+        <div class="container">
+            <div class="section-title">
+                <h2>What our customers say</h2>
+            </div>
+            <div class="testimonial-grid">
+                <div class="testimonial-card">
+                    <p>"The Nexus team went above and beyond during our onboarding. They answered every question and even hopped on a call to help us configure our reports."</p>
+                    <div class="testimonial-author">— Sarah J., Marketing Director</div>
+                </div>
+                <div class="testimonial-card">
+                    <p>"I reached out with a complex chatbot training need, and their support team had it solved within hours. Truly exceptional service."</p>
+                    <div class="testimonial-author">— Michael T., CTO</div>
+                </div>
+                <div class="testimonial-card">
+                    <p>"We were evaluating several vendors, but Nexus won us over with their responsiveness and willingness to customize."</p>
+                    <div class="testimonial-author">— Elena R., Product Manager</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Quick answers</h2>
+            </div>
+            <div class="faq-grid">
+                <div class="faq-item">
+                    <h4>How quickly do you respond?</h4>
+                    <p>We aim to reply to all inquiries within 24 hours (often much faster). Sales calls can be scheduled instantly via our calendar link.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Do you offer demos?</h4>
+                    <p>Yes! We can schedule a personalized demo tailored to your use case. Just indicate that in your message.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Can I get a trial first?</h4>
+                    <p>Absolutely. All products come with a 14‑day free trial – no credit card required. You can sign up directly on any product page.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Do you have local partners?</h4>
+                    <p>We work with implementation partners worldwide. Contact us to find a partner near you.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="cta-section" style="background: var(--primary); color: white; text-align: center;">
+        <div class="container">
+            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Ready to transform your marketing?</h2>
+            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--neutral-200);">Get in touch today – we'll help you find the perfect solution.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="#" class="btn btn-listening">Start Free Trial</a>
+                <a href="#" class="btn btn-light">Schedule a Demo</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="index.html" class="logo" style="color: white;">Nexus<span>.ai</span></a>
+                <p style="color: var(--neutral-300); max-width: 400px;">Your AI partner for marketing intelligence – from listening to reporting to conversational AI.</p>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="products.html">Products</a>
+                    <a href="listening.html">Listening</a>
+                    <a href="reports.html">Reports</a>
+                    <a href="chatbot.html">Chatbot</a>
+                    <a href="about.html">About</a>
+                    <a href="onboarding.html">How It Works</a>
+                    <a href="contact.html">Contact</a>
+                </div>
+            </div>
+            <div class="copyright">
+                &copy; 2025 Nexus.ai. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        document.querySelector('.mobile-menu-btn')?.addEventListener('click', function() {
+            const nav = document.querySelector('.nav-links');
+            if (nav.style.display === 'flex') {
+                nav.style.display = 'none';
+            } else {
+                nav.style.display = 'flex';
+                nav.style.flexDirection = 'column';
+                nav.style.position = 'absolute';
+                nav.style.top = '100%';
+                nav.style.left = '0';
+                nav.style.right = '0';
+                nav.style.backgroundColor = 'white';
+                nav.style.padding = '1.5rem';
+                nav.style.boxShadow = 'var(--shadow-lg)';
+                nav.style.zIndex = '99';
+            }
+        });
+
+        // Form submission handling (demo with Formspree)
+        document.getElementById('contact-form')?.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const form = e.target;
+            const formData = new FormData(form);
+            const statusDiv = document.getElementById('form-status');
+            
+            statusDiv.className = 'form-status';
+            statusDiv.textContent = 'Sending...';
+            
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    statusDiv.className = 'form-status success';
+                    statusDiv.textContent = 'Thank you! We\'ll be in touch within 24 hours.';
+                    form.reset();
+                } else {
+                    const data = await response.json();
+                    throw new Error(data?.error || 'Form submission failed');
+                }
+            } catch (error) {
+                statusDiv.className = 'form-status error';
+                statusDiv.textContent = 'Oops! Something went wrong. Please try again or email us directly.';
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>
