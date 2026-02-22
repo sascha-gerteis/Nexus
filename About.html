@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus.ai | About – AI Technology for Marketing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ========== FULL CSS (same as homepage) ========== */
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2d4a8a;
+            --accent: #0ea5e9;
+            --accent-light: #7dd3fc;
+            --accent-chatbot: #8b5cf6;
+            --accent-chatbot-light: #c4b5fd;
+            --accent-listening: #10b981;
+            --accent-listening-light: #a7f3d0;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 0.5rem;
+            --radius-lg: 0.75rem;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--neutral-800);
+            background-color: white;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        .section-title h2 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .section-title p {
+            font-size: 1.125rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.875rem 2rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-chatbot {
+            background-color: var(--accent-chatbot);
+            color: white;
+        }
+
+        .btn-chatbot:hover {
+            background-color: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-listening {
+            background-color: var(--accent-listening);
+            color: white;
+        }
+
+        .btn-listening:hover {
+            background-color: #059669;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: var(--primary);
+            border: 2px solid var(--neutral-200);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background-color: var(--neutral-50);
+        }
+
+        .card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            border-bottom: 1px solid var(--neutral-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--neutral-700);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        /* Hero */
+        .about-hero {
+            padding: 4rem 0;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            text-align: center;
+        }
+        .about-hero h1 {
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+        .about-hero p {
+            font-size: 1.25rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* Tech grid */
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .tech-card {
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+            box-shadow: var(--shadow);
+        }
+        .tech-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--neutral-100);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* How it works (platform diagram) */
+        .platform-flow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+        .flow-step {
+            flex: 1;
+            min-width: 180px;
+            text-align: center;
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+        }
+        .flow-arrow {
+            font-size: 2rem;
+            color: var(--neutral-400);
+        }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+        .stat-card {
+            text-align: center;
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+        }
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: var(--accent-listening);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Products mini */
+        .product-pillars {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        /* Security */
+        .security-badge {
+            background: var(--neutral-50);
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            display: inline-block;
+            margin: 1rem;
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--neutral-900);
+            color: white;
+            padding: 3rem 0 2rem;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--neutral-300);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            color: var(--neutral-400);
+            font-size: 0.875rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--neutral-800);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .platform-flow {
+                flex-direction: column;
+            }
+            .flow-arrow {
+                transform: rotate(90deg);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .about-hero h1 {
+                font-size: 2.5rem;
+            }
+            .nav-links {
+                display: none;
+            }
+            .mobile-menu-btn {
+                display: block;
+            }
+        }
+
+        @media (max-width: 640px) {
+            section {
+                padding: 3rem 0;
+            }
+        }
+
+        .nav-links a.active {
+            color: var(--accent);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <a href="index.html" class="logo">Nexus<span>.ai</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="products.html">Products</a>
+                <a href="listening.html">Listening</a>
+                <a href="reports.html">Reports</a>
+                <a href="chatbot.html">Chatbot</a>
+                <a href="about.html" class="active">About</a>
+                <a href="index.html#faq">FAQ</a>
+                <a href="index.html#cta" class="btn btn-primary">Get Started</a>
+            </nav>
+            <button class="mobile-menu-btn">☰</button>
+        </div>
+    </header>
+
+    <section class="about-hero">
+        <div class="container">
+            <h1>The AI platform built for marketing</h1>
+            <p>Nexus.ai combines advanced natural language processing, real‑time data streaming, and automation to give you a complete view of your brand – and the tools to act on it.</p>
+        </div>
+    </section>
+
+    <!-- What is Nexus (platform overview) -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>The Nexus Platform</h2>
+                <p>One unified AI engine, three powerful applications.</p>
+            </div>
+            <div style="background: var(--neutral-50); padding: 3rem; border-radius: var(--radius-lg); text-align: center;">
+                <p style="font-size: 1.2rem; max-width: 800px; margin: 0 auto;">At the core of Nexus is a proprietary AI engine that ingests, analyzes, and interprets massive amounts of unstructured data – from social conversations to customer messages – and turns it into structured, actionable intelligence. Every product you see is a specialized interface to this engine.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Our AI Technology (detailed) -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Our AI Technology Stack</h2>
+                <p>How we deliver speed, accuracy, and scale.</p>
+            </div>
+            <div class="tech-grid">
+                <div class="tech-card">
+                    <div class="tech-icon">🧠</div>
+                    <h3>Natural Language Understanding</h3>
+                    <p>We use transformer‑based models (similar to GPT) fine‑tuned on millions of marketing and support conversations. Achieves 94% accuracy in sentiment detection across 50+ languages.</p>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon">⚡</div>
+                    <h3>Real‑time Stream Processing</h3>
+                    <p>Our data pipeline processes over 100M social posts, news articles, and forum threads per day with sub‑second latency. Built on Apache Kafka and custom microservices.</p>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon">📊</div>
+                    <h3>Automated Insight Generation</h3>
+                    <p>We don’t just show you data – we highlight trends, anomalies, and recommendations using proprietary algorithms that learn from your industry.</p>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon">🔌</div>
+                    <h3>Integration Layer</h3>
+                    <p>Connect with 50+ platforms via API, webhooks, or pre‑built connectors (Slack, Zapier, HubSpot, Salesforce). Your data flows where you need it.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works (platform flow) -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>How the Nexus Engine Works</h2>
+                <p>From raw data to actionable intelligence.</p>
+            </div>
+            <div class="platform-flow">
+                <div class="flow-step">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">🌐</div>
+                    <h4>1. Ingest</h4>
+                    <p>Millions of sources: social APIs, news feeds, forums, direct messages, and your own data (CSV, CRM).</p>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">🔍</div>
+                    <h4>2. Analyze</h4>
+                    <p>NLP models extract entities, sentiment, intent, and trends. Custom models per product (listening, reports, chatbot).</p>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">⚙️</div>
+                    <h4>3. Structure</h4>
+                    <p>Data is indexed and enriched. Our engine generates summaries, alerts, and predictions.</p>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">📤</div>
+                    <h4>4. Deliver</h4>
+                    <p>Real‑time dashboards, automated reports, chatbot responses, or API payloads.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- The Three Products (brief) -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>What We Build</h2>
+                <p>Three specialised applications of our core AI.</p>
+            </div>
+            <div class="product-pillars">
+                <div class="card">
+                    <span class="product-badge badge-listening" style="display: inline-block; padding: 0.25rem 1rem; background: #d1fae5; color: #065f46; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">Social Listening</span>
+                    <p>Continuous monitoring of brand conversations across the open web. Our AI flags shifts in sentiment, detects emerging crises, and benchmarks competitors – all in real time.</p>
+                </div>
+                <div class="card">
+                    <span class="product-badge badge-report" style="display: inline-block; padding: 0.25rem 1rem; background: #e0f2fe; color: #0369a1; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">Social Media Reports</span>
+                    <p>Automated generation of professional, white‑label reports. We pull data from all major platforms, calculate ROI, and deliver a PDF or live dashboard in 48 hours.</p>
+                </div>
+                <div class="card">
+                    <span class="product-badge badge-chatbot" style="display: inline-block; padding: 0.25rem 1rem; background: #ede9fe; color: #5b21b6; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">AI Chatbot</span>
+                    <p>Custom‑trained chatbots that understand your business. Deploy on your site or messaging apps to handle support, qualify leads, and book appointments 24/7.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Use Cases / Industries -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Who We Serve</h2>
+                <p>Our technology adapts to any industry.</p>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                <div class="card" style="text-align: center;">🏢 Agencies</div>
+                <div class="card" style="text-align: center;">🛍️ E‑commerce</div>
+                <div class="card" style="text-align: center;">🏥 Healthcare</div>
+                <div class="card" style="text-align: center;">🏦 Finance</div>
+                <div class="card" style="text-align: center;">🎮 Gaming</div>
+                <div class="card" style="text-align: center;">📱 SaaS</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Speed & Scale Stats -->
+    <section style="background: linear-gradient(135deg, #1a365d 0%, #2d4a8a 100%); color: white;">
+        <div class="container">
+            <div class="section-title" style="color: white;">
+                <h2 style="color: white;">Engineered for Scale</h2>
+                <p style="color: var(--neutral-200);">Numbers that show what our platform handles daily.</p>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card" style="background: rgba(255,255,255,0.1); color: white;">
+                    <div class="stat-number" style="color: white;">100M+</div>
+                    <div>Sources monitored daily</div>
+                </div>
+                <div class="stat-card" style="background: rgba(255,255,255,0.1); color: white;">
+                    <div class="stat-number" style="color: white;">50+</div>
+                    <div>Languages supported</div>
+                </div>
+                <div class="stat-card" style="background: rgba(255,255,255,0.1); color: white;">
+                    <div class="stat-number" style="color: white;">99.9%</div>
+                    <div>Platform uptime</div>
+                </div>
+                <div class="stat-card" style="background: rgba(255,255,255,0.1); color: white;">
+                    <div class="stat-number" style="color: white;">500ms</div>
+                    <div>Avg. response time (chatbot)</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Security & Privacy -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Security & Privacy by Design</h2>
+                <p>Your data is safe with us.</p>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 2rem;">
+                <div class="security-badge">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">🔒</div>
+                    <h4>Encryption</h4>
+                    <p>AES-256 for data at rest, TLS 1.3 in transit.</p>
+                </div>
+                <div class="security-badge">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">📜</div>
+                    <h4>Compliance</h4>
+                    <p>SOC2 Type II, GDPR, CCPA ready.</p>
+                </div>
+                <div class="security-badge">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">🔐</div>
+                    <h4>Access Control</h4>
+                    <p>Role‑based permissions and SSO integration.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Our Mission -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="mission-block" style="max-width: 800px; margin: 0 auto; text-align: center;">
+                <h2 style="font-size: 2rem; color: var(--primary); margin-bottom: 1.5rem;">Our Mission</h2>
+                <p style="font-size: 1.2rem;">To democratize AI for marketing and customer engagement. We believe every business – from solo entrepreneur to global enterprise – should have access to the same intelligence that powers the world's largest brands. That's why we build tools that are powerful, yet simple to use.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="cta-section" style="background: var(--primary); color: white; text-align: center;">
+        <div class="container">
+            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Ready to put our AI to work?</h2>
+            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--neutral-200);">Explore our products or contact us for a demo.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="products.html" class="btn btn-listening">View All Products</a>
+                <a href="index.html#cta" class="btn btn-light">Request Consultation</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="index.html" class="logo" style="color: white;">Nexus<span>.ai</span></a>
+                <p style="color: var(--neutral-300); max-width: 400px;">The AI platform for marketing intelligence – listening, reporting, and chatbots powered by one engine.</p>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="products.html">Products</a>
+                    <a href="listening.html">Listening</a>
+                    <a href="reports.html">Reports</a>
+                    <a href="chatbot.html">Chatbot</a>
+                    <a href="about.html">About</a>
+                </div>
+            </div>
+            <div class="copyright">
+                &copy; 2025 Nexus.ai. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        document.querySelector('.mobile-menu-btn')?.addEventListener('click', function() {
+            const nav = document.querySelector('.nav-links');
+            if (nav.style.display === 'flex') {
+                nav.style.display = 'none';
+            } else {
+                nav.style.display = 'flex';
+                nav.style.flexDirection = 'column';
+                nav.style.position = 'absolute';
+                nav.style.top = '100%';
+                nav.style.left = '0';
+                nav.style.right = '0';
+                nav.style.backgroundColor = 'white';
+                nav.style.padding = '1.5rem';
+                nav.style.boxShadow = 'var(--shadow-lg)';
+                nav.style.zIndex = '99';
+            }
+        });
+    </script>
+</body>
+</html>
