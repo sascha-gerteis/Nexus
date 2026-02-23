@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus.ai | Social Listening – AI-Powered Brand Monitoring</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ========== FULL CSS (same as homepage) ========== */
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2d4a8a;
+            --accent: #0ea5e9;
+            --accent-light: #7dd3fc;
+            --accent-chatbot: #8b5cf6;
+            --accent-chatbot-light: #c4b5fd;
+            --accent-listening: #10b981;
+            --accent-listening-light: #a7f3d0;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 0.5rem;
+            --radius-lg: 0.75rem;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--neutral-800);
+            background-color: white;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        .section-title h2 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .section-title p {
+            font-size: 1.125rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.875rem 2rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-chatbot {
+            background-color: var(--accent-chatbot);
+            color: white;
+        }
+
+        .btn-chatbot:hover {
+            background-color: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-listening {
+            background-color: var(--accent-listening);
+            color: white;
+        }
+
+        .btn-listening:hover {
+            background-color: #059669;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: var(--primary);
+            border: 2px solid var(--neutral-200);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background-color: var(--neutral-50);
+        }
+
+        .card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            border-bottom: 1px solid var(--neutral-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--neutral-700);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        /* Hero */
+        .hero {
+            padding: 6rem 0 5rem;
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 60%;
+            height: 150%;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(5, 150, 105, 0.05) 100%);
+            border-radius: 50%;
+            z-index: 0;
+        }
+
+        .hero-content {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1.1;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto 2.5rem;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .trust-badges {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+            color: var(--neutral-700);
+            font-weight: 500;
+        }
+
+        /* Listening Demo */
+        .listening-demo {
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .listening-demo::before {
+            content: '';
+            position: absolute;
+            top: -30%;
+            left: -10%;
+            width: 40%;
+            height: 160%;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(5, 150, 105, 0.05) 100%);
+            border-radius: 50%;
+            z-index: 0;
+        }
+
+        .listening-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .listening-dashboard {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            overflow: hidden;
+            border: 1px solid var(--neutral-200);
+            padding: 1.5rem;
+        }
+
+        .listening-header {
+            background: linear-gradient(135deg, var(--accent-listening) 0%, #059669 100%);
+            color: white;
+            padding: 1.25rem;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .listening-avatar {
+            width: 36px;
+            height: 36px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-listening);
+            font-size: 1.2rem;
+        }
+
+        .listening-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            background: var(--neutral-50);
+            padding: 1rem;
+            border-radius: var(--radius);
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .metric-label {
+            font-size: 0.875rem;
+            color: var(--neutral-600);
+        }
+
+        .sentiment-chart {
+            height: 200px;
+            background: var(--neutral-50);
+            border-radius: var(--radius);
+            margin-bottom: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sentiment-chart::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, 
+                rgba(239, 68, 68, 0.1) 0%, 
+                rgba(239, 68, 68, 0.1) 20%, 
+                rgba(245, 158, 11, 0.1) 20%, 
+                rgba(245, 158, 11, 0.1) 50%, 
+                rgba(16, 185, 129, 0.1) 50%, 
+                rgba(16, 185, 129, 0.1) 100%);
+        }
+
+        .mentions-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .mention-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--neutral-200);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .mention-item:last-child {
+            border-bottom: none;
+        }
+
+        .mention-sentiment {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .sentiment-positive {
+            background-color: var(--accent-listening);
+        }
+
+        .sentiment-negative {
+            background-color: #ef4444;
+        }
+
+        .sentiment-neutral {
+            background-color: var(--warning);
+        }
+
+        .listening-features {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .listening-feature {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--neutral-700);
+        }
+
+        /* Feature grid */
+        .product-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .feature-card {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .feature-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1.5rem;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            color: var(--accent-listening);
+        }
+
+        /* Use cases */
+        .usecase-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        /* How it works */
+        .steps-container {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        .step {
+            flex: 1;
+            min-width: 180px;
+            text-align: center;
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+        }
+        .step-number {
+            width: 48px;
+            height: 48px;
+            background: var(--accent-listening);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin: 0 auto 1rem;
+        }
+
+        /* Report sample */
+        .report-sample {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            border: 1px solid var(--neutral-200);
+            overflow: hidden;
+        }
+        .report-sample-header {
+            background: linear-gradient(135deg, var(--accent-listening) 0%, #059669 100%);
+            color: white;
+            padding: 1.25rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .report-sample-body {
+            padding: 2rem;
+        }
+        .report-section {
+            margin-bottom: 2rem;
+        }
+        .report-section h4 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            border-bottom: 2px solid var(--neutral-200);
+            padding-bottom: 0.5rem;
+        }
+
+        /* Pricing */
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .pricing-card {
+            text-align: center;
+            position: relative;
+        }
+        .pricing-card.featured {
+            border: 2px solid var(--accent-listening);
+            transform: scale(1.02);
+        }
+        .pricing-badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent-listening);
+            color: white;
+            padding: 0.25rem 1rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .pricing-header {
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--neutral-200);
+            margin-bottom: 1.5rem;
+        }
+        .pricing-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+        .pricing-price {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+        .pricing-period {
+            color: var(--neutral-600);
+        }
+        .pricing-features {
+            list-style: none;
+            text-align: left;
+            margin-bottom: 2rem;
+        }
+        .pricing-features li {
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        .pricing-features li::before {
+            content: '✓';
+            color: var(--accent-listening);
+            font-weight: 700;
+        }
+
+        /* Builder */
+        .builder-section {
+            background: var(--neutral-50);
+        }
+        .builder-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+        }
+        .builder-controls {
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+        }
+        .package-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+        }
+        .package-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem;
+            border: 2px solid var(--neutral-200);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .package-option:hover {
+            border-color: var(--accent-listening-light);
+        }
+        .package-option.selected {
+            border-color: var(--accent-listening);
+            background: rgba(16, 185, 129, 0.05);
+        }
+        .package-name {
+            font-weight: 600;
+            color: var(--primary);
+        }
+        .package-price {
+            font-weight: 700;
+            color: var(--accent-listening);
+        }
+        .addons-selector {
+            margin-bottom: 2.5rem;
+        }
+        .addon-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--neutral-200);
+            cursor: pointer;
+        }
+        .addon-checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--neutral-300);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .addon-checkbox.checked {
+            background: var(--accent-listening);
+            border-color: var(--accent-listening);
+        }
+        .addon-checkbox.checked::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+        }
+        .builder-summary {
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            position: sticky;
+            top: 6rem;
+        }
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--neutral-200);
+        }
+        .total-price {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--accent-listening);
+        }
+        .summary-items {
+            margin-bottom: 2rem;
+        }
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--neutral-200);
+        }
+
+        /* FAQ */
+        .faq-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .faq-item {
+            background: var(--neutral-50);
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            border: 1px solid var(--neutral-200);
+            cursor: pointer;
+        }
+        .faq-question {
+            padding: 1.5rem;
+            font-weight: 600;
+            color: var(--primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .faq-answer {
+            padding: 0 1.5rem;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+        }
+        .faq-answer.active {
+            padding: 0 1.5rem 1.5rem;
+            max-height: 500px;
+        }
+        .faq-toggle {
+            width: 24px;
+            height: 24px;
+            position: relative;
+        }
+        .faq-toggle::before,
+        .faq-toggle::after {
+            content: '';
+            position: absolute;
+            background: var(--neutral-600);
+            transition: transform 0.3s ease;
+        }
+        .faq-toggle::before {
+            width: 14px;
+            height: 2px;
+            top: 11px;
+            left: 5px;
+        }
+        .faq-toggle::after {
+            width: 2px;
+            height: 14px;
+            top: 5px;
+            left: 11px;
+        }
+        .faq-item.active .faq-toggle::after {
+            transform: rotate(90deg);
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--neutral-900);
+            color: white;
+            padding: 3rem 0 2rem;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--neutral-300);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            color: var(--neutral-400);
+            font-size: 0.875rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--neutral-800);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .listening-container,
+            .builder-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.75rem;
+            }
+            .nav-links {
+                display: none;
+            }
+            .mobile-menu-btn {
+                display: block;
+            }
+            .steps-container {
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 640px) {
+            section {
+                padding: 3rem 0;
+            }
+            .hero {
+                padding: 4rem 0 3rem;
+            }
+            .pricing-card.featured {
+                transform: none;
+            }
+            .listening-metrics {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .nav-links a.active {
+            color: var(--accent-listening);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <a href="index.html" class="logo">Nexus<span>.ai</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="products.html">Products</a>
+                <a href="listening.html" class="active">Listening</a>
+                <a href="reports.html">Reports</a>
+                <a href="chatbot.html">Chatbot</a>
+                <a href="about.html">About</a>
+                <a href="onboarding.html">How It Works</a>
+                <a href="contact.html">Contact</a>
+                <a href="index.html#cta" class="btn btn-primary">Get Started</a>
+            </nav>
+            <button class="mobile-menu-btn">☰</button>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="container hero-content">
+            <h1>Know Every Conversation About Your Brand</h1>
+            <p class="hero-subtitle">Real‑time social listening across 100+ million sources. Track mentions, analyze sentiment, monitor competitors, and detect crises before they escalate.</p>
+            <div class="hero-cta">
+                <a href="#builder" class="btn btn-listening">Build Your Listening →</a>
+                <a href="#demo" class="btn btn-listening">Try Live Demo</a>
+                <a href="#report" class="btn btn-secondary">View Sample Report</a>
+            </div>
+            <div class="trust-badges">
+                <span>✅ 100M+ sources monitored</span>
+                <span>⚡ Real‑time alerts</span>
+                <span>📊 94% sentiment accuracy</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- LIVE DEMO -->
+    <section class="listening-demo" id="demo">
+        <div class="container">
+            <div class="section-title">
+                <h2>See It in Action</h2>
+                <p>Monitor brand health and uncover insights instantly.</p>
+            </div>
+            <div class="listening-container">
+                <div class="listening-dashboard">
+                    <div class="listening-header">
+                        <div class="listening-avatar">🔊</div>
+                        <div>Live Brand Monitor – "Nexus.ai"</div>
+                    </div>
+                    <div class="listening-metrics">
+                        <div class="metric-card">
+                            <div class="metric-value">1,284</div>
+                            <div class="metric-label">Mentions (24h)</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">74%</div>
+                            <div class="metric-label">Positive</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">12</div>
+                            <div class="metric-label">Crisis Alerts</div>
+                        </div>
+                    </div>
+                    <div class="sentiment-chart"></div>
+                    <div class="mentions-list">
+                        <div class="mention-item">
+                            <span class="mention-sentiment sentiment-positive"></span>
+                            @techcrunch: "Nexus.ai revolutionizes social listening"
+                        </div>
+                        <div class="mention-item">
+                            <span class="mention-sentiment sentiment-neutral"></span>
+                            @marketer: Anyone compared Nexus to Brandwatch?
+                        </div>
+                        <div class="mention-item">
+                            <span class="mention-sentiment sentiment-positive"></span>
+                            @user123: Love the new sentiment analysis feature!
+                        </div>
+                        <div class="mention-item">
+                            <span class="mention-sentiment sentiment-negative"></span>
+                            @critic: Downtime yesterday affected our monitoring
+                        </div>
+                        <div class="mention-item">
+                            <span class="mention-sentiment sentiment-positive"></span>
+                            @influencer: Just signed up for Nexus – excited to try it!
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h3 style="font-size: 2rem; color: var(--primary); margin-bottom: 1.5rem;">Powerful Dashboard, Zero Complexity</h3>
+                    <p style="color: var(--neutral-600); margin-bottom: 2rem;">Track mentions, analyze sentiment, and detect trends before they go viral. Our AI filters noise and highlights what matters.</p>
+                    
+                    <div class="listening-features">
+                        <div class="listening-feature">
+                            <span style="color: var(--accent-listening);">✓</span> 100+ million sources
+                        </div>
+                        <div class="listening-feature">
+                            <span style="color: var(--accent-listening);">✓</span> Real‑time crisis alerts
+                        </div>
+                        <div class="listening-feature">
+                            <span style="color: var(--accent-listening);">✓</span> Competitor tracking
+                        </div>
+                        <div class="listening-feature">
+                            <span style="color: var(--accent-listening);">✓</span> Custom keyword queries
+                        </div>
+                        <div class="listening-feature">
+                            <span style="color: var(--accent-listening);">✓</span> Sentiment trends
+                        </div>
+                        <div class="listening-feature">
+                            <span style="color: var(--accent-listening);">✓</span> Export to CSV/PDF
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- KEY FEATURES -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Why Choose Nexus.ai Listening?</h2>
+                <p>Go beyond basic monitoring – get actionable intelligence.</p>
+            </div>
+            <div class="product-features">
+                <div class="card feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Real‑time Monitoring</h3>
+                    <p>Never miss a mention. Get alerts as they happen across Twitter, Reddit, news, blogs, forums, and review sites.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3>AI Sentiment Analysis</h3>
+                    <p>Our NLP model detects sarcasm, context, and emotion – 94% accuracy across 50+ languages.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">🏆</div>
+                    <h3>Competitor Benchmarks</h3>
+                    <p>Compare share of voice, sentiment, and top keywords against your rivals. Know where you stand.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">🚨</div>
+                    <h3>Crisis Detection</h3>
+                    <p>Automatic alerts when negative mentions spike, so you can respond immediately and protect your brand.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3>Trend Forecasting</h3>
+                    <p>Identify emerging topics and influencers before they peak. Stay ahead of the curve.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">🔌</div>
+                    <h3>Integrations</h3>
+                    <p>Connect with Slack, Teams, Zapier, and your CRM. Automate workflows based on listening data.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- USE CASES -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Built for Your Role</h2>
+            </div>
+            <div class="usecase-grid">
+                <div class="card">
+                    <h3>🏢 For Brands</h3>
+                    <p>Protect your reputation, understand customer pain points, and measure campaign impact. Get a single view of all brand conversations.</p>
+                </div>
+                <div class="card">
+                    <h3>📰 For PR Teams</h3>
+                    <p>Monitor media coverage, track crisis sentiment, and manage brand image across news and social. Respond before stories escalate.</p>
+                </div>
+                <div class="card">
+                    <h3>🏢 For Agencies</h3>
+                    <p>Deliver white‑label listening reports to clients. Show ROI with competitor benchmarks and share of voice analysis.</p>
+                </div>
+                <div class="card">
+                    <h3>📊 For Market Research</h3>
+                    <p>Understand consumer trends, track brand perception, and gather competitive intelligence for strategic decisions.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>How Social Listening Works</h2>
+            </div>
+            <div class="steps-container">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h4>Define Keywords</h4>
+                    <p>Set up brand names, products, competitors, or industry terms. Use Boolean operators for precision.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h4>AI Crawls 100M+ Sources</h4>
+                    <p>Our bots scan social networks, news, forums, and review sites 24/7 in 50+ languages.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h4>Real‑time Analysis</h4>
+                    <p>Sentiment, reach, and trends are calculated instantly. Our NLP engine filters noise.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h4>Alerts & Reports</h4>
+                    <p>Get notified of critical changes via email/Slack and export custom reports anytime.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- LISTENING REPORT SAMPLE -->
+    <section style="background: var(--neutral-50);" id="report">
+        <div class="container">
+            <div class="section-title">
+                <h2>What You'll Receive</h2>
+                <p>Sample listening report – comprehensive analysis of brand health.</p>
+            </div>
+            <div class="report-sample">
+                <div class="report-sample-header">
+                    <span>📊</span> Social Listening Report – "Nexus.ai" (April 2025)
+                </div>
+                <div class="report-sample-body">
+                    <div class="report-section">
+                        <h4>Executive Summary</h4>
+                        <p>Total mentions increased 24% this month, driven by product launch. Sentiment remains strong at 78% positive. One minor crisis alert on April 15 was resolved within 2 hours.</p>
+                    </div>
+                    
+                    <div class="report-section">
+                        <h4>Volume & Sentiment Trends</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="background: var(--neutral-100); padding: 1rem; border-radius: var(--radius);">
+                                <div style="font-weight: 700;">Total Mentions</div>
+                                <div style="font-size: 2rem; color: var(--primary);">1,284</div>
+                                <div style="color: var(--success);">↑ 24% vs last month</div>
+                            </div>
+                            <div style="background: var(--neutral-100); padding: 1rem; border-radius: var(--radius);">
+                                <div style="font-weight: 700;">Sentiment Breakdown</div>
+                                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                    <span style="color: var(--accent-listening);">74% Positive</span>
+                                    <span style="color: var(--warning);">18% Neutral</span>
+                                    <span style="color: #ef4444;">8% Negative</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="report-section">
+                        <h4>Top Sources</h4>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <th style="text-align: left; padding: 0.5rem; background: var(--neutral-100);">Source</th>
+                                <th style="text-align: left; padding: 0.5rem; background: var(--neutral-100);">Mentions</th>
+                                <th style="text-align: left; padding: 0.5rem; background: var(--neutral-100);">Sentiment</th>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">Twitter/X</td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">842</td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">72% positive</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">Reddit</td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">214</td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">68% positive</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">News</td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">98</td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--neutral-200);">82% positive</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div style="margin-top: 2rem; text-align: right;">
+                        <a href="#" class="btn btn-listening">Download Full Sample PDF →</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PRICING -->
+    <section id="pricing">
+        <div class="container">
+            <div class="section-title">
+                <h2>Flexible Listening Plans</h2>
+                <p>Choose the right level of monitoring for your needs.</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="card pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Starter</h3>
+                        <div class="pricing-price">$199</div>
+                        <div class="pricing-period">/month</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Up to 5 keywords</li>
+                        <li>Basic sentiment analysis</li>
+                        <li>Email alerts</li>
+                        <li>7‑day data history</li>
+                        <li>10,000 mentions/month</li>
+                    </ul>
+                    <a href="#builder" class="btn btn-listening" style="width: 100%;">Select Starter</a>
+                </div>
+                <div class="card pricing-card featured">
+                    <div class="pricing-badge">POPULAR</div>
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Professional</h3>
+                        <div class="pricing-price">$299</div>
+                        <div class="pricing-period">/month</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Unlimited keywords</li>
+                        <li>Advanced sentiment (94% accuracy)</li>
+                        <li>Slack/Teams integration</li>
+                        <li>Competitor tracking (3 competitors)</li>
+                        <li>30‑day data history</li>
+                        <li>50,000 mentions/month</li>
+                    </ul>
+                    <a href="#builder" class="btn btn-listening" style="width: 100%;">Select Professional</a>
+                </div>
+                <div class="card pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Enterprise</h3>
+                        <div class="pricing-price">$599</div>
+                        <div class="pricing-period">/month</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Everything in Professional</li>
+                        <li>Unlimited competitors</li>
+                        <li>API access</li>
+                        <li>Historical data (12 months)</li>
+                        <li>Dedicated support</li>
+                        <li>Unlimited mentions</li>
+                    </ul>
+                    <a href="#builder" class="btn btn-listening" style="width: 100%;">Contact Sales</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- INTERACTIVE BUILDER -->
+    <section class="builder-section" id="builder">
+        <div class="container">
+            <div class="section-title">
+                <h2>Build Your Listening Package</h2>
+                <p>Select a plan and add‑ons. See your total update in real time.</p>
+            </div>
+            <div class="builder-container">
+                <div class="builder-controls">
+                    <h4 style="margin-bottom: 1rem;">1. Choose your base plan</h4>
+                    <div class="package-selector">
+                        <div class="package-option" onclick="selectPackage('starter')">
+                            <div class="package-name">Starter</div>
+                            <div class="package-price">$199/mo</div>
+                        </div>
+                        <div class="package-option selected" onclick="selectPackage('pro')">
+                            <div class="package-name">Professional</div>
+                            <div class="package-price">$299/mo</div>
+                        </div>
+                        <div class="package-option" onclick="selectPackage('enterprise')">
+                            <div class="package-name">Enterprise</div>
+                            <div class="package-price">$599/mo</div>
+                        </div>
+                    </div>
+
+                    <h4 style="margin: 2rem 0 1rem;">2. Add‑ons (optional)</h4>
+                    <div class="addons-selector">
+                        <div class="addon-option" onclick="toggleAddon('competitor')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="competitor-check"></div>
+                                <div>+3 additional competitors</div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent-listening);">+$49/mo</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleAddon('historical')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="historical-check"></div>
+                                <div>Historical data (12 months)</div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent-listening);">+$99/mo</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleAddon('api')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="api-check"></div>
+                                <div>API access</div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent-listening);">+$199/mo</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleAddon('slack')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="slack-check"></div>
+                                <div>Slack/Teams premium integration</div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent-listening);">+$29/mo</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="builder-summary">
+                    <div class="summary-header">
+                        <h3>Your Listening Package</h3>
+                        <div class="total-price" id="total-price">$299<span>/mo</span></div>
+                    </div>
+                    <div class="summary-items" id="summary-items">
+                        <div class="summary-item">
+                            <span>Professional base</span>
+                            <span>$299/mo</span>
+                        </div>
+                    </div>
+                    <a href="#cta" class="btn btn-listening" style="width: 100%;">Continue to Checkout</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Frequently Asked Questions</h2>
+            </div>
+            <div class="faq-container">
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>What sources do you monitor?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>We monitor Twitter/X, Facebook, Instagram, Reddit, YouTube comments, news sites (10,000+), blogs, forums, and review platforms like Trustpilot and G2. Over 100 million sources in total.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>How accurate is the sentiment analysis?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Our AI model achieves 94% accuracy across 50+ languages, handling sarcasm, emojis, and context better than generic tools. We continuously retrain on new data.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Can I monitor multiple brands?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yes. The Professional plan includes up to 5 brand profiles/keyword groups. Enterprise has unlimited brands.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>How fast are crisis alerts?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Alerts are delivered within 60 seconds of detection via email, Slack, or Teams. You can set custom thresholds for what constitutes a crisis.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Is there a free trial?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yes! All plans come with a 14‑day free trial – no credit card required. You'll have full access to all features.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TESTIMONIALS -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Trusted by 2,500+ businesses</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+                <div class="card">
+                    <p>"Nexus listening caught a brewing PR crisis before it exploded. We were able to respond in minutes and prevent negative press."</p>
+                    <div style="margin-top: 1rem; font-weight: 600;">— Sarah J., PR Director</div>
+                </div>
+                <div class="card">
+                    <p>"The competitor benchmarks alone are worth the price. We use them in every client pitch to show exactly where they stand."</p>
+                    <div style="margin-top: 1rem; font-weight: 600;">— Michael T., Agency Owner</div>
+                </div>
+                <div class="card">
+                    <p>"Easiest setup ever. We were monitoring within an hour. The sentiment analysis is surprisingly accurate."</p>
+                    <div style="margin-top: 1rem; font-weight: 600;">— Elena R., Brand Manager</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="cta-section" style="background: var(--primary); color: white; text-align: center;">
+        <div class="container">
+            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Ready to listen to every conversation?</h2>
+            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--neutral-200);">Start your 14‑day free trial today – no credit card required.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="#builder" class="btn btn-listening">Build Your Listening</a>
+                <a href="#demo" class="btn btn-light">Try Live Demo</a>
+                <a href="contact.html" class="btn btn-secondary">Contact Sales</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="index.html" class="logo" style="color: white;">Nexus<span>.ai</span></a>
+                <p style="color: var(--neutral-300); max-width: 400px;">Your AI partner for marketing intelligence – from listening to reporting to conversational AI.</p>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="products.html">Products</a>
+                    <a href="listening.html">Listening</a>
+                    <a href="reports.html">Reports</a>
+                    <a href="chatbot.html">Chatbot</a>
+                    <a href="about.html">About</a>
+                    <a href="onboarding.html">How It Works</a>
+                    <a href="contact.html">Contact</a>
+                </div>
+            </div>
+            <div class="copyright">
+                &copy; 2025 Nexus.ai. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu
+        document.querySelector('.mobile-menu-btn')?.addEventListener('click', function() {
+            const nav = document.querySelector('.nav-links');
+            if (nav.style.display === 'flex') {
+                nav.style.display = 'none';
+            } else {
+                nav.style.display = 'flex';
+                nav.style.flexDirection = 'column';
+                nav.style.position = 'absolute';
+                nav.style.top = '100%';
+                nav.style.left = '0';
+                nav.style.right = '0';
+                nav.style.backgroundColor = 'white';
+                nav.style.padding = '1.5rem';
+                nav.style.boxShadow = 'var(--shadow-lg)';
+                nav.style.zIndex = '99';
+            }
+        });
+
+        // FAQ toggle
+        function toggleFAQ(item) {
+            const answer = item.querySelector('.faq-answer');
+            const isActive = answer.classList.contains('active');
+            document.querySelectorAll('.faq-answer').forEach(a => a.classList.remove('active'));
+            document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('active'));
+            if (!isActive) {
+                answer.classList.add('active');
+                item.classList.add('active');
+            }
+        }
+
+        // Builder
+        let basePrice = 299; // Professional default
+        let addons = {};
+
+        function selectPackage(pkg) {
+            document.querySelectorAll('.package-option').forEach(opt => opt.classList.remove('selected'));
+            event.currentTarget.classList.add('selected');
+            
+            const priceText = event.currentTarget.querySelector('.package-price').innerText;
+            basePrice = parseInt(priceText.replace(/[^0-9]/g, ''));
+            updateTotal();
+            updateSummary();
+        }
+
+        function toggleAddon(addonId) {
+            const checkbox = document.getElementById(addonId + '-check');
+            if (addons[addonId]) {
+                delete addons[addonId];
+                checkbox.classList.remove('checked');
+            } else {
+                let price = 0;
+                if (addonId === 'competitor') price = 49;
+                if (addonId === 'historical') price = 99;
+                if (addonId === 'api') price = 199;
+                if (addonId === 'slack') price = 29;
+                addons[addonId] = price;
+                checkbox.classList.add('checked');
+            }
+            updateTotal();
+            updateSummary();
+        }
+
+        function updateTotal() {
+            let total = basePrice;
+            for (let key in addons) total += addons[key];
+            document.getElementById('total-price').innerHTML = `$${total}<span>/mo</span>`;
+        }
+
+        function updateSummary() {
+            const summaryDiv = document.getElementById('summary-items');
+            let baseName = 'Professional';
+            if (basePrice === 199) baseName = 'Starter';
+            if (basePrice === 599) baseName = 'Enterprise';
+            
+            let html = `<div class="summary-item"><span>${baseName} base</span><span>$${basePrice}/mo</span></div>`;
+            
+            for (let key in addons) {
+                let name = key === 'competitor' ? '+3 competitors' : 
+                          (key === 'historical' ? 'Historical data' : 
+                          (key === 'api' ? 'API access' : 'Slack/Teams premium'));
+                html += `<div class="summary-item"><span>${name}</span><span>+$${addons[key]}/mo</span></div>`;
+            }
+            
+            summaryDiv.innerHTML = html;
+        }
+
+        // Pre-select addons for demo
+        window.onload = function() {
+            document.getElementById('competitor-check')?.classList.add('checked');
+            addons['competitor'] = 49;
+            document.getElementById('slack-check')?.classList.add('checked');
+            addons['slack'] = 29;
+            updateTotal();
+            updateSummary();
+        };
+    </script>
+</body>
+</html>
