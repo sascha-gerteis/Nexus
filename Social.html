@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus.ai | Social Media Reports – Actionable Analytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ========== FULL CSS (same as homepage) ========== */
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2d4a8a;
+            --accent: #0ea5e9;
+            --accent-light: #7dd3fc;
+            --accent-chatbot: #8b5cf6;
+            --accent-chatbot-light: #c4b5fd;
+            --accent-listening: #10b981;
+            --accent-listening-light: #a7f3d0;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 0.5rem;
+            --radius-lg: 0.75rem;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--neutral-800);
+            background-color: white;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        .section-title h2 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .section-title p {
+            font-size: 1.125rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.875rem 2rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-chatbot {
+            background-color: var(--accent-chatbot);
+            color: white;
+        }
+
+        .btn-chatbot:hover {
+            background-color: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-listening {
+            background-color: var(--accent-listening);
+            color: white;
+        }
+
+        .btn-listening:hover {
+            background-color: #059669;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: var(--primary);
+            border: 2px solid var(--neutral-200);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background-color: var(--neutral-50);
+        }
+
+        .card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            border-bottom: 1px solid var(--neutral-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--neutral-700);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        /* Hero */
+        .hero {
+            padding: 6rem 0 5rem;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 60%;
+            height: 150%;
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.05) 0%, rgba(29, 78, 216, 0.05) 100%);
+            border-radius: 50%;
+            z-index: 0;
+        }
+
+        .hero-content {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1.1;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--neutral-600);
+            max-width: 700px;
+            margin: 0 auto 2.5rem;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .trust-badges {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+            color: var(--neutral-700);
+            font-weight: 500;
+        }
+
+        /* Report Preview */
+        .report-preview-large {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            border: 1px solid var(--neutral-200);
+            overflow: hidden;
+            margin: 2rem 0;
+        }
+        .preview-header {
+            background: linear-gradient(135deg, var(--accent) 0%, #0284c7 100%);
+            color: white;
+            padding: 1.25rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .preview-body {
+            padding: 2rem;
+        }
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .preview-metric {
+            background: var(--neutral-50);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+        .metric-label {
+            color: var(--neutral-600);
+            font-size: 0.9rem;
+        }
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .preview-table th {
+            text-align: left;
+            padding: 0.75rem;
+            background: var(--neutral-100);
+            font-weight: 600;
+        }
+        .preview-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--neutral-200);
+        }
+
+        /* Feature grid */
+        .product-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .feature-card {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .feature-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1.5rem;
+            background: rgba(14, 165, 233, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            color: var(--accent);
+        }
+
+        /* Use cases */
+        .usecase-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        /* How it works */
+        .steps-container {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        .step {
+            flex: 1;
+            min-width: 180px;
+            text-align: center;
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--neutral-200);
+        }
+        .step-number {
+            width: 48px;
+            height: 48px;
+            background: var(--accent);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin: 0 auto 1rem;
+        }
+
+        /* Sample gallery */
+        .sample-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .sample-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+        .sample-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+        .sample-image {
+            height: 180px;
+            background: var(--neutral-100);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            color: var(--neutral-400);
+        }
+        .sample-info {
+            padding: 1.5rem;
+        }
+        .sample-info h4 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Pricing */
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .pricing-card {
+            text-align: center;
+            position: relative;
+        }
+        .pricing-card.featured {
+            border: 2px solid var(--accent);
+            transform: scale(1.02);
+        }
+        .pricing-badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: white;
+            padding: 0.25rem 1rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .pricing-header {
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--neutral-200);
+            margin-bottom: 1.5rem;
+        }
+        .pricing-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+        .pricing-price {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+        .pricing-period {
+            color: var(--neutral-600);
+        }
+        .pricing-features {
+            list-style: none;
+            text-align: left;
+            margin-bottom: 2rem;
+        }
+        .pricing-features li {
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        .pricing-features li::before {
+            content: '✓';
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* Builder */
+        .builder-section {
+            background: var(--neutral-50);
+        }
+        .builder-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+        }
+        .builder-controls {
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+        }
+        .package-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+        }
+        .package-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem;
+            border: 2px solid var(--neutral-200);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .package-option:hover {
+            border-color: var(--accent-light);
+        }
+        .package-option.selected {
+            border-color: var(--accent);
+            background: rgba(14, 165, 233, 0.05);
+        }
+        .package-name {
+            font-weight: 600;
+            color: var(--primary);
+        }
+        .package-price {
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .addons-selector {
+            margin-bottom: 2.5rem;
+        }
+        .addon-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--neutral-200);
+            cursor: pointer;
+        }
+        .addon-checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--neutral-300);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .addon-checkbox.checked {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        .addon-checkbox.checked::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+        }
+        .builder-summary {
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            position: sticky;
+            top: 6rem;
+        }
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--neutral-200);
+        }
+        .total-price {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--accent);
+        }
+        .summary-items {
+            margin-bottom: 2rem;
+        }
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--neutral-200);
+        }
+
+        /* FAQ */
+        .faq-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .faq-item {
+            background: var(--neutral-50);
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            border: 1px solid var(--neutral-200);
+            cursor: pointer;
+        }
+        .faq-question {
+            padding: 1.5rem;
+            font-weight: 600;
+            color: var(--primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .faq-answer {
+            padding: 0 1.5rem;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+        }
+        .faq-answer.active {
+            padding: 0 1.5rem 1.5rem;
+            max-height: 500px;
+        }
+        .faq-toggle {
+            width: 24px;
+            height: 24px;
+            position: relative;
+        }
+        .faq-toggle::before,
+        .faq-toggle::after {
+            content: '';
+            position: absolute;
+            background: var(--neutral-600);
+            transition: transform 0.3s ease;
+        }
+        .faq-toggle::before {
+            width: 14px;
+            height: 2px;
+            top: 11px;
+            left: 5px;
+        }
+        .faq-toggle::after {
+            width: 2px;
+            height: 14px;
+            top: 5px;
+            left: 11px;
+        }
+        .faq-item.active .faq-toggle::after {
+            transform: rotate(90deg);
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--neutral-900);
+            color: white;
+            padding: 3rem 0 2rem;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--neutral-300);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            color: var(--neutral-400);
+            font-size: 0.875rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--neutral-800);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .builder-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.75rem;
+            }
+            .nav-links {
+                display: none;
+            }
+            .mobile-menu-btn {
+                display: block;
+            }
+            .steps-container {
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 640px) {
+            section {
+                padding: 3rem 0;
+            }
+            .hero {
+                padding: 4rem 0 3rem;
+            }
+            .pricing-card.featured {
+                transform: none;
+            }
+        }
+
+        .nav-links a.active {
+            color: var(--accent);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <a href="index.html" class="logo">Nexus<span>.ai</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="products.html">Products</a>
+                <a href="listening.html">Listening</a>
+                <a href="reports.html" class="active">Reports</a>
+                <a href="chatbot.html">Chatbot</a>
+                <a href="about.html">About</a>
+                <a href="onboarding.html">How It Works</a>
+                <a href="contact.html">Contact</a>
+                <a href="index.html#cta" class="btn btn-primary">Get Started</a>
+            </nav>
+            <button class="mobile-menu-btn">☰</button>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="container hero-content">
+            <h1>Turn Social Data into Decisions</h1>
+            <p class="hero-subtitle">Professional, white‑label social media reports delivered in 48 hours. Get actionable insights, prove ROI, and impress your clients or leadership.</p>
+            <div class="hero-cta">
+                <a href="#builder" class="btn btn-primary">Build Your Report →</a>
+                <a href="#samples" class="btn btn-primary">View Sample Reports</a>
+                <a href="#pricing" class="btn btn-secondary">See Pricing</a>
+            </div>
+            <div class="trust-badges">
+                <span>✅ 48‑hour delivery</span>
+                <span>⚡ 10+ platforms supported</span>
+                <span>📊 White‑label ready</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- INTERACTIVE REPORT PREVIEW -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>See What You'll Get</h2>
+                <p>Interactive preview of a real social media performance report.</p>
+            </div>
+            <div class="report-preview-large">
+                <div class="preview-header">
+                    <span>📊</span> Social Media Performance Report – April 2025
+                </div>
+                <div class="preview-body">
+                    <div class="preview-grid">
+                        <div class="preview-metric">
+                            <div class="metric-value">+24%</div>
+                            <div class="metric-label">Engagement Rate</div>
+                        </div>
+                        <div class="preview-metric">
+                            <div class="metric-value">12.4K</div>
+                            <div class="metric-label">New Followers</div>
+                        </div>
+                        <div class="preview-metric">
+                            <div class="metric-value">$8.2K</div>
+                            <div class="metric-label">Attributed Revenue</div>
+                        </div>
+                        <div class="preview-metric">
+                            <div class="metric-value">1.8M</div>
+                            <div class="metric-label">Impressions</div>
+                        </div>
+                    </div>
+                    
+                    <h4 style="color: var(--primary); margin: 2rem 0 1rem;">Platform Breakdown</h4>
+                    <table class="preview-table">
+                        <thead>
+                            <tr>
+                                <th>Platform</th>
+                                <th>Followers</th>
+                                <th>Engagement</th>
+                                <th>Top Post</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Instagram</td>
+                                <td>45.2K (+8%)</td>
+                                <td>4.2%</td>
+                                <td>Reel: 45K views</td>
+                            </tr>
+                            <tr>
+                                <td>LinkedIn</td>
+                                <td>12.8K (+12%)</td>
+                                <td>5.1%</td>
+                                <td>Industry trends: 12K likes</td>
+                            </tr>
+                            <tr>
+                                <td>TikTok</td>
+                                <td>28.4K (+24%)</td>
+                                <td>6.8%</td>
+                                <td>Behind the scenes: 89K views</td>
+                            </tr>
+                            <tr>
+                                <td>Facebook</td>
+                                <td>32.1K (+2%)</td>
+                                <td>1.2%</td>
+                                <td>Product launch: 2.3K reactions</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div style="margin-top: 2rem; text-align: right; color: var(--neutral-500);">
+                        <span>⬇️ <a href="#" style="color: var(--accent);">Download full PDF sample</a></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- KEY FEATURES -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Everything You Need in a Report</h2>
+                <p>Comprehensive analytics that tell the full story of your social performance.</p>
+            </div>
+            <div class="product-features">
+                <div class="card feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Cross‑Platform Analytics</h3>
+                    <p>Combine data from Instagram, LinkedIn, TikTok, Facebook, X (Twitter), YouTube, and more into one unified report.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3>Engagement & ROI Tracking</h3>
+                    <p>Measure engagement rates, click‑throughs, conversions, and calculate return on investment.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3>Custom Templates</h3>
+                    <p>White‑label reports with your logo, brand colors, and custom cover pages. Impress clients with professional design.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">👥</div>
+                    <h3>Audience Insights</h3>
+                    <p>Demographics, growth trends, top followers, and geographic breakdown of your audience.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">🏆</div>
+                    <h3>Content Performance</h3>
+                    <p>Identify your best‑performing posts by engagement, reach, and conversions. See what's working.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">⏱️</div>
+                    <h3>48‑Hour Delivery</h3>
+                    <p>Guaranteed turnaround, even for complex, multi‑platform reports. Get your data when you need it.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- USE CASES -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Built for Your Role</h2>
+            </div>
+            <div class="usecase-grid">
+                <div class="card">
+                    <h3>🏢 For Agencies</h3>
+                    <p>Deliver premium, white‑label reports to clients that justify your value, prove ROI, and retain business. Stand out from competitors.</p>
+                </div>
+                <div class="card">
+                    <h3>📈 For Marketing Teams</h3>
+                    <p>Get leadership‑ready insights that connect social performance to business outcomes. Make data‑driven decisions.</p>
+                </div>
+                <div class="card">
+                    <h3>🏷️ For Brands</h3>
+                    <p>Scale reporting across multiple regions and product lines with consistent, actionable analysis.</p>
+                </div>
+                <div class="card">
+                    <h3>🎓 For Educators</h3>
+                    <p>Teach social media strategy with real data. Use our reports to show students what works.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>How It Works</h2>
+                <p>From connection to delivery in 5 simple steps.</p>
+            </div>
+            <div class="steps-container">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h4>Connect Accounts</h4>
+                    <p>Link your social media accounts via secure OAuth. We support all major platforms.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h4>Choose Template</h4>
+                    <p>Select a standard template or upload your own branded design.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h4>Select Metrics</h4>
+                    <p>Pick which KPIs to include: engagement, growth, ROI, top posts, etc.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h4>Set Schedule</h4>
+                    <p>Choose one‑time or recurring reports (weekly, monthly, custom).</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <h4>Receive Report</h4>
+                    <p>Get your PDF report in 48 hours (or instantly for Pro plans).</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SAMPLE REPORTS GALLERY -->
+    <section id="samples">
+        <div class="container">
+            <div class="section-title">
+                <h2>Sample Reports</h2>
+                <p>See exactly what you'll receive – click to download full PDF samples.</p>
+            </div>
+            <div class="sample-gallery">
+                <div class="sample-card">
+                    <div class="sample-image">📈</div>
+                    <div class="sample-info">
+                        <h4>Monthly Performance</h4>
+                        <p>Complete overview of all platforms with engagement trends and top content.</p>
+                        <a href="#" class="btn btn-secondary" style="margin-top: 1rem;">Download PDF</a>
+                    </div>
+                </div>
+                <div class="sample-card">
+                    <div class="sample-image">💰</div>
+                    <div class="sample-info">
+                        <h4>ROI & Conversions</h4>
+                        <p>Track attributed revenue, conversion rates, and cost per result.</p>
+                        <a href="#" class="btn btn-secondary" style="margin-top: 1rem;">Download PDF</a>
+                    </div>
+                </div>
+                <div class="sample-card">
+                    <div class="sample-image">👥</div>
+                    <div class="sample-info">
+                        <h4>Audience Insights</h4>
+                        <p>Deep dive into demographics, growth, and follower behavior.</p>
+                        <a href="#" class="btn btn-secondary" style="margin-top: 1rem;">Download PDF</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PRICING -->
+    <section id="pricing">
+        <div class="container">
+            <div class="section-title">
+                <h2>Simple, Transparent Pricing</h2>
+                <p>Choose the plan that fits your reporting needs.</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="card pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Basic</h3>
+                        <div class="pricing-price">$99</div>
+                        <div class="pricing-period">/report</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Up to 3 platforms</li>
+                        <li>Standard template</li>
+                        <li>48‑hour delivery</li>
+                        <li>Email support</li>
+                        <li>PDF download</li>
+                    </ul>
+                    <a href="#builder" class="btn btn-primary" style="width: 100%;">Select Basic</a>
+                </div>
+                <div class="card pricing-card featured">
+                    <div class="pricing-badge">MOST POPULAR</div>
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Pro</h3>
+                        <div class="pricing-price">$199</div>
+                        <div class="pricing-period">/month</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Unlimited platforms</li>
+                        <li>Custom templates (white‑label)</li>
+                        <li>Recurring reports (weekly/monthly)</li>
+                        <li>Priority support</li>
+                        <li>ROI & conversion tracking</li>
+                        <li>API access</li>
+                    </ul>
+                    <a href="#builder" class="btn btn-primary" style="width: 100%;">Select Pro</a>
+                </div>
+                <div class="card pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-name">Enterprise</h3>
+                        <div class="pricing-price">$499</div>
+                        <div class="pricing-period">/month</div>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>Everything in Pro</li>
+                        <li>Multi‑brand reporting</li>
+                        <li>Dedicated account manager</li>
+                        <li>Custom integrations</li>
+                        <li>SLA guarantee</li>
+                        <li>Advanced security (SSO)</li>
+                    </ul>
+                    <a href="#builder" class="btn btn-primary" style="width: 100%;">Contact Sales</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- INTERACTIVE BUILDER -->
+    <section class="builder-section" id="builder">
+        <div class="container">
+            <div class="section-title">
+                <h2>Build Your Report</h2>
+                <p>Select a plan and add‑ons. See your total update in real time.</p>
+            </div>
+            <div class="builder-container">
+                <div class="builder-controls">
+                    <h4 style="margin-bottom: 1rem;">1. Choose your plan</h4>
+                    <div class="package-selector">
+                        <div class="package-option" onclick="selectPackage('basic')">
+                            <div class="package-name">Basic (one‑time)</div>
+                            <div class="package-price">$99/report</div>
+                        </div>
+                        <div class="package-option selected" onclick="selectPackage('pro')">
+                            <div class="package-name">Pro (monthly)</div>
+                            <div class="package-price">$199/mo</div>
+                        </div>
+                        <div class="package-option" onclick="selectPackage('enterprise')">
+                            <div class="package-name">Enterprise</div>
+                            <div class="package-price">$499/mo</div>
+                        </div>
+                    </div>
+
+                    <h4 style="margin: 2rem 0 1rem;">2. Add‑ons (optional)</h4>
+                    <div class="addons-selector">
+                        <div class="addon-option" onclick="toggleAddon('whitelabel')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="whitelabel-check"></div>
+                                <div>White‑label (remove Nexus.ai branding)</div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent);">+$39/mo</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleAddon('historical')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="historical-check"></div>
+                                <div>Historical data (12 months)</div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent);">+$49/mo</div>
+                        </div>
+                        <div class="addon-option" onclick="toggleAddon('posts')">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="addon-checkbox" id="posts-check"></div>
+                                <div>Post ideas pack (10 hooks + captions)</div>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent);">+$29/mo</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="builder-summary">
+                    <div class="summary-header">
+                        <h3>Your Report Package</h3>
+                        <div class="total-price" id="total-price">$199<span>/mo</span></div>
+                    </div>
+                    <div class="summary-items" id="summary-items">
+                        <div class="summary-item">
+                            <span>Pro monthly</span>
+                            <span>$199/mo</span>
+                        </div>
+                    </div>
+                    <a href="#cta" class="btn btn-primary" style="width: 100%;">Continue to Checkout</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+        <div class="container">
+            <div class="section-title">
+                <h2>Frequently Asked Questions</h2>
+            </div>
+            <div class="faq-container">
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Which platforms do you support?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>We support Instagram, Facebook, LinkedIn, TikTok, X (Twitter), YouTube, Pinterest, and Google My Business. More platforms added regularly.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Can I use my own branding?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yes! Pro and Enterprise plans include white‑label reports with your logo, brand colors, and custom cover pages.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>How fast will I get my report?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Basic reports are delivered in 48 hours. Pro and Enterprise reports can be generated instantly or on a recurring schedule.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Can I schedule recurring reports?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Absolutely. Pro and Enterprise plans offer weekly, monthly, or custom recurring reports delivered automatically to your inbox.</p>
+                    </div>
+                </div>
+                <div class="faq-item" onclick="toggleFAQ(this)">
+                    <div class="faq-question">
+                        <span>Is there a free trial?</span>
+                        <div class="faq-toggle"></div>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yes! All monthly plans come with a 14‑day free trial – no credit card required.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TESTIMONIALS -->
+    <section style="background: var(--neutral-50);">
+        <div class="container">
+            <div class="section-title">
+                <h2>Trusted by 2,500+ businesses</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+                <div class="card">
+                    <p>"We use Nexus reports in every client pitch. The insights are always on point, and the design is stunning. Our clients love them."</p>
+                    <div style="margin-top: 1rem; font-weight: 600;">— Alex R., Agency Director</div>
+                </div>
+                <div class="card">
+                    <p>"The ROI tracking feature alone saved us hours of manual work. Now we can prove our value to leadership with real numbers."</p>
+                    <div style="margin-top: 1rem; font-weight: 600;">— Sarah J., Marketing Manager</div>
+                </div>
+                <div class="card">
+                    <p>"Switching to Nexus saved us 10+ hours per month on reporting. The white‑label option makes us look like a million bucks."</p>
+                    <div style="margin-top: 1rem; font-weight: 600;">— Michael T., Social Media Lead</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="cta-section" style="background: var(--primary); color: white; text-align: center;">
+        <div class="container">
+            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Ready to transform your reporting?</h2>
+            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--neutral-200);">Start your 14‑day free trial today – no credit card required.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="#builder" class="btn btn-primary">Build Your Report</a>
+                <a href="#samples" class="btn btn-light">View Samples</a>
+                <a href="contact.html" class="btn btn-secondary">Contact Sales</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="index.html" class="logo" style="color: white;">Nexus<span>.ai</span></a>
+                <p style="color: var(--neutral-300); max-width: 400px;">Your AI partner for marketing intelligence – from listening to reporting to conversational AI.</p>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="products.html">Products</a>
+                    <a href="listening.html">Listening</a>
+                    <a href="reports.html">Reports</a>
+                    <a href="chatbot.html">Chatbot</a>
+                    <a href="about.html">About</a>
+                    <a href="onboarding.html">How It Works</a>
+                    <a href="contact.html">Contact</a>
+                </div>
+            </div>
+            <div class="copyright">
+                &copy; 2025 Nexus.ai. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu
+        document.querySelector('.mobile-menu-btn')?.addEventListener('click', function() {
+            const nav = document.querySelector('.nav-links');
+            if (nav.style.display === 'flex') {
+                nav.style.display = 'none';
+            } else {
+                nav.style.display = 'flex';
+                nav.style.flexDirection = 'column';
+                nav.style.position = 'absolute';
+                nav.style.top = '100%';
+                nav.style.left = '0';
+                nav.style.right = '0';
+                nav.style.backgroundColor = 'white';
+                nav.style.padding = '1.5rem';
+                nav.style.boxShadow = 'var(--shadow-lg)';
+                nav.style.zIndex = '99';
+            }
+        });
+
+        // FAQ toggle
+        function toggleFAQ(item) {
+            const answer = item.querySelector('.faq-answer');
+            const isActive = answer.classList.contains('active');
+            document.querySelectorAll('.faq-answer').forEach(a => a.classList.remove('active'));
+            document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('active'));
+            if (!isActive) {
+                answer.classList.add('active');
+                item.classList.add('active');
+            }
+        }
+
+        // Builder
+        let basePrice = 199; // Pro default
+        let addons = {};
+
+        function selectPackage(pkg) {
+            document.querySelectorAll('.package-option').forEach(opt => opt.classList.remove('selected'));
+            event.currentTarget.classList.add('selected');
+            
+            const priceText = event.currentTarget.querySelector('.package-price').innerText;
+            basePrice = parseInt(priceText.replace(/[^0-9]/g, ''));
+            if (pkg === 'basic') basePrice = 99; // one-time
+            updateTotal();
+            updateSummary();
+        }
+
+        function toggleAddon(addonId) {
+            const checkbox = document.getElementById(addonId + '-check');
+            if (addons[addonId]) {
+                delete addons[addonId];
+                checkbox.classList.remove('checked');
+            } else {
+                let price = 0;
+                if (addonId === 'whitelabel') price = 39;
+                if (addonId === 'historical') price = 49;
+                if (addonId === 'posts') price = 29;
+                addons[addonId] = price;
+                checkbox.classList.add('checked');
+            }
+            updateTotal();
+            updateSummary();
+        }
+
+        function updateTotal() {
+            let total = basePrice;
+            for (let key in addons) total += addons[key];
+            document.getElementById('total-price').innerHTML = `$${total}<span>/mo</span>`;
+        }
+
+        function updateSummary() {
+            const summaryDiv = document.getElementById('summary-items');
+            let baseName = 'Pro monthly';
+            if (basePrice === 99) baseName = 'Basic one‑time';
+            if (basePrice === 499) baseName = 'Enterprise';
+            
+            let html = `<div class="summary-item"><span>${baseName}</span><span>$${basePrice}/mo</span></div>`;
+            
+            for (let key in addons) {
+                let name = key === 'whitelabel' ? 'White‑label' : (key === 'historical' ? 'Historical data' : 'Post ideas');
+                html += `<div class="summary-item"><span>${name}</span><span>+$${addons[key]}/mo</span></div>`;
+            }
+            
+            summaryDiv.innerHTML = html;
+        }
+
+        // Pre-select addons for demo
+        window.onload = function() {
+            document.getElementById('whitelabel-check')?.classList.add('checked');
+            addons['whitelabel'] = 39;
+            updateTotal();
+            updateSummary();
+        };
+    </script>
+</body>
+</html>
