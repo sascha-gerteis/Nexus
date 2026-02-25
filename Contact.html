@@ -173,15 +173,20 @@
             stroke-width: 2;
             fill: none;
         }
-
-        /* Header */
-        header {
+      header {
             background-color: white;
             border-bottom: 1px solid var(--neutral-200);
             position: sticky;
             top: 0;
             z-index: 100;
             padding: 1rem 0;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
         }
 
         .header-container {
@@ -212,10 +217,34 @@
             text-decoration: none;
             font-weight: 500;
             transition: color 0.2s;
+            white-space: nowrap;
         }
 
         .nav-links a:hover {
             color: var(--accent);
+        }
+
+        /* optional button style – can be used for any nav link */
+        .nav-links .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1.25rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .nav-links .btn:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
         }
 
         .mobile-menu-btn {
@@ -223,7 +252,102 @@
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 1.5rem;
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+      header {
+            background-color: white;
+            border-bottom: 1px solid var(--neutral-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--neutral-700);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+            white-space: nowrap;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        /* optional button style – can be used for any nav link */
+        .nav-links .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1.25rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            border-radius: var(--radius);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .nav-links .btn:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
         }
 
         /* Contact Hero */
@@ -551,21 +675,30 @@
     </style>
 </head>
 <body>
+   <!-- redesigned navbar -->
     <header>
         <div class="container header-container">
+            <!-- logo (links to home) -->
             <a href="index.html" class="logo">Nexus<span>.ai</span></a>
-            <nav class="nav-links">
+
+            <!-- navigation links (pages) -->
+            <nav class="nav-links" id="navbarNav">
                 <a href="index.html">Home</a>
-                <a href="products.html">Products</a>
-                <a href="listening.html">Listening</a>
-                <a href="reports.html">Reports</a>
-                <a href="chatbot.html">Chatbot</a>
-                <a href="about.html">About</a>
-                <a href="onboarding.html">How It Works</a>
-                <a href="contact.html" class="active">Contact</a>
-                <a href="#cta" class="btn btn-primary">Get Started</a>
+                <a href="Product.html">Product</a>
+                <a href="About.html">About</a>
+                <a href="Contact.html">Contact</a>
+                <a href="Onboarding.html">Onboarding</a>
+                <!-- you can keep or remove the "Get Started" button;
+                     here we keep it as an optional extra, but it's not required -->
+                <a href="Contact.html" class="btn">Get Started</a>
             </nav>
-            <button class="mobile-menu-btn">☰</button>
+
+            <!-- mobile menu toggle button -->
+            <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+                <svg class="icon" viewBox="0 0 24 24">
+                    <path d="M3 12h18M3 6h18M3 18h18"/>
+                </svg>
+            </button>
         </div>
     </header>
 
