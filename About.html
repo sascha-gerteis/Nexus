@@ -35,15 +35,8 @@
             --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
 
         body {
             font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
@@ -60,9 +53,7 @@
             padding: 0 1.5rem;
         }
 
-        section {
-            padding: 5rem 0;
-        }
+        section { padding: 5rem 0; }
 
         .section-title {
             text-align: center;
@@ -98,33 +89,21 @@
             white-space: nowrap;
         }
 
-        .btn-primary {
-            background-color: var(--accent);
-            color: white;
-        }
-
+        .btn-primary { background-color: var(--accent); color: white; }
         .btn-primary:hover {
             background-color: var(--primary-light);
             transform: translateY(-2px);
             box-shadow: var(--shadow-lg);
         }
 
-        .btn-chatbot {
-            background-color: var(--accent-chatbot);
-            color: white;
-        }
-
+        .btn-chatbot { background-color: var(--accent-chatbot); color: white; }
         .btn-chatbot:hover {
             background-color: #7c3aed;
             transform: translateY(-2px);
             box-shadow: var(--shadow-lg);
         }
 
-        .btn-listening {
-            background-color: var(--accent-listening);
-            color: white;
-        }
-
+        .btn-listening { background-color: var(--accent-listening); color: white; }
         .btn-listening:hover {
             background-color: #059669;
             transform: translateY(-2px);
@@ -136,11 +115,13 @@
             color: var(--primary);
             border: 2px solid var(--neutral-200);
         }
-
         .btn-secondary:hover {
             border-color: var(--accent);
             background-color: var(--neutral-50);
         }
+
+        .btn-light { background-color: white; color: var(--primary); }
+        .btn-light:hover { background-color: var(--neutral-100); }
 
         .card {
             background: white;
@@ -151,7 +132,6 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             height: 100%;
         }
-
         .card:hover {
             transform: translateY(-5px);
             box-shadow: var(--shadow-lg);
@@ -175,13 +155,6 @@
             padding: 1rem 0;
         }
 
-        .container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 1.5rem;
-        }
-
         .header-container {
             display: flex;
             justify-content: space-between;
@@ -195,9 +168,7 @@
             text-decoration: none;
         }
 
-        .logo span {
-            color: var(--accent);
-        }
+        .logo span { color: var(--accent); }
 
         .nav-links {
             display: flex;
@@ -212,12 +183,8 @@
             transition: color 0.2s;
             white-space: nowrap;
         }
+        .nav-links a:hover { color: var(--accent); }
 
-        .nav-links a:hover {
-            color: var(--accent);
-        }
-
-        /* optional button style – can be used for any nav link */
         .nav-links .btn {
             display: inline-flex;
             align-items: center;
@@ -233,27 +200,13 @@
             background-color: var(--accent);
             color: white;
         }
-
         .nav-links .btn:hover {
             background-color: var(--primary-light);
             transform: translateY(-2px);
             box-shadow: var(--shadow-lg);
         }
 
-        .mobile-menu-btn {
-            display: none;
-            background: none;
-            border: none;
-            cursor: pointer;
-        }
-
-        .icon {
-            width: 24px;
-            height: 24px;
-            stroke: currentColor;
-            stroke-width: 2;
-            fill: none;
-        }
+        .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; }
 
         /* Hero */
         .about-hero {
@@ -270,7 +223,7 @@
         .about-hero p {
             font-size: 1.25rem;
             color: var(--neutral-600);
-            max-width: 700px;
+            max-width: 820px;
             margin: 0 auto;
         }
 
@@ -353,6 +306,28 @@
             gap: 2rem;
         }
 
+        /* Who we serve (better) */
+        .serve-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        .serve-card {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .serve-title {
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+        .serve-desc {
+            color: var(--neutral-600);
+            font-size: 0.95rem;
+        }
+
         /* Security */
         .security-badge {
             background: var(--neutral-50);
@@ -360,6 +335,14 @@
             border-radius: var(--radius-lg);
             display: inline-block;
             margin: 1rem;
+            border: 1px solid var(--neutral-200);
+        }
+
+        /* CTA section */
+        .cta-section {
+            background: var(--primary);
+            color: white;
+            text-align: center;
         }
 
         /* Footer */
@@ -381,6 +364,7 @@
         .footer-links {
             display: flex;
             gap: 2rem;
+            flex-wrap: wrap;
         }
 
         .footer-links a {
@@ -388,10 +372,7 @@
             text-decoration: none;
             transition: color 0.2s;
         }
-
-        .footer-links a:hover {
-            color: white;
-        }
+        .footer-links a:hover { color: white; }
 
         .copyright {
             text-align: center;
@@ -403,58 +384,59 @@
 
         /* Responsive */
         @media (max-width: 1024px) {
-            .platform-flow {
-                flex-direction: column;
-            }
-            .flow-arrow {
-                transform: rotate(90deg);
-            }
+            .platform-flow { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); }
         }
 
         @media (max-width: 768px) {
-            .about-hero h1 {
-                font-size: 2.5rem;
-            }
-            .nav-links {
-                display: none;
-            }
-            .mobile-menu-btn {
-                display: block;
-            }
+            .about-hero h1 { font-size: 2.5rem; }
+            .nav-links { display: none; }
+            .mobile-menu-btn { display: block; }
         }
 
         @media (max-width: 640px) {
-            section {
-                padding: 3rem 0;
-            }
+            section { padding: 3rem 0; }
         }
 
-        .nav-links a.active {
-            color: var(--accent);
-            font-weight: 600;
+        .nav-links a.active { color: var(--accent); font-weight: 600; }
+
+        /* Mobile menu open state (consistent & clean) */
+        .nav-links.mobile-open {
+            display: flex !important;
+            flex-direction: column;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: white;
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--neutral-200);
+            box-shadow: var(--shadow-lg);
+            gap: 1rem;
+            align-items: stretch;
+            z-index: 999;
         }
+
+        .nav-links.mobile-open a { text-align: center; }
+        .nav-links.mobile-open .btn { width: 100%; }
     </style>
 </head>
+
 <body>
-    <!-- redesigned navbar -->
+    <!-- Navbar -->
     <header>
         <div class="container header-container">
-            <!-- logo (links to home) -->
             <a href="index.html" class="logo">Nexus<span>.ai</span></a>
 
-            <!-- navigation links (pages) -->
             <nav class="nav-links" id="navbarNav">
                 <a href="index.html">Home</a>
                 <a href="Product.html">Product</a>
-                <a href="About.html">About</a>
+                <a href="About.html" class="active">About</a>
                 <a href="Contact.html">Contact</a>
                 <a href="Onboarding.html">Onboarding</a>
-                <!-- you can keep or remove the "Get Started" button;
-                     here we keep it as an optional extra, but it's not required -->
                 <a href="Get-started.html" class="btn">Get Started</a>
             </nav>
 
-            <!-- mobile menu toggle button -->
             <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
                 <svg class="icon" viewBox="0 0 24 24">
                     <path d="M3 12h18M3 6h18M3 18h18"/>
@@ -463,251 +445,330 @@
         </div>
     </header>
 
+    <!-- Hero -->
     <section class="about-hero">
         <div class="container">
-            <h1>The AI platform built for marketing</h1>
-            <p>Nexus.ai combines advanced natural language processing, real‑time data streaming, and automation to give you a complete view of your brand – and the tools to act on it.</p>
+            <h1>The AI platform built for modern marketing</h1>
+            <p>
+                Nexus.ai combines advanced language AI, real-time data analysis, and automation to give you a complete view of your online presence —
+                and the tools to act on it faster than any manual workflow.
+            </p>
         </div>
     </section>
 
-    <!-- What is Nexus (platform overview) -->
+    <!-- What is Nexus -->
     <section>
         <div class="container">
             <div class="section-title">
                 <h2>The Nexus Platform</h2>
                 <p>One unified AI engine, three powerful applications.</p>
             </div>
-            <div style="background: var(--neutral-50); padding: 3rem; border-radius: var(--radius-lg); text-align: center;">
-                <p style="font-size: 1.2rem; max-width: 800px; margin: 0 auto;">At the core of Nexus is a proprietary AI engine that ingests, analyzes, and interprets massive amounts of unstructured data – from social conversations to customer messages – and turns it into structured, actionable intelligence. Every product you see is a specialized interface to this engine.</p>
+
+            <div style="background: var(--neutral-50); padding: 3rem; border-radius: var(--radius-lg); text-align: center; border: 1px solid var(--neutral-200);">
+                <p style="font-size: 1.15rem; max-width: 900px; margin: 0 auto; color: var(--neutral-700);">
+                    At the core of Nexus is an AI engine that ingests, analyzes, and interprets massive amounts of online data —
+                    from social conversations to customer messages — and turns it into structured, actionable intelligence.
+                    Every product you see is a specialized interface to the same engine: listen to the market, report performance, and automate conversations.
+                </p>
             </div>
         </div>
     </section>
 
-    <!-- Our AI Technology (detailed) -->
+    <!-- AI Tech -->
     <section style="background: var(--neutral-50);">
         <div class="container">
             <div class="section-title">
                 <h2>Our AI Technology Stack</h2>
                 <p>How we deliver speed, accuracy, and scale.</p>
             </div>
+
             <div class="tech-grid">
                 <div class="tech-card">
                     <div class="tech-icon">🧠</div>
                     <h3>Natural Language Understanding</h3>
-                    <p>We use transformer‑based models (similar to GPT) fine‑tuned on millions of marketing and support conversations. Achieves 94% accuracy in sentiment detection across 50+ languages.</p>
+                    <p>AI models extract sentiment, intent, topics, and entities across multiple languages — built for real-world marketing and customer conversations.</p>
                 </div>
+
                 <div class="tech-card">
                     <div class="tech-icon">⚡</div>
-                    <h3>Real‑time Stream Processing</h3>
-                    <p>Our data pipeline processes over 100M social posts, news articles, and forum threads per day with sub‑second latency. Built on Apache Kafka and custom microservices.</p>
+                    <h3>Real-time Processing</h3>
+                    <p>A streaming pipeline that can detect changes fast — from rising trends to sudden negative sentiment — so you can act before it spreads.</p>
                 </div>
+
                 <div class="tech-card">
                     <div class="tech-icon">📊</div>
-                    <h3>Automated Insight Generation</h3>
-                    <p>We don’t just show you data – we highlight trends, anomalies, and recommendations using proprietary algorithms that learn from your industry.</p>
+                    <h3>Automated Insights</h3>
+                    <p>We don’t just show data. We summarize what matters, highlight anomalies, and generate next-step recommendations you can use immediately.</p>
                 </div>
+
                 <div class="tech-card">
                     <div class="tech-icon">🔌</div>
-                    <h3>Integration Layer</h3>
-                    <p>Connect with 50+ platforms via API, webhooks, or pre‑built connectors (Slack, Zapier, HubSpot, Salesforce). Your data flows where you need it.</p>
+                    <h3>Integrations</h3>
+                    <p>Connect to your tools via APIs, exports, and automations. Keep your reporting, alerts, and workflows connected without manual work.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- How It Works (platform flow) -->
+    <!-- Platform flow -->
     <section>
         <div class="container">
             <div class="section-title">
                 <h2>How the Nexus Engine Works</h2>
                 <p>From raw data to actionable intelligence.</p>
             </div>
+
             <div class="platform-flow">
                 <div class="flow-step">
                     <div style="font-size: 2rem; margin-bottom: 1rem;">🌐</div>
                     <h4>1. Ingest</h4>
-                    <p>Millions of sources: social APIs, news feeds, forums, direct messages, and your own data (CSV, CRM).</p>
+                    <p>Social platforms, news, forums, reviews, and your own data sources.</p>
                 </div>
+
                 <div class="flow-arrow">→</div>
+
                 <div class="flow-step">
                     <div style="font-size: 2rem; margin-bottom: 1rem;">🔍</div>
                     <h4>2. Analyze</h4>
-                    <p>NLP models extract entities, sentiment, intent, and trends. Custom models per product (listening, reports, chatbot).</p>
+                    <p>Sentiment, topics, intent, trends, competitors, and customer needs.</p>
                 </div>
+
                 <div class="flow-arrow">→</div>
+
                 <div class="flow-step">
                     <div style="font-size: 2rem; margin-bottom: 1rem;">⚙️</div>
                     <h4>3. Structure</h4>
-                    <p>Data is indexed and enriched. Our engine generates summaries, alerts, and predictions.</p>
+                    <p>Summaries, dashboards, alerts, and clear decision-ready outputs.</p>
                 </div>
+
                 <div class="flow-arrow">→</div>
+
                 <div class="flow-step">
                     <div style="font-size: 2rem; margin-bottom: 1rem;">📤</div>
                     <h4>4. Deliver</h4>
-                    <p>Real‑time dashboards, automated reports, chatbot responses, or API payloads.</p>
+                    <p>Reports, live insights, chatbot answers, and automation triggers.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- The Three Products (brief) -->
+    <!-- Products mini -->
     <section style="background: var(--neutral-50);">
         <div class="container">
             <div class="section-title">
                 <h2>What We Build</h2>
                 <p>Three specialised applications of our core AI.</p>
             </div>
+
             <div class="product-pillars">
                 <div class="card">
-                    <span class="product-badge badge-listening" style="display: inline-block; padding: 0.25rem 1rem; background: #d1fae5; color: #065f46; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">Social Listening</span>
-                    <p>Continuous monitoring of brand conversations across the open web. Our AI flags shifts in sentiment, detects emerging crises, and benchmarks competitors – all in real time.</p>
+                    <span style="display:inline-block; padding:0.25rem 1rem; background:#d1fae5; color:#065f46; border-radius:20px; font-weight:600; margin-bottom:1rem;">Social Listening</span>
+                    <p>Track brand conversations across the open web. Detect shifts in sentiment, discover trends, and benchmark competitors in real time.</p>
                 </div>
+
                 <div class="card">
-                    <span class="product-badge badge-report" style="display: inline-block; padding: 0.25rem 1rem; background: #e0f2fe; color: #0369a1; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">Social Media Reports</span>
-                    <p>Automated generation of professional, white‑label reports. We pull data from all major platforms, calculate ROI, and deliver a PDF or live dashboard in 48 hours.</p>
+                    <span style="display:inline-block; padding:0.25rem 1rem; background:#e0f2fe; color:#0369a1; border-radius:20px; font-weight:600; margin-bottom:1rem;">Social Media Reports</span>
+                    <p>Professional, leadership-ready reporting. We consolidate platform data, calculate performance, and deliver a clean PDF or dashboard output.</p>
                 </div>
+
                 <div class="card">
-                    <span class="product-badge badge-chatbot" style="display: inline-block; padding: 0.25rem 1rem; background: #ede9fe; color: #5b21b6; border-radius: 20px; font-weight: 600; margin-bottom: 1rem;">AI Chatbot</span>
-                    <p>Custom‑trained chatbots that understand your business. Deploy on your site or messaging apps to handle support, qualify leads, and book appointments 24/7.</p>
+                    <span style="display:inline-block; padding:0.25rem 1rem; background:#ede9fe; color:#5b21b6; border-radius:20px; font-weight:600; margin-bottom:1rem;">AI Chatbot</span>
+                    <p>Deploy a chatbot trained on your business. Handle FAQs, qualify leads, route requests, and respond instantly — 24/7.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Use Cases / Industries -->
+    <!-- Who we serve (IMPROVED) -->
     <section>
         <div class="container">
             <div class="section-title">
                 <h2>Who We Serve</h2>
-                <p>Our technology adapts to any industry.</p>
+                <p>
+                    If your business has an online presence, Nexus can help.
+                    We support almost any industry — from solo founders to enterprise teams — because the problems are universal:
+                    visibility, performance, and response speed.
+                </p>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
-                <div class="card" style="text-align: center;">🏢 Agencies</div>
-                <div class="card" style="text-align: center;">🛍️ E‑commerce</div>
-                <div class="card" style="text-align: center;">🏥 Healthcare</div>
-                <div class="card" style="text-align: center;">🏦 Finance</div>
-                <div class="card" style="text-align: center;">🎮 Gaming</div>
-                <div class="card" style="text-align: center;">📱 SaaS</div>
+
+            <div class="serve-grid">
+                <div class="card serve-card">
+                    <div style="font-size: 1.75rem;">🏢</div>
+                    <div class="serve-title">Agencies</div>
+                    <div class="serve-desc">White-label reporting, client monitoring, and scalable delivery without adding headcount.</div>
+                </div>
+
+                <div class="card serve-card">
+                    <div style="font-size: 1.75rem;">🛍️</div>
+                    <div class="serve-title">E-commerce & Retail</div>
+                    <div class="serve-desc">Track product feedback, reviews, creator mentions, and customer questions — and respond faster.</div>
+                </div>
+
+                <div class="card serve-card">
+                    <div style="font-size: 1.75rem;">📱</div>
+                    <div class="serve-title">SaaS & Apps</div>
+                    <div class="serve-desc">Spot churn signals, feature requests, and sentiment shifts across communities and social platforms.</div>
+                </div>
+
+                <div class="card serve-card">
+                    <div style="font-size: 1.75rem;">🍽️</div>
+                    <div class="serve-title">Local Businesses</div>
+                    <div class="serve-desc">Restaurants, clinics, gyms — if customers talk about you online, we can monitor and help you act.</div>
+                </div>
+
+                <div class="card serve-card">
+                    <div style="font-size: 1.75rem;">🎓</div>
+                    <div class="serve-title">Creators & Education</div>
+                    <div class="serve-desc">Understand audience feedback, content performance, and questions at scale — across platforms.</div>
+                </div>
+
+                <div class="card serve-card">
+                    <div style="font-size: 1.75rem;">🏦</div>
+                    <div class="serve-title">Regulated Industries</div>
+                    <div class="serve-desc">Finance, healthcare, and more — monitoring, insights, and controlled automation with privacy in mind.</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem; text-align: center; color: var(--neutral-600);">
+                <p style="max-width: 900px; margin: 0 auto;">
+                    In short: if people can search your brand, mention it, review it, message it, or talk about it anywhere online —
+                    Nexus can help you capture the signal and turn it into action.
+                </p>
             </div>
         </div>
     </section>
 
-    <!-- Speed & Scale Stats -->
+    <!-- Scale stats -->
     <section style="background: linear-gradient(135deg, #1a365d 0%, #2d4a8a 100%); color: white;">
         <div class="container">
             <div class="section-title" style="color: white;">
                 <h2 style="color: white;">Engineered for Scale</h2>
-                <p style="color: var(--neutral-200);">Numbers that show what our platform handles daily.</p>
+                <p style="color: var(--neutral-200);">Numbers that show what our platform is designed to handle.</p>
             </div>
+
             <div class="stats-grid">
                 <div class="stat-card" style="background: rgba(255,255,255,0.1); color: white;">
                     <div class="stat-number" style="color: white;">100M+</div>
-                    <div>Sources monitored daily</div>
+                    <div>Content signals processed</div>
                 </div>
+
                 <div class="stat-card" style="background: rgba(255,255,255,0.1); color: white;">
                     <div class="stat-number" style="color: white;">50+</div>
                     <div>Languages supported</div>
                 </div>
+
                 <div class="stat-card" style="background: rgba(255,255,255,0.1); color: white;">
                     <div class="stat-number" style="color: white;">99.9%</div>
-                    <div>Platform uptime</div>
+                    <div>Uptime target</div>
                 </div>
+
                 <div class="stat-card" style="background: rgba(255,255,255,0.1); color: white;">
-                    <div class="stat-number" style="color: white;">500ms</div>
-                    <div>Avg. response time (chatbot)</div>
+                    <div class="stat-number" style="color: white;">Fast</div>
+                    <div>Alerts & reporting delivery</div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Security & Privacy -->
+    <!-- Security -->
     <section>
         <div class="container">
             <div class="section-title">
                 <h2>Security & Privacy by Design</h2>
-                <p>Your data is safe with us.</p>
+                <p>Your data is protected. Your customers’ trust matters.</p>
             </div>
-            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 2rem;">
+
+            <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:2rem;">
                 <div class="security-badge">
                     <div style="font-size: 2rem; margin-bottom: 1rem;">🔒</div>
                     <h4>Encryption</h4>
-                    <p>AES-256 for data at rest, TLS 1.3 in transit.</p>
+                    <p>AES-256 at rest, TLS in transit.</p>
                 </div>
-                <div class="security-badge">
-                    <div style="font-size: 2rem; margin-bottom: 1rem;">📜</div>
-                    <h4>Compliance</h4>
-                    <p>SOC2 Type II, GDPR, CCPA ready.</p>
-                </div>
+
                 <div class="security-badge">
                     <div style="font-size: 2rem; margin-bottom: 1rem;">🔐</div>
                     <h4>Access Control</h4>
-                    <p>Role‑based permissions and SSO integration.</p>
+                    <p>Role-based permissions, optional SSO.</p>
+                </div>
+
+                <div class="security-badge">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">🧩</div>
+                    <h4>Flexible Deployment</h4>
+                    <p>Designed to integrate with your workflows and data boundaries.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Our Mission -->
+    <!-- Mission -->
     <section style="background: var(--neutral-50);">
         <div class="container">
-            <div class="mission-block" style="max-width: 800px; margin: 0 auto; text-align: center;">
+            <div style="max-width: 900px; margin: 0 auto; text-align: center;">
                 <h2 style="font-size: 2rem; color: var(--primary); margin-bottom: 1.5rem;">Our Mission</h2>
-                <p style="font-size: 1.2rem;">To democratize AI for marketing and customer engagement. We believe every business – from solo entrepreneur to global enterprise – should have access to the same intelligence that powers the world's largest brands. That's why we build tools that are powerful, yet simple to use.</p>
+                <p style="font-size: 1.2rem; color: var(--neutral-700);">
+                    To make AI practical for every business online.
+                    We believe any company — from solo entrepreneur to global enterprise — should have access to the same intelligence and automation
+                    that powers the world’s largest brands. That’s why we build tools that are powerful, simple, and results-focused.
+                </p>
             </div>
         </div>
     </section>
 
-    <!-- Final CTA -->
-    <section class="cta-section" style="background: var(--primary); color: white; text-align: center;">
+    <!-- Final CTA (FIXED LINKS) -->
+    <section class="cta-section">
         <div class="container">
-            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Ready to put our AI to work?</h2>
-            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--neutral-200);">Explore our products or contact us for a demo.</p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                <a href="products.html" class="btn btn-listening">View All Products</a>
-                <a href="index.html#cta" class="btn btn-light">Request Consultation</a>
+            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Ready to put AI to work?</h2>
+            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--neutral-200);">
+                Explore our products or build your package in minutes.
+            </p>
+
+            <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+                <!-- FIX: Products should go to Product.html -->
+                <a href="Product.html" class="btn btn-listening">View Products</a>
+
+                <!-- FIX: Request Consultation should go to Get-started.html -->
+                <a href="Get-started.html" class="btn btn-light">Request Consultation</a>
             </div>
         </div>
     </section>
 
+    <!-- Footer (optional: also fix Products link here to Product.html for consistency) -->
     <footer>
         <div class="container">
             <div class="footer-content">
                 <a href="index.html" class="logo" style="color: white;">Nexus<span>.ai</span></a>
-                <p style="color: var(--neutral-300); max-width: 400px;">The AI platform for marketing intelligence – listening, reporting, and chatbots powered by one engine.</p>
+                <p style="color: var(--neutral-300); max-width: 420px;">
+                    The AI platform for marketing intelligence — listening, reporting, and chatbots powered by one engine.
+                </p>
                 <div class="footer-links">
                     <a href="index.html">Home</a>
-                    <a href="products.html">Products</a>
+                    <a href="Product.html">Products</a>
                     <a href="listening.html">Listening</a>
                     <a href="reports.html">Reports</a>
                     <a href="chatbot.html">Chatbot</a>
-                    <a href="about.html">About</a>
+                    <a href="About.html">About</a>
+                    <a href="Get-started.html">Get Started</a>
                 </div>
             </div>
-            <div class="copyright">
-                &copy; 2025 Nexus.ai. All rights reserved.
-            </div>
+            <div class="copyright">&copy; 2025 Nexus.ai. All rights reserved.</div>
         </div>
     </footer>
 
     <script>
-        // Mobile menu toggle
-        document.querySelector('.mobile-menu-btn')?.addEventListener('click', function() {
-            const nav = document.querySelector('.nav-links');
-            if (nav.style.display === 'flex') {
-                nav.style.display = 'none';
-            } else {
-                nav.style.display = 'flex';
-                nav.style.flexDirection = 'column';
-                nav.style.position = 'absolute';
-                nav.style.top = '100%';
-                nav.style.left = '0';
-                nav.style.right = '0';
-                nav.style.backgroundColor = 'white';
-                nav.style.padding = '1.5rem';
-                nav.style.boxShadow = 'var(--shadow-lg)';
-                nav.style.zIndex = '99';
-            }
-        });
+        // Mobile menu toggle (clean + consistent)
+        (function () {
+            const btn = document.getElementById('mobileMenuBtn');
+            const nav = document.getElementById('navbarNav');
+            if (!btn || !nav) return;
+
+            btn.addEventListener('click', function () {
+                nav.classList.toggle('mobile-open');
+            });
+
+            nav.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', () => nav.classList.remove('mobile-open'));
+            });
+        })();
     </script>
 </body>
 </html>
