@@ -1,1100 +1,996 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexus.ai | Get Started – Build Your Package</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-        /* ========== GLOBAL STYLES ========== */
-        :root {
-            --primary: #1a365d;
-            --primary-light: #2d4a8a;
-            --accent: #0ea5e9;
-            --accent-light: #7dd3fc;
-            --accent-chatbot: #8b5cf6;
-            --accent-chatbot-light: #c4b5fd;
-            --accent-listening: #10b981;
-            --accent-listening-light: #a7f3d0;
-            --neutral-50: #f9fafb;
-            --neutral-100: #f3f4f6;
-            --neutral-200: #e5e7eb;
-            --neutral-300: #d1d5db;
-            --neutral-600: #4b5563;
-            --neutral-700: #374151;
-            --neutral-800: #1f2937;
-            --neutral-900: #111827;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --radius: 0.5rem;
-            --radius-lg: 0.75rem;
-            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus.ai | Get Started – Build Your Package</title>
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-        html {
-            scroll-behavior: smooth;
-        }
+  <style>
+    /* ========== GLOBAL STYLES ========== */
+    :root {
+      --primary: #1a365d;
+      --primary-light: #2d4a8a;
+      --accent: #0ea5e9;
+      --accent-light: #7dd3fc;
+      --accent-chatbot: #8b5cf6;
+      --accent-chatbot-light: #c4b5fd;
+      --accent-listening: #10b981;
+      --accent-listening-light: #a7f3d0;
+      --neutral-50: #f9fafb;
+      --neutral-100: #f3f4f6;
+      --neutral-200: #e5e7eb;
+      --neutral-300: #d1d5db;
+      --neutral-600: #4b5563;
+      --neutral-700: #374151;
+      --neutral-800: #1f2937;
+      --neutral-900: #111827;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --radius: 0.5rem;
+      --radius-lg: 0.75rem;
+      --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+    }
 
-        body {
-            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-            line-height: 1.6;
-            color: var(--neutral-800);
-            background-color: white;
-            overflow-x: hidden;
-        }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
 
-        .container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 1.5rem;
-        }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--neutral-800);
+      background-color: white;
+      overflow-x: hidden;
+    }
 
-        section {
-            padding: 5rem 0;
-        }
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
 
-        .section-title {
-            text-align: center;
-            margin-bottom: 3.5rem;
-        }
+    section { padding: 5rem 0; }
 
-        .section-title h2 {
-            font-size: 2.25rem;
-            font-weight: 800;
-            color: var(--primary);
-            margin-bottom: 1rem;
-        }
+    .section-title { text-align: center; margin-bottom: 3.5rem; }
+    .section-title h2 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+    .section-title p {
+      font-size: 1.125rem;
+      color: var(--neutral-600);
+      max-width: 700px;
+      margin: 0 auto;
+    }
 
-        .section-title p {
-            font-size: 1.125rem;
-            color: var(--neutral-600);
-            max-width: 700px;
-            margin: 0 auto;
-        }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.875rem 2rem;
+      font-weight: 600;
+      font-size: 1rem;
+      border-radius: var(--radius);
+      text-decoration: none;
+      transition: all 0.2s ease;
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
 
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.875rem 2rem;
-            font-weight: 600;
-            font-size: 1rem;
-            border-radius: var(--radius);
-            text-decoration: none;
-            transition: all 0.2s ease;
-            border: none;
-            cursor: pointer;
-            white-space: nowrap;
-        }
+    .btn-primary { background-color: var(--accent); color: white; }
+    .btn-primary:hover {
+      background-color: var(--primary-light);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
 
-        .btn-primary {
-            background-color: var(--accent);
-            color: white;
-        }
+    .btn-chatbot { background-color: var(--accent-chatbot); color: white; }
+    .btn-chatbot:hover {
+      background-color: #7c3aed;
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
 
-        .btn-primary:hover {
-            background-color: var(--primary-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-        }
+    .btn-listening { background-color: var(--accent-listening); color: white; }
+    .btn-listening:hover {
+      background-color: #059669;
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
 
-        .btn-chatbot {
-            background-color: var(--accent-chatbot);
-            color: white;
-        }
+    .btn-secondary {
+      background-color: white;
+      color: var(--primary);
+      border: 2px solid var(--neutral-200);
+    }
+    .btn-secondary:hover { border-color: var(--accent); background-color: var(--neutral-50); }
 
-        .btn-chatbot:hover {
-            background-color: #7c3aed;
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-        }
+    .btn-light { background-color: white; color: var(--primary); }
+    .btn-light:hover { background-color: var(--neutral-100); }
 
-        .btn-listening {
-            background-color: var(--accent-listening);
-            color: white;
-        }
+    .card {
+      background: white;
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--neutral-200);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      height: 100%;
+    }
+    .card:hover { transform: translateY(-5px); box-shadow: var(--shadow-lg); }
 
-        .btn-listening:hover {
-            background-color: #059669;
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-        }
+    header {
+      background-color: white;
+      border-bottom: 1px solid var(--neutral-200);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 1rem 0;
+    }
 
-        .btn-secondary {
-            background-color: white;
-            color: var(--primary);
-            border: 2px solid var(--neutral-200);
-        }
+    .header-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
 
-        .btn-secondary:hover {
-            border-color: var(--accent);
-            background-color: var(--neutral-50);
-        }
+    .logo {
+      font-size: 1.75rem;
+      font-weight: 900;
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .logo span { color: var(--accent); }
 
-        .btn-light {
-            background-color: white;
-            color: var(--primary);
-        }
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
 
-        .btn-light:hover {
-            background-color: var(--neutral-100);
-        }
+    .nav-links a {
+      color: var(--neutral-700);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+      white-space: nowrap;
+    }
+    .nav-links a:hover { color: var(--accent); }
 
-        .card {
-            background: white;
-            border-radius: var(--radius-lg);
-            padding: 2rem;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--neutral-200);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            height: 100%;
-        }
+    .nav-links .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border-radius: var(--radius);
+      text-decoration: none;
+      transition: all 0.2s ease;
+      border: none;
+      cursor: pointer;
+      background-color: var(--accent);
+      color: white;
+    }
+    .nav-links .btn:hover {
+      background-color: var(--primary-light);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-lg);
-        }
+    .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; }
+    .icon { width: 24px; height: 24px; stroke: currentColor; stroke-width: 2; fill: none; }
 
-         header {
-            background-color: white;
-            border-bottom: 1px solid var(--neutral-200);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            padding: 1rem 0;
-        }
+    /* Hero */
+    .getstarted-hero {
+      padding: 4rem 0;
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      text-align: center;
+    }
+    .getstarted-hero h1 {
+      font-size: 3rem;
+      font-weight: 900;
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+    .getstarted-hero p {
+      font-size: 1.25rem;
+      color: var(--neutral-600);
+      max-width: 700px;
+      margin: 0 auto;
+    }
 
-        .container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 1.5rem;
-        }
+    /* Product cards */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+    .product-card {
+      background: white;
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      border: 2px solid var(--neutral-200);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .product-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+    .product-card.active { border-color: var(--accent); }
+    .product-card.listening.active { border-color: var(--accent-listening); }
+    .product-card.reports.active { border-color: var(--accent); }
+    .product-card.chatbot.active { border-color: var(--accent-chatbot); }
 
-        .header-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+    .product-icon { font-size: 3rem; margin-bottom: 1rem; }
+    .product-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
+    .product-price-badge {
+      display: inline-block;
+      padding: 0.25rem 1rem;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+    }
+    .listening-badge { background: #d1fae5; color: #065f46; }
+    .reports-badge { background: #e0f2fe; color: #0369a1; }
+    .chatbot-badge { background: #ede9fe; color: #5b21b6; }
 
-        .logo {
-            font-size: 1.75rem;
-            font-weight: 900;
-            color: var(--primary);
-            text-decoration: none;
-        }
+    /* Builder layout */
+    .builder-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: start;
+      margin-bottom: 3rem;
+    }
+    .customization-panel {
+      background: white;
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--neutral-200);
+    }
+    .preview-panel {
+      background: white;
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--neutral-200);
+      position: sticky;
+      top: 6rem;
+    }
 
-        .logo span {
-            color: var(--accent);
-        }
+    /* Plan options */
+    .plan-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      border: 2px solid var(--neutral-200);
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .plan-option:hover { border-color: var(--accent-light); }
+    .plan-option.selected { border-color: var(--accent); background: rgba(14,165,233,0.05); }
+    .plan-option.listening.selected {
+      border-color: var(--accent-listening);
+      background: rgba(16,185,129,0.05);
+    }
+    .plan-option.chatbot.selected {
+      border-color: var(--accent-chatbot);
+      background: rgba(139,92,246,0.05);
+    }
+    .plan-name { font-weight: 600; color: var(--primary); }
+    .plan-price { font-weight: 700; color: var(--accent); }
+    .plan-price.listening { color: var(--accent-listening); }
+    .plan-price.chatbot { color: var(--accent-chatbot); }
 
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
+    .addon-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--neutral-200);
+    }
 
-        .nav-links a {
-            color: var(--neutral-700);
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.2s;
-            white-space: nowrap;
-        }
+    .addon-checkbox {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--neutral-300);
+      border-radius: 4px;
+      margin-right: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-        .nav-links a:hover {
-            color: var(--accent);
-        }
+    .addon-checkbox.checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    /* Make checkbox color match product */
+    .addon-checkbox.checked.listening {
+      background: var(--accent-listening);
+      border-color: var(--accent-listening);
+    }
+    .addon-checkbox.checked.chatbot {
+      background: var(--accent-chatbot);
+      border-color: var(--accent-chatbot);
+    }
 
-        /* optional button style – can be used for any nav link */
-        .nav-links .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.5rem 1.25rem;
-            font-weight: 600;
-            font-size: 0.95rem;
-            border-radius: var(--radius);
-            text-decoration: none;
-            transition: all 0.2s ease;
-            border: none;
-            cursor: pointer;
-            background-color: var(--accent);
-            color: white;
-        }
+    .addon-checkbox.checked::after {
+      content: '';
+      width: 12px;
+      height: 12px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg ' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: 12px;
+      display: block;
+    }
 
-        .nav-links .btn:hover {
-            background-color: var(--primary-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-        }
+    /* Preview content */
+    .report-preview { background: var(--neutral-50); border-radius: var(--radius); padding: 1rem; }
+    .chat-preview {
+      background: var(--neutral-50);
+      border-radius: var(--radius);
+      padding: 1rem;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+    }
+    .chat-message { max-width: 80%; padding: 0.75rem; border-radius: 1rem; margin-bottom: 0.5rem; }
+    .chat-message.bot {
+      background: white;
+      border-bottom-left-radius: 0.25rem;
+      align-self: flex-start;
+    }
+    .chat-message.user {
+      background: var(--accent-chatbot);
+      color: white;
+      border-bottom-right-radius: 0.25rem;
+      align-self: flex-end;
+    }
 
-        .mobile-menu-btn {
-            display: none;
-            background: none;
-            border: none;
-            cursor: pointer;
-        }
+    /* Summary bar */
+    .summary-bar {
+      background: white;
+      border-top: 2px solid var(--neutral-200);
+      padding: 1.5rem 0;
+      position: sticky;
+      bottom: 0;
+      z-index: 90;
+      box-shadow: 0 -4px 6px -2px rgba(0,0,0,0.05);
+    }
+    .summary-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .selected-products-list { display: flex; flex-wrap: wrap; gap: 1rem; }
+    .selected-tag {
+      background: var(--neutral-100);
+      padding: 0.25rem 1rem;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .selected-tag .remove { cursor: pointer; color: var(--neutral-600); font-weight: 700; }
+    .summary-total { font-size: 1.5rem; font-weight: 800; color: var(--primary); }
 
-        .icon {
-            width: 24px;
-            height: 24px;
-            stroke: currentColor;
-            stroke-width: 2;
-            fill: none;
-        }
-        /* Hero */
-        .getstarted-hero {
-            padding: 4rem 0;
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            text-align: center;
-        }
-        .getstarted-hero h1 {
-            font-size: 3rem;
-            font-weight: 900;
-            color: var(--primary);
-            margin-bottom: 1rem;
-        }
-        .getstarted-hero p {
-            font-size: 1.25rem;
-            color: var(--neutral-600);
-            max-width: 700px;
-            margin: 0 auto;
-        }
+    /* Contact form */
+    .contact-form {
+      background: white;
+      padding: 2.5rem;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--neutral-200);
+      max-width: 700px;
+      margin: 3rem auto 0;
+    }
+    .form-group { margin-bottom: 1.5rem; }
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: var(--neutral-700);
+    }
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      border: 1px solid var(--neutral-300);
+      border-radius: var(--radius);
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(14,165,233,0.1);
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
-        /* Product cards */
-        .product-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 2rem;
-            margin-bottom: 3rem;
-        }
-        .product-card {
-            background: white;
-            border-radius: var(--radius-lg);
-            padding: 2rem;
-            border: 2px solid var(--neutral-200);
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-        }
-        .product-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg);
-        }
-        .product-card.active {
-            border-color: var(--accent);
-        }
-        .product-card.listening.active {
-            border-color: var(--accent-listening);
-        }
-        .product-card.reports.active {
-            border-color: var(--accent);
-        }
-        .product-card.chatbot.active {
-            border-color: var(--accent-chatbot);
-        }
-        .product-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-        .product-name {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 0.5rem;
-        }
-        .product-price-badge {
-            display: inline-block;
-            padding: 0.25rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-        }
-        .listening-badge {
-            background: #d1fae5;
-            color: #065f46;
-        }
-        .reports-badge {
-            background: #e0f2fe;
-            color: #0369a1;
-        }
-        .chatbot-badge {
-            background: #ede9fe;
-            color: #5b21b6;
-        }
+    .form-status { margin-top: 1rem; padding: 1rem; border-radius: var(--radius); display: none; }
+    .form-status.success { display: block; background: #d1fae5; color: #065f46; }
+    .form-status.error { display: block; background: #fee2e2; color: #991b1b; }
 
-        /* Builder layout */
-        .builder-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 3rem;
-            align-items: start;
-            margin-bottom: 3rem;
-        }
-        .customization-panel {
-            background: white;
-            border-radius: var(--radius-lg);
-            padding: 2rem;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--neutral-200);
-        }
-        .preview-panel {
-            background: white;
-            border-radius: var(--radius-lg);
-            padding: 2rem;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--neutral-200);
-            position: sticky;
-            top: 6rem;
-        }
+    /* Footer */
+    footer { background-color: var(--neutral-900); color: white; padding: 3rem 0 2rem; }
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 2rem;
+    }
+    .footer-links { display: flex; gap: 2rem; }
+    .footer-links a { color: var(--neutral-300); text-decoration: none; transition: color 0.2s; }
+    .footer-links a:hover { color: white; }
+    .copyright {
+      text-align: center;
+      color: var(--neutral-400);
+      font-size: 0.875rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--neutral-800);
+    }
 
-        /* Plan options */
-        .plan-option {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1rem;
-            border: 2px solid var(--neutral-200);
-            border-radius: var(--radius);
-            margin-bottom: 1rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .plan-option:hover {
-            border-color: var(--accent-light);
-        }
-        .plan-option.selected {
-            border-color: var(--accent);
-            background: rgba(14,165,233,0.05);
-        }
-        .plan-option.listening.selected {
-            border-color: var(--accent-listening);
-            background: rgba(16,185,129,0.05);
-        }
-        .plan-option.chatbot.selected {
-            border-color: var(--accent-chatbot);
-            background: rgba(139,92,246,0.05);
-        }
-        .plan-name {
-            font-weight: 600;
-            color: var(--primary);
-        }
-        .plan-price {
-            font-weight: 700;
-            color: var(--accent);
-        }
-        .plan-price.listening {
-            color: var(--accent-listening);
-        }
-        .plan-price.chatbot {
-            color: var(--accent-chatbot);
-        }
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .builder-row { grid-template-columns: 1fr; }
+      .product-grid { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+    }
+    @media (max-width: 768px) {
+      .getstarted-hero h1 { font-size: 2.5rem; }
+      .nav-links { display: none; }
+      .mobile-menu-btn { display: block; }
+      .summary-content { flex-direction: column; align-items: flex-start; }
+      .form-row { grid-template-columns: 1fr; }
+    }
 
-        .addon-option {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 0;
-            border-bottom: 1px solid var(--neutral-200);
-        }
-        .addon-checkbox {
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--neutral-300);
-            border-radius: 4px;
-            margin-right: 1rem;
-            cursor: pointer;
-        }
-        .addon-checkbox.checked {
-            background: var(--accent);
-            border-color: var(--accent);
-            position: relative;
-        }
-        .addon-checkbox.checked::after {
-            content: '✓';
-            color: white;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        /* Preview content */
-        .report-preview {
-            background: var(--neutral-50);
-            border-radius: var(--radius);
-            padding: 1rem;
-        }
-        .chat-preview {
-            background: var(--neutral-50);
-            border-radius: var(--radius);
-            padding: 1rem;
-            min-height: 200px;
-            display: flex;
-            flex-direction: column;
-        }
-        .chat-message {
-            max-width: 80%;
-            padding: 0.75rem;
-            border-radius: 1rem;
-            margin-bottom: 0.5rem;
-        }
-        .chat-message.bot {
-            background: white;
-            border-bottom-left-radius: 0.25rem;
-            align-self: flex-start;
-        }
-        .chat-message.user {
-            background: var(--accent-chatbot);
-            color: white;
-            border-bottom-right-radius: 0.25rem;
-            align-self: flex-end;
-        }
-
-        /* Summary bar */
-        .summary-bar {
-            background: white;
-            border-top: 2px solid var(--neutral-200);
-            padding: 1.5rem 0;
-            position: sticky;
-            bottom: 0;
-            z-index: 90;
-            box-shadow: 0 -4px 6px -2px rgba(0,0,0,0.05);
-        }
-        .summary-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        .selected-products-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        .selected-tag {
-            background: var(--neutral-100);
-            padding: 0.25rem 1rem;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .selected-tag .remove {
-            cursor: pointer;
-            color: var(--neutral-600);
-            font-weight: 700;
-        }
-        .summary-total {
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: var(--primary);
-        }
-
-        /* Contact form */
-        .contact-form {
-            background: white;
-            padding: 2.5rem;
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-lg);
-            border: 1px solid var(--neutral-200);
-            max-width: 700px;
-            margin: 3rem auto 0;
-        }
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: var(--neutral-700);
-        }
-        .form-group input,
-        .form-group textarea {
-            width: 100%;
-            padding: 0.875rem 1rem;
-            border: 1px solid var(--neutral-300);
-            border-radius: var(--radius);
-            font-family: 'Inter', sans-serif;
-            font-size: 1rem;
-        }
-        .form-group input:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(14,165,233,0.1);
-        }
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }
-        .form-status {
-            margin-top: 1rem;
-            padding: 1rem;
-            border-radius: var(--radius);
-            display: none;
-        }
-        .form-status.success {
-            display: block;
-            background: #d1fae5;
-            color: #065f46;
-        }
-        .form-status.error {
-            display: block;
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        /* Footer */
-        footer {
-            background-color: var(--neutral-900);
-            color: white;
-            padding: 3rem 0 2rem;
-        }
-        .footer-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            flex-wrap: wrap;
-            gap: 2rem;
-        }
-        .footer-links {
-            display: flex;
-            gap: 2rem;
-        }
-        .footer-links a {
-            color: var(--neutral-300);
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-        .footer-links a:hover {
-            color: white;
-        }
-        .copyright {
-            text-align: center;
-            color: var(--neutral-400);
-            font-size: 0.875rem;
-            padding-top: 2rem;
-            border-top: 1px solid var(--neutral-800);
-        }
-
-        /* Responsive */
-        @media (max-width: 1024px) {
-            .builder-row {
-                grid-template-columns: 1fr;
-            }
-            .product-grid {
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            }
-        }
-        @media (max-width: 768px) {
-            .getstarted-hero h1 {
-                font-size: 2.5rem;
-            }
-            .nav-links {
-                display: none;
-            }
-            .mobile-menu-btn {
-                display: block;
-            }
-            .summary-content {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-        }
-
-        .nav-links a.active {
-            color: var(--accent);
-            font-weight: 600;
-        }
-        .hidden {
-            display: none;
-        }
-    </style>
+    .hidden { display: none; }
+  </style>
 </head>
+
 <body>
-    <!-- redesigned navbar -->
-    <header>
-        <div class="container header-container">
-            <!-- logo (links to home) -->
-            <a href="index.html" class="logo">Nexus<span>.ai</span></a>
+  <!-- redesigned navbar -->
+  <header>
+    <div class="container header-container">
+      <a href="index.html" class="logo">Nexus<span>.ai</span></a>
 
-            <!-- navigation links (pages) -->
-            <nav class="nav-links" id="navbarNav">
-                <a href="index.html">Home</a>
-                <a href="Product.html">Product</a>
-                <a href="About.html">About</a>
-                <a href="Contact.html">Contact</a>
-                <a href="Onboarding.html">Onboarding</a>
-                <!-- you can keep or remove the "Get Started" button;
-                     here we keep it as an optional extra, but it's not required -->
-                <a href="Contact.html" class="btn">Get Started</a>
-            </nav>
+      <nav class="nav-links" id="navbarNav">
+        <a href="index.html">Home</a>
+        <a href="Product.html">Product</a>
+        <a href="About.html">About</a>
+        <a href="Contact.html">Contact</a>
+        <a href="Onboarding.html">Onboarding</a>
+        <a href="Contact.html" class="btn">Get Started</a>
+      </nav>
 
-            <!-- mobile menu toggle button -->
-            <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-                <svg class="icon" viewBox="0 0 24 24">
-                    <path d="M3 12h18M3 6h18M3 18h18"/>
-                </svg>
-            </button>
-        </div>
-    </header>
-    <section class="getstarted-hero">
-        <div class="container">
-            <h1>Build Your Custom Package</h1>
-            <p>Click any product to configure it. Add multiple products and see your savings.</p>
-        </div>
-    </section>
-
-    <!-- Product cards -->
-    <section style="padding-top: 0;">
-        <div class="container">
-            <div class="product-grid">
-                <!-- Listening card -->
-                <div class="product-card listening" id="card-listening" onclick="setActiveProduct('listening')">
-                    <div class="product-icon">🔊</div>
-                    <div class="product-name">Social Listening</div>
-                    <div class="product-price-badge listening-badge">from $199/mo</div>
-                </div>
-                <!-- Reports card -->
-                <div class="product-card reports" id="card-reports" onclick="setActiveProduct('reports')">
-                    <div class="product-icon">📊</div>
-                    <div class="product-name">Social Media Reports</div>
-                    <div class="product-price-badge reports-badge">from $99/mo</div>
-                </div>
-                <!-- Chatbot card -->
-                <div class="product-card chatbot" id="card-chatbot" onclick="setActiveProduct('chatbot')">
-                    <div class="product-icon">🤖</div>
-                    <div class="product-name">AI Chatbot</div>
-                    <div class="product-price-badge chatbot-badge">from $299/mo</div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Builder row: customization + preview -->
-    <section style="padding-top: 0;">
-        <div class="container">
-            <div class="builder-row">
-                <!-- Customization panel (dynamic) -->
-                <div class="customization-panel" id="customization-panel">
-                    <!-- Content will be injected by JS -->
-                    <p style="color: var(--neutral-600);">Select a product above to customize it.</p>
-                </div>
-
-                <!-- Preview panel (dynamic) -->
-                <div class="preview-panel" id="preview-panel">
-                    <h3 style="margin-bottom: 1rem;">Live Preview</h3>
-                    <div id="preview-content">
-                        <p style="color: var(--neutral-600);">Click a product to see a preview.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Summary bar (sticky) -->
-    <div class="summary-bar" id="summary-bar">
-        <div class="container">
-            <div class="summary-content">
-                <div class="selected-products-list" id="selected-products-list"></div>
-                <div class="summary-total" id="summary-total">$0</div>
-                <button class="btn btn-primary" onclick="showContactForm()">Continue →</button>
-            </div>
-        </div>
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+        <svg class="icon" viewBox="0 0 24 24">
+          <path d="M3 12h18M3 6h18M3 18h18"></path>
+        </svg>
+      </button>
     </div>
+  </header>
 
-    <!-- Contact form (initially hidden) -->
-    <section id="contact-section" style="display: none;">
-        <div class="container">
-            <div class="section-title">
-                <h2>Almost done!</h2>
-                <p>Tell us about yourself and we'll send you a detailed quote.</p>
-            </div>
-            <div class="contact-form">
-                <form id="get-started-form" action="https://formspree.io/f/your-form-id" method="POST">
-                    <input type="hidden" name="_subject" value="New package inquiry">
-                    <input type="hidden" name="_gotcha" style="display:none">
-                    <input type="hidden" name="selected_products" id="selected-products-hidden">
-                    <input type="hidden" name="estimated_total" id="estimated-total-hidden">
+  <section class="getstarted-hero">
+    <div class="container">
+      <h1>Build Your Custom Package</h1>
+      <p>Click any product to configure it. Add multiple products and see your total update.</p>
+    </div>
+  </section>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="first_name">First name *</label>
-                            <input type="text" id="first_name" name="first_name" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="last_name">Last name *</label>
-                            <input type="text" id="last_name" name="last_name" required>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="email">Work email *</label>
-                        <input type="email" id="email" name="email" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="company">Company name</label>
-                        <input type="text" id="company" name="company">
-                    </div>
-                    <div class="form-group">
-                        <label for="message">Message (optional)</label>
-                        <textarea id="message" name="message" rows="4"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary" style="width:100%;">Request Quote</button>
-                    <div id="form-status" class="form-status"></div>
-                </form>
-            </div>
+  <!-- Product cards -->
+  <section style="padding-top: 0;">
+    <div class="container">
+      <div class="product-grid">
+        <div class="product-card listening" id="card-listening" onclick="setActiveProduct('listening')">
+          <div class="product-icon">🔊</div>
+          <div class="product-name">Social Listening</div>
+          <div class="product-price-badge listening-badge">$59/mo</div>
         </div>
-    </section>
 
-    <footer>
-        <div class="container">
-            <div class="footer-content">
-                <a href="index.html" class="logo" style="color:white;">Nexus<span>.ai</span></a>
-                <p style="color:var(--neutral-300); max-width:400px;">Your AI partner for marketing intelligence.</p>
-                <div class="footer-links">
-                    <a href="index.html">Home</a>
-                    <a href="products.html">Products</a>
-                    <a href="listening.html">Listening</a>
-                    <a href="reports.html">Reports</a>
-                    <a href="chatbot.html">Chatbot</a>
-                    <a href="about.html">About</a>
-                    <a href="contact.html">Contact</a>
-                </div>
-            </div>
-            <div class="copyright">
-                &copy; 2025 Nexus.ai. All rights reserved.
-            </div>
+        <div class="product-card reports" id="card-reports" onclick="setActiveProduct('reports')">
+          <div class="product-icon">📊</div>
+          <div class="product-name">Social Media Reports</div>
+          <div class="product-price-badge reports-badge">$69/mo</div>
         </div>
-    </footer>
 
-    <script>
-        // ========== DATA ==========
-        const products = {
-            listening: {
-                name: 'Social Listening',
-                basePrice: { starter: 199, pro: 299, enterprise: 599 },
-                addons: [
-                    { id: 'competitor', name: '+3 competitors', price: 49 },
-                    { id: 'historical', name: 'Historical data (12mo)', price: 99 },
-                    { id: 'api', name: 'API access', price: 199 }
-                ]
-            },
-            reports: {
-                name: 'Social Media Reports',
-                basePrice: { starter: 99, pro: 199, enterprise: 499 },
-                addons: [
-                    { id: 'whitelabel', name: 'White-label', price: 39 },
-                    { id: 'historical', name: 'Historical data (12mo)', price: 49 },
-                    { id: 'posts', name: 'Post ideas pack', price: 29 }
-                ]
-            },
-            chatbot: {
-                name: 'AI Chatbot',
-                basePrice: { starter: 299, pro: 399, enterprise: 799 },
-                addons: [
-                    { id: 'training', name: 'Additional training', price: 199 },
-                    { id: 'languages', name: 'Multi-language', price: 149 },
-                    { id: 'api', name: 'API access', price: 99 }
-                ]
-            }
-        };
+        <div class="product-card chatbot" id="card-chatbot" onclick="setActiveProduct('chatbot')">
+          <div class="product-icon">🤖</div>
+          <div class="product-name">AI Chatbot</div>
+          <div class="product-price-badge chatbot-badge">from $59/mo</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-        // State: which products are selected and their config
-        let selected = {
-            listening: { enabled: false, plan: 'pro', addons: {} },
-            reports: { enabled: false, plan: 'pro', addons: {} },
-            chatbot: { enabled: false, plan: 'pro', addons: {} }
-        };
+  <!-- Builder row: customization + preview -->
+  <section style="padding-top: 0;">
+    <div class="container">
+      <div class="builder-row">
+        <div class="customization-panel" id="customization-panel">
+          <p style="color: var(--neutral-600);">Select a product above to customize it.</p>
+        </div>
 
-        let activeProduct = null; // 'listening', 'reports', or 'chatbot'
+        <div class="preview-panel" id="preview-panel">
+          <h3 style="margin-bottom: 1rem;">Live Preview</h3>
+          <div id="preview-content">
+            <p style="color: var(--neutral-600);">Click a product to see a preview.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-        // DOM elements
-        const customizationPanel = document.getElementById('customization-panel');
-        const previewContent = document.getElementById('preview-content');
-        const selectedList = document.getElementById('selected-products-list');
-        const summaryTotal = document.getElementById('summary-total');
-        const hiddenProducts = document.getElementById('selected-products-hidden');
-        const hiddenTotal = document.getElementById('estimated-total-hidden');
-        const contactSection = document.getElementById('contact-section');
-        const messageField = document.getElementById('message');
+  <!-- Summary bar (sticky) -->
+  <div class="summary-bar" id="summary-bar">
+    <div class="container">
+      <div class="summary-content">
+        <div class="selected-products-list" id="selected-products-list"></div>
+        <div class="summary-total" id="summary-total">$0</div>
+        <button class="btn btn-primary" onclick="showContactForm()">Continue →</button>
+      </div>
+    </div>
+  </div>
 
-        // Helper to update active card styling
-        function setActiveProduct(productId) {
-            // Remove active class from all cards
-            document.getElementById('card-listening').classList.remove('active');
-            document.getElementById('card-reports').classList.remove('active');
-            document.getElementById('card-chatbot').classList.remove('active');
-            // Add active class to clicked card
-            document.getElementById('card-' + productId).classList.add('active');
-            activeProduct = productId;
-            renderCustomizationPanel();
-            renderPreview();
+  <!-- Contact form (initially hidden) -->
+  <section id="contact-section" style="display: none;">
+    <div class="container">
+      <div class="section-title">
+        <h2>Almost done!</h2>
+        <p>Tell us about yourself and we'll send you a detailed quote.</p>
+      </div>
+
+      <div class="contact-form">
+        <form id="get-started-form" action="https://formspree.io/f/your-form-id" method="POST">
+          <input type="hidden" name="_subject" value="New package inquiry">
+          <input type="hidden" name="_gotcha" style="display:none">
+          <input type="hidden" name="selected_products" id="selected-products-hidden">
+          <input type="hidden" name="estimated_total" id="estimated-total-hidden">
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="first_name">First name *</label>
+              <input type="text" id="first_name" name="first_name" required>
+            </div>
+            <div class="form-group">
+              <label for="last_name">Last name *</label>
+              <input type="text" id="last_name" name="last_name" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="email">Work email *</label>
+            <input type="email" id="email" name="email" required>
+          </div>
+
+          <div class="form-group">
+            <label for="company">Company name</label>
+            <input type="text" id="company" name="company">
+          </div>
+
+          <div class="form-group">
+            <label for="message">Message (optional)</label>
+            <textarea id="message" name="message" rows="4"></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="width:100%;">Request Quote</button>
+          <div id="form-status" class="form-status"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-content">
+        <a href="index.html" class="logo" style="color:white;">Nexus<span>.ai</span></a>
+        <p style="color:var(--neutral-300); max-width:400px;">Your AI partner for marketing intelligence.</p>
+        <div class="footer-links">
+          <a href="index.html">Home</a>
+          <a href="products.html">Products</a>
+          <a href="listening.html">Listening</a>
+          <a href="reports.html">Reports</a>
+          <a href="chatbot.html">Chatbot</a>
+          <a href="about.html">About</a>
+          <a href="contact.html">Contact</a>
+        </div>
+      </div>
+      <div class="copyright">&copy; 2025 Nexus.ai. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script>
+    // ===============================
+    // DATA (MATCH HOMEPAGE EXACTLY)
+    // ===============================
+    const products = {
+      listening: {
+        name: 'Social Listening',
+        basePrice: { standard: 59 },
+        planLabel: { standard: 'Social Listening' },
+        addons: [
+          { id: 'competitor', name: 'Competitor Intelligence', price: 39 },
+          { id: 'historical', name: 'Historical Data Analysis', price: 39 }
+        ]
+      },
+      reports: {
+        name: 'Social Media Reports',
+        basePrice: { standard: 69 },
+        planLabel: { standard: 'Social Media Reports' },
+        addons: [
+          { id: 'whitelabel', name: 'White-label + Cover Page', price: 9 },
+          { id: 'postideas', name: 'Post Ideas Pack', price: 29 }
+        ]
+      },
+      chatbot: {
+        name: 'AI Chatbot',
+        basePrice: { starter: 59, pro: 79 },
+        planLabel: { starter: 'Starter Chatbot', pro: 'Pro Chatbot' },
+        planDesc:  { starter: 'Up to 500 conversations/month', pro: 'Up to 1000 conversations/month' },
+        addons: [
+          { id: 'multilanguage', name: 'Multi-language Support', price: 29 },
+          { id: 'integration', name: 'Custom Integration', price: 19 }
+        ]
+      }
+    };
+
+    // State
+    let selected = {
+      listening: { enabled: false, plan: 'standard', addons: {} },
+      reports:   { enabled: false, plan: 'standard', addons: {} },
+      chatbot:   { enabled: false, plan: 'pro', addons: {} }
+    };
+
+    let activeProduct = null;
+
+    // DOM elements
+    const customizationPanel = document.getElementById('customization-panel');
+    const previewContent = document.getElementById('preview-content');
+    const selectedList = document.getElementById('selected-products-list');
+    const summaryTotal = document.getElementById('summary-total');
+
+    const hiddenProducts = document.getElementById('selected-products-hidden');
+    const hiddenTotal = document.getElementById('estimated-total-hidden');
+    const contactSection = document.getElementById('contact-section');
+    const messageField = document.getElementById('message');
+
+    function productClass(productId) {
+      if (productId === 'listening') return 'listening';
+      if (productId === 'chatbot') return 'chatbot';
+      return '';
+    }
+
+    function priceColor(productId) {
+      if (productId === 'listening') return 'var(--accent-listening)';
+      if (productId === 'chatbot') return 'var(--accent-chatbot)';
+      return 'var(--accent)';
+    }
+
+    // ===============================
+    // UI
+    // ===============================
+    function setActiveProduct(productId) {
+      document.getElementById('card-listening').classList.remove('active');
+      document.getElementById('card-reports').classList.remove('active');
+      document.getElementById('card-chatbot').classList.remove('active');
+
+      document.getElementById('card-' + productId).classList.add('active');
+
+      activeProduct = productId;
+      renderCustomizationPanel();
+      renderPreview();
+    }
+
+    function renderCustomizationPanel() {
+      if (!activeProduct) {
+        customizationPanel.innerHTML = '<p style="color: var(--neutral-600);">Select a product above to customize it.</p>';
+        return;
+      }
+
+      const p = products[activeProduct];
+      const sel = selected[activeProduct];
+      const cls = productClass(activeProduct);
+
+      let html = `<h3 style="margin-bottom: 1.5rem; color: var(--primary);">Customize ${p.name}</h3>`;
+
+      // Plan selection
+      html += `<h4 style="margin-bottom: 1rem;">Choose a plan</h4>`;
+      for (let [plan, price] of Object.entries(p.basePrice)) {
+        const selectedClass = (sel.plan === plan) ? 'selected' : '';
+        const label = (p.planLabel && p.planLabel[plan]) ? p.planLabel[plan] : (plan.charAt(0).toUpperCase() + plan.slice(1));
+        const desc = (p.planDesc && p.planDesc[plan]) ? p.planDesc[plan] : '';
+
+        html += `
+          <div class="plan-option ${cls} ${selectedClass}" onclick="setPlan('${activeProduct}', '${plan}')">
+            <div style="display:flex; flex-direction:column; gap:0.1rem;">
+              <span class="plan-name">${label}</span>
+              ${desc ? `<span style="font-size:0.875rem; color: var(--neutral-600);">${desc}</span>` : ``}
+            </div>
+            <span class="plan-price ${cls}">$${price}/mo</span>
+          </div>
+        `;
+      }
+
+      // Add-ons
+      if (p.addons.length > 0) {
+        html += `<h4 style="margin: 2rem 0 1rem;">Add-ons (optional)</h4>`;
+        p.addons.forEach(addon => {
+          const checked = sel.addons[addon.id] ? 'checked' : '';
+          const c = priceColor(activeProduct);
+
+          html += `
+            <div class="addon-option">
+              <div style="display:flex; align-items:center;">
+                <div class="addon-checkbox ${cls} ${checked}" id="addon-${activeProduct}-${addon.id}"
+                  onclick="toggleAddon('${activeProduct}', '${addon.id}', ${addon.price}); event.stopPropagation();"></div>
+                <span>${addon.name}</span>
+              </div>
+              <span style="font-weight: 700; color: ${c};">+$${addon.price}/mo</span>
+            </div>
+          `;
+        });
+      }
+
+      // Add/remove
+      html += `
+        <div style="margin-top: 2rem;">
+          <button class="btn btn-primary" onclick="toggleProductEnabled('${activeProduct}')">
+            ${sel.enabled ? 'Remove from package' : 'Add to package'}
+          </button>
+        </div>
+      `;
+
+      customizationPanel.innerHTML = html;
+    }
+
+    function renderPreview() {
+      if (!activeProduct) {
+        previewContent.innerHTML = '<p style="color: var(--neutral-600);">Click a product to see a preview.</p>';
+        return;
+      }
+
+      const p = products[activeProduct];
+      const sel = selected[activeProduct];
+      const label = (p.planLabel && p.planLabel[sel.plan]) ? p.planLabel[sel.plan] : sel.plan;
+
+      if (activeProduct === 'listening' || activeProduct === 'reports') {
+        previewContent.innerHTML = `
+          <div class="report-preview">
+            <h4 style="color: var(--primary); margin-bottom: 0.5rem;">${p.name} Report</h4>
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
+              <span>Plan: ${label}</span>
+              <span>$${p.basePrice[sel.plan]}/mo</span>
+            </div>
+            <div style="background:white; padding:1rem; border-radius: var(--radius);">
+              <div style="height:8px; width:80%; background: var(--neutral-200); margin-bottom:0.5rem;"></div>
+              <div style="height:8px; width:60%; background: var(--neutral-200); margin-bottom:1rem;"></div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                <div style="height:40px; background: var(--neutral-200);"></div>
+                <div style="height:40px; background: var(--neutral-200);"></div>
+              </div>
+            </div>
+            <p style="margin-top:1rem; color: var(--neutral-600);">Sample preview – actual report includes full metrics.</p>
+          </div>
+        `;
+      } else {
+        previewContent.innerHTML = `
+          <div class="chat-preview">
+            <div class="chat-message bot">Hello! How can I help you today?</div>
+            <div class="chat-message user">I'd like to know about pricing.</div>
+            <div class="chat-message bot">Our ${label} plan starts at $${p.basePrice[sel.plan]}/mo. Can I help with anything else?</div>
+            <p style="margin-top:1rem; color: var(--neutral-600);">Live demo – your chatbot will respond like this.</p>
+          </div>
+        `;
+      }
+    }
+
+    // ===============================
+    // ACTIONS
+    // ===============================
+    function toggleProductEnabled(productId) {
+      selected[productId].enabled = !selected[productId].enabled;
+      renderCustomizationPanel();
+      updateSummary();
+    }
+
+    function setPlan(productId, plan) {
+      selected[productId].plan = plan;
+      renderCustomizationPanel();
+      renderPreview();
+      updateSummary();
+    }
+
+    function toggleAddon(productId, addonId, price) {
+      const addons = selected[productId].addons;
+
+      if (addons[addonId]) delete addons[addonId];
+      else addons[addonId] = price;
+
+      const checkbox = document.getElementById(`addon-${productId}-${addonId}`);
+      if (checkbox) checkbox.classList.toggle('checked');
+
+      updateSummary();
+    }
+
+    // IMPORTANT FIX: total was 0 because scripts often error on missing fields
+    // This calculateTotal is simple + safe and always returns a number.
+    function calculateTotal() {
+      let total = 0;
+
+      for (let [id, sel] of Object.entries(selected)) {
+        if (!sel.enabled) continue;
+
+        const base = products[id].basePrice[sel.plan];
+        total += (typeof base === 'number') ? base : 0;
+
+        for (let addonPrice of Object.values(sel.addons)) {
+          total += (typeof addonPrice === 'number') ? addonPrice : 0;
         }
+      }
 
-        // Render customization panel based on activeProduct
-        function renderCustomizationPanel() {
-            if (!activeProduct) {
-                customizationPanel.innerHTML = '<p style="color: var(--neutral-600);">Select a product above to customize it.</p>';
-                return;
-            }
-            const p = products[activeProduct];
-            const sel = selected[activeProduct];
-            const productColorClass = activeProduct === 'listening' ? 'listening' : (activeProduct === 'chatbot' ? 'chatbot' : '');
+      return total;
+    }
 
-            let html = `<h3 style="margin-bottom: 1.5rem; color: var(--primary);">Customize ${p.name}</h3>`;
+    function removeProduct(productId) {
+      selected[productId].enabled = false;
+      if (activeProduct === productId) {
+        renderCustomizationPanel();
+        renderPreview();
+      }
+      updateSummary();
+    }
 
-            // Plan selection
-            html += `<h4 style="margin-bottom: 1rem;">Choose a plan</h4>`;
-            for (let [plan, price] of Object.entries(p.basePrice)) {
-                const selectedClass = (sel.plan === plan) ? 'selected' : '';
-                html += `
-                    <div class="plan-option ${productColorClass} ${selectedClass}" onclick="setPlan('${activeProduct}', '${plan}')">
-                        <span class="plan-name">${plan.charAt(0).toUpperCase() + plan.slice(1)}</span>
-                        <span class="plan-price ${productColorClass}">$${price}/mo</span>
-                    </div>
-                `;
-            }
+    function buildSelectedSummaryText() {
+      const parts = [];
+      for (let [id, sel] of Object.entries(selected)) {
+        if (!sel.enabled) continue;
 
-            // Add-ons
-            if (p.addons.length > 0) {
-                html += `<h4 style="margin: 2rem 0 1rem;">Add-ons (optional)</h4>`;
-                p.addons.forEach(addon => {
-                    const checked = sel.addons[addon.id] ? 'checked' : '';
-                    html += `
-                        <div class="addon-option">
-                            <div style="display: flex; align-items: center;">
-                                <div class="addon-checkbox ${checked}" id="addon-${activeProduct}-${addon.id}" onclick="toggleAddon('${activeProduct}', '${addon.id}', ${addon.price})"></div>
-                                <span>${addon.name}</span>
-                            </div>
-                            <span style="font-weight: 700; color: var(--accent);">+$${addon.price}/mo</span>
-                        </div>
-                    `;
-                });
-            }
+        const p = products[id];
+        const label = (p.planLabel && p.planLabel[sel.plan]) ? p.planLabel[sel.plan] : sel.plan;
 
-            // Add to package button
-            html += `
-                <div style="margin-top: 2rem;">
-                    <button class="btn btn-primary" onclick="toggleProductEnabled('${activeProduct}')">
-                        ${sel.enabled ? 'Remove from package' : 'Add to package'}
-                    </button>
-                </div>
-            `;
-            customizationPanel.innerHTML = html;
-        }
-
-        // Render preview based on activeProduct
-        function renderPreview() {
-            if (!activeProduct) {
-                previewContent.innerHTML = '<p style="color: var(--neutral-600);">Click a product to see a preview.</p>';
-                return;
-            }
-            const p = products[activeProduct];
-            const sel = selected[activeProduct];
-
-            if (activeProduct === 'listening' || activeProduct === 'reports') {
-                // Report preview
-                previewContent.innerHTML = `
-                    <div class="report-preview">
-                        <h4 style="color: var(--primary); margin-bottom: 0.5rem;">${p.name} Report</h4>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span>Plan: ${sel.plan}</span>
-                            <span>$${p.basePrice[sel.plan]}/mo</span>
-                        </div>
-                        <div style="background: white; padding: 1rem; border-radius: var(--radius);">
-                            <div style="height: 8px; width: 80%; background: var(--neutral-200); margin-bottom: 0.5rem;"></div>
-                            <div style="height: 8px; width: 60%; background: var(--neutral-200); margin-bottom: 1rem;"></div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                                <div style="height: 40px; background: var(--neutral-200);"></div>
-                                <div style="height: 40px; background: var(--neutral-200);"></div>
-                            </div>
-                        </div>
-                        <p style="margin-top: 1rem; color: var(--neutral-600);">Sample preview – actual report includes full metrics.</p>
-                    </div>
-                `;
-            } else {
-                // Chatbot preview
-                previewContent.innerHTML = `
-                    <div class="chat-preview">
-                        <div class="chat-message bot">Hello! How can I help you today?</div>
-                        <div class="chat-message user">I'd like to know about pricing.</div>
-                        <div class="chat-message bot">Our ${sel.plan} plan starts at $${p.basePrice[sel.plan]}/mo. Can I help with anything else?</div>
-                        <p style="margin-top: 1rem; color: var(--neutral-600);">Live demo – your chatbot will respond like this.</p>
-                    </div>
-                `;
-            }
-        }
-
-        // Toggle product enabled status
-        function toggleProductEnabled(productId) {
-            selected[productId].enabled = !selected[productId].enabled;
-            // If enabling, ensure it's in selected; if disabling, remove
-            renderCustomizationPanel(); // to update button text
-            updateSummary();
-        }
-
-        // Set plan for a product
-        function setPlan(productId, plan) {
-            selected[productId].plan = plan;
-            renderCustomizationPanel();
-            renderPreview();
-            updateSummary();
-        }
-
-        // Toggle addon
-        function toggleAddon(productId, addonId, price) {
-            const addons = selected[productId].addons;
-            if (addons[addonId]) {
-                delete addons[addonId];
-            } else {
-                addons[addonId] = price;
-            }
-            // Update checkbox visual
-            const checkbox = document.getElementById(`addon-${productId}-${addonId}`);
-            if (checkbox) checkbox.classList.toggle('checked');
-            updateSummary();
-        }
-
-        // Calculate total for all selected products
-        function calculateTotal() {
-            let subtotal = 0;
-            let count = 0;
-            for (let [id, sel] of Object.entries(selected)) {
-                if (sel.enabled) {
-                    count++;
-                    subtotal += products[id].basePrice[sel.plan];
-                    for (let price of Object.values(sel.addons)) {
-                        subtotal += price;
-                    }
-                }
-            }
-            let discount = 0;
-            if (count === 2) discount = subtotal * 0.1;
-            if (count === 3) discount = subtotal * 0.15;
-            return { subtotal, discount, total: subtotal - discount, count };
-        }
-
-        // Update summary bar and hidden fields
-        function updateSummary() {
-            const { total, count, discount } = calculateTotal();
-            summaryTotal.textContent = `$${total.toFixed(2)}`;
-
-            // Build selected products tags
-            let tagsHtml = '';
-            for (let [id, sel] of Object.entries(selected)) {
-                if (sel.enabled) {
-                    tagsHtml += `
-                        <div class="selected-tag" style="background: ${id === 'listening' ? '#d1fae5' : (id === 'reports' ? '#e0f2fe' : '#ede9fe')};">
-                            ${products[id].name} (${sel.plan})
-                            <span class="remove" onclick="removeProduct('${id}')">✕</span>
-                        </div>
-                    `;
-                }
-            }
-            selectedList.innerHTML = tagsHtml || '<span style="color: var(--neutral-600);">No products selected</span>';
-
-            // Update hidden fields
-            const selectedNames = Object.entries(selected)
-                .filter(([_, s]) => s.enabled)
-                .map(([id, s]) => `${products[id].name} (${s.plan})`)
-                .join(', ');
-            hiddenProducts.value = selectedNames;
-            hiddenTotal.value = total.toFixed(2);
-
-            // Update contact form message
-            messageField.value = `I'm interested in: ${selectedNames || 'None'}. Estimated monthly budget: $${total.toFixed(2)}. Please contact me to discuss further.`;
-        }
-
-        // Remove product from selection
-        function removeProduct(productId) {
-            selected[productId].enabled = false;
-            // If this product was active, refresh panel
-            if (activeProduct === productId) {
-                renderCustomizationPanel();
-                renderPreview();
-            }
-            updateSummary();
-        }
-
-        // Show contact form and scroll to it
-        function showContactForm() {
-            contactSection.style.display = 'block';
-            contactSection.scrollIntoView({ behavior: 'smooth' });
-        }
-
-        // Initialize
-        window.onload = function() {
-            // Pre-select Listening and Reports for demo
-            selected.listening.enabled = true;
-            selected.reports.enabled = true;
-            activeProduct = 'listening';
-            setActiveProduct('listening');
-            updateSummary();
-        };
-
-        // Mobile menu
-        document.querySelector('.mobile-menu-btn')?.addEventListener('click', function() {
-            const nav = document.querySelector('.nav-links');
-            if (nav.style.display === 'flex') {
-                nav.style.display = 'none';
-            } else {
-                nav.style.display = 'flex';
-                nav.style.flexDirection = 'column';
-                nav.style.position = 'absolute';
-                nav.style.top = '100%';
-                nav.style.left = '0';
-                nav.style.right = '0';
-                nav.style.backgroundColor = 'white';
-                nav.style.padding = '1.5rem';
-                nav.style.boxShadow = 'var(--shadow-lg)';
-            }
+        const addonNames = Object.keys(sel.addons).map(aid => {
+          const found = p.addons.find(a => a.id === aid);
+          return found ? found.name : aid;
         });
 
-        // Form submission (demo)
-        document.getElementById('get-started-form')?.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            const statusDiv = document.getElementById('form-status');
-            statusDiv.className = 'form-status';
-            statusDiv.textContent = 'Sending...';
-            try {
-                const response = await fetch(form.action, {
-                    method: 'POST',
-                    body: formData,
-                    headers: { 'Accept': 'application/json' }
-                });
-                if (response.ok) {
-                    statusDiv.className = 'form-status success';
-                    statusDiv.textContent = 'Thank you! We\'ll be in touch within 24 hours.';
-                    form.reset();
-                } else {
-                    throw new Error('Submission failed');
-                }
-            } catch (error) {
-                statusDiv.className = 'form-status error';
-                statusDiv.textContent = 'Oops! Something went wrong. Please try again.';
-            }
+        const addonText = addonNames.length ? ` + Add-ons: ${addonNames.join(', ')}` : '';
+        parts.push(`${p.name} (${label})${addonText}`);
+      }
+      return parts.join(' | ');
+    }
+
+    function updateSummary() {
+      const total = calculateTotal();
+      summaryTotal.textContent = `$${total.toFixed(2)}`;
+
+      // tags
+      let tagsHtml = '';
+      for (let [id, sel] of Object.entries(selected)) {
+        if (!sel.enabled) continue;
+
+        const bg = (id === 'listening') ? '#d1fae5' : (id === 'reports') ? '#e0f2fe' : '#ede9fe';
+        const p = products[id];
+        const label = (p.planLabel && p.planLabel[sel.plan]) ? p.planLabel[sel.plan] : sel.plan;
+
+        tagsHtml += `
+          <div class="selected-tag" style="background:${bg};">
+            ${p.name} (${label})
+            <span class="remove" onclick="removeProduct('${id}')">✕</span>
+          </div>
+        `;
+      }
+
+      selectedList.innerHTML = tagsHtml || '<span style="color: var(--neutral-600);">No products selected</span>';
+
+      // hidden fields (null-safe)
+      const summaryText = buildSelectedSummaryText();
+      if (hiddenProducts) hiddenProducts.value = summaryText || 'None';
+      if (hiddenTotal) hiddenTotal.value = total.toFixed(2);
+
+      if (messageField) {
+        messageField.value = summaryText
+          ? `I'm interested in: ${summaryText}. Estimated monthly total: $${total.toFixed(2)}. Please contact me to discuss next steps.`
+          : `Hi! I'm interested in Nexus.ai. Please contact me to discuss options.`;
+      }
+    }
+
+    function showContactForm() {
+      contactSection.style.display = 'block';
+      contactSection.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ===============================
+    // INIT (keeps your original demo behavior so total is NOT 0)
+    // ===============================
+    window.onload = function () {
+      // Demo preselect so you instantly see the total change (and confirm it works)
+      selected.listening.enabled = true;
+      selected.reports.enabled = true;
+
+      // set default active product
+      setActiveProduct('listening');
+
+      // update totals
+      updateSummary();
+    };
+
+    // Mobile menu
+    document.getElementById('mobileMenuBtn')?.addEventListener('click', function() {
+      const nav = document.querySelector('.nav-links');
+      if (!nav) return;
+
+      if (nav.style.display === 'flex') {
+        nav.style.display = 'none';
+      } else {
+        nav.style.display = 'flex';
+        nav.style.flexDirection = 'column';
+        nav.style.position = 'absolute';
+        nav.style.top = '100%';
+        nav.style.left = '0';
+        nav.style.right = '0';
+        nav.style.backgroundColor = 'white';
+        nav.style.padding = '1.5rem';
+        nav.style.boxShadow = 'var(--shadow-lg)';
+      }
+    });
+
+    // Form submission (demo)
+    document.getElementById('get-started-form')?.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const form = e.target;
+      const formData = new FormData(form);
+      const statusDiv = document.getElementById('form-status');
+
+      statusDiv.className = 'form-status';
+      statusDiv.textContent = 'Sending...';
+
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          body: formData,
+          headers: { 'Accept': 'application/json' }
         });
-    </script>
+
+        if (response.ok) {
+          statusDiv.className = 'form-status success';
+          statusDiv.textContent = 'Thank you! We\'ll be in touch within 24 hours.';
+          form.reset();
+        } else {
+          throw new Error('Submission failed');
+        }
+      } catch (error) {
+        statusDiv.className = 'form-status error';
+        statusDiv.textContent = 'Oops! Something went wrong. Please try again.';
+      }
+    });
+  </script>
 </body>
 </html>
