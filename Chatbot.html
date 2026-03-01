@@ -312,81 +312,7 @@
             box-shadow: var(--shadow-xl);
             overflow: hidden;
             border: 1px solid var(--neutral-200);
-        }
-
-        .chatbot-header {
-            background: linear-gradient(135deg, var(--accent-chatbot) 0%, #7c3aed 100%);
-            color: white;
-            padding: 1.25rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .chatbot-avatar {
-            width: 36px;
-            height: 36px;
-            background: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--accent-chatbot);
-            font-size: 1.2rem;
-        }
-
-        .chatbot-messages {
-            height: 400px;
-            overflow-y: auto;
-            padding: 1.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .message {
-            max-width: 80%;
-            padding: 1rem;
-            border-radius: 1rem;
-            line-height: 1.5;
-        }
-
-        .message.bot {
-            background: var(--neutral-100);
-            border-bottom-left-radius: 0.25rem;
-            align-self: flex-start;
-        }
-
-        .message.user {
-            background: linear-gradient(135deg, var(--accent-chatbot) 0%, #7c3aed 100%);
-            color: white;
-            border-bottom-right-radius: 0.25rem;
-            align-self: flex-end;
-        }
-
-        .chatbot-input {
-            padding: 1.25rem;
-            border-top: 1px solid var(--neutral-200);
-            display: flex;
-            gap: 0.75rem;
-        }
-
-        .chatbot-input input {
-            flex: 1;
-            padding: 0.75rem 1rem;
-            border: 1px solid var(--neutral-300);
-            border-radius: var(--radius);
-            font-family: 'Inter', sans-serif;
-        }
-
-        .chatbot-input button {
-            background: var(--accent-chatbot);
-            color: white;
-            border: none;
-            border-radius: var(--radius);
-            padding: 0.75rem 1.5rem;
-            cursor: pointer;
-            font-weight: 600;
+            height: 520px; /* fixed height for the iframe container */
         }
 
         .chatbot-features {
@@ -759,21 +685,6 @@
             border-top: 1px solid var(--neutral-800);
         }
 
-        /* Typing animation */
-        .typing-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--neutral-600);
-            animation: typingBounce 1.4s infinite ease-in-out both;
-        }
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes typingBounce {
-            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
-            40% { transform: scale(1); opacity: 1; }
-        }
-
         /* Responsive */
         @media (max-width: 1024px) {
             .chatbot-container,
@@ -816,21 +727,29 @@
     </style>
 </head>
 <body>
-    <header>
+       <header>
         <div class="container header-container">
+            <!-- logo (links to home) -->
             <a href="index.html" class="logo">Nexus<span>.ai</span></a>
-            <nav class="nav-links">
+
+            <!-- navigation links (pages) -->
+            <nav class="nav-links" id="navbarNav">
                 <a href="index.html">Home</a>
-                <a href="products.html">Products</a>
-                <a href="listening.html">Listening</a>
-                <a href="reports.html">Reports</a>
-                <a href="chatbot.html" class="active">Chatbot</a>
-                <a href="about.html">About</a>
-                <a href="onboarding.html">How It Works</a>
-                <a href="contact.html">Contact</a>
-                <a href="index.html#cta" class="btn btn-primary">Get Started</a>
+                <a href="Product.html">Product</a>
+                <a href="About.html">About</a>
+                <a href="Contact.html">Contact</a>
+                <a href="Onboarding.html">Onboarding</a>
+                <!-- you can keep or remove the "Get Started" button;
+                     here we keep it as an optional extra, but it's not required -->
+                <a href="Get-started.html" class="btn">Get Started</a>
             </nav>
-            <button class="mobile-menu-btn">☰</button>
+
+            <!-- mobile menu toggle button -->
+            <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+                <svg class="icon" viewBox="0 0 24 24">
+                    <path d="M3 12h18M3 6h18M3 18h18"/>
+                </svg>
+            </button>
         </div>
     </header>
 
@@ -852,7 +771,7 @@
         </div>
     </section>
 
-    <!-- LIVE DEMO -->
+    <!-- LIVE DEMO with Shadow DOM chatbot -->
     <section class="chatbot-demo" id="demo">
         <div class="container">
             <div class="section-title">
@@ -860,31 +779,10 @@
                 <p>Interact with our AI chatbot demo. Ask about features, pricing, or how it works.</p>
             </div>
             <div class="chatbot-container">
-                <div class="chatbot-window">
-                    <div class="chatbot-header">
-                        <div class="chatbot-avatar">🤖</div>
-                        <div>
-                            <div style="font-weight: 700;">Nexus AI Assistant</div>
-                            <div style="font-size: 0.875rem; opacity: 0.9;">Online • 24/7 Support</div>
-                        </div>
-                    </div>
-                    <div class="chatbot-messages" id="chatbot-messages">
-                        <div class="message bot">
-                            Hello! I'm your Nexus AI assistant. How can I help you today?
-                        </div>
-                        <div class="message user">
-                            What chatbot features do you offer?
-                        </div>
-                        <div class="message bot">
-                            We offer custom AI chatbots with natural language processing, multi‑platform integration, custom training on your data, and 24/7 automated support.
-                        </div>
-                    </div>
-                    <div class="chatbot-input">
-                        <input type="text" id="chatbot-input" placeholder="Type your message..." onkeypress="if(event.key=='Enter') sendChatMessage()">
-                        <button onclick="sendChatMessage()">Send</button>
-                        <button onclick="clearChat()" style="background: var(--neutral-200); color: var(--neutral-700); margin-left: 0.5rem;">Clear</button>
-                    </div>
-                </div>
+                <!-- Left column: chatbot mount point -->
+                <div class="chatbot-window" id="nx-chatbot-mount"></div>
+
+                <!-- Right column: description and features -->
                 <div>
                     <h3 style="font-size: 2rem; color: var(--primary); margin-bottom: 1.5rem;">Smart, Context‑Aware Conversations</h3>
                     <p style="color: var(--neutral-600); margin-bottom: 2rem;">Our AI doesn't just match keywords – it understands intent, remembers context, and provides natural, helpful responses.</p>
@@ -913,6 +811,313 @@
             </div>
         </div>
     </section>
+
+    <!-- Shadow DOM chatbot script (isolated, working demo) -->
+    <script>
+        (() => {
+            // ===================== CONFIG =====================
+            const USE_MOCK_WEBHOOK = true; // true = works without n8n
+            const REAL_WEBHOOK_URL = "https://saschag.app.n8n.cloud/webhook/chat";
+            const WEBHOOK_URL = USE_MOCK_WEBHOOK ? null : REAL_WEBHOOK_URL;
+
+            // ===================== MOUNT ======================
+            const mount = document.getElementById("nx-chatbot-mount");
+            if (!mount) return;
+
+            // Create isolated Shadow DOM (CSS cannot leak out)
+            const root = mount.attachShadow({ mode: "open" });
+
+            // ===================== UI =========================
+            root.innerHTML = `
+                <style>
+                    :host{
+                        display:block;
+                        width:100%;
+                        height:100%;
+                    }
+                    .nx-wrap{
+                        width:100%;
+                        height:100%;
+                        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+                        color:#111827;
+                    }
+                    .nx-chat{
+                        width:100%;
+                        height:100%;
+                        min-height:520px;
+                        border:1px solid #e5e7eb;
+                        border-radius:14px;
+                        overflow:hidden;
+                        background:#fff;
+                        box-shadow:0 10px 25px -5px rgba(0,0,0,.10);
+                        display:flex;
+                        flex-direction:column;
+                    }
+                    .nx-header{
+                        flex:0 0 auto;
+                        display:flex;
+                        align-items:center;
+                        gap:12px;
+                        padding:16px 18px;
+                        color:#fff;
+                        background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%);
+                    }
+                    .nx-avatar{
+                        width:40px;
+                        height:40px;
+                        border-radius:999px;
+                        background:rgba(255,255,255,.15);
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        flex:0 0 auto;
+                    }
+                    .nx-avatar svg{
+                        width:20px;
+                        height:20px;
+                        stroke:#fff;
+                        fill:none;
+                        stroke-width:2;
+                    }
+                    .nx-title{ font-weight:900; line-height:1.1; }
+                    .nx-sub{ font-size:12.5px; opacity:.9; margin-top:2px; }
+                    .nx-mode{
+                        margin-left:auto;
+                        font-size:11px;
+                        padding:3px 10px;
+                        border-radius:999px;
+                        background:#0ea5e9;
+                        color:#fff;
+                        font-weight:900;
+                        white-space:nowrap;
+                    }
+                    .nx-msgs{
+                        flex:1 1 auto;
+                        min-height:0;
+                        padding:18px;
+                        background:#f9fafb;
+                        overflow:auto;
+                        display:flex;
+                        flex-direction:column;
+                        gap:12px;
+                    }
+                    .nx-bubble{
+                        max-width:84%;
+                        padding:12px 14px;
+                        border-radius:16px;
+                        line-height:1.45;
+                        font-size:15.5px;
+                        word-break:break-word;
+                    }
+                    .nx-bot{
+                        background:#fff;
+                        border:1px solid #e5e7eb;
+                        color:#111827;
+                        border-bottom-left-radius:6px;
+                    }
+                    .nx-user{
+                        margin-left:auto;
+                        background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%);
+                        color:#fff;
+                        border:none;
+                        border-bottom-right-radius:6px;
+                    }
+                    .nx-inputRow{
+                        flex:0 0 auto;
+                        display:flex;
+                        gap:10px;
+                        padding:14px;
+                        border-top:1px solid #e5e7eb;
+                        background:#fff;
+                    }
+                    .nx-input{
+                        flex:1;
+                        border:1px solid #e5e7eb;
+                        border-radius:10px;
+                        padding:12px;
+                        outline:none;
+                        font-size:16px;
+                    }
+                    .nx-btn{
+                        border:none;
+                        border-radius:10px;
+                        padding:12px 14px;
+                        font-weight:900;
+                        cursor:pointer;
+                        white-space:nowrap;
+                    }
+                    .nx-send{ background:#8b5cf6; color:#fff; }
+                    .nx-send:hover{ background:#7c3aed; }
+                    .nx-clear{ background:#e5e7eb; color:#374151; }
+                    .nx-dots{ display:inline-flex; gap:6px; align-items:center; }
+                    .nx-dot{
+                        width:7px;
+                        height:7px;
+                        border-radius:999px;
+                        background:#9ca3af;
+                        animation:nxPulse 1.1s infinite ease-in-out;
+                        opacity:.85;
+                    }
+                    .nx-dot:nth-child(2){ animation-delay:.15s; }
+                    .nx-dot:nth-child(3){ animation-delay:.3s; }
+                    @keyframes nxPulse{
+                        0%,80%,100%{ transform:translateY(0); opacity:.55; }
+                        40%{ transform:translateY(-3px); opacity:1; }
+                    }
+                </style>
+                <div class="nx-wrap">
+                    <div class="nx-chat">
+                        <div class="nx-header">
+                            <div class="nx-avatar" aria-hidden="true">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="nx-title">Nexus AI Assistant</div>
+                                <div class="nx-sub">Online • 24/7 Support</div>
+                            </div>
+                            <div class="nx-mode" id="nx-mode">Local Demo Mode</div>
+                        </div>
+                        <div class="nx-msgs" id="nx-msgs" aria-live="polite"></div>
+                        <div class="nx-inputRow">
+                            <input class="nx-input" id="nx-input" type="text" placeholder="Type your message..." autocomplete="off" />
+                            <button class="nx-btn nx-send" id="nx-send" type="button">Send</button>
+                            <button class="nx-btn nx-clear" id="nx-clear" type="button">Clear</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // ===================== LOGIC =======================
+            const msgs = root.getElementById("nx-msgs");
+            const input = root.getElementById("nx-input");
+            const sendBtn = root.getElementById("nx-send");
+            const clearBtn = root.getElementById("nx-clear");
+            const mode = root.getElementById("nx-mode");
+
+            mode.textContent = USE_MOCK_WEBHOOK ? "Local Demo Mode" : "Live Mode";
+            mode.style.background = USE_MOCK_WEBHOOK ? "#10b981" : "#0ea5e9";
+
+            let isTyping = false;
+            let history = [{ role:"assistant", content:"Hello! I'm your Nexus AI assistant. How can I help you today?" }];
+
+            function sessionId(){
+                let id = localStorage.getItem("nx_shadow_chat_session");
+                if(!id){
+                    id = "nx_" + Date.now() + "_" + Math.random().toString(36).slice(2,10);
+                    localStorage.setItem("nx_shadow_chat_session", id);
+                }
+                return id;
+            }
+
+            function add(role, text){
+                const div = document.createElement("div");
+                div.className = "nx-bubble " + (role === "user" ? "nx-user" : "nx-bot");
+                div.textContent = text;
+                msgs.appendChild(div);
+                msgs.scrollTop = msgs.scrollHeight;
+            }
+
+            function typingOn(){
+                const div = document.createElement("div");
+                div.className = "nx-bubble nx-bot";
+                div.id = "nx-typing";
+                div.innerHTML = `<span class="nx-dots"><span class="nx-dot"></span><span class="nx-dot"></span><span class="nx-dot"></span></span>`;
+                msgs.appendChild(div);
+                msgs.scrollTop = msgs.scrollHeight;
+            }
+
+            function typingOff(){
+                const t = root.getElementById("nx-typing");
+                if(t) t.remove();
+            }
+
+            function mockReply(msg){
+                const m = (msg||"").toLowerCase();
+                if(m.includes("price")||m.includes("cost")||m.includes("how much")){
+                    return "Pricing: Starter $59/mo (500 conv), Pro $79/mo (1000 conv). Add-ons: Multi-language +$29, Custom Integration +$19.";
+                }
+                if(m.includes("feature")||m.includes("can you do")){
+                    return "Our chatbots offer NLP, multi‑platform integration, custom training, 24/7 support, and detailed analytics.";
+                }
+                if(m.includes("hello")||m.includes("hi")) return "Hi there! How can I assist you with Nexus.ai today?";
+                return "Thanks for your message! A team member will follow up shortly, or you can explore our pricing and features above.";
+            }
+
+            async function send(){
+                const text = input.value.trim();
+                if(!text || isTyping) return;
+
+                add("user", text);
+                history.push({ role:"user", content:text });
+                input.value = "";
+
+                isTyping = true;
+                typingOn();
+
+                if(USE_MOCK_WEBHOOK || !WEBHOOK_URL){
+                    setTimeout(() => {
+                        typingOff();
+                        const reply = mockReply(text);
+                        add("assistant", reply);
+                        history.push({ role:"assistant", content:reply });
+                        isTyping = false;
+                    }, 800);
+                    return;
+                }
+
+                try{
+                    const payload = {
+                        message: text,
+                        messageHistory: history.slice(-10),
+                        timestamp: new Date().toISOString(),
+                        sessionId: sessionId(),
+                        source: "nexus-website"
+                    };
+
+                    const res = await fetch(WEBHOOK_URL, {
+                        method:"POST",
+                        headers:{ "Content-Type":"application/json", "Accept":"application/json" },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if(!res.ok) throw new Error("HTTP " + res.status);
+                    const data = await res.json();
+
+                    typingOff();
+                    const reply = data.reply || data.message || data.response || data.text || data.answer || "I received your message.";
+                    add("assistant", reply);
+                    history.push({ role:"assistant", content:reply });
+                }catch(e){
+                    console.error(e);
+                    typingOff();
+                    const reply = mockReply(text) + " (Fallback)";
+                    add("assistant", reply);
+                    history.push({ role:"assistant", content:reply });
+                }finally{
+                    isTyping = false;
+                }
+            }
+
+            function clear(){
+                history = [{ role:"assistant", content:"Hello! I'm your Nexus AI assistant. How can I help you today?" }];
+                msgs.innerHTML = "";
+                add("assistant", history[0].content);
+                localStorage.removeItem("nx_shadow_chat_session");
+            }
+
+            // init
+            msgs.innerHTML = "";
+            add("assistant", history[0].content);
+
+            sendBtn.addEventListener("click", send);
+            clearBtn.addEventListener("click", clear);
+            input.addEventListener("keydown", (e) => {
+                if(e.key === "Enter"){ e.preventDefault(); send(); }
+            });
+        })();
+    </script>
 
     <!-- KEY FEATURES -->
     <section>
@@ -1019,7 +1224,7 @@
         </div>
     </section>
 
-    <!-- CHATBOT ANALYTICS REPORT SECTION (as requested) -->
+    <!-- CHATBOT ANALYTICS REPORT SECTION -->
     <section style="background: var(--neutral-50);" id="reports">
         <div class="container">
             <div class="section-title">
@@ -1105,8 +1310,8 @@
         </div>
     </section>
 
-    <!-- PRICING -->
-    <section>
+    <!-- PRICING (updated) -->
+    <section id="pricing">
         <div class="container">
             <div class="section-title">
                 <h2>Simple, Transparent Pricing</h2>
@@ -1116,11 +1321,11 @@
                 <div class="card pricing-card">
                     <div class="pricing-header">
                         <h3 class="pricing-name">Starter</h3>
-                        <div class="pricing-price">$299</div>
+                        <div class="pricing-price">$59</div>
                         <div class="pricing-period">/month</div>
                     </div>
                     <ul class="pricing-features">
-                        <li>Up to 1,000 conversations/month</li>
+                        <li>Up to 500 conversations/month</li>
                         <li>Basic NLP</li>
                         <li>Website embed only</li>
                         <li>Email support</li>
@@ -1132,11 +1337,11 @@
                     <div class="pricing-badge">POPULAR</div>
                     <div class="pricing-header">
                         <h3 class="pricing-name">Pro</h3>
-                        <div class="pricing-price">$399</div>
+                        <div class="pricing-price">$79</div>
                         <div class="pricing-period">/month</div>
                     </div>
                     <ul class="pricing-features">
-                        <li>Up to 5,000 conversations/month</li>
+                        <li>Up to 1,000 conversations/month</li>
                         <li>Advanced NLP + custom training</li>
                         <li>Multi‑platform (web, Messenger, WhatsApp)</li>
                         <li>Priority chat support</li>
@@ -1145,27 +1350,12 @@
                     </ul>
                     <a href="#builder" class="btn btn-chatbot" style="width: 100%;">Select Pro</a>
                 </div>
-                <div class="card pricing-card">
-                    <div class="pricing-header">
-                        <h3 class="pricing-name">Enterprise</h3>
-                        <div class="pricing-price">$799</div>
-                        <div class="pricing-period">/month</div>
-                    </div>
-                    <ul class="pricing-features">
-                        <li>Unlimited conversations</li>
-                        <li>Custom integrations</li>
-                        <li>Dedicated account manager</li>
-                        <li>99.9% SLA</li>
-                        <li>SSO & advanced security</li>
-                        <li>Custom reporting</li>
-                    </ul>
-                    <a href="#builder" class="btn btn-chatbot" style="width: 100%;">Contact Sales</a>
-                </div>
+                
             </div>
         </div>
     </section>
 
-    <!-- INTERACTIVE BUILDER -->
+    <!-- INTERACTIVE BUILDER (updated) -->
     <section class="builder-section" id="builder">
         <div class="container">
             <div class="section-title">
@@ -1177,41 +1367,31 @@
                     <h4 style="margin-bottom: 1rem;">1. Choose your base plan</h4>
                     <div class="package-selector">
                         <div class="package-option" onclick="selectPackage('starter')">
-                            <div class="package-name">Starter</div>
-                            <div class="package-price">$299/mo</div>
+                            <div class="package-name">Starter (500 conv)</div>
+                            <div class="package-price">$59/mo</div>
                         </div>
                         <div class="package-option selected" onclick="selectPackage('pro')">
-                            <div class="package-name">Pro</div>
-                            <div class="package-price">$399/mo</div>
+                            <div class="package-name">Pro (1000 conv)</div>
+                            <div class="package-price">$79/mo</div>
                         </div>
-                        <div class="package-option" onclick="selectPackage('enterprise')">
-                            <div class="package-name">Enterprise</div>
-                            <div class="package-price">$799/mo</div>
-                        </div>
+            
                     </div>
 
                     <h4 style="margin: 2rem 0 1rem;">2. Add‑ons (optional)</h4>
                     <div class="addons-selector">
-                        <div class="addon-option" onclick="toggleAddon('training')">
+                        <div class="addon-option" onclick="toggleAddon('multilang')">
                             <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                <div class="addon-checkbox" id="training-check"></div>
-                                <div>Additional training (5+ hours)</div>
+                                <div class="addon-checkbox" id="multilang-check"></div>
+                                <div>Multi-language Support</div>
                             </div>
-                            <div style="font-weight: 700; color: var(--accent-chatbot);">+$199/mo</div>
+                            <div style="font-weight: 700; color: var(--accent-chatbot);">+$29/mo</div>
                         </div>
-                        <div class="addon-option" onclick="toggleAddon('languages')">
+                        <div class="addon-option" onclick="toggleAddon('integration')">
                             <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                <div class="addon-checkbox" id="languages-check"></div>
-                                <div>Multi‑language (5+ languages)</div>
+                                <div class="addon-checkbox" id="integration-check"></div>
+                                <div>Custom Integration</div>
                             </div>
-                            <div style="font-weight: 700; color: var(--accent-chatbot);">+$149/mo</div>
-                        </div>
-                        <div class="addon-option" onclick="toggleAddon('api')">
-                            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                <div class="addon-checkbox" id="api-check"></div>
-                                <div>API access + webhooks</div>
-                            </div>
-                            <div style="font-weight: 700; color: var(--accent-chatbot);">+$99/mo</div>
+                            <div style="font-weight: 700; color: var(--accent-chatbot);">+$19/mo</div>
                         </div>
                     </div>
                 </div>
@@ -1219,12 +1399,12 @@
                 <div class="builder-summary">
                     <div class="summary-header">
                         <h3>Your Chatbot</h3>
-                        <div class="total-price" id="total-price">$399<span>/mo</span></div>
+                        <div class="total-price" id="total-price">$79<span>/mo</span></div>
                     </div>
                     <div class="summary-items" id="summary-items">
                         <div class="summary-item">
                             <span>Pro base</span>
-                            <span>$399/mo</span>
+                            <span>$79/mo</span>
                         </div>
                     </div>
                     <a href="#cta" class="btn btn-chatbot" style="width: 100%;">Continue to Checkout</a>
@@ -1310,7 +1490,7 @@
             <p style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--neutral-200);">Start your 14‑day free trial today – no credit card required.</p>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
                 <a href="#builder" class="btn btn-chatbot">Build Your Chatbot</a>
-                <a href="#demo" class="btn btn-light">Try Demo</a>
+                <a href="#demo" class="btn btn-secondary">Try Demo</a>
                 <a href="contact.html" class="btn btn-secondary">Contact Sales</a>
             </div>
         </div>
@@ -1358,54 +1538,6 @@
             }
         });
 
-        // Chatbot demo
-        let isBotTyping = false;
-        const messageHistory = [
-            { role: 'assistant', content: "Hello! I'm your Nexus AI assistant. How can I help you today?" }
-        ];
-
-        function sendChatMessage() {
-            const input = document.getElementById('chatbot-input');
-            const msg = input.value.trim();
-            if (!msg || isBotTyping) return;
-
-            const messagesDiv = document.getElementById('chatbot-messages');
-            messagesDiv.innerHTML += `<div class="message user">${msg}</div>`;
-            input.value = '';
-            
-            // Show typing indicator
-            messagesDiv.innerHTML += `<div class="message bot" id="typing-indicator"><div style="display: flex; gap: 4px;"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            isBotTyping = true;
-
-            // Simulate response
-            setTimeout(() => {
-                document.getElementById('typing-indicator')?.remove();
-                
-                const responses = {
-                    'hello': "Hi there! How can I assist you with Nexus.ai today?",
-                    'feature': "Our chatbots offer NLP, multi‑platform integration, custom training, 24/7 support, and detailed analytics.",
-                    'price': "Pricing starts at $299/month for Starter, $399 for Pro, and custom Enterprise plans.",
-                    'default': "Thanks for your message! A team member will follow up shortly, or you can explore our pricing and features above."
-                };
-                
-                let reply = responses.default;
-                const lower = msg.toLowerCase();
-                if (lower.includes('hello') || lower.includes('hi')) reply = responses.hello;
-                else if (lower.includes('feature') || lower.includes('can you do')) reply = responses.feature;
-                else if (lower.includes('price') || lower.includes('cost') || lower.includes('how much')) reply = responses.price;
-                
-                messagesDiv.innerHTML += `<div class="message bot">${reply}</div>`;
-                isBotTyping = false;
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            }, 1500);
-        }
-
-        function clearChat() {
-            const messagesDiv = document.getElementById('chatbot-messages');
-            messagesDiv.innerHTML = '<div class="message bot">Hello! I\'m your Nexus AI assistant. How can I help you today?</div>';
-        }
-
         // FAQ toggle
         function toggleFAQ(item) {
             const answer = item.querySelector('.faq-answer');
@@ -1419,7 +1551,7 @@
         }
 
         // Builder
-        let basePrice = 399; // Pro default
+        let basePrice = 79; // Pro default
         let addons = {};
 
         function selectPackage(pkg) {
@@ -1439,9 +1571,8 @@
                 checkbox.classList.remove('checked');
             } else {
                 let price = 0;
-                if (addonId === 'training') price = 199;
-                if (addonId === 'languages') price = 149;
-                if (addonId === 'api') price = 99;
+                if (addonId === 'multilang') price = 29;
+                if (addonId === 'integration') price = 19;
                 addons[addonId] = price;
                 checkbox.classList.add('checked');
             }
@@ -1458,23 +1589,25 @@
         function updateSummary() {
             const summaryDiv = document.getElementById('summary-items');
             let baseName = 'Pro base';
-            if (basePrice === 299) baseName = 'Starter base';
+            if (basePrice === 59) baseName = 'Starter base';
             if (basePrice === 799) baseName = 'Enterprise base';
             
             let html = `<div class="summary-item"><span>${baseName}</span><span>$${basePrice}/mo</span></div>`;
             
             for (let key in addons) {
-                let name = key === 'training' ? 'Additional training' : (key === 'languages' ? 'Multi‑language' : 'API access');
+                let name = key === 'multilang' ? 'Multi‑language' : 'Custom Integration';
                 html += `<div class="summary-item"><span>${name}</span><span>+$${addons[key]}/mo</span></div>`;
             }
             
             summaryDiv.innerHTML = html;
         }
 
-        // Pre-select addons for demo
+        // Pre-select no addons for demo
         window.onload = function() {
-            document.getElementById('training-check')?.classList.add('checked');
-            addons['training'] = 199;
+            // Optionally pre-select one addon to demonstrate; we'll leave none selected.
+            // But you can uncomment below to pre-select Multi-language
+            // document.getElementById('multilang-check')?.classList.add('checked');
+            // addons['multilang'] = 29;
             updateTotal();
             updateSummary();
         };
