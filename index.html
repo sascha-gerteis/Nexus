@@ -3969,14 +3969,28 @@
     }
 
     // ==================== SAMPLE FUNCTIONS ====================
-    function showSample(sampleId) {
-        document.querySelectorAll('.sample-tab').forEach(tab => tab.classList.remove('active'));
-        document.querySelectorAll('.sample-tab').forEach(tab => {
-            if (tab.textContent.toLowerCase().includes(sampleId)) tab.classList.add('active');
-        });
-        document.querySelectorAll('.sample-content').forEach(content => content.classList.remove('active'));
-        document.getElementById(`${sampleId}-sample`).classList.add('active');
+ function showSample(sampleId) {
+    const sampleTabs = document.querySelectorAll('.sample-tab');
+    const sampleContents = document.querySelectorAll('.sample-content');
+
+    sampleTabs.forEach(tab => tab.classList.remove('active'));
+    sampleContents.forEach(content => content.classList.remove('active'));
+
+    const tabMap = {
+        listening: 0,
+        social: 1,
+        chatbot: 2
+    };
+
+    if (sampleTabs[tabMap[sampleId]]) {
+        sampleTabs[tabMap[sampleId]].classList.add('active');
     }
+
+    const targetContent = document.getElementById(`${sampleId}-sample`);
+    if (targetContent) {
+        targetContent.classList.add('active');
+    }
+}
 
     function downloadSample(packageType) {
         alert(`Downloading ${packageType} PDF sample...\n\nIn a real implementation, this would download a PDF file.\n\nFor now, we're showing you a preview. To get actual samples, use the "Request Consultation" form below.`);
@@ -4122,3 +4136,4 @@
 </script>
 </body>
 </html>
+
