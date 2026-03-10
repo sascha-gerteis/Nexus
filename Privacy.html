@@ -304,18 +304,27 @@
 <body>
     <header>
         <div class="container header-container">
+            <!-- logo (links to home) -->
             <a href="index.html" class="logo">Nexus<span>.ai</span></a>
-            <nav class="nav-links">
+
+            <!-- navigation links (pages) -->
+            <nav class="nav-links" id="navbarNav">
                 <a href="index.html">Home</a>
-                <a href="products.html">Products</a>
-                <a href="about.html">About</a>
-                <a href="onboarding.html">How It Works</a>
-                <a href="contact.html">Contact</a>
-                <a href="terms.html">Terms</a>
-                <a href="privacy.html" class="active">Privacy</a>
-                <a href="index.html#cta" class="btn btn-primary">Get Started</a>
+                <a href="Product.html">Product</a>
+                <a href="About.html">About</a>
+                <a href="Contact.html">Contact</a>
+                <a href="Onboarding.html">Onboarding</a>
+                <!-- you can keep or remove the "Get Started" button;
+                     here we keep it as an optional extra, but it's not required -->
+                <a href="Get-started.html" class="btn">Get Started</a>
             </nav>
-            <button class="mobile-menu-btn">☰</button>
+
+            <!-- mobile menu toggle button -->
+            <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+                <svg class="icon" viewBox="0 0 24 24">
+                    <path d="M3 12h18M3 6h18M3 18h18"/>
+                </svg>
+            </button>
         </div>
     </header>
 
@@ -419,23 +428,22 @@
         </div>
     </div>
 
-    <footer>
+ <footer>
         <div class="container">
             <div class="footer-content">
                 <a href="index.html" class="logo" style="color: white;">Nexus<span>.ai</span></a>
-                <p style="color: var(--neutral-300); max-width: 400px;">Your AI partner for marketing intelligence – from listening to reporting to conversational AI.</p>
+                <p style="color: var(--neutral-300); max-width: 400px;">Connecting businesses to the practical power of AI and automation. Three powerful tools for complete digital intelligence.</p>
                 <div class="footer-links">
-                    <a href="index.html">Home</a>
-                    <a href="products.html">Products</a>
-                    <a href="about.html">About</a>
-                    <a href="onboarding.html">How It Works</a>
+                    <a href="product.html">Product</a>
+                    <a href="about.hmtl">Aout</a>
                     <a href="contact.html">Contact</a>
-                    <a href="terms.html">Terms</a>
-                    <a href="privacy.html">Privacy</a>
+                    <a href="onboarding.html">Onboarding</a>
+                    <a href="get-started.html">Get Started</a>
+                    <a href="privacy.html">Privacy Policy</a>
                 </div>
             </div>
             <div class="copyright">
-                &copy; 2025 Nexus.ai. All rights reserved.
+                &copy; 2025 Nexus.ai. All rights reserved. AI-powered social listening, reports, and chatbots for modern businesses.
             </div>
         </div>
     </footer>
