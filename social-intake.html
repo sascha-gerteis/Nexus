@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS AI | Social Intelligence Intake</title>
+    <style>
+        :root {
+            --nexus-blue: #00d2ff;
+            --nexus-dark: #0a0b10;
+            --nexus-gray: #1a1c23;
+        }
+        body {
+            background-color: var(--nexus-dark);
+            color: #e0e0e0;
+            font-family: 'Inter', -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+        .form-container {
+            background: var(--nexus-gray);
+            padding: 35px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            max-width: 550px;
+            width: 100%;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+        }
+        h2 { color: var(--nexus-blue); margin-top: 0; text-transform: uppercase; letter-spacing: 1px; }
+        .subtitle { font-size: 13px; color: #888; margin-bottom: 25px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+
+        .section-label { font-size: 11px; font-weight: 800; color: var(--nexus-blue); text-transform: uppercase; margin-bottom: 15px; display: block; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-size: 12px; margin-bottom: 8px; color: #bbb; }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            background: #0f1016;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: white;
+            box-sizing: border-box;
+        }
+        input:focus { border-color: var(--nexus-blue); outline: none; }
+
+        /* Mode Selection Toggle */
+        .mode-selector {
+            display: flex;
+            background: #0f1016;
+            padding: 5px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: 0.3s;
+            font-weight: bold;
+        }
+        .mode-btn.active {
+            background: var(--nexus-blue);
+            color: #000;
+        }
+
+        .hidden { display: none; }
+        .setup-box { background: #14161f; padding: 15px; border-radius: 8px; border-left: 3px solid var(--nexus-blue); }
+
+        .submit-btn {
+            background: var(--nexus-blue);
+            color: black;
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 900;
+            cursor: pointer;
+            text-transform: uppercase;
+            margin-top: 20px;
+            transition: 0.3s;
+        }
+        .submit-btn:hover { background: #00e5ff; transform: scale(1.01); }
+    </style>
+</head>
+<body>
+
+<div class="form-container">
+    <h2>SOCIAL INTEL INTAKE</h2>
+    <div class="subtitle">Nexus AI Automated Performance Tracking</div>
+    
+    <form action="https://formspree.io/f/your-id-here" method="POST">
+        <input type="hidden" name="product" value="Social Media Report">
+        
+        <div class="section-label">1. Client Details</div>
+        <div class="input-group">
+            <label>Business / Brand Name</label>
+            <input type="text" name="brand_name" required placeholder="e.g. Arbour Hotel">
+        </div>
+        <div class="input-group">
+            <label>Contact (Line ID / WhatsApp / Email)</label>
+            <input type="text" name="contact_info" required placeholder="@line_handle">
+        </div>
+
+        <div class="section-label">2. Integration Method</div>
+        <div class="mode-selector">
+            <div id="self-btn" class="mode-btn active" onclick="toggleMode('self')">Self-Serve</div>
+            <div id="nexus-btn" class="mode-btn" onclick="toggleMode('nexus')">Nexus-Managed</div>
+        </div>
+        <input type="hidden" name="integration_type" id="integration_type" value="Self-Serve">
+
+        <div id="self-serve-ui" class="setup-box">
+            <label>Enter Login Keys / Handles (FB, IG, TikTok)</label>
+            <textarea name="self_creds" rows="3" placeholder="Username: [xxx] / Token: [xxx]"></textarea>
+            <p style="font-size:10px; color:#666; margin-top:5px;">*Your data is encrypted and used only for API scraping.</p>
+        </div>
+
+        <div id="nexus-ui" class="setup-box hidden">
+            <label>Preferred Setup Time</label>
+            <input type="text" name="nexus_setup_time" placeholder="e.g. Tomorrow 2PM via Line">
+            <p style="font-size:10px; color:#aaa; margin-top:5px;">*A Nexus engineer will guide you through secure OAuth verification.</p>
+        </div>
+
+        <div class="section-label" style="margin-top:20px;">3. Report Scope</div>
+        <div class="input-group">
+            <label>Competitor Handles to Track</label>
+            <input type="text" name="competitors" placeholder="@competitor1, @competitor2">
+        </div>
+
+        <div class="input-group">
+            <label>Specific Goals</label>
+            <textarea name="report_goals" rows="2" placeholder="e.g. Monthly engagement growth, ROI on ad spend"></textarea>
+        </div>
+
+        <button type="submit" class="submit-btn">Initialize Social Audit</button>
+    </form>
+</div>
+
+<script>
+    function toggleMode(mode) {
+        const selfBtn = document.getElementById('self-btn');
+        const nexusBtn = document.getElementById('nexus-btn');
+        const selfUI = document.getElementById('self-serve-ui');
+        const nexusUI = document.getElementById('nexus-ui');
+        const typeInput = document.getElementById('integration_type');
+
+        if(mode === 'self') {
+            selfBtn.classList.add('active');
+            nexusBtn.classList.remove('active');
+            selfUI.classList.remove('hidden');
+            nexusUI.classList.add('hidden');
+            typeInput.value = "Self-Serve";
+        } else {
+            nexusBtn.classList.add('active');
+            selfBtn.classList.remove('active');
+            nexusUI.classList.remove('hidden');
+            selfUI.classList.add('hidden');
+            typeInput.value = "Nexus-Managed";
+        }
+    }
+</script>
+
+</body>
+</html>
