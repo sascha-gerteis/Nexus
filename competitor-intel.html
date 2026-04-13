@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --nexus-blue: #00d2ff;
+            --nexus-dark: #0a0b10;
+            --nexus-gray: #1a1c23;
+        }
+        body {
+            background-color: var(--nexus-dark);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+        .form-container {
+            background: var(--nexus-gray);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h2 { color: var(--nexus-blue); margin-top: 0; }
+        p { font-size: 14px; color: #aaa; margin-bottom: 25px; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; color: #888; }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            background: #0f1016;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: white;
+            box-sizing: border-box;
+        }
+        input:focus { border-color: var(--nexus-blue); outline: none; }
+        .submit-btn {
+            background: var(--nexus-blue);
+            color: black;
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: 0.3s;
+        }
+        .submit-btn:hover { background: #00a8cc; transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+
+<div class="form-container">
+    <h2>NEXUS AI | INTAKE</h2>
+    <p>Initialize your automated market audit and competitive sweep.</p>
+    
+    <form action="https://formspree.io/f/your-id-here" method="POST">
+        
+        <div class="input-group">
+            <label>Full Name</label>
+            <input type="text" name="name" placeholder="Sascha G." required>
+        </div>
+
+        <div class="input-group">
+            <label>Company Website URL</label>
+            <input type="url" name="website" placeholder="https://your-agency.com" required>
+        </div>
+
+        <div class="input-group">
+            <label>Line ID / WhatsApp</label>
+            <input type="text" name="contact" placeholder="@line_id" required>
+        </div>
+
+        <div class="input-group">
+            <label>Competitor URLs (Top 3)</label>
+            <textarea name="competitors" rows="3" placeholder="Competitor 1, Competitor 2, Competitor 3"></textarea>
+        </div>
+
+        <div class="input-group">
+            <label>Primary Audit Goal</label>
+            <select name="goal">
+                <option value="inquiry-leaks">Inquiry Leak Detection</option>
+                <option value="price-tracking">Price Tracking</option>
+                <option value="sentiment">Sentiment Analysis</option>
+                <option value="efficiency">Operational Efficiency</option>
+            </select>
+        </div>
+
+        <input type="hidden" name="_subject" value="New Nexus Audit Order!">
+        <button type="submit" class="submit-btn">Initialize Audit</button>
+    </form>
+</div>
+
+</body>
+</html>
