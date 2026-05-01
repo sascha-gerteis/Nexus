@@ -498,6 +498,7 @@
             color: white;
         }
   </style>
+  <script async src="https://js.stripe.com/v3/buy-button.js"></script>
 </head>
 
 <body>
@@ -561,7 +562,7 @@
         </div>
 
         <div class="preview-panel" id="preview-panel">
-          <h3 style="margin-bottom: 1rem;">Live Preview</h3>
+          <h3 style="margin-bottom: 1rem;">Live Preview (Scroll to See)</h3>
           <div id="preview-content">
             <p style="color: var(--neutral-600);">Click a product to see a preview.</p>
           </div>
@@ -575,55 +576,20 @@
       <div class="summary-content">
         <div class="selected-products-list" id="selected-products-list"></div>
         <div class="summary-total" id="summary-total">$0</div>
-        <button class="btn btn-primary" onclick="showContactForm()">Continue →</button>
+        <button class="btn btn-primary" onclick="goToStripeCheckout()">Continue →</button>
       </div>
     </div>
   </div>
 
-  <section id="contact-section" style="display: none;">
+  <section id="checkout-section" style="display: none;">
     <div class="container">
       <div class="section-title">
-        <h2>Almost done!</h2>
-        <p>Tell us about yourself and we'll send you a detailed quote.</p>
+        <h2>Complete Your Checkout</h2>
+        <p id="checkout-message">Your secure Stripe checkout will appear below.</p>
       </div>
 
-      <div class="contact-form">
-        <!-- Replace with your Formspree endpoint -->
-        <form id="get-started-form" action="https://formspree.io/f/xnjbvobw" method="POST">
-          <input type="hidden" name="_subject" value="New package inquiry">
-          <input type="hidden" name="_gotcha" style="display:none">
-          <input type="hidden" name="selected_products" id="selected-products-hidden">
-          <input type="hidden" name="estimated_total" id="estimated-total-hidden">
-
-          <div class="form-row">
-            <div class="form-group">
-              <label for="first_name">First name *</label>
-              <input type="text" id="first_name" name="first_name" required>
-            </div>
-            <div class="form-group">
-              <label for="last_name">Last name *</label>
-              <input type="text" id="last_name" name="last_name" required>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label for="email">Work email *</label>
-            <input type="email" id="email" name="email" required>
-          </div>
-
-          <div class="form-group">
-            <label for="company">Company name</label>
-            <input type="text" id="company" name="company">
-          </div>
-
-          <div class="form-group">
-            <label for="message">Message (optional)</label>
-            <textarea id="message" name="message" rows="4"></textarea>
-          </div>
-
-          <button type="submit" class="btn btn-primary" style="width:100%;">Request Quote</button>
-          <div id="form-status" class="form-status"></div>
-        </form>
+      <div class="contact-form" id="stripe-checkout-container">
+        <p style="color: var(--neutral-600); text-align:center;">Select a product and click Continue to checkout.</p>
       </div>
     </div>
   </section>
@@ -686,6 +652,13 @@
       }
     };
 
+    const STRIPE_PUBLISHABLE_KEY = 'pk_live_51T6Q0eRsP5mlfh2No7bwjXhsJsUoyOwak8or4J0c8uFY2ZmnyKmBNRVdBue86L3hxUAQsQ31fKiUHIcZOiMWHngr00mZWPmI8q';
+    const STRIPE_BUY_BUTTONS = {
+      listening: 'buy_btn_1TS9IyRsP5mlfh2NzocCVQ1C',
+      reports: 'buy_btn_1TS8YARsP5mlfh2NwileaT6L',
+      chatbot: 'buy_btn_1TS9IORsP5mlfh2N4ZBvwVRF'
+    };
+
     let selected = {
       listening: { enabled: false, plan: 'standard', addons: {} },
       reports:   { enabled: false, plan: 'standard', addons: {} },
@@ -698,7 +671,7 @@
     const previewContent = document.getElementById('preview-content');
     const selectedList = document.getElementById('selected-products-list');
     const summaryTotal = document.getElementById('summary-total');
-    const contactSection = document.getElementById('contact-section');
+    const checkoutSection = document.getElementById('checkout-section');
 
     // ========== UI FUNCTIONS ==========
     function setActiveProduct(productId) {
@@ -819,9 +792,67 @@
       selectedList.innerHTML = tagsHtml;
     }
 
-    function showContactForm() {
-      contactSection.style.display = 'block';
-      window.scrollTo({ top: contactSection.offsetTop - 100, behavior: 'smooth' });
+    function getSelectedProductIds() {
+      return Object.entries(selected)
+        .filter(([, sel]) => sel.enabled)
+        .map(([id]) => id);
+    }
+
+    function goToStripeCheckout() {
+      const selectedProductIds = getSelectedProductIds();
+
+      if (selectedProductIds.length === 0) {
+        alert('Please add a product to your package before continuing.');
+        return;
+      }
+
+      renderStripeCheckout(selectedProductIds);
+      checkoutSection.style.display = 'block';
+      window.scrollTo({ top: checkoutSection.offsetTop - 100, behavior: 'smooth' });
+
+      // If only one product is selected, try to open the Stripe checkout automatically.
+      // If the browser blocks the automatic click or Stripe has not loaded yet, the Stripe button remains visible.
+      if (selectedProductIds.length === 1) {
+        tryAutoOpenStripeCheckout(selectedProductIds[0]);
+      }
+    }
+
+    function renderStripeCheckout(productIds) {
+      const checkoutMessage = document.getElementById('checkout-message');
+      const checkoutContainer = document.getElementById('stripe-checkout-container');
+
+      checkoutMessage.textContent = productIds.length === 1
+        ? 'You are being sent to secure Stripe checkout. If it does not open automatically, click the Stripe button below.'
+        : 'You selected multiple products. Complete checkout for each selected product below.';
+
+      checkoutContainer.innerHTML = productIds.map((id) => {
+        const product = products[id];
+        return `
+          <div id="stripe-button-${id}" style="padding:1rem 0; border-bottom:1px solid var(--neutral-200); text-align:center;">
+            <h3 style="margin-bottom:0.75rem; color:var(--primary);">${product.name}</h3>
+            <stripe-buy-button
+              buy-button-id="${STRIPE_BUY_BUTTONS[id]}"
+              publishable-key="${STRIPE_PUBLISHABLE_KEY}">
+            </stripe-buy-button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function tryAutoOpenStripeCheckout(productId, attempt = 0) {
+      const buyButton = document.querySelector(`#stripe-button-${productId} stripe-buy-button`);
+      const internalButton = buyButton && buyButton.shadowRoot
+        ? buyButton.shadowRoot.querySelector('button, [role="button"]')
+        : null;
+
+      if (internalButton) {
+        internalButton.click();
+        return;
+      }
+
+      if (attempt < 20) {
+        setTimeout(() => tryAutoOpenStripeCheckout(productId, attempt + 1), 250);
+      }
     }
 
     function buildSelectionSummary() {
@@ -837,30 +868,9 @@
       return parts.join('; ') || 'No products selected';
     }
 
-    // ========== FORMSPREE SUBMISSION ==========
-    document.getElementById('get-started-form').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      document.getElementById('selected-products-hidden').value = buildSelectionSummary();
-      document.getElementById('estimated-total-hidden').value = '$' + calculateTotal().toFixed(2);
-
-      const formData = new FormData(this);
-      const response = await fetch(this.action, { method: 'POST', body: formData, headers: { 'Accept': 'application/json' } });
-      const statusDiv = document.getElementById('form-status');
-      if (response.ok) {
-        statusDiv.className = 'form-status success';
-        statusDiv.textContent = 'Thanks for your inquiry! We’ll get back to you soon.';
-        this.reset();
-        setTimeout(() => { contactSection.style.display = 'none'; statusDiv.style.display = 'none'; }, 5000);
-      } else {
-        statusDiv.className = 'form-status error';
-        statusDiv.textContent = 'Oops! Something went wrong. Please try again.';
-      }
-    });
-
+    // ========== STRIPE CHECKOUT ==========
     // Initialize
     updateSummary();
   </script>
-</body>
-</html>
 </body>
 </html>
