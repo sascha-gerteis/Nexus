@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -18,6 +18,12 @@
   <script src="/assets/js/config.js"></script>
 
   <title>Cancellation Requests | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
 </head>
 
 <body data-admin="true" data-admin-page="cancellation-requests">
@@ -111,7 +117,7 @@
     <div class="nexus-modal-lite-backdrop" onclick="closeReviewModal()"></div>
 
     <div class="nexus-modal-lite-card admin-cancel-review-modal-card">
-      <button class="nexus-modal-lite-close" type="button" onclick="closeReviewModal()">×</button>
+      <button class="nexus-modal-lite-close" type="button" onclick="closeReviewModal()">Ã—</button>
 
       <span class="eyebrow" id="reviewModalEyebrow">Review request</span>
 
@@ -163,7 +169,7 @@
     }
 
     function dateLabel(value) {
-      if (!value) return "—";
+      if (!value) return "â€”";
 
       try {
         return new Date(value).toLocaleString();
@@ -306,7 +312,7 @@
 
               <div>
                 <span>Decision notes</span>
-                <strong>${escapeHtml(request.admin_notes || "—")}</strong>
+                <strong>${escapeHtml(request.admin_notes || "â€”")}</strong>
               </div>
             </div>
           </article>

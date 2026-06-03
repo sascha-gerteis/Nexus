@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -14,6 +14,12 @@
   <script src="/assets/js/config.js"></script>
 
   <title>Product Editor | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
 </head>
 
 <body data-admin="true" data-admin-page="automation-form">
@@ -226,7 +232,7 @@
             <option value="free_demo">Free demo</option>
           </select>
           <small>
-            Use “Setup fee only” if this product is sold as a one-time setup/install service.
+            Use â€œSetup fee onlyâ€ if this product is sold as a one-time setup/install service.
           </small>
         </div>
 
@@ -410,7 +416,7 @@
   <div class="admin-accordion-body">
     <div class="product-editor-explain-card">
       <span class="pill blue">How this works</span>
-      <h3>Setup fields become the buyer’s setup form.</h3>
+      <h3>Setup fields become the buyerâ€™s setup form.</h3>
       <p>
         These fields are shown after checkout for self-serve products. For Nexus Guided Install,
         use these fields only for non-sensitive business information. Do not ask buyers to paste passwords here.
@@ -1028,7 +1034,7 @@
       }
 
       if (icon) {
-        icon.textContent = open ? "−" : "+";
+        icon.textContent = open ? "âˆ’" : "+";
       }
     },
 
@@ -2080,7 +2086,7 @@
         else if (source === "secret") this.addUnique(detected.secret, key);
         else if (source === "customer") this.addUnique(detected.customer, key);
         else if (source === "system") this.addUnique(detected.system, key);
-        else this.addUnique(detected.unknown, `${placeholder} → ${source}.${key}`);
+        else this.addUnique(detected.unknown, `${placeholder} â†’ ${source}.${key}`);
 
         detected.custom = detected.custom.filter(item => item !== placeholder);
       }
