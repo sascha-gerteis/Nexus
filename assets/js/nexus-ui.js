@@ -1,6 +1,31 @@
 ﻿const NexusUI = (() => {
-  const FX_FALLBACK = 36;
-const FX_CACHE_KEY = "nexus_usd_thb_rate_cache";
+  const SUPPORTED_LANGUAGES = ["en", "th", "zh", "es", "hi", "ar", "fr"];
+  const RTL_LANGUAGES = ["ar"];
+  const LANGUAGE_OPTIONS = [
+    { code: "en", label: "English" },
+    { code: "th", label: "ไทย" },
+    { code: "zh", label: "中文" },
+    { code: "es", label: "Español" },
+    { code: "hi", label: "हिन्दी" },
+    { code: "ar", label: "العربية" },
+    { code: "fr", label: "Français" }
+  ];
+  const SUPPORTED_CURRENCIES = ["THB", "USD", "EUR", "GBP", "JPY"];
+  const CURRENCY_OPTIONS = [
+    { code: "THB", label: "THB" },
+    { code: "USD", label: "USD" },
+    { code: "EUR", label: "EUR" },
+    { code: "GBP", label: "GBP" },
+    { code: "JPY", label: "JPY" }
+  ];
+  const FX_FALLBACK_RATES = {
+    USD: 1,
+    THB: 36,
+    EUR: 0.92,
+    GBP: 0.78,
+    JPY: 157
+  };
+const FX_CACHE_KEY = "nexus_fx_rates_cache";
 const FX_CACHE_TTL_MS = 15 * 60 * 1000;
 
   function q(name) {
@@ -34,11 +59,13 @@ const FX_CACHE_TTL_MS = 15 * 60 * 1000;
   }
 
   function getCurrency() {
-    return localStorage.getItem("nexus_currency") || "USD";
+    const stored = String(localStorage.getItem("nexus_currency") || "THB").toUpperCase();
+    return SUPPORTED_CURRENCIES.includes(stored) ? stored : "THB";
   }
 
  function setCurrency(currency) {
-  const normalized = currency === "THB" ? "THB" : "USD";
+  const requested = String(currency || "THB").toUpperCase();
+  const normalized = SUPPORTED_CURRENCIES.includes(requested) ? requested : "THB";
 
   localStorage.setItem("nexus_currency", normalized);
 
@@ -59,51 +86,65 @@ const FX_CACHE_TTL_MS = 15 * 60 * 1000;
     return `
       <label class="currency-select-wrap" aria-label="${escapeAttribute(t("nav_currency"))}">
         <select class="currency-select" onchange="NexusUI.setCurrency(this.value)">
-          <option value="THB" ${currency === "THB" ? "selected" : ""}>THB</option>
-          <option value="USD" ${currency === "USD" ? "selected" : ""}>USD</option>
+          ${CURRENCY_OPTIONS.map((item) => `
+            <option value="${item.code}" ${currency === item.code ? "selected" : ""}>${item.label}</option>
+          `).join("")}
         </select>
       </label>
     `;
   }
 
-function getCachedUsdToThbRate() {
+function getCachedFxRates() {
   try {
     const cached = localStorage.getItem(FX_CACHE_KEY);
 
-    if (!cached) return FX_FALLBACK;
+    if (!cached) return { ...FX_FALLBACK_RATES };
 
     const parsed = JSON.parse(cached);
 
     if (
       parsed &&
-      parsed.rate &&
+      parsed.rates &&
       parsed.created_at &&
       Date.now() - parsed.created_at < FX_CACHE_TTL_MS
     ) {
-      return Number(parsed.rate);
+      return {
+        ...FX_FALLBACK_RATES,
+        ...parsed.rates
+      };
     }
 
-    return FX_FALLBACK;
+    if (parsed?.rate) {
+      return {
+        ...FX_FALLBACK_RATES,
+        THB: Number(parsed.rate) || FX_FALLBACK_RATES.THB
+      };
+    }
+
+    return { ...FX_FALLBACK_RATES };
   } catch {
-    return FX_FALLBACK;
+    return { ...FX_FALLBACK_RATES };
   }
 }
 
 async function refreshUsdToThbRate() {
   try {
-    const response = await fetch("https://api.frankfurter.dev/v2/rate/USD/THB");
+    const response = await fetch("https://api.frankfurter.dev/v2/latest?from=USD&to=THB,EUR,GBP,JPY");
     const data = await response.json();
 
-    const rate = Number(data.rate || 0);
+    const rates = {
+      ...FX_FALLBACK_RATES,
+      ...(data.rates || {})
+    };
 
-    if (!response.ok || !rate || rate <= 0) {
+    if (!response.ok || !rates.THB || rates.THB <= 0) {
       throw new Error("Invalid FX response");
     }
 
     localStorage.setItem(
       FX_CACHE_KEY,
       JSON.stringify({
-        rate,
+        rates,
         created_at: Date.now(),
         source: "frankfurter_live"
       })
@@ -111,9 +152,9 @@ async function refreshUsdToThbRate() {
 
     document.dispatchEvent(new CustomEvent("fxratechange"));
 
-    return rate;
+    return rates.THB;
   } catch {
-    return getCachedUsdToThbRate();
+    return getCachedFxRates().THB;
   }
 }
 
@@ -152,7 +193,7 @@ function getProductBaseAmount(product) {
   if (genericValue > 0) {
     return {
       amount: genericValue,
-      currency: productCurrency === "THB" ? "THB" : "USD"
+      currency: SUPPORTED_CURRENCIES.includes(productCurrency) ? productCurrency : "USD"
     };
   }
 
@@ -165,34 +206,29 @@ function getProductBaseAmount(product) {
 function convertAmount(amount, fromCurrency, toCurrency) {
   const from = String(fromCurrency || "USD").toUpperCase();
   const to = String(toCurrency || "USD").toUpperCase();
-  const rate = getCachedUsdToThbRate();
+  const rates = getCachedFxRates();
 
   if (!amount || amount <= 0) return 0;
 
   if (from === to) return Number(amount);
 
-  if (from === "USD" && to === "THB") {
-    return Math.round(Number(amount) * rate);
-  }
+  const fromRate = rates[from] || 1;
+  const toRate = rates[to] || 1;
+  const converted = (Number(amount) / fromRate) * toRate;
 
-  if (from === "THB" && to === "USD") {
-    return Math.round((Number(amount) / rate) * 100) / 100;
-  }
-
-  return Number(amount);
+  if (to === "THB" || to === "JPY") return Math.round(converted);
+  return Math.round(converted * 100) / 100;
 }
 
 function formatMoney(amount, currency) {
   const selectedCurrency = String(currency || getCurrency() || "USD").toUpperCase();
 
-  if (selectedCurrency === "THB") {
-    return `à¸¿${Math.round(Number(amount || 0)).toLocaleString("en-US")}`;
-  }
-
-  return `$${Number(amount || 0).toLocaleString("en-US", {
-    minimumFractionDigits: Number.isInteger(Number(amount)) ? 0 : 2,
-    maximumFractionDigits: 2
-  })}`;
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: SUPPORTED_CURRENCIES.includes(selectedCurrency) ? selectedCurrency : "USD",
+    minimumFractionDigits: selectedCurrency === "THB" || selectedCurrency === "JPY" ? 0 : undefined,
+    maximumFractionDigits: selectedCurrency === "THB" || selectedCurrency === "JPY" ? 0 : 2
+  }).format(Number(amount || 0));
 }
 
 function priceAmount(product) {
@@ -1029,7 +1065,7 @@ function productColorTheme(color) {
           .map((review) => {
             return `
               <p>
-                <strong>â˜… ${escapeHtml(review.rating)}/5 â€” ${escapeHtml(review.reviewer_name)}</strong><br>
+                <strong>${ratingStars(review.rating)} ${escapeHtml(review.rating)}/5 - ${escapeHtml(review.reviewer_name)}</strong><br>
                 ${escapeHtml(review.review_text)}
               </p>
             `;
@@ -1084,7 +1120,7 @@ function productColorTheme(color) {
   function ratingStars(rating) {
   const value = Math.max(0, Math.min(5, Number(rating || 0)));
   const full = Math.round(value);
-  return "â˜…".repeat(full) + "â˜†".repeat(5 - full);
+  return "\u2605".repeat(full) + "\u2606".repeat(5 - full);
 }
 
 function reviewStats(reviews) {
@@ -1575,19 +1611,482 @@ const THAI_GLOSSARY_REPLACEMENTS = [
   [/\bSupabase\b/g, "Supabase"]
 ];
 
-function getLanguage() {
-  const requested = q("lang");
+const EXTRA_I18N = {
+  th: {
+    nav_home: "หน้าแรก",
+    nav_marketplace: "มาร์เก็ตเพลส",
+    nav_developers: "นักพัฒนา",
+    nav_browse_developers: "ดูนักพัฒนา",
+    nav_join_waitlist: "เข้าร่วมเวตลิสต์",
+    nav_about: "เกี่ยวกับเรา",
+    nav_contact: "ติดต่อ",
+    nav_dashboard: "แดชบอร์ด",
+    nav_admin: "แอดมิน",
+    nav_login: "เข้าสู่ระบบ",
+    nav_logout: "ออกจากระบบ",
+    nav_currency: "สกุลเงิน",
+    nav_language: "ภาษา",
+    nav_toggle: "เปิดเมนู",
+    common_browse_automations: "ดูออโตเมชัน",
+    common_explore_marketplace: "ดูมาร์เก็ตเพลส",
+    common_request_custom_automation: "ขอออโตเมชันแบบกำหนดเอง",
+    common_join_developer_waitlist: "เข้าร่วมเวตลิสต์นักพัฒนา",
+    common_get_support: "ติดต่อซัพพอร์ต",
+    common_buy: "ซื้อ",
+    common_preview: "พรีวิว",
+    common_view: "ดู",
+    common_view_setup: "ดูการตั้งค่า",
+    common_view_output: "ดูเอาต์พุต",
+    common_complete_setup: "ตั้งค่าให้เสร็จ",
+    common_message_developer: "ส่งข้อความถึงนักพัฒนา",
+    common_message_nexus: "ส่งข้อความถึง Nexus",
+    dashboard_buyer_title: "แดชบอร์ดออโตเมชันของคุณ",
+    dashboard_buyer_subtitle: "ติดตามออโตเมชัน ดูเอาต์พุต ตั้งค่า และตรวจสอบกิจกรรมสำคัญได้ในที่เดียว",
+    dashboard_overview: "ภาพรวม",
+    dashboard_automations: "ออโตเมชันของฉัน",
+    dashboard_outputs: "เอาต์พุต",
+    dashboard_activity: "กิจกรรม",
+    dashboard_orders: "ออร์เดอร์",
+    dashboard_messages: "ข้อความ"
+  },
+  zh: {
+    nav_home: "首页",
+    nav_marketplace: "市场",
+    nav_developers: "开发者",
+    nav_browse_developers: "浏览开发者",
+    nav_join_waitlist: "加入候补名单",
+    nav_about: "关于我们",
+    nav_contact: "联系",
+    nav_dashboard: "仪表盘",
+    nav_admin: "管理员",
+    nav_login: "登录",
+    nav_logout: "退出",
+    nav_currency: "货币",
+    nav_language: "语言",
+    nav_toggle: "打开菜单",
+    common_explore_marketplace: "浏览市场",
+    common_request_custom_automation: "请求定制自动化",
+    common_buy: "购买",
+    common_preview: "预览",
+    common_view: "查看",
+    dashboard_messages: "消息"
+  },
+  es: {
+    nav_home: "Inicio",
+    nav_marketplace: "Marketplace",
+    nav_developers: "Desarrolladores",
+    nav_browse_developers: "Ver desarrolladores",
+    nav_join_waitlist: "Unirse a la lista",
+    nav_about: "Acerca de",
+    nav_contact: "Contacto",
+    nav_dashboard: "Panel",
+    nav_admin: "Admin",
+    nav_login: "Iniciar sesión",
+    nav_logout: "Cerrar sesión",
+    nav_currency: "Moneda",
+    nav_language: "Idioma",
+    nav_toggle: "Abrir menú",
+    common_explore_marketplace: "Explorar marketplace",
+    common_request_custom_automation: "Solicitar automatización personalizada",
+    common_buy: "Comprar",
+    common_preview: "Vista previa",
+    common_view: "Ver",
+    dashboard_messages: "Mensajes"
+  },
+  hi: {
+    nav_home: "होम",
+    nav_marketplace: "मार्केटप्लेस",
+    nav_developers: "डेवलपर",
+    nav_browse_developers: "डेवलपर देखें",
+    nav_join_waitlist: "वेटलिस्ट में जुड़ें",
+    nav_about: "हमारे बारे में",
+    nav_contact: "संपर्क",
+    nav_dashboard: "डैशबोर्ड",
+    nav_admin: "एडमिन",
+    nav_login: "लॉगिन",
+    nav_logout: "लॉगआउट",
+    nav_currency: "मुद्रा",
+    nav_language: "भाषा",
+    nav_toggle: "मेनू खोलें",
+    common_explore_marketplace: "मार्केटप्लेस देखें",
+    common_request_custom_automation: "कस्टम ऑटोमेशन का अनुरोध करें",
+    common_buy: "खरीदें",
+    common_preview: "प्रीव्यू",
+    common_view: "देखें",
+    dashboard_messages: "संदेश"
+  },
+  ar: {
+    nav_home: "الرئيسية",
+    nav_marketplace: "السوق",
+    nav_developers: "المطورون",
+    nav_browse_developers: "تصفح المطورين",
+    nav_join_waitlist: "انضم إلى قائمة الانتظار",
+    nav_about: "من نحن",
+    nav_contact: "تواصل",
+    nav_dashboard: "لوحة التحكم",
+    nav_admin: "المدير",
+    nav_login: "تسجيل الدخول",
+    nav_logout: "تسجيل الخروج",
+    nav_currency: "العملة",
+    nav_language: "اللغة",
+    nav_toggle: "فتح القائمة",
+    common_explore_marketplace: "تصفح السوق",
+    common_request_custom_automation: "اطلب أتمتة مخصصة",
+    common_buy: "شراء",
+    common_preview: "معاينة",
+    common_view: "عرض",
+    dashboard_messages: "الرسائل"
+  },
+  fr: {
+    nav_home: "Accueil",
+    nav_marketplace: "Marketplace",
+    nav_developers: "Développeurs",
+    nav_browse_developers: "Voir les développeurs",
+    nav_join_waitlist: "Rejoindre la liste",
+    nav_about: "À propos",
+    nav_contact: "Contact",
+    nav_dashboard: "Tableau de bord",
+    nav_admin: "Admin",
+    nav_login: "Connexion",
+    nav_logout: "Déconnexion",
+    nav_currency: "Devise",
+    nav_language: "Langue",
+    nav_toggle: "Ouvrir le menu",
+    common_explore_marketplace: "Explorer le marketplace",
+    common_request_custom_automation: "Demander une automatisation personnalisée",
+    common_buy: "Acheter",
+    common_preview: "Aperçu",
+    common_view: "Voir",
+    dashboard_messages: "Messages"
+  }
+};
 
-  if (requested === "th" || requested === "en") {
+Object.entries(EXTRA_I18N).forEach(([language, values]) => {
+  I18N[language] = {
+    ...I18N.en,
+    ...(I18N[language] || {}),
+    ...values
+  };
+});
+
+const LITERAL_TRANSLATIONS = {
+  th: {
+    "Solve business bottlenecks with ready-made automation.": "แก้คอขวดทางธุรกิจด้วยออโตเมชันสำเร็จรูป",
+    "Explore marketplace": "ดูมาร์เก็ตเพลส",
+    "How it works": "วิธีการทำงาน",
+    "Find": "ค้นหา",
+    "Understand": "เข้าใจ",
+    "Set up": "ตั้งค่า",
+    "Run": "ใช้งาน",
+    "Businesses need outcomes, not another tool to manage.": "ธุรกิจต้องการผลลัพธ์ ไม่ใช่เครื่องมืออีกตัวที่ต้องดูแล",
+    "Marketplace": "มาร์เก็ตเพลส",
+    "Developers": "นักพัฒนา",
+    "Contact": "ติดต่อ",
+    "About": "เกี่ยวกับเรา",
+    "Dashboard": "แดชบอร์ด",
+    "Request custom automation": "ขอออโตเมชันแบบกำหนดเอง",
+    "Product reviews": "รีวิวสินค้า",
+    "Developer reviews": "รีวิวนักพัฒนา",
+    "Verified purchase": "ซื้อจริง"
+  },
+  zh: {
+    "Solve business bottlenecks with ready-made automation.": "用现成自动化解决业务瓶颈。",
+    "Explore marketplace": "浏览市场",
+    "How it works": "工作方式",
+    "Find": "寻找",
+    "Understand": "了解",
+    "Set up": "设置",
+    "Run": "运行",
+    "Businesses need outcomes, not another tool to manage.": "企业需要结果，而不是另一个要管理的工具。",
+    "Marketplace": "市场",
+    "Developers": "开发者",
+    "Contact": "联系",
+    "About": "关于我们",
+    "Dashboard": "仪表盘",
+    "Request custom automation": "请求定制自动化",
+    "Product reviews": "产品评价",
+    "Developer reviews": "开发者评价",
+    "Verified purchase": "已验证购买"
+  },
+  es: {
+    "Solve business bottlenecks with ready-made automation.": "Resuelve cuellos de botella con automatizaciones listas para usar.",
+    "Explore marketplace": "Explorar marketplace",
+    "How it works": "Cómo funciona",
+    "Find": "Encontrar",
+    "Understand": "Entender",
+    "Set up": "Configurar",
+    "Run": "Ejecutar",
+    "Businesses need outcomes, not another tool to manage.": "Las empresas necesitan resultados, no otra herramienta que gestionar.",
+    "Marketplace": "Marketplace",
+    "Developers": "Desarrolladores",
+    "Contact": "Contacto",
+    "About": "Acerca de",
+    "Dashboard": "Panel",
+    "Request custom automation": "Solicitar automatización personalizada",
+    "Product reviews": "Reseñas del producto",
+    "Developer reviews": "Reseñas del desarrollador",
+    "Verified purchase": "Compra verificada"
+  },
+  hi: {
+    "Solve business bottlenecks with ready-made automation.": "तैयार ऑटोमेशन से बिज़नेस bottlenecks हल करें।",
+    "Explore marketplace": "मार्केटप्लेस देखें",
+    "How it works": "यह कैसे काम करता है",
+    "Find": "खोजें",
+    "Understand": "समझें",
+    "Set up": "सेटअप करें",
+    "Run": "चलाएँ",
+    "Businesses need outcomes, not another tool to manage.": "बिज़नेस को परिणाम चाहिए, संभालने के लिए एक और टूल नहीं।",
+    "Marketplace": "मार्केटप्लेस",
+    "Developers": "डेवलपर",
+    "Contact": "संपर्क",
+    "About": "हमारे बारे में",
+    "Dashboard": "डैशबोर्ड",
+    "Request custom automation": "कस्टम ऑटोमेशन का अनुरोध करें",
+    "Product reviews": "प्रोडक्ट रिव्यू",
+    "Developer reviews": "डेवलपर रिव्यू",
+    "Verified purchase": "सत्यापित खरीद"
+  },
+  ar: {
+    "Solve business bottlenecks with ready-made automation.": "حل اختناقات العمل باستخدام أتمتة جاهزة.",
+    "Explore marketplace": "تصفح السوق",
+    "How it works": "كيف يعمل",
+    "Find": "ابحث",
+    "Understand": "افهم",
+    "Set up": "إعداد",
+    "Run": "تشغيل",
+    "Businesses need outcomes, not another tool to manage.": "الشركات تحتاج إلى نتائج، لا إلى أداة أخرى لإدارتها.",
+    "Marketplace": "السوق",
+    "Developers": "المطورون",
+    "Contact": "تواصل",
+    "About": "من نحن",
+    "Dashboard": "لوحة التحكم",
+    "Request custom automation": "اطلب أتمتة مخصصة",
+    "Product reviews": "مراجعات المنتج",
+    "Developer reviews": "مراجعات المطور",
+    "Verified purchase": "عملية شراء مؤكدة"
+  },
+  fr: {
+    "Solve business bottlenecks with ready-made automation.": "Résolvez les blocages métier avec des automatisations prêtes à l'emploi.",
+    "Explore marketplace": "Explorer le marketplace",
+    "How it works": "Comment ça marche",
+    "Find": "Trouver",
+    "Understand": "Comprendre",
+    "Set up": "Configurer",
+    "Run": "Lancer",
+    "Businesses need outcomes, not another tool to manage.": "Les entreprises ont besoin de résultats, pas d'un outil de plus à gérer.",
+    "Marketplace": "Marketplace",
+    "Developers": "Développeurs",
+    "Contact": "Contact",
+    "About": "À propos",
+    "Dashboard": "Tableau de bord",
+    "Request custom automation": "Demander une automatisation personnalisée",
+    "Product reviews": "Avis produit",
+    "Developer reviews": "Avis développeur",
+    "Verified purchase": "Achat vérifié"
+  }
+};
+
+Object.assign(LITERAL_TRANSLATIONS.th, {
+  "Nexus helps teams find practical automation products for reporting, support, operations, sales, and internal workflows. Browse by the outcome you need, preview what the product delivers, and choose the setup path that fits your team.": "Nexus ช่วยทีมค้นหาออโตเมชันที่ใช้งานได้จริงสำหรับรายงาน ซัพพอร์ต งานปฏิบัติการ ฝ่ายขาย และเวิร์กโฟลว์ภายใน เลือกจากผลลัพธ์ที่ต้องการ พรีวิวสิ่งที่สินค้าส่งมอบ และเลือกเส้นทางเซ็ตอัพที่เหมาะกับทีมของคุณ",
+  "Search by business issue, outcome, category, and setup path.": "ค้นหาตามปัญหาธุรกิจ ผลลัพธ์ หมวดหมู่ และเส้นทางเซ็ตอัพ",
+  "See what the product does, what it needs, and what it produces.": "ดูว่าสินค้าทำอะไร ต้องใช้อะไร และสร้างเอาต์พุตอะไร",
+  "Choose self-serve or Nexus guided setup based on complexity.": "เลือกเซ็ตอัพเองหรือให้ Nexus ไกด์เซ็ตอัพตามความซับซ้อน",
+  "Move from manual work to a repeatable process your team can use.": "เปลี่ยนงานแมนนวลให้เป็นโปรเซสที่ทีมใช้งานซ้ำได้",
+  "Most teams do not have an ideas problem. They have an execution problem. Reports still take hours, customer questions still repeat, sales follow-up still slips, and internal handoffs still depend on people copying information between tools.": "ทีมส่วนใหญ่ไม่ได้ขาดไอเดีย แต่ติดที่การลงมือทำ รายงานยังใช้เวลาหลายชั่วโมง คำถามลูกค้ายังซ้ำๆ การติดตามฝ่ายขายยังหลุด และการส่งต่องานภายในยังต้องให้คนคัดลอกข้อมูลระหว่างเครื่องมือ",
+  "Nexus turns those repeatable problems into clear marketplace products. Each listing explains the business issue it solves, the output it creates, what setup requires, and whether your team can self-serve or should use guided setup.": "Nexus เปลี่ยนปัญหาที่เกิดซ้ำให้เป็นสินค้าบนมาร์เก็ตเพลสที่เข้าใจง่าย ทุกลิสติ้งอธิบายปัญหาธุรกิจที่แก้ เอาต์พุตที่ได้ สิ่งที่ต้องใช้ในการเซ็ตอัพ และทีมควรเซ็ตอัพเองหรือใช้ไกด์เซ็ตอัพ",
+  "Old way": "วิธีเดิม",
+  "Slow and unclear": "ช้าและไม่ชัดเจน",
+  "Compare disconnected tools": "เทียบเครื่องมือที่ไม่เชื่อมกัน",
+  "Buy software without seeing the outcome": "ซื้อซอฟต์แวร์โดยยังไม่เห็นผลลัพธ์",
+  "Hire builders without a clear product": "จ้างคนทำโดยยังไม่มีสินค้าเป็นรูปธรรม",
+  "Handle setup and errors alone": "จัดการเซ็ตอัพและข้อผิดพลาดเอง",
+  "Keep manual workarounds running": "ยังต้องใช้วิธีแมนนวลต่อไป",
+  "Nexus way": "วิธีของ Nexus",
+  "Outcome-first and clear": "เริ่มจากผลลัพธ์และชัดเจน",
+  "Browse by business issue": "เลือกดูตามปัญหาธุรกิจ",
+  "Understand the output before setup": "เข้าใจเอาต์พุตก่อนเซ็ตอัพ",
+  "Choose the right setup path upfront": "เลือกเส้นทางเซ็ตอัพที่เหมาะตั้งแต่แรก",
+  "See who built or operates the product": "เห็นว่าใครสร้างหรือดูแลสินค้า",
+  "Move toward a repeatable process": "เดินหน้าไปสู่โปรเซสที่ทำซ้ำได้",
+  "From business issue to working process.": "จากปัญหาธุรกิจสู่โปรเซสที่ใช้งานจริง",
+  "Nexus is designed so a business user can understand the solution before dealing with setup, payment, or technical implementation.": "Nexus ถูกออกแบบให้ผู้ใช้ธุรกิจเข้าใจโซลูชันก่อนต้องจัดการเซ็ตอัพ การชำระเงิน หรือรายละเอียดทางเทคนิค",
+  "Search by outcome": "ค้นหาจากผลลัพธ์",
+  "Browse products by business issue, department, pricing model, setup type, and expected result.": "เลือกดูสินค้าตามปัญหาธุรกิจ แผนก โมเดลราคา ประเภทเซ็ตอัพ และผลลัพธ์ที่คาดหวัง",
+  "Review the listing": "รีวิวลิสติ้ง",
+  "See what the product does, what it needs from you, what it outputs, and who operates it.": "ดูว่าสินค้าทำอะไร ต้องการอะไรจากคุณ สร้างเอาต์พุตอะไร และใครดูแล",
+  "Choose the fit": "เลือกสิ่งที่เหมาะ",
+  "Some products offer different versions for different team sizes, reporting styles, or workflows.": "บางสินค้ามีหลายเวอร์ชันสำหรับขนาดทีม รูปแบบรายงาน หรือเวิร์กโฟลว์ที่ต่างกัน",
+  "Start setup": "เริ่มเซ็ตอัพ",
+  "Choose self-serve when simple or Nexus guided setup when the process needs more care.": "เลือกเซ็ตอัพเองเมื่อง่าย หรือใช้ Nexus ไกด์เซ็ตอัพเมื่อโปรเซสต้องดูแลมากขึ้น",
+  "Ready-made products for common business issues.": "สินค้าสำเร็จรูปสำหรับปัญหาธุรกิจที่พบบ่อย",
+  "Browse productized solutions for reporting, customer support, lead handling, content operations, social listening, and internal team workflows.": "เลือกดูโซลูชันแบบโปรดักต์สำหรับรายงาน ซัพพอร์ตลูกค้า การจัดการลีด งานคอนเทนต์ โซเชียลลิสเทนนิ่ง และเวิร์กโฟลว์ภายในทีม",
+  "View full marketplace": "ดูมาร์เก็ตเพลสทั้งหมด",
+  "Every listing explains the outcome first.": "ทุกลิสติ้งอธิบายผลลัพธ์ก่อน",
+  "Nexus listings are built for business decisions. A product should make it clear what problem it solves, what result it creates, what information is needed, and how setup will work.": "ลิสติ้งของ Nexus ถูกสร้างเพื่อการตัดสินใจทางธุรกิจ สินค้าควรบอกให้ชัดว่าแก้ปัญหาอะไร สร้างผลลัพธ์อะไร ต้องใช้ข้อมูลอะไร และเซ็ตอัพอย่างไร",
+  "Clear output": "เอาต์พุตชัดเจน",
+  "Reports, alerts, summaries, dashboards, replies, or workflow actions.": "รายงาน แจ้งเตือน สรุป แดชบอร์ด การตอบกลับ หรือแอคชันในเวิร์กโฟลว์",
+  "Practical options": "ตัวเลือกที่ใช้ได้จริง",
+  "Choose the version that fits your team, data, and working style.": "เลือกเวอร์ชันที่เหมาะกับทีม ข้อมูล และสไตล์การทำงาน",
+  "Setup support": "ซัพพอร์ตเซ็ตอัพ",
+  "Use self-serve for simple cases or guided setup for more complex ones.": "ใช้เซ็ตอัพเองสำหรับเคสง่าย หรือไกด์เซ็ตอัพสำหรับเคสที่ซับซ้อนกว่า",
+  "A hub for businesses and automation builders.": "ฮับสำหรับธุรกิจและนักสร้างออโตเมชัน",
+  "Nexus starts by helping businesses find useful solutions. As the platform grows, approved builders can list well-packaged products that solve specific operational problems.": "Nexus เริ่มจากการช่วยธุรกิจค้นหาโซลูชันที่มีประโยชน์ เมื่อแพลตฟอร์มเติบโต นักสร้างที่ได้รับอนุมัติจะลิสต์สินค้าที่แพ็กเกจดีและแก้ปัญหางานปฏิบัติการเฉพาะทางได้",
+  "A marketplace for solving business problems with automation.": "มาร์เก็ตเพลสสำหรับแก้ปัญหาธุรกิจด้วยออโตเมชัน",
+  "Nexus helps businesses find packaged solutions for repeat work, reporting, support, lead handling, internal operations, and customer workflows. The goal is simple: make useful automation easy to understand, buy, set up, and trust.": "Nexus ช่วยธุรกิจค้นหาโซลูชันที่แพ็กเกจแล้วสำหรับงานซ้ำ รายงาน ซัพพอร์ต การจัดการลีด งานภายใน และเวิร์กโฟลว์ลูกค้า เป้าหมายคือทำให้ออโตเมชันที่มีประโยชน์เข้าใจง่าย ซื้อได้ เซ็ตอัพได้ และน่าเชื่อถือ",
+  "Talk to Nexus": "คุยกับ Nexus",
+  "Buying automation is still too confusing.": "การซื้อออโตเมชันยังซับซ้อนเกินไป",
+  "Most companies can point to the work that slows them down: reports, inboxes, handoffs, customer questions, follow-ups, and data updates. The hard part is turning those problems into a reliable process without wasting weeks comparing tools or managing a custom build.": "บริษัทส่วนใหญ่รู้ว่างานอะไรทำให้ช้า เช่น รายงาน อินบ็อกซ์ การส่งต่องาน คำถามลูกค้า การติดตาม และการอัปเดตข้อมูล ส่วนที่ยากคือการเปลี่ยนปัญหาเหล่านั้นให้เป็นโปรเซสที่เชื่อถือได้โดยไม่เสียเวลาหลายสัปดาห์ไปกับการเทียบเครื่องมือหรือดูแลการสร้างแบบคัสตอม",
+  "Today, a business often has to choose between hiring an agency, buying another narrow tool, downloading a technical template, or building internally. Nexus creates a clearer path: productized solutions that explain the outcome and setup before you commit.": "วันนี้ธุรกิจมักต้องเลือกระหว่างจ้างเอเจนซี ซื้อเครื่องมือเฉพาะทาง ดาวน์โหลดเทมเพลตเทคนิค หรือสร้างเองภายใน Nexus ทำให้เส้นทางชัดขึ้นด้วยโซลูชันแบบโปรดักต์ที่อธิบายผลลัพธ์และการเซ็ตอัพก่อนตัดสินใจ",
+  "Current market": "ตลาดปัจจุบัน",
+  "Template libraries": "ไลบรารีเทมเพลต",
+  "Useful for technical users, but risky for teams that cannot debug, host, or maintain them.": "มีประโยชน์สำหรับผู้ใช้เทคนิค แต่เสี่ยงสำหรับทีมที่ดีบัก โฮสต์ หรือดูแลเองไม่ได้",
+  "Vague software tools": "ซอฟต์แวร์ที่ไม่ชัดเจน",
+  "Many products sound impressive but do not clearly show what they deliver or how they fit daily operations.": "หลายสินค้าฟังดูดี แต่ไม่แสดงชัดว่าส่งมอบอะไรหรือเข้ากับงานประจำวันอย่างไร",
+  "Custom agencies": "เอเจนซีคัสตอม",
+  "Can work, but are often slow, expensive, and hard to compare before committing.": "ทำได้ แต่อาจช้า แพง และเทียบยากก่อนตัดสินใจ",
+  "A marketplace layer that packages useful automations as understandable business products.": "เลเยอร์มาร์เก็ตเพลสที่แพ็กออโตเมชันให้เป็นสินค้าธุรกิจที่เข้าใจง่าย",
+  "Tell us what business process you want to improve.": "บอกเราว่าคุณอยากปรับปรุงโปรเซสธุรกิจอะไร",
+  "Use this page for product questions, custom process requests, setup support, partnerships, or builder access. Nexus routes each message into the admin inbox so the right person can review it and follow up.": "ใช้หน้านี้สำหรับคำถามสินค้า คำขอโปรเซสคัสตอม ซัพพอร์ตเซ็ตอัพ พาร์ตเนอร์ชิป หรือการเข้าถึงสำหรับนักสร้าง Nexus จะส่งทุกข้อความเข้าอินบ็อกซ์แอดมินเพื่อให้คนที่เหมาะสมรีวิวและติดตามต่อ",
+  "Send a message": "ส่งข้อความ",
+  "Browse marketplace": "ดูมาร์เก็ตเพลส",
+  "For product questions, setup support, custom requests, and marketplace help.": "สำหรับคำถามสินค้า ซัพพอร์ตเซ็ตอัพ คำขอคัสตอม และความช่วยเหลือเกี่ยวกับมาร์เก็ตเพลส",
+  "Available after intake": "ติดต่อได้หลังส่งรายละเอียด",
+  "Share the request first so Nexus can route it to the right support path.": "ส่งรายละเอียดก่อนเพื่อให้ Nexus ส่งต่อไปยังเส้นทางซัพพอร์ตที่เหมาะสม",
+  "Business process requests": "คำขอโปรเซสธุรกิจ",
+  "Reports, support handoffs, operations tasks, lead follow-up, and internal workflows.": "รายงาน การส่งต่องานซัพพอร์ต งานปฏิบัติการ การติดตามลีด และเวิร์กโฟลว์ภายใน",
+  "Within 1-2 business days": "ภายใน 1-2 วันทำการ",
+  "For urgent setup or launch requests, mention the timeline clearly.": "สำหรับคำขอเซ็ตอัพหรือเปิดใช้งานเร่งด่วน โปรดระบุไทม์ไลน์ให้ชัดเจน",
+  "Different requests need different next steps.": "คำขอต่างกันต้องใช้ขั้นตอนถัดไปที่ต่างกัน",
+  "Nexus is a hub for solving recurring business problems. Choose the path that best matches what you need so the request can be reviewed quickly.": "Nexus เป็นฮับสำหรับแก้ปัญหาธุรกิจที่เกิดซ้ำ เลือกเส้นทางที่ตรงกับสิ่งที่ต้องการเพื่อให้รีวิวคำขอได้เร็วขึ้น",
+  "Business buyer": "ผู้ซื้อธุรกิจ",
+  "Custom process request": "คำขอโปรเซสคัสตอม",
+  "Developer or builder": "นักพัฒนาหรือนักสร้าง",
+  "Partnerships": "พาร์ตเนอร์ชิป",
+  "Describe the process, the problem, and the outcome you want.": "อธิบายโปรเซส ปัญหา และผลลัพธ์ที่ต้องการ",
+  "Keep it practical. Explain the manual work, the tools involved, how often it happens, and what should be produced when the process is working properly.": "เขียนให้ใช้งานได้จริง อธิบายงานแมนนวล เครื่องมือที่เกี่ยวข้อง ความถี่ที่เกิดขึ้น และสิ่งที่ควรได้เมื่อโปรเซสทำงานถูกต้อง",
+  "For buyers": "สำหรับผู้ซื้อ",
+  "For custom process requests": "สำหรับคำขอโปรเซสคัสตอม",
+  "For developers": "สำหรับนักพัฒนา",
+  "Contact form": "ฟอร์มติดต่อ",
+  "Name": "ชื่อ",
+  "Email": "อีเมล",
+  "Company": "บริษัท",
+  "Inquiry type": "ประเภทคำถาม",
+  "What do you need?": "คุณต้องการอะไร",
+  "Send message": "ส่งข้อความ",
+  "Your message is saved into the Nexus admin dashboard for review and follow-up.": "ข้อความของคุณจะถูกบันทึกในแดชบอร์ดแอดมินของ Nexus เพื่อรีวิวและติดตามต่อ",
+  "What should you write?": "ควรเขียนอะไร",
+  "You do not need technical details. The most useful information is the business goal, the current manual process, and what output you want the finished process to produce.": "ไม่จำเป็นต้องมีรายละเอียดเทคนิค ข้อมูลที่มีประโยชน์ที่สุดคือเป้าหมายธุรกิจ โปรเซสแมนนวลปัจจุบัน และเอาต์พุตที่ต้องการจากโปรเซสที่ทำเสร็จแล้ว"
+});
+
+const LANGUAGE_GLOSSARY_REPLACEMENTS = {
+  th: [
+    [/\bautomation\b/gi, "ออโตเมชัน"],
+    [/\bautomations\b/gi, "ออโตเมชัน"],
+    [/\bworkflow\b/gi, "เวิร์กโฟลว์"],
+    [/\bworkflows\b/gi, "เวิร์กโฟลว์"],
+    [/\bmarketplace\b/gi, "มาร์เก็ตเพลส"],
+    [/\bdeveloper\b/gi, "นักพัฒนา"],
+    [/\bdevelopers\b/gi, "นักพัฒนา"],
+    [/\bdashboard\b/gi, "แดชบอร์ด"],
+    [/\breview\b/gi, "รีวิว"],
+    [/\breviews\b/gi, "รีวิว"],
+    [/\bsetup\b/gi, "เซ็ตอัพ"],
+    [/\bproduct\b/gi, "สินค้า"],
+    [/\bproducts\b/gi, "สินค้า"]
+  ],
+  es: [
+    [/\bautomation\b/gi, "automatización"],
+    [/\bautomations\b/gi, "automatizaciones"],
+    [/\bworkflow\b/gi, "flujo de trabajo"],
+    [/\bworkflows\b/gi, "flujos de trabajo"],
+    [/\bmarketplace\b/gi, "marketplace"],
+    [/\bdashboard\b/gi, "panel"],
+    [/\bproduct\b/gi, "producto"],
+    [/\bproducts\b/gi, "productos"],
+    [/\bsetup\b/gi, "configuración"],
+    [/\breview\b/gi, "reseña"],
+    [/\breviews\b/gi, "reseñas"]
+  ],
+  fr: [
+    [/\bautomation\b/gi, "automatisation"],
+    [/\bautomations\b/gi, "automatisations"],
+    [/\bworkflow\b/gi, "workflow"],
+    [/\bworkflows\b/gi, "workflows"],
+    [/\bmarketplace\b/gi, "marketplace"],
+    [/\bdashboard\b/gi, "tableau de bord"],
+    [/\bproduct\b/gi, "produit"],
+    [/\bproducts\b/gi, "produits"],
+    [/\bsetup\b/gi, "configuration"],
+    [/\breview\b/gi, "avis"],
+    [/\breviews\b/gi, "avis"]
+  ],
+  zh: [
+    [/\bautomation\b/gi, "自动化"],
+    [/\bautomations\b/gi, "自动化"],
+    [/\bworkflow\b/gi, "工作流"],
+    [/\bworkflows\b/gi, "工作流"],
+    [/\bmarketplace\b/gi, "市场"],
+    [/\bdashboard\b/gi, "仪表盘"],
+    [/\bdeveloper\b/gi, "开发者"],
+    [/\bdevelopers\b/gi, "开发者"],
+    [/\bproduct\b/gi, "产品"],
+    [/\bproducts\b/gi, "产品"],
+    [/\bsetup\b/gi, "设置"],
+    [/\breview\b/gi, "评价"],
+    [/\breviews\b/gi, "评价"]
+  ],
+  hi: [
+    [/\bautomation\b/gi, "ऑटोमेशन"],
+    [/\bautomations\b/gi, "ऑटोमेशन"],
+    [/\bworkflow\b/gi, "वर्कफ़्लो"],
+    [/\bworkflows\b/gi, "वर्कफ़्लो"],
+    [/\bmarketplace\b/gi, "मार्केटप्लेस"],
+    [/\bdashboard\b/gi, "डैशबोर्ड"],
+    [/\bdeveloper\b/gi, "डेवलपर"],
+    [/\bdevelopers\b/gi, "डेवलपर"],
+    [/\bproduct\b/gi, "प्रोडक्ट"],
+    [/\bproducts\b/gi, "प्रोडक्ट"],
+    [/\bsetup\b/gi, "सेटअप"],
+    [/\breview\b/gi, "रिव्यू"],
+    [/\breviews\b/gi, "रिव्यू"]
+  ],
+  ar: [
+    [/\bautomation\b/gi, "الأتمتة"],
+    [/\bautomations\b/gi, "الأتمتة"],
+    [/\bworkflow\b/gi, "سير العمل"],
+    [/\bworkflows\b/gi, "سير العمل"],
+    [/\bmarketplace\b/gi, "السوق"],
+    [/\bdashboard\b/gi, "لوحة التحكم"],
+    [/\bdeveloper\b/gi, "المطور"],
+    [/\bdevelopers\b/gi, "المطورون"],
+    [/\bproduct\b/gi, "المنتج"],
+    [/\bproducts\b/gi, "المنتجات"],
+    [/\bsetup\b/gi, "الإعداد"],
+    [/\breview\b/gi, "مراجعة"],
+    [/\breviews\b/gi, "مراجعات"]
+  ]
+};
+
+function normalizeLanguage(language) {
+  const normalized = String(language || "en").toLowerCase();
+  return SUPPORTED_LANGUAGES.includes(normalized) ? normalized : "en";
+}
+
+function getLanguage() {
+  const requested = normalizeLanguage(q("lang"));
+
+  if (q("lang")) {
     persistLanguage(requested);
     return requested;
   }
 
   try {
-    const stored = localStorage.getItem("nexus_language") || sessionStorage.getItem("nexus_language");
+    const stored = normalizeLanguage(localStorage.getItem("nexus_language") || sessionStorage.getItem("nexus_language"));
 
-    if (stored === "th" || stored === "en") {
+    if (stored) {
       document.documentElement.lang = stored;
+      document.documentElement.dir = RTL_LANGUAGES.includes(stored) ? "rtl" : "ltr";
       return stored;
     }
   } catch {
@@ -1600,16 +2099,15 @@ function getLanguage() {
     .find((item) => item.startsWith("nexus_language="))
     ?.split("=")[1];
 
-  const normalized = cookieLanguage === "th" || cookieLanguage === "en"
-    ? cookieLanguage
-    : "en";
+  const normalized = normalizeLanguage(cookieLanguage);
 
   document.documentElement.lang = normalized;
+  document.documentElement.dir = RTL_LANGUAGES.includes(normalized) ? "rtl" : "ltr";
   return normalized;
 }
 
 function persistLanguage(language) {
-  const normalized = language === "th" ? "th" : "en";
+  const normalized = normalizeLanguage(language);
 
   try {
     localStorage.setItem("nexus_language", normalized);
@@ -1620,6 +2118,7 @@ function persistLanguage(language) {
 
   document.cookie = `nexus_language=${normalized};path=/;max-age=31536000;SameSite=Lax`;
   document.documentElement.lang = normalized;
+  document.documentElement.dir = RTL_LANGUAGES.includes(normalized) ? "rtl" : "ltr";
 }
 
 function updateCurrentUrlLanguage(language) {
@@ -1628,8 +2127,10 @@ function updateCurrentUrlLanguage(language) {
   try {
     const url = new URL(window.location.href);
 
-    if (language === "th") {
-      url.searchParams.set("lang", "th");
+    const normalized = normalizeLanguage(language);
+
+    if (normalized !== "en") {
+      url.searchParams.set("lang", normalized);
     } else {
       url.searchParams.delete("lang");
     }
@@ -1650,8 +2151,10 @@ function localizedInternalUrl(href, language = getLanguage()) {
 
     if (url.origin !== location.origin) return href;
 
-    if (language === "th") {
-      url.searchParams.set("lang", "th");
+    const normalized = normalizeLanguage(language);
+
+    if (normalized !== "en") {
+      url.searchParams.set("lang", normalized);
     } else {
       url.searchParams.delete("lang");
     }
@@ -1680,26 +2183,26 @@ function localizeInternalLinks(root = document) {
 }
 
 function refreshLanguageState(language = getLanguage(), options = {}) {
-  const normalized = language === "th" ? "th" : "en";
+  const normalized = normalizeLanguage(language);
 
   persistLanguage(normalized);
   updateCurrentUrlLanguage(normalized);
 
-  document.querySelectorAll("[data-language-btn]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.languageBtn === normalized);
+  document.querySelectorAll(".language-select").forEach((select) => {
+    select.value = normalized;
   });
 
-  if (options.force || normalized === "th") {
+  if (options.force || normalized !== "en") {
     applyTranslations(document.body || document);
   }
 
-  if (options.force || normalized === "th" || lastLocalizedLinkLanguage === "th") {
+  if (options.force || normalized !== "en" || lastLocalizedLinkLanguage !== "en") {
     localizeInternalLinks(document.body || document);
   }
 
   lastLocalizedLinkLanguage = normalized;
 
-  if (normalized === "th") {
+  if (normalized !== "en") {
     startTranslationObserver();
   } else {
     stopTranslationObserver();
@@ -1707,7 +2210,7 @@ function refreshLanguageState(language = getLanguage(), options = {}) {
 }
 
 function setLanguage(language) {
-  const normalized = language === "th" ? "th" : "en";
+  const normalized = normalizeLanguage(language);
 
   refreshLanguageState(normalized, { force: true });
 
@@ -1813,13 +2316,17 @@ function normalizeText(value) {
 function translateLiteral(value, language = getLanguage()) {
   const original = String(value || "");
   const normalized = normalizeText(original);
+  const activeLanguage = normalizeLanguage(language);
 
-  if (!normalized || language !== "th") return original;
+  if (!normalized || activeLanguage === "en") return original;
 
-  const exact = LITERAL_TRANSLATIONS_TH[normalized];
+  const exact = LITERAL_TRANSLATIONS[activeLanguage]?.[normalized] || "";
   if (exact) return exact;
 
-  const fallback = THAI_GLOSSARY_REPLACEMENTS.reduce((text, [pattern, replacement]) => {
+  const glossary = LANGUAGE_GLOSSARY_REPLACEMENTS[activeLanguage] ||
+    (activeLanguage === "th" ? THAI_GLOSSARY_REPLACEMENTS : []);
+
+  const fallback = glossary.reduce((text, [pattern, replacement]) => {
     return text.replace(pattern, replacement);
   }, original);
 
@@ -1846,23 +2353,13 @@ function languageSwitch() {
   const language = getLanguage();
 
   return `
-    <div class="language-switch" aria-label="${escapeAttribute(t("nav_language"))}">
-      <button
-        type="button"
-        data-language-btn="en"
-        onclick="NexusUI.setLanguage('en')"
-        class="${language === "en" ? "active" : ""}"
-      >
-        EN</button>
-
-      <button
-        type="button"
-        data-language-btn="th"
-        onclick="NexusUI.setLanguage('th')"
-        class="${language === "th" ? "active" : ""}"
-      >
-        TH</button>
-    </div>
+    <label class="language-select-wrap" aria-label="${escapeAttribute(t("nav_language"))}">
+      <select class="language-select" onchange="NexusUI.setLanguage(this.value)">
+        ${LANGUAGE_OPTIONS.map((item) => `
+          <option value="${item.code}" ${language === item.code ? "selected" : ""}>${item.label}</option>
+        `).join("")}
+      </select>
+    </label>
   `;
 }
 
@@ -1936,7 +2433,7 @@ function applyTranslations(root = document) {
         }
 
         const original = stored[attribute] || "";
-        element.setAttribute(attribute, language === "th" ? translateLiteral(original, language) : original);
+        element.setAttribute(attribute, language !== "en" ? translateLiteral(original, language) : original);
       });
     });
 
@@ -1961,7 +2458,7 @@ function applyTranslations(root = document) {
       }
 
       const original = originalTextNodes.get(node) || "";
-      node.nodeValue = language === "th" ? translateLiteral(original, language) : original;
+      node.nodeValue = language !== "en" ? translateLiteral(original, language) : original;
     });
   } finally {
     isApplyingTranslations = false;
@@ -1975,7 +2472,7 @@ function stopTranslationObserver() {
 }
 
 function startTranslationObserver() {
-  if (getLanguage() !== "th") {
+  if (getLanguage() === "en") {
     stopTranslationObserver();
     return;
   }

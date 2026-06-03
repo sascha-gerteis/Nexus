@@ -793,7 +793,7 @@ async function submitCheckoutIntent(event) {
               <div class="tags">
                 <span class="tag">${developer.type || "Developer"}</span>
                 <span class="tag">${developer.verified ? "Verified" : "Pending"}</span>
-                <span class="tag">★ ${developer.rating || "New"}</span>
+                <span class="tag">${developer.rating ? NexusUI.ratingStars(developer.rating) : "New"}</span>
               </div>
 
               <a class="btn btn-primary" href="/pages/developers/profile.html?id=${developer.id}">
@@ -1598,7 +1598,7 @@ placeholderValidationErrors = parseJsonField("placeholder_validation_errors", []
       featured: formData.get("featured") === "on",
 
       pricing_type: String(formData.get("pricing_type") || "custom_quote"),
-      currency: String(formData.get("currency") || "USD"),
+      currency: String(formData.get("currency") || "THB"),
 
       price: Number(formData.get("price") || 0),
       price_usd: Number(formData.get("price_usd") || 0),

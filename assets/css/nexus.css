@@ -5563,13 +5563,15 @@ body[data-page="checkout"] .site-header {
   gap: 0.45rem;
 }
 
-.currency-select-wrap {
+.currency-select-wrap,
+.language-select-wrap {
   position: relative;
   display: inline-flex;
   align-items: center;
 }
 
-.currency-select {
+.currency-select,
+.language-select {
   appearance: none;
   border: 1px solid #dbeafe;
   background: #f8fbff;
@@ -5583,7 +5585,8 @@ body[data-page="checkout"] .site-header {
   box-shadow: 0 8px 20px rgba(37, 99, 255, 0.06);
 }
 
-.currency-select-wrap::after {
+.currency-select-wrap::after,
+.language-select-wrap::after {
   content: "";
   position: absolute;
   right: 0.82rem;
@@ -8803,11 +8806,14 @@ body[data-page="checkout"] .site-header {
   }
 
   .currency-select-wrap,
-  .currency-select {
+  .currency-select,
+  .language-select-wrap,
+  .language-select {
     width: 100%;
   }
 
-  .language-switch {
+  .language-switch,
+  .language-select-wrap {
     justify-content: center;
   }
 

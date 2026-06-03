@@ -210,7 +210,7 @@
       <span class="eyebrow">Step 2</span>
       <h2>Pricing</h2>
       <p>
-        Choose one currency and one price. Nexus handles USD/THB conversion and Stripe sync automatically.
+        Choose one currency and one price. Nexus handles currency conversion and Stripe sync automatically.
       </p>
     </div>
     <span class="accordion-icon">+</span>
@@ -245,8 +245,11 @@
         <div>
           <label>Main currency</label>
           <select class="select" name="currency" id="simpleCurrency" onchange="NexusAdminUI.syncSimplePricingToHiddenFields()">
-            <option value="USD">USD</option>
             <option value="THB">THB</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="JPY">JPY</option>
           </select>
           <small>
             Buyers can still switch currency in checkout. Nexus converts automatically.
@@ -1252,7 +1255,7 @@
       if (model === "setup_fee") {
         if (selectedCurrency === "THB") {
           if (setupThb) setupThb.value = price || "";
-        } else {
+        } else if (selectedCurrency === "USD") {
           if (setupUsd) setupUsd.value = price || "";
         }
 
@@ -1270,7 +1273,7 @@
       if (selectedCurrency === "THB") {
         if (priceThb) priceThb.value = price || "";
         if (setupThb) setupThb.value = setupFee || "";
-      } else {
+      } else if (selectedCurrency === "USD") {
         if (priceUsd) priceUsd.value = price || "";
         if (setupUsd) setupUsd.value = setupFee || "";
       }
@@ -1424,7 +1427,7 @@
         featured: formData.get("featured") === "on",
 
         pricing_type: String(formData.get("pricing_type") || "custom_quote"),
-        currency: String(formData.get("currency") || "USD"),
+        currency: String(formData.get("currency") || "THB"),
 
         price: Number(formData.get("price") || 0),
         price_usd: Number(formData.get("price_usd") || 0),

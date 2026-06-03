@@ -12,29 +12,46 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "
 const SITE_URL = Deno.env.get("SITE_URL") || "https://nexus-ai.software";
 
 const FX_API_BASE_URL = "https://api.frankfurter.dev";
+type SupportedCheckoutCurrency = "usd" | "thb" | "eur" | "gbp" | "jpy";
+const SUPPORTED_CHECKOUT_CURRENCIES: SupportedCheckoutCurrency[] = ["thb", "usd", "eur", "gbp", "jpy"];
+const ZERO_DECIMAL_STRIPE_CURRENCIES = new Set<SupportedCheckoutCurrency>(["jpy"]);
+
+function fallbackFxRates(): Record<SupportedCheckoutCurrency, number> {
+  return {
+    usd: 1,
+    thb: Number(Deno.env.get("USD_TO_THB_FALLBACK_RATE") || 36),
+    eur: Number(Deno.env.get("USD_TO_EUR_FALLBACK_RATE") || 0.92),
+    gbp: Number(Deno.env.get("USD_TO_GBP_FALLBACK_RATE") || 0.78),
+    jpy: Number(Deno.env.get("USD_TO_JPY_FALLBACK_RATE") || 157),
+  };
+}
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function normalizeCurrency(value: unknown): "usd" | "thb" {
-  const currency = String(value || "USD").trim().toLowerCase();
-  return currency === "thb" ? "thb" : "usd";
+function normalizeCurrency(value: unknown): SupportedCheckoutCurrency {
+  const currency = String(value || "THB").trim().toLowerCase() as SupportedCheckoutCurrency;
+  return SUPPORTED_CHECKOUT_CURRENCIES.includes(currency) ? currency : "thb";
 }
 
 function normalizePricingType(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
-function roundMoney(amount: number, currency: "usd" | "thb") {
-  if (currency === "thb") {
+function roundMoney(amount: number, currency: SupportedCheckoutCurrency) {
+  if (currency === "thb" || currency === "jpy") {
     return Math.round(amount);
   }
 
   return Math.round(amount * 100) / 100;
 }
 
-function toStripeUnitAmount(amount: number) {
+function toStripeUnitAmount(amount: number, currency: SupportedCheckoutCurrency) {
+  if (ZERO_DECIMAL_STRIPE_CURRENCIES.has(currency)) {
+    return Math.round(Number(amount || 0));
+  }
+
   return Math.round(Number(amount || 0) * 100);
 }
 
@@ -48,16 +65,21 @@ function getStripeMode(product: any): "payment" | "subscription" | "unsupported"
   return "unsupported";
 }
 
-function getPriceIdColumn(currency: "usd" | "thb") {
-  return currency === "usd" ? "stripe_price_id_usd" : "stripe_price_id_thb";
+function getPriceIdColumn(currency: SupportedCheckoutCurrency) {
+  if (currency === "usd") return "stripe_price_id_usd";
+  if (currency === "thb") return "stripe_price_id_thb";
+  return "";
 }
 
-function getStripeAmountColumn(currency: "usd" | "thb") {
-  return currency === "usd" ? "stripe_price_amount_usd" : "stripe_price_amount_thb";
+function getStripeAmountColumn(currency: SupportedCheckoutCurrency) {
+  if (currency === "usd") return "stripe_price_amount_usd";
+  if (currency === "thb") return "stripe_price_amount_thb";
+  return "";
 }
 
-function getPriceIdForCurrency(product: any, currency: "usd" | "thb") {
-  return currency === "usd" ? product.stripe_price_id_usd : product.stripe_price_id_thb;
+function getPriceIdForCurrency(product: any, currency: SupportedCheckoutCurrency) {
+  const column = getPriceIdColumn(currency);
+  return column ? product[column] : "";
 }
 
 function getConfiguredPriceValues(product: any) {
@@ -65,14 +87,17 @@ function getConfiguredPriceValues(product: any) {
   const isSetupFee = pricingType === "setup_fee";
 
   return {
+    values: SUPPORTED_CHECKOUT_CURRENCIES.reduce((acc, currency) => {
+      const field = isSetupFee ? `setup_fee_${currency}` : `price_${currency}`;
+      acc[currency] = Number(product[field] || 0);
+      return acc;
+    }, {} as Record<SupportedCheckoutCurrency, number>),
     usdValue: isSetupFee
       ? Number(product.setup_fee_usd || 0)
       : Number(product.price_usd || 0),
-
     thbValue: isSetupFee
       ? Number(product.setup_fee_thb || 0)
       : Number(product.price_thb || 0),
-
     genericValue: isSetupFee
       ? Number(product.setup_fee || 0)
       : Number(product.price || 0),
@@ -81,15 +106,15 @@ function getConfiguredPriceValues(product: any) {
   };
 }
 
-function getMissingPriceMessage(product: any, currency: "usd" | "thb") {
+function getMissingPriceMessage(product: any, currency: SupportedCheckoutCurrency) {
   const pricingType = normalizePricingType(product.pricing_type);
   const selected = currency.toUpperCase();
 
   if (pricingType === "setup_fee") {
-    return `No ${selected} setup fee is configured for this product. Add setup_fee_${currency}, setup_fee in matching base currency, or the opposite currency so Nexus can convert it.`;
+    return `No ${selected} setup fee is configured for this product. Add setup_fee_${currency}, setup_fee in a matching base currency, or a USD/THB price so Nexus can convert it.`;
   }
 
-  return `No ${selected} price is configured for this product. Add price_${currency}, price in matching base currency, or the opposite currency so Nexus can convert it.`;
+  return `No ${selected} price is configured for this product. Add price_${currency}, price in a matching base currency, or a USD/THB price so Nexus can convert it.`;
 }
 
 function formatPriceDisplay(amount: number, currency: "usd" | "thb", mode: "payment" | "subscription") {
@@ -103,6 +128,18 @@ function formatPriceDisplay(amount: number, currency: "usd" | "thb", mode: "paym
     minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     maximumFractionDigits: 2,
   })}${suffix}`;
+}
+
+function formatCheckoutPriceDisplay(amount: number, currency: SupportedCheckoutCurrency, mode: "payment" | "subscription") {
+  const suffix = mode === "subscription" ? "/mo" : "";
+  const formatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: currency === "thb" || currency === "jpy" ? 0 : undefined,
+    maximumFractionDigits: currency === "thb" || currency === "jpy" ? 0 : 2,
+  });
+
+  return `${formatter.format(Number(amount || 0))}${suffix}`;
 }
 
 async function getLiveUsdToThbRate() {
@@ -277,6 +314,140 @@ async function resolveAmountForCurrency(product: any, currency: "usd" | "thb") {
   };
 }
 
+async function getLiveFxRates() {
+  const fallback = fallbackFxRates();
+
+  try {
+    const response = await fetch(`${FX_API_BASE_URL}/v2/latest?from=USD&to=THB,EUR,GBP,JPY`, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+      },
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data?.message || `FX API failed with status ${response.status}`);
+    }
+
+    const liveRates = {
+      usd: 1,
+      thb: Number(data?.rates?.THB || 0),
+      eur: Number(data?.rates?.EUR || 0),
+      gbp: Number(data?.rates?.GBP || 0),
+      jpy: Number(data?.rates?.JPY || 0),
+    };
+
+    const hasValidRates = SUPPORTED_CHECKOUT_CURRENCIES.every((currency) => {
+      return liveRates[currency] && liveRates[currency] > 0;
+    });
+
+    if (!hasValidRates) {
+      throw new Error("FX API returned invalid rates.");
+    }
+
+    return {
+      rates: liveRates,
+      source: "frankfurter_live",
+      date: data.date || null,
+    };
+  } catch {
+    return {
+      rates: fallback,
+      source: "fallback_secret",
+      date: null,
+    };
+  }
+}
+
+function convertCurrencyAmount(
+  amount: number,
+  fromCurrency: SupportedCheckoutCurrency,
+  toCurrency: SupportedCheckoutCurrency,
+  rates: Record<SupportedCheckoutCurrency, number>,
+) {
+  if (fromCurrency === toCurrency) return Number(amount || 0);
+
+  const fromRate = rates[fromCurrency] || 1;
+  const toRate = rates[toCurrency] || 1;
+
+  return (Number(amount || 0) / fromRate) * toRate;
+}
+
+function priceUpdateFieldForCurrency(isSetupFee: boolean, currency: SupportedCheckoutCurrency) {
+  if (currency !== "usd" && currency !== "thb") return null;
+  return isSetupFee ? `setup_fee_${currency}` : `price_${currency}`;
+}
+
+async function resolveCheckoutAmountForCurrency(product: any, currency: SupportedCheckoutCurrency) {
+  const productBaseCurrency = normalizeCurrency(product.currency || "USD");
+  const { values, genericValue, isSetupFee } = getConfiguredPriceValues(product);
+  const exactValue = Number(values[currency] || 0);
+
+  if (exactValue > 0) {
+    return {
+      amount: roundMoney(exactValue, currency),
+      source: `exact_${currency}`,
+      derived: false,
+      fxRate: null as number | null,
+      fxSource: null as string | null,
+      fxDate: null as string | null,
+      updateField: null as string | null,
+      isSetupFee,
+    };
+  }
+
+  const fx = await getLiveFxRates();
+
+  const sourceCurrency = SUPPORTED_CHECKOUT_CURRENCIES.find((candidate) => {
+    return Number(values[candidate] || 0) > 0;
+  });
+
+  if (sourceCurrency) {
+    const sourceAmount = Number(values[sourceCurrency] || 0);
+    const convertedAmount = convertCurrencyAmount(sourceAmount, sourceCurrency, currency, fx.rates);
+
+    return {
+      amount: roundMoney(convertedAmount, currency),
+      source: `converted_from_${sourceCurrency}`,
+      derived: true,
+      fxRate: fx.rates[currency],
+      fxSource: fx.source,
+      fxDate: fx.date,
+      updateField: priceUpdateFieldForCurrency(isSetupFee, currency),
+      isSetupFee,
+    };
+  }
+
+  if (genericValue > 0) {
+    const convertedAmount = convertCurrencyAmount(genericValue, productBaseCurrency, currency, fx.rates);
+    const isGenericExact = productBaseCurrency === currency;
+
+    return {
+      amount: roundMoney(convertedAmount, currency),
+      source: isGenericExact ? `generic_${currency}` : `converted_from_generic_${productBaseCurrency}`,
+      derived: !isGenericExact,
+      fxRate: isGenericExact ? null : fx.rates[currency],
+      fxSource: isGenericExact ? null : fx.source,
+      fxDate: isGenericExact ? null : fx.date,
+      updateField: !isGenericExact ? priceUpdateFieldForCurrency(isSetupFee, currency) : null,
+      isSetupFee,
+    };
+  }
+
+  return {
+    amount: 0,
+    source: "missing",
+    derived: false,
+    fxRate: fx.rates[currency],
+    fxSource: fx.source,
+    fxDate: fx.date,
+    updateField: null,
+    isSetupFee,
+  };
+}
+
 async function requireBuyer(req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
 
@@ -302,21 +473,21 @@ async function requireBuyer(req: Request) {
   return { user: userData.user, error: null };
 }
 
-async function ensureStripePrice(adminClient: any, product: any, currency: "usd" | "thb") {
+async function ensureStripePrice(adminClient: any, product: any, currency: SupportedCheckoutCurrency) {
   const mode = getStripeMode(product);
 
   if (mode === "unsupported") {
     throw new Error("This product cannot be purchased through Stripe checkout.");
   }
 
-  const resolvedPrice = await resolveAmountForCurrency(product, currency);
+  const resolvedPrice = await resolveCheckoutAmountForCurrency(product, currency);
   const amount = resolvedPrice.amount;
 
   if (!amount || amount <= 0) {
     throw new Error(getMissingPriceMessage(product, currency));
   }
 
-  const expectedUnitAmount = toStripeUnitAmount(amount);
+  const expectedUnitAmount = toStripeUnitAmount(amount, currency);
 
   let stripeProductId = product.stripe_product_id;
 
@@ -401,8 +572,11 @@ async function ensureStripePrice(adminClient: any, product: any, currency: "usd"
     const newPrice = await stripe.prices.create(pricePayload);
     priceId = newPrice.id;
 
-    updates[getPriceIdColumn(currency)] = newPrice.id;
-    updates[getStripeAmountColumn(currency)] = amount;
+    const priceIdColumn = getPriceIdColumn(currency);
+    const amountColumn = getStripeAmountColumn(currency);
+
+    if (priceIdColumn) updates[priceIdColumn] = newPrice.id;
+    if (amountColumn) updates[amountColumn] = amount;
   }
 
   await adminClient
@@ -445,7 +619,7 @@ Deno.serve(async (req) => {
     const automationId = body.automation_id;
     const installType = String(body.install_type || "self_serve");
     const selectedCustomization = String(body.selected_customization || "");
-    const currency = normalizeCurrency(body.currency || "USD");
+    const currency = normalizeCurrency(body.currency || "THB");
 
     const buyerName = String(body.buyer_name || user.user_metadata?.full_name || "");
     const buyerEmail = String(body.buyer_email || user.email || "");
@@ -510,7 +684,7 @@ Deno.serve(async (req) => {
       { onConflict: "user_id" },
     );
 
-    const priceDisplay = formatPriceDisplay(amount, currency, mode);
+    const priceDisplay = formatCheckoutPriceDisplay(amount, currency, mode);
 
     const { data: order, error: orderError } = await adminClient
       .from("orders")
