@@ -7,7 +7,9 @@ const NexusApp = (() => {
     NexusUI.wireModal();
 
     if (typeof NexusUI.mountGlobalNav === "function") {
-  await NexusUI.mountGlobalNav();
+  NexusUI.mountGlobalNav().catch((error) => {
+    console.warn("Could not mount Nexus navigation:", error);
+  });
 }
 
     if (typeof NexusUI.mountAdminSidebar === "function") {
@@ -26,7 +28,9 @@ const NexusApp = (() => {
 
     document.addEventListener("languagechange", async () => {
   if (typeof NexusUI.mountGlobalNav === "function") {
-    await NexusUI.mountGlobalNav();
+    NexusUI.mountGlobalNav({ force: true }).catch((error) => {
+      console.warn("Could not refresh Nexus navigation:", error);
+    });
   }
 
   if (typeof NexusUI.mountAdminSidebar === "function") {
@@ -90,6 +94,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       liveAutomations.slice(0, 3).map(NexusUI.productCard).join("") ||
       `<div class="card"><h3>No live products yet</h3><p>Use the hidden admin URL to publish your first automation.</p></div>`;
 
+    NexusUI.applyTranslations?.(grid);
     renderHomeProductVisual(liveAutomations);
     forceBuyLinksToCheckoutPage();
   }
@@ -206,6 +211,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       items.map(NexusUI.productCard).join("") ||
       `<div class="card"><h3>No results</h3><p>Try changing the filters.</p></div>`;
 
+    NexusUI.applyTranslations?.(grid);
     forceBuyLinksToCheckoutPage();
   }
 
@@ -329,6 +335,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     `;
 
     NexusUI.openModal(side, main);
+    NexusUI.applyTranslations?.(document.getElementById("productModal"));
   }
 
   async function openSetupChoice(slug) {
@@ -382,6 +389,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const livePreview = document.getElementById("livePreview");
     if (livePreview) {
       livePreview.innerHTML = NexusUI.renderPreview(activeProduct, customization);
+      NexusUI.applyTranslations?.(livePreview);
     }
 
     const chosenCustomization = document.getElementById("chosenCustomization");
@@ -523,6 +531,8 @@ function renderSetupChoicePage(root, product) {
       </div>
     </div>
   `;
+
+  NexusUI.applyTranslations?.(root);
 
   const form = document.getElementById("setupChoicePageForm");
 
@@ -804,6 +814,8 @@ async function submitCheckoutIntent(event) {
         `;
       })
       .join("");
+
+    NexusUI.applyTranslations?.(grid);
   }
 
   async function renderDeveloperProfile() {
@@ -962,6 +974,8 @@ async function submitCheckoutIntent(event) {
       ${developerReviewModal}
     `;
 
+    NexusUI.applyTranslations?.(root);
+
     const developerReviewForm = document.getElementById("developerReviewForm");
 
     if (developerReviewForm) {
@@ -1099,6 +1113,8 @@ async function submitCheckoutIntent(event) {
     if (document.body.dataset.adminPage === "messages") await renderMessages();
     if (document.body.dataset.adminPage === "checkout-intents") await renderCheckoutIntents();
     if (document.body.dataset.adminPage === "notifications") await renderAdminNotifications();
+
+    NexusUI.applyTranslations?.(document.body);
   }
 
   async function renderAdminDashboard() {

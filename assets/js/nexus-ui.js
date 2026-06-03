@@ -25,6 +25,9 @@
     GBP: 0.78,
     JPY: 157
   };
+  const autoTranslatedTextNodes = new WeakMap();
+  const autoTranslatedElements = new WeakMap();
+  const autoTranslatedAttributes = new WeakMap();
 const FX_CACHE_KEY = "nexus_fx_rates_cache";
 const FX_CACHE_TTL_MS = 15 * 60 * 1000;
 
@@ -128,6 +131,21 @@ function getCachedFxRates() {
 }
 
 async function refreshUsdToThbRate() {
+  try {
+    const cached = localStorage.getItem(FX_CACHE_KEY);
+    const parsed = cached ? JSON.parse(cached) : null;
+
+    if (
+      parsed?.rates?.THB &&
+      parsed.created_at &&
+      Date.now() - parsed.created_at < FX_CACHE_TTL_MS
+    ) {
+      return parsed.rates.THB;
+    }
+  } catch {
+    // Fall through to the live refresh when the cache cannot be read.
+  }
+
   try {
     const response = await fetch("https://api.frankfurter.dev/v2/latest?from=USD&to=THB,EUR,GBP,JPY");
     const data = await response.json();
@@ -669,7 +687,7 @@ function productColorTheme(color) {
     const ctaHref = isCustomRequest
       ? `/pages/custom-request/index.html?slug=${slug}`
       : `/pages/checkout/index.html?slug=${slug}&step=setup`;
-    const ctaLabel = isCustomRequest ? "Request custom automation" : "Buy";
+    const ctaLabel = isCustomRequest ? t("common_request_custom_automation") : t("common_buy");
 
     return `
       <article class="product-card color-${colorClass(product.color)}">
@@ -679,13 +697,13 @@ function productColorTheme(color) {
           </div>
 
           <span class="${pillClass(product.color)}">
-            ${escapeHtml(localizeRecord(product, "badge", localizeRecord(product, "category", "Automation")))}
+            ${escapeHtml(l(localizeRecord(product, "badge", localizeRecord(product, "category", "Automation"))))}
           </span>
         </div>
 
-        <h3>${escapeHtml(localizeRecord(product, "title"))}</h3>
+        <h3>${escapeHtml(l(localizeRecord(product, "title")))}</h3>
 
-        <p>${escapeHtml(localizeRecord(product, "short_description"))}</p>
+        <p>${escapeHtml(l(localizeRecord(product, "short_description")))}</p>
 
         <div
           class="developer-mini"
@@ -698,25 +716,25 @@ function productColorTheme(color) {
 
           <div>
             <strong>${escapeHtml(developer.display_name || "Nexus Internal")}</strong>
-            <span>${escapeHtml(localizeRecord(developer, "type", "Verified Operator"))} &middot; &#9733; ${escapeHtml(developer.rating || "New")}</span>
+            <span>${escapeHtml(l(localizeRecord(developer, "type", "Verified Operator")))} &middot; &#9733; ${escapeHtml(l(developer.rating || "New"))}</span>
           </div>
         </div>
 
         <div class="tags">
-          <span class="tag">${escapeHtml(localizeRecord(product, "category", "Automation"))}</span>
-          <span class="tag">${escapeHtml(localizeRecord(product, "delivery_time", "Custom"))}</span>
-          <span class="tag">&#9733; ${escapeHtml(product.rating || "New")} (${escapeHtml(product.review_count || 0)})</span>
+          <span class="tag">${escapeHtml(l(localizeRecord(product, "category", "Automation")))}</span>
+          <span class="tag">${escapeHtml(l(localizeRecord(product, "delivery_time", "Custom")))}</span>
+          <span class="tag">&#9733; ${escapeHtml(l(product.rating || "New"))} (${escapeHtml(product.review_count || 0)})</span>
         </div>
 
         <div class="meta-grid">
           <div class="meta">
-            <span>Price</span>
+            <span>${escapeHtml(l("Price"))}</span>
             <strong>${money(product)}</strong>
           </div>
 
           <div class="meta">
-            <span>Setup</span>
-            <strong>${escapeHtml(localizeRecord(product, "setup_type", "Self-serve or guided"))}</strong>
+            <span>${escapeHtml(l("Setup"))}</span>
+            <strong>${escapeHtml(l(localizeRecord(product, "setup_type", "Self-serve or guided")))}</strong>
           </div>
         </div>
 
@@ -733,7 +751,7 @@ function productColorTheme(color) {
             href="${ctaHref}"
             onclick="event.stopPropagation();"
           >
-            ${isCustomRequest ? t("common_request_custom_automation") : t("common_buy")}
+            ${ctaLabel}
           </a>
         </div>
       </article>
@@ -747,10 +765,10 @@ function productColorTheme(color) {
 
     return `
       <div class="info-block">
-        <h4>${escapeHtml(title)}</h4>
+        <h4>${escapeHtml(l(title))}</h4>
 
         <ul class="clean">
-          ${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          ${list.map((item) => `<li>${escapeHtml(l(item))}</li>`).join("")}
         </ul>
       </div>
     `;
@@ -1087,6 +1105,7 @@ function productColorTheme(color) {
 
     modalSide.innerHTML = side;
     modalMain.innerHTML = main;
+    applyTranslations(modal);
 
     modal.classList.add("open");
   }
@@ -1979,6 +1998,323 @@ Object.assign(LITERAL_TRANSLATIONS.th, {
   "You do not need technical details. The most useful information is the business goal, the current manual process, and what output you want the finished process to produce.": "ไม่จำเป็นต้องมีรายละเอียดเทคนิค ข้อมูลที่มีประโยชน์ที่สุดคือเป้าหมายธุรกิจ โปรเซสแมนนวลปัจจุบัน และเอาต์พุตที่ต้องการจากโปรเซสที่ทำเสร็จแล้ว"
 });
 
+const COMMON_LITERAL_TRANSLATIONS = {
+  th: {
+    "Fix repeat work without managing the build.": "แก้งานซ้ำโดยไม่ต้องจัดการงานสร้างเอง",
+    "Businesses should not need to learn workflow builders, debug API errors, or manage hosting to improve a process. Nexus helps teams compare products by outcome, setup effort, and trust.": "ธุรกิจไม่ควรต้องเรียนรู้เครื่องมือสร้างเวิร์กโฟลว์ ดีบัก API หรือจัดการโฮสติ้งเพื่อปรับปรุงโปรเซส Nexus ช่วยทีมเปรียบเทียบสินค้าจากผลลัพธ์ ความง่ายในการเซ็ตอัพ และความน่าเชื่อถือ",
+    "Find products by business issue": "ค้นหาสินค้าตามปัญหาธุรกิจ",
+    "Keep setup information in one place": "เก็บข้อมูลเซ็ตอัพไว้ที่เดียว",
+    "Track orders and conversations from the dashboard": "ติดตามออร์เดอร์และบทสนทนาจากแดชบอร์ด",
+    "Browse products": "ดูสินค้า",
+    "Turn useful builds into repeatable products.": "เปลี่ยนงานที่มีประโยชน์ให้เป็นสินค้าที่ขายซ้ำได้",
+    "Builders can package working solutions with clear outcomes, setup requirements, pricing, and support expectations instead of selling every project from scratch.": "นักสร้างสามารถแพ็กโซลูชันที่ใช้งานได้พร้อมผลลัพธ์ ข้อกำหนดเซ็ตอัพ ราคา และระดับซัพพอร์ตที่ชัดเจน แทนการขายทุกโปรเจกต์ใหม่ตั้งแต่ศูนย์",
+    "Create a public builder profile": "สร้างโปรไฟล์นักสร้างสาธารณะ",
+    "Submit products for review": "ส่งสินค้าให้รีวิว",
+    "Explain outputs and setup needs": "อธิบายเอาต์พุตและสิ่งที่ต้องใช้ในการเซ็ตอัพ",
+    "Message buyers in-platform": "ส่งข้อความหาผู้ซื้อในแพลตฟอร์ม",
+    "Build trust through product quality": "สร้างความน่าเชื่อถือด้วยคุณภาพสินค้า",
+    "Nexus becomes a trusted place to find what works.": "Nexus เป็นที่ที่น่าเชื่อถือสำหรับค้นหาสิ่งที่ใช้งานได้จริง",
+    "Business software is crowded and hard to compare. Nexus creates structure around outcomes: product pages, previews, reviews, builder profiles, setup paths, and real buyer feedback.": "ซอฟต์แวร์ธุรกิจมีเยอะและเทียบยาก Nexus จัดโครงสร้างรอบผลลัพธ์: หน้าสินค้า พรีวิว รีวิว โปรไฟล์นักสร้าง เส้นทางเซ็ตอัพ และฟีดแบ็กจากผู้ซื้อจริง",
+    "Over time, better listings and real feedback help teams choose with less risk. The marketplace becomes more useful as it learns which products fit which business problems.": "เมื่อเวลาผ่านไป ลิสติ้งที่ดีขึ้นและฟีดแบ็กจริงช่วยให้ทีมเลือกได้เสี่ยงน้อยลง มาร์เก็ตเพลสจะมีประโยชน์มากขึ้นเมื่อรู้ว่าสินค้าใดเหมาะกับปัญหาธุรกิจแบบไหน",
+    "Trust Layer": "เลเยอร์ความน่าเชื่อถือ",
+    "Products": "สินค้า",
+    "Buyers": "ผู้ซื้อ",
+    "Reviews": "รีวิว",
+    "Recommendations": "คำแนะนำ",
+    "Automation becomes packaged and understandable.": "ออโตเมชันถูกแพ็กให้เข้าใจง่าย",
+    "Businesses compare real outcomes.": "ธุรกิจเปรียบเทียบผลลัพธ์จริง",
+    "Results create marketplace confidence.": "ผลลัพธ์สร้างความมั่นใจให้มาร์เก็ตเพลส",
+    "Nexus learns what works for each use case.": "Nexus เรียนรู้ว่าสิ่งใดใช้ได้กับแต่ละยูสเคส",
+    "Built in phases so the foundation works first.": "สร้างเป็นเฟสเพื่อให้ฐานทำงานได้ก่อน",
+    "Marketplace foundation": "ฐานมาร์เก็ตเพลส",
+    "Payments and orders": "การชำระเงินและออร์เดอร์",
+    "Accounts and dashboards": "บัญชีและแดชบอร์ด",
+    "Hosted reliability layer": "เลเยอร์ความเสถียรแบบโฮสต์",
+    "Start with a product or ask for a custom solution.": "เริ่มจากสินค้า หรือขอโซลูชันคัสตอม",
+    "Contact Nexus": "ติดต่อ Nexus",
+    "The trusted marketplace layer for business automation.": "เลเยอร์มาร์เก็ตเพลสที่น่าเชื่อถือสำหรับออโตเมชันธุรกิจ",
+    "Developer Waitlist": "เวตลิสต์นักพัฒนา",
+    "Privacy": "ความเป็นส่วนตัว",
+    "Price": "ราคา",
+    "Setup": "เซ็ตอัพ",
+    "Buy": "ซื้อ",
+    "Buy / choose setup": "ซื้อ / เลือกเซ็ตอัพ",
+    "View profile": "ดูโปรไฟล์",
+    "Ask Nexus": "ถาม Nexus",
+    "Message developer": "ส่งข้อความถึงนักพัฒนา",
+    "Problem it solves": "ปัญหาที่แก้",
+    "Business outcome": "ผลลัพธ์ธุรกิจ",
+    "Who this is for": "เหมาะกับใคร",
+    "Outputs": "เอาต์พุต",
+    "Required inputs": "ข้อมูลที่ต้องใช้",
+    "Ready to use this automation?": "พร้อมใช้ออโตเมชันนี้หรือยัง?",
+    "No live products yet": "ยังไม่มีสินค้าที่ไลฟ์",
+    "No results": "ไม่พบผลลัพธ์",
+    "Try changing the filters.": "ลองเปลี่ยนตัวกรอง",
+    "Choose setup path": "เลือกเส้นทางเซ็ตอัพ",
+    "Setup method": "วิธีเซ็ตอัพ",
+    "Continue to secure payment": "ไปต่อเพื่อชำระเงินอย่างปลอดภัย",
+    "Opening secure checkout...": "กำลังเปิดเช็กเอาต์ที่ปลอดภัย...",
+    "Self-Serve Setup": "เซ็ตอัพเอง",
+    "Nexus Guided Install": "Nexus ไกด์เซ็ตอัพ",
+    "Fastest": "เร็วที่สุด",
+    "Managed setup": "เซ็ตอัพแบบดูแลให้",
+    "Best for complex cases": "เหมาะกับเคสซับซ้อน",
+    "Developer profiles": "โปรไฟล์นักพัฒนา",
+    "View profile": "ดูโปรไฟล์",
+    "Developer not found": "ไม่พบนักพัฒนา",
+    "Developer rating": "คะแนนนักพัฒนา",
+    "Live products": "สินค้าที่ไลฟ์",
+    "No live products yet.": "ยังไม่มีสินค้าที่ไลฟ์",
+    "Review developer": "รีวิวนักพัฒนา",
+    "Submit review": "ส่งรีวิว",
+    "Cancel": "ยกเลิก",
+    "Rating": "คะแนน",
+    "Your role": "บทบาทของคุณ",
+    "Review": "รีวิว",
+    "No reviews yet": "ยังไม่มีรีวิว",
+    "Loading products...": "กำลังโหลดสินค้า...",
+    "Loading developers...": "กำลังโหลดนักพัฒนา..."
+  },
+  zh: {
+    "Nexus helps teams find practical automation products for reporting, support, operations, sales, and internal workflows. Browse by the outcome you need, preview what the product delivers, and choose the setup path that fits your team.": "Nexus 帮助团队找到适用于报表、支持、运营、销售和内部流程的实用自动化产品。按需要的结果浏览，预览交付内容，并选择适合团队的设置方式。",
+    "Search by business issue, outcome, category, and setup path.": "按业务问题、结果、类别和设置方式搜索。",
+    "See what the product does, what it needs, and what it produces.": "了解产品做什么、需要什么、会产出什么。",
+    "Choose self-serve or Nexus guided setup based on complexity.": "根据复杂度选择自助设置或 Nexus 指导设置。",
+    "Move from manual work to a repeatable process your team can use.": "把手工工作变成团队可重复使用的流程。",
+    "Most teams do not have an ideas problem. They have an execution problem. Reports still take hours, customer questions still repeat, sales follow-up still slips, and internal handoffs still depend on people copying information between tools.": "多数团队缺的不是想法，而是执行。报表仍要花数小时，客户问题重复出现，销售跟进容易遗漏，内部交接还依赖人工在工具之间复制信息。",
+    "Nexus turns those repeatable problems into clear marketplace products. Each listing explains the business issue it solves, the output it creates, what setup requires, and whether your team can self-serve or should use guided setup.": "Nexus 把这些重复问题变成清晰的市场产品。每个列表都会说明解决的业务问题、产生的输出、设置要求，以及团队适合自助还是指导设置。",
+    "Slow and unclear": "缓慢且不清晰",
+    "Compare disconnected tools": "比较彼此割裂的工具",
+    "Buy software without seeing the outcome": "在看不到结果前购买软件",
+    "Hire builders without a clear product": "在产品不清晰时雇人开发",
+    "Handle setup and errors alone": "独自处理设置和错误",
+    "Keep manual workarounds running": "继续依赖手工变通方案",
+    "Outcome-first and clear": "以结果为先，清晰透明",
+    "Browse by business issue": "按业务问题浏览",
+    "Understand the output before setup": "设置前先了解输出",
+    "Choose the right setup path upfront": "提前选择正确的设置方式",
+    "See who built or operates the product": "查看谁构建或运营产品",
+    "Move toward a repeatable process": "走向可重复流程",
+    "From business issue to working process.": "从业务问题到可运行流程。",
+    "Ready-made products for common business issues.": "面向常见业务问题的现成产品。",
+    "Every listing explains the outcome first.": "每个列表都先说明结果。",
+    "A hub for businesses and automation builders.": "面向企业和自动化构建者的中心。",
+    "Price": "价格",
+    "Setup": "设置",
+    "Buy / choose setup": "购买 / 选择设置",
+    "View profile": "查看资料",
+    "Ask Nexus": "询问 Nexus",
+    "Message developer": "联系开发者",
+    "Problem it solves": "解决的问题",
+    "Business outcome": "业务结果",
+    "Who this is for": "适用对象",
+    "Outputs": "输出",
+    "Required inputs": "所需输入",
+    "Ready to use this automation?": "准备使用这个自动化了吗？",
+    "Choose setup path": "选择设置方式",
+    "Setup method": "设置方式",
+    "Continue to secure payment": "继续安全付款",
+    "Self-Serve Setup": "自助设置",
+    "Nexus Guided Install": "Nexus 指导安装",
+    "Developer profiles": "开发者资料",
+    "No reviews yet": "暂无评价",
+    "Loading products...": "正在加载产品...",
+    "Loading developers...": "正在加载开发者..."
+  },
+  es: {
+    "Nexus helps teams find practical automation products for reporting, support, operations, sales, and internal workflows. Browse by the outcome you need, preview what the product delivers, and choose the setup path that fits your team.": "Nexus ayuda a los equipos a encontrar automatizaciones prácticas para reportes, soporte, operaciones, ventas y flujos internos. Explora por el resultado que necesitas, previsualiza lo que entrega el producto y elige la configuración que encaja con tu equipo.",
+    "Search by business issue, outcome, category, and setup path.": "Busca por problema de negocio, resultado, categoría y tipo de configuración.",
+    "See what the product does, what it needs, and what it produces.": "Ve qué hace el producto, qué necesita y qué produce.",
+    "Choose self-serve or Nexus guided setup based on complexity.": "Elige configuración self-serve o guiada por Nexus según la complejidad.",
+    "Move from manual work to a repeatable process your team can use.": "Convierte trabajo manual en un proceso repetible para tu equipo.",
+    "Most teams do not have an ideas problem. They have an execution problem. Reports still take hours, customer questions still repeat, sales follow-up still slips, and internal handoffs still depend on people copying information between tools.": "La mayoría de los equipos no tienen un problema de ideas, tienen un problema de ejecución. Los reportes siguen tomando horas, las preguntas de clientes se repiten, el seguimiento comercial se pierde y los traspasos internos dependen de copiar información entre herramientas.",
+    "Nexus turns those repeatable problems into clear marketplace products. Each listing explains the business issue it solves, the output it creates, what setup requires, and whether your team can self-serve or should use guided setup.": "Nexus convierte esos problemas repetibles en productos claros de marketplace. Cada ficha explica el problema que resuelve, el resultado que crea, lo que requiere la configuración y si tu equipo puede hacerlo solo o necesita guía.",
+    "Slow and unclear": "Lento y poco claro",
+    "Compare disconnected tools": "Comparar herramientas desconectadas",
+    "Buy software without seeing the outcome": "Comprar software sin ver el resultado",
+    "Hire builders without a clear product": "Contratar builders sin un producto claro",
+    "Handle setup and errors alone": "Gestionar configuración y errores solo",
+    "Keep manual workarounds running": "Mantener soluciones manuales",
+    "Outcome-first and clear": "Claro y orientado al resultado",
+    "Browse by business issue": "Explorar por problema de negocio",
+    "Understand the output before setup": "Entender el resultado antes de configurar",
+    "Choose the right setup path upfront": "Elegir la configuración correcta desde el inicio",
+    "See who built or operates the product": "Ver quién creó u opera el producto",
+    "Move toward a repeatable process": "Avanzar hacia un proceso repetible",
+    "From business issue to working process.": "Del problema de negocio al proceso funcionando.",
+    "Ready-made products for common business issues.": "Productos listos para problemas comunes de negocio.",
+    "Every listing explains the outcome first.": "Cada ficha explica primero el resultado.",
+    "A hub for businesses and automation builders.": "Un hub para empresas y builders de automatización.",
+    "Price": "Precio",
+    "Setup": "Configuración",
+    "Buy / choose setup": "Comprar / elegir configuración",
+    "View profile": "Ver perfil",
+    "Ask Nexus": "Preguntar a Nexus",
+    "Message developer": "Enviar mensaje al desarrollador",
+    "Problem it solves": "Problema que resuelve",
+    "Business outcome": "Resultado de negocio",
+    "Who this is for": "Para quién es",
+    "Outputs": "Resultados",
+    "Required inputs": "Datos necesarios",
+    "Ready to use this automation?": "¿Listo para usar esta automatización?",
+    "Choose setup path": "Elige configuración",
+    "Setup method": "Método de configuración",
+    "Continue to secure payment": "Continuar al pago seguro",
+    "Self-Serve Setup": "Configuración self-serve",
+    "Nexus Guided Install": "Instalación guiada por Nexus",
+    "Developer profiles": "Perfiles de desarrolladores",
+    "No reviews yet": "Aún no hay reseñas",
+    "Loading products...": "Cargando productos...",
+    "Loading developers...": "Cargando desarrolladores..."
+  },
+  hi: {
+    "Nexus helps teams find practical automation products for reporting, support, operations, sales, and internal workflows. Browse by the outcome you need, preview what the product delivers, and choose the setup path that fits your team.": "Nexus टीमों को reporting, support, operations, sales और internal workflows के लिए practical automation products खोजने में मदद करता है। जिस outcome की जरूरत है उसके हिसाब से browse करें, product क्या deliver करता है preview करें, और अपनी team के लिए सही setup path चुनें।",
+    "Search by business issue, outcome, category, and setup path.": "Business issue, outcome, category और setup path से खोजें।",
+    "See what the product does, what it needs, and what it produces.": "देखें product क्या करता है, क्या चाहिए, और क्या output देता है।",
+    "Choose self-serve or Nexus guided setup based on complexity.": "Complexity के हिसाब से self-serve या Nexus guided setup चुनें।",
+    "Move from manual work to a repeatable process your team can use.": "Manual work को आपकी team के लिए repeatable process में बदलें।",
+    "Most teams do not have an ideas problem. They have an execution problem. Reports still take hours, customer questions still repeat, sales follow-up still slips, and internal handoffs still depend on people copying information between tools.": "ज्यादातर teams के पास ideas की कमी नहीं होती, execution की समस्या होती है। Reports में अब भी घंटे लगते हैं, customer questions repeat होते हैं, sales follow-up छूटता है, और internal handoffs tools के बीच copy-paste पर निर्भर रहते हैं।",
+    "Nexus turns those repeatable problems into clear marketplace products. Each listing explains the business issue it solves, the output it creates, what setup requires, and whether your team can self-serve or should use guided setup.": "Nexus इन repeatable problems को clear marketplace products में बदलता है। हर listing बताती है कि कौन सा business issue solve होता है, कौन सा output मिलता है, setup में क्या चाहिए, और team self-serve कर सकती है या guided setup चाहिए।",
+    "Slow and unclear": "धीमा और अस्पष्ट",
+    "Compare disconnected tools": "Disconnected tools की तुलना",
+    "Buy software without seeing the outcome": "Outcome देखे बिना software खरीदना",
+    "Hire builders without a clear product": "Clear product के बिना builders hire करना",
+    "Handle setup and errors alone": "Setup और errors अकेले संभालना",
+    "Keep manual workarounds running": "Manual workarounds चलाते रहना",
+    "Outcome-first and clear": "Outcome-first और clear",
+    "Browse by business issue": "Business issue से browse करें",
+    "Understand the output before setup": "Setup से पहले output समझें",
+    "Choose the right setup path upfront": "पहले से सही setup path चुनें",
+    "See who built or operates the product": "देखें product किसने बनाया या operate किया",
+    "Move toward a repeatable process": "Repeatable process की ओर बढ़ें",
+    "From business issue to working process.": "Business issue से working process तक।",
+    "Ready-made products for common business issues.": "Common business issues के लिए ready-made products.",
+    "Every listing explains the outcome first.": "हर listing पहले outcome समझाती है।",
+    "A hub for businesses and automation builders.": "Businesses और automation builders के लिए hub.",
+    "Price": "कीमत",
+    "Setup": "सेटअप",
+    "Buy / choose setup": "खरीदें / setup चुनें",
+    "View profile": "प्रोफाइल देखें",
+    "Ask Nexus": "Nexus से पूछें",
+    "Message developer": "डेवलपर को message करें",
+    "Problem it solves": "यह जो समस्या हल करता है",
+    "Business outcome": "Business outcome",
+    "Who this is for": "यह किसके लिए है",
+    "Outputs": "Outputs",
+    "Required inputs": "जरूरी inputs",
+    "Ready to use this automation?": "क्या आप यह automation इस्तेमाल करने के लिए ready हैं?",
+    "Choose setup path": "Setup path चुनें",
+    "Setup method": "Setup method",
+    "Continue to secure payment": "Secure payment पर जाएं",
+    "Self-Serve Setup": "Self-serve setup",
+    "Nexus Guided Install": "Nexus guided install",
+    "Developer profiles": "Developer profiles",
+    "No reviews yet": "अभी reviews नहीं हैं",
+    "Loading products...": "Products load हो रहे हैं...",
+    "Loading developers...": "Developers load हो रहे हैं..."
+  },
+  ar: {
+    "Nexus helps teams find practical automation products for reporting, support, operations, sales, and internal workflows. Browse by the outcome you need, preview what the product delivers, and choose the setup path that fits your team.": "يساعد Nexus الفرق على العثور على منتجات أتمتة عملية للتقارير والدعم والعمليات والمبيعات وسير العمل الداخلي. تصفح حسب النتيجة المطلوبة، شاهد ما يقدمه المنتج، واختر مسار الإعداد المناسب لفريقك.",
+    "Search by business issue, outcome, category, and setup path.": "ابحث حسب مشكلة العمل أو النتيجة أو الفئة أو مسار الإعداد.",
+    "See what the product does, what it needs, and what it produces.": "اعرف ما يفعله المنتج وما يحتاجه وما ينتجه.",
+    "Choose self-serve or Nexus guided setup based on complexity.": "اختر الإعداد الذاتي أو الإعداد الموجه من Nexus حسب درجة التعقيد.",
+    "Move from manual work to a repeatable process your team can use.": "حوّل العمل اليدوي إلى عملية قابلة للتكرار يستخدمها فريقك.",
+    "Most teams do not have an ideas problem. They have an execution problem. Reports still take hours, customer questions still repeat, sales follow-up still slips, and internal handoffs still depend on people copying information between tools.": "معظم الفرق لا تعاني من نقص الأفكار، بل من صعوبة التنفيذ. التقارير ما زالت تستغرق ساعات، أسئلة العملاء تتكرر، متابعة المبيعات تفلت، والتسليمات الداخلية تعتمد على نسخ المعلومات بين الأدوات.",
+    "Nexus turns those repeatable problems into clear marketplace products. Each listing explains the business issue it solves, the output it creates, what setup requires, and whether your team can self-serve or should use guided setup.": "يحوّل Nexus هذه المشاكل المتكررة إلى منتجات واضحة في السوق. كل قائمة تشرح مشكلة العمل التي تحلها، والمخرجات التي تنشئها، ومتطلبات الإعداد، وما إذا كان فريقك يستطيع الإعداد ذاتيًا أو يحتاج إلى إعداد موجه.",
+    "Slow and unclear": "بطيء وغير واضح",
+    "Compare disconnected tools": "مقارنة أدوات غير مترابطة",
+    "Buy software without seeing the outcome": "شراء برنامج دون رؤية النتيجة",
+    "Hire builders without a clear product": "توظيف منفذين دون منتج واضح",
+    "Handle setup and errors alone": "التعامل مع الإعداد والأخطاء وحدك",
+    "Keep manual workarounds running": "الاستمرار في حلول يدوية مؤقتة",
+    "Outcome-first and clear": "واضح ويركز على النتيجة أولاً",
+    "Browse by business issue": "تصفح حسب مشكلة العمل",
+    "Understand the output before setup": "افهم المخرجات قبل الإعداد",
+    "Choose the right setup path upfront": "اختر مسار الإعداد الصحيح من البداية",
+    "See who built or operates the product": "اعرف من بنى المنتج أو يديره",
+    "Move toward a repeatable process": "انتقل إلى عملية قابلة للتكرار",
+    "From business issue to working process.": "من مشكلة عمل إلى عملية تعمل.",
+    "Ready-made products for common business issues.": "منتجات جاهزة لمشاكل العمل الشائعة.",
+    "Every listing explains the outcome first.": "كل قائمة تشرح النتيجة أولاً.",
+    "A hub for businesses and automation builders.": "مركز للشركات وبناة الأتمتة.",
+    "Price": "السعر",
+    "Setup": "الإعداد",
+    "Buy / choose setup": "شراء / اختيار الإعداد",
+    "View profile": "عرض الملف",
+    "Ask Nexus": "اسأل Nexus",
+    "Message developer": "مراسلة المطور",
+    "Problem it solves": "المشكلة التي يحلها",
+    "Business outcome": "نتيجة العمل",
+    "Who this is for": "لمن هذا المنتج",
+    "Outputs": "المخرجات",
+    "Required inputs": "المدخلات المطلوبة",
+    "Ready to use this automation?": "هل أنت جاهز لاستخدام هذه الأتمتة؟",
+    "Choose setup path": "اختر مسار الإعداد",
+    "Setup method": "طريقة الإعداد",
+    "Continue to secure payment": "المتابعة إلى الدفع الآمن",
+    "Self-Serve Setup": "إعداد ذاتي",
+    "Nexus Guided Install": "تثبيت موجه من Nexus",
+    "Developer profiles": "ملفات المطورين",
+    "No reviews yet": "لا توجد مراجعات بعد",
+    "Loading products...": "جاري تحميل المنتجات...",
+    "Loading developers...": "جاري تحميل المطورين..."
+  },
+  fr: {
+    "Nexus helps teams find practical automation products for reporting, support, operations, sales, and internal workflows. Browse by the outcome you need, preview what the product delivers, and choose the setup path that fits your team.": "Nexus aide les équipes à trouver des automatisations pratiques pour les rapports, le support, les opérations, les ventes et les workflows internes. Parcourez selon le résultat recherché, prévisualisez ce que le produit livre et choisissez le mode de configuration adapté.",
+    "Search by business issue, outcome, category, and setup path.": "Recherchez par problème métier, résultat, catégorie et mode de configuration.",
+    "See what the product does, what it needs, and what it produces.": "Voyez ce que le produit fait, ce dont il a besoin et ce qu’il produit.",
+    "Choose self-serve or Nexus guided setup based on complexity.": "Choisissez le self-serve ou l’installation guidée Nexus selon la complexité.",
+    "Move from manual work to a repeatable process your team can use.": "Passez du travail manuel à un processus répétable pour votre équipe.",
+    "Most teams do not have an ideas problem. They have an execution problem. Reports still take hours, customer questions still repeat, sales follow-up still slips, and internal handoffs still depend on people copying information between tools.": "La plupart des équipes ne manquent pas d’idées, elles ont un problème d’exécution. Les rapports prennent encore des heures, les questions clients se répètent, le suivi commercial glisse et les transmissions internes reposent encore sur du copier-coller entre outils.",
+    "Nexus turns those repeatable problems into clear marketplace products. Each listing explains the business issue it solves, the output it creates, what setup requires, and whether your team can self-serve or should use guided setup.": "Nexus transforme ces problèmes répétitifs en produits marketplace clairs. Chaque fiche explique le problème métier résolu, le résultat créé, les besoins de configuration et si l’équipe peut se débrouiller seule ou doit être accompagnée.",
+    "Slow and unclear": "Lent et peu clair",
+    "Compare disconnected tools": "Comparer des outils déconnectés",
+    "Buy software without seeing the outcome": "Acheter un logiciel sans voir le résultat",
+    "Hire builders without a clear product": "Engager des builders sans produit clair",
+    "Handle setup and errors alone": "Gérer seul la configuration et les erreurs",
+    "Keep manual workarounds running": "Continuer avec des contournements manuels",
+    "Outcome-first and clear": "Clair et orienté résultat",
+    "Browse by business issue": "Parcourir par problème métier",
+    "Understand the output before setup": "Comprendre le résultat avant configuration",
+    "Choose the right setup path upfront": "Choisir le bon mode dès le départ",
+    "See who built or operates the product": "Voir qui construit ou opère le produit",
+    "Move toward a repeatable process": "Avancer vers un processus répétable",
+    "From business issue to working process.": "Du problème métier au processus opérationnel.",
+    "Ready-made products for common business issues.": "Produits prêts à l’emploi pour problèmes métier courants.",
+    "Every listing explains the outcome first.": "Chaque fiche explique d’abord le résultat.",
+    "A hub for businesses and automation builders.": "Un hub pour les entreprises et les builders d’automatisation.",
+    "Price": "Prix",
+    "Setup": "Configuration",
+    "Buy / choose setup": "Acheter / choisir la configuration",
+    "View profile": "Voir le profil",
+    "Ask Nexus": "Demander à Nexus",
+    "Message developer": "Message au développeur",
+    "Problem it solves": "Problème résolu",
+    "Business outcome": "Résultat métier",
+    "Who this is for": "Pour qui",
+    "Outputs": "Résultats",
+    "Required inputs": "Entrées requises",
+    "Ready to use this automation?": "Prêt à utiliser cette automatisation ?",
+    "Choose setup path": "Choisir le mode de configuration",
+    "Setup method": "Méthode de configuration",
+    "Continue to secure payment": "Continuer vers le paiement sécurisé",
+    "Self-Serve Setup": "Configuration self-serve",
+    "Nexus Guided Install": "Installation guidée Nexus",
+    "Developer profiles": "Profils développeurs",
+    "No reviews yet": "Aucun avis pour l’instant",
+    "Loading products...": "Chargement des produits...",
+    "Loading developers...": "Chargement des développeurs..."
+  }
+};
+
+Object.entries(COMMON_LITERAL_TRANSLATIONS).forEach(([language, values]) => {
+  LITERAL_TRANSLATIONS[language] = {
+    ...(LITERAL_TRANSLATIONS[language] || {}),
+    ...values
+  };
+});
+
 const LANGUAGE_GLOSSARY_REPLACEMENTS = {
   th: [
     [/\bautomation\b/gi, "ออโตเมชัน"],
@@ -2333,30 +2669,52 @@ function translateLiteral(value, language = getLanguage()) {
   return fallback !== original ? fallback : original;
 }
 
+function l(value, fallback = "") {
+  const raw = value !== undefined && value !== null && value !== "" ? value : fallback;
+  return translateLiteral(raw);
+}
+
+function scheduleAutoTranslation() {}
+
 function shouldSkipTextNode(node) {
   const parent = node?.parentElement;
   if (!parent) return true;
 
   const tag = parent.tagName;
-  if (["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "SELECT", "CODE", "PRE"].includes(tag)) {
+  if (["SCRIPT", "STYLE", "SELECT", "OPTION", "CODE", "PRE"].includes(tag)) {
     return true;
   }
 
-  if (parent.closest?.("[data-no-i18n], .html-preview-frame, .preview-window iframe")) {
+  if (parent.closest?.("[data-no-i18n], select, option, .currency-select-wrap, .language-select-wrap, .html-preview-frame, .preview-window iframe")) {
+    return true;
+  }
+
+  if (parent.closest?.("[data-i18n], [data-i18n-html]")) {
     return true;
   }
 
   return false;
 }
 
+function shouldSkipElementTranslation(element) {
+  if (!element) return true;
+  const tag = element.tagName;
+
+  if (["SCRIPT", "STYLE", "SELECT", "OPTION", "CODE", "PRE"].includes(tag)) {
+    return true;
+  }
+
+  return Boolean(element.closest?.("[data-no-i18n], select, option, .currency-select-wrap, .language-select-wrap, .html-preview-frame, .preview-window iframe"));
+}
+
 function languageSwitch() {
   const language = getLanguage();
 
   return `
-    <label class="language-select-wrap" aria-label="${escapeAttribute(t("nav_language"))}">
-      <select class="language-select" onchange="NexusUI.setLanguage(this.value)">
+    <label class="language-select-wrap" aria-label="${escapeAttribute(t("nav_language"))}" data-no-i18n="true">
+      <select class="language-select" onchange="NexusUI.setLanguage(this.value)" data-no-i18n="true">
         ${LANGUAGE_OPTIONS.map((item) => `
-          <option value="${item.code}" ${language === item.code ? "selected" : ""}>${item.label}</option>
+          <option value="${item.code}" ${language === item.code ? "selected" : ""} data-no-i18n="true">${item.label}</option>
         `).join("")}
       </select>
     </label>
@@ -2380,8 +2738,33 @@ function applyTranslations(root = document) {
     ];
 
     textElements.forEach((element) => {
+      if (shouldSkipElementTranslation(element)) return;
       const key = element.dataset.i18n;
-      element.textContent = t(key, element.textContent);
+      const source = I18N.en[key] || element.dataset.originalI18nText || element.textContent || "";
+      const translated = t(key, source);
+      element.dataset.originalI18nText = source;
+
+      const autoElement = autoTranslatedElements.get(element);
+      if (
+        language !== "en" &&
+        translated === source &&
+        autoElement?.language === language &&
+        autoElement?.original === source
+      ) {
+        element.textContent = autoElement.translated;
+        return;
+      }
+
+      element.textContent = translated;
+
+      if (language !== "en" && translated === source) {
+        scheduleAutoTranslation({
+          type: "element",
+          element,
+          original: source,
+          language
+        });
+      }
     });
 
     const htmlElements = [
@@ -2390,6 +2773,7 @@ function applyTranslations(root = document) {
     ];
 
     htmlElements.forEach((element) => {
+      if (shouldSkipElementTranslation(element)) return;
       const key = element.dataset.i18nHtml;
       element.innerHTML = t(key, element.innerHTML);
     });
@@ -2406,8 +2790,40 @@ function applyTranslations(root = document) {
       ];
 
       elements.forEach((element) => {
+        if (shouldSkipElementTranslation(element)) return;
         const key = element.dataset[datasetKey];
-        element.setAttribute(attribute, t(key, element.getAttribute(attribute) || ""));
+        const source = I18N.en[key] || element.getAttribute(attribute) || "";
+        const translated = t(key, source);
+
+        const autoAttribute = autoTranslatedAttributes.get(element)?.[attribute];
+        if (
+          language !== "en" &&
+          translated === source &&
+          autoAttribute?.language === language &&
+          autoAttribute?.original === source
+        ) {
+          element.setAttribute(attribute, autoAttribute.translated);
+          return;
+        }
+
+        element.setAttribute(attribute, translated);
+
+        if (language !== "en" && translated === source) {
+          let stored = originalAttributeValues.get(element);
+          if (!stored) {
+            stored = {};
+            originalAttributeValues.set(element, stored);
+          }
+          stored[attribute] = source;
+
+          scheduleAutoTranslation({
+            type: "attribute",
+            element,
+            attribute,
+            original: source,
+            language
+          });
+        }
       });
     });
 
@@ -2420,6 +2836,7 @@ function applyTranslations(root = document) {
       ];
 
       elements.forEach((element) => {
+        if (shouldSkipElementTranslation(element)) return;
         if (element.hasAttribute(dataAttribute)) return;
 
         let stored = originalAttributeValues.get(element);
@@ -2433,7 +2850,30 @@ function applyTranslations(root = document) {
         }
 
         const original = stored[attribute] || "";
-        element.setAttribute(attribute, language !== "en" ? translateLiteral(original, language) : original);
+        const translated = language !== "en" ? translateLiteral(original, language) : original;
+
+        const autoAttribute = autoTranslatedAttributes.get(element)?.[attribute];
+        if (
+          language !== "en" &&
+          translated === original &&
+          autoAttribute?.language === language &&
+          autoAttribute?.original === original
+        ) {
+          element.setAttribute(attribute, autoAttribute.translated);
+          return;
+        }
+
+        element.setAttribute(attribute, translated);
+
+        if (language !== "en") {
+          scheduleAutoTranslation({
+            type: "attribute",
+            element,
+            attribute,
+            original,
+            language
+          });
+        }
       });
     });
 
@@ -2458,7 +2898,29 @@ function applyTranslations(root = document) {
       }
 
       const original = originalTextNodes.get(node) || "";
-      node.nodeValue = language !== "en" ? translateLiteral(original, language) : original;
+      const translated = language !== "en" ? translateLiteral(original, language) : original;
+
+      const autoText = autoTranslatedTextNodes.get(node);
+      if (
+        language !== "en" &&
+        translated === original &&
+        autoText?.language === language &&
+        autoText?.original === original
+      ) {
+        node.nodeValue = autoText.translated;
+        return;
+      }
+
+      node.nodeValue = translated;
+
+      if (language !== "en") {
+        scheduleAutoTranslation({
+          type: "text",
+          node,
+          original,
+          language
+        });
+      }
     });
   } finally {
     isApplyingTranslations = false;
@@ -2472,36 +2934,9 @@ function stopTranslationObserver() {
 }
 
 function startTranslationObserver() {
-  if (getLanguage() === "en") {
-    stopTranslationObserver();
-    return;
-  }
-
-  if (translationObserver || typeof MutationObserver === "undefined" || !document.body) return;
-
-  translationObserver = new MutationObserver((mutations) => {
-    if (isApplyingTranslations) return;
-
-    window.requestAnimationFrame(() => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === "characterData" && mutation.target?.parentElement) {
-          applyTranslations(mutation.target.parentElement);
-          return;
-        }
-
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) applyTranslations(node);
-          if (node.nodeType === Node.TEXT_NODE && node.parentElement) applyTranslations(node.parentElement);
-        });
-      });
-    });
-  });
-
-  translationObserver.observe(document.body, {
-    childList: true,
-    characterData: true,
-    subtree: true
-  });
+  // Dynamic sections call applyTranslations after they render. Avoid a global
+  // observer because it repeatedly walks the whole page and slows routing.
+  stopTranslationObserver();
 }
 
 async function getNavDestination(active = "") {
@@ -2706,7 +3141,6 @@ function globalNav(active = "") {
 
         <div class="nav-controls">
           ${currencySwitch()}
-          ${languageSwitch()}
         </div>
 
         <a class="btn btn-secondary btn-small" id="navAccountButton" href="/pages/buyer/login.html">

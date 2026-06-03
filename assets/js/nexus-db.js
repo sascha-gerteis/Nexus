@@ -35,6 +35,13 @@ const NexusDB = (() => {
     "NEXUS_DB_ANON_KEY"
   ]);
 
+  const SITE_URL = readConfigValue([
+    "SITE_URL",
+    "NEXUS_SITE_URL",
+    "APP_URL",
+    "PUBLIC_SITE_URL"
+  ]) || "https://nexus-ai.software";
+
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     console.error("Missing Supabase config. Check assets/js/config.js");
   }
@@ -264,6 +271,22 @@ const NexusDB = (() => {
     }
   }
 
+  function cleanSiteOrigin(value = "") {
+    const raw = String(value || "").trim().replace(/\/+$/, "");
+
+    if (!raw) return location.origin;
+
+    try {
+      return new URL(raw).origin;
+    } catch {
+      return location.origin;
+    }
+  }
+
+  function authRedirectOrigin() {
+    return cleanSiteOrigin(SITE_URL || location.origin);
+  }
+
   function accountLoginPath(accountType = "buyer", nextUrl = "") {
     const account = String(accountType || "buyer").toLowerCase() === "developer"
       ? "developer"
@@ -279,7 +302,7 @@ const NexusDB = (() => {
   }
 
   function buyerAuthRedirectUrl(nextUrl = "") {
-    const redirectUrl = new URL("/pages/buyer/login.html", location.origin);
+    const redirectUrl = new URL("/pages/buyer/login.html", authRedirectOrigin());
     redirectUrl.searchParams.set("next", nextUrl || "/pages/buyer/dashboard.html");
     return redirectUrl.toString();
   }
@@ -288,7 +311,7 @@ const NexusDB = (() => {
     const account = String(accountType || "buyer").toLowerCase() === "developer"
       ? "developer"
       : "buyer";
-    const redirectUrl = new URL("/pages/auth/reset-password.html", location.origin);
+    const redirectUrl = new URL("/pages/auth/reset-password.html", authRedirectOrigin());
     redirectUrl.searchParams.set("account", account);
     redirectUrl.searchParams.set("mode", "recovery");
     redirectUrl.searchParams.set("next", nextUrl || (account === "developer" ? "/pages/developer/dashboard.html" : "/pages/buyer/dashboard.html"));
