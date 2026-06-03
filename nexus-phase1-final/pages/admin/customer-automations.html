@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Cancellation Requests | Nexus Admin</title>
+</head>
+
+<body data-admin="true" data-admin-page="cancellation-requests">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+
+      <a href="/pages/admin/dashboard.html">Overview</a>
+      <a href="/pages/admin/orders.html">Orders</a>
+      <a href="/pages/admin/automations.html">Products</a>
+      <a href="/pages/admin/product-form.html">Create Product</a>
+      <a class="active" href="/pages/admin/customer-automations.html">Cancellation Requests</a>
+      <a href="/pages/admin/messages.html">Inquiries</a>
+      <a href="/pages/admin/notifications.html">Notifications</a>
+      <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
+      <a href="/pages/admin/waitlist.html">Developer Waitlist</a>
+      <a href="/pages/admin/reviews.html">Reviews</a>
+      <a href="/pages/admin/developer-profile.html">Developer Profile</a>
+      <a href="/pages/marketplace/index.html">View Marketplace</a>
+      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+    </aside>
+
+    <main class="main">
+      <section class="admin-cancel-hero">
+        <div>
+          <span class="eyebrow">Admin review</span>
+          <h1>Cancellation requests.</h1>
+          <p>
+            Review buyer cancellation requests before cancelling access or changing order status.
+            This protects active customers and prevents accidental removal of paid automations.
+          </p>
+        </div>
+
+        <div class="admin-cancel-hero-actions">
+          <a class="btn btn-secondary btn-small" href="/pages/admin/dashboard.html">
+            Back to dashboard
+          </a>
+
+          <a class="btn btn-primary btn-small" href="/pages/admin/orders.html">
+            View orders
+          </a>
+        </div>
+      </section>
+
+      <div class="admin-cancel-stats">
+        <div class="card">
+          <span class="pill orange">Pending</span>
+          <h3 id="pendingCancellationCount">0</h3>
+          <p>Needs review</p>
+        </div>
+
+        <div class="card">
+          <span class="pill green">Approved</span>
+          <h3 id="approvedCancellationCount">0</h3>
+          <p>Approved requests</p>
+        </div>
+
+        <div class="card">
+          <span class="pill red">Rejected</span>
+          <h3 id="rejectedCancellationCount">0</h3>
+          <p>Rejected requests</p>
+        </div>
+      </div>
+
+      <section class="admin-cancel-panel">
+        <div class="admin-cancel-panel-head">
+          <div>
+            <span class="eyebrow">Cancellation queue</span>
+            <h2>Buyer requests.</h2>
+            <p>
+              Approve only after confirming the customer agreed, was refunded, migrated,
+              or otherwise handled by Nexus.
+            </p>
+          </div>
+
+          <button class="btn btn-secondary btn-small" type="button" onclick="loadCancellationRequests()">
+            Refresh
+          </button>
+        </div>
+
+        <div class="admin-cancel-list" id="cancellationRows">
+          Loading cancellation requests...
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="nexus-modal-lite" id="cancelReviewModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeReviewModal()"></div>
+
+    <div class="nexus-modal-lite-card admin-cancel-review-modal-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeReviewModal()">×</button>
+
+      <span class="eyebrow" id="reviewModalEyebrow">Review request</span>
+
+      <h2 id="reviewModalTitle">Review cancellation</h2>
+
+      <div class="admin-cancel-review-summary" id="reviewModalSummary"></div>
+
+      <label for="reviewAdminNotes">Admin decision notes</label>
+      <textarea
+        class="textarea"
+        id="reviewAdminNotes"
+        placeholder="Example: Customer confirmed cancellation by email. Refund handled. Automation access can be cancelled."
+      ></textarea>
+
+      <div class="admin-cancel-review-warning" id="reviewModalWarning" style="display:none">
+        Approving this request will mark the buyer automation as cancelled. Existing outputs/history will remain.
+      </div>
+
+      <div class="modal-lite-actions">
+        <button class="btn btn-secondary" type="button" onclick="closeReviewModal()">
+          Keep pending
+        </button>
+
+        <button class="btn btn-primary" type="button" id="reviewSubmitButton" onclick="submitReviewDecision()">
+          Submit decision
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-notice.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+
+  <script>
+    let cancellationRequests = [];
+    let currentReviewRequest = null;
+    let currentReviewDecision = null;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function dateLabel(value) {
+      if (!value) return "—";
+
+      try {
+        return new Date(value).toLocaleString();
+      } catch {
+        return value;
+      }
+    }
+
+    function statusPill(status) {
+      const safe = String(status || "pending").toLowerCase();
+
+      if (safe === "approved") return "pill green";
+      if (safe === "rejected") return "pill red";
+      return "pill orange";
+    }
+
+    function getBuyerName(request) {
+      const buyerEmail = request.orders?.buyer_email || "";
+      return request.orders?.buyer_name || buyerEmail || "Buyer";
+    }
+
+    function getProductTitle(request) {
+      return (
+        request.automations?.title ||
+        request.customer_automations?.automations?.title ||
+        request.orders?.automation_title ||
+        "Automation"
+      );
+    }
+
+    async function initCancellationRequestsPage() {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      const profile = await NexusDB.requireAdmin();
+      if (!profile) return;
+
+      await loadCancellationRequests();
+    }
+
+    async function loadCancellationRequests() {
+      const body = document.getElementById("cancellationRows");
+
+      if (body) {
+        body.innerHTML = `<div class="admin-cancel-empty">Loading cancellation requests...</div>`;
+      }
+
+      const { data, error } = await NexusDB.listCancellationRequests();
+
+      if (error) {
+        body.innerHTML = `
+          <div class="admin-cancel-empty">
+            ${escapeHtml(error.message || "Could not load cancellation requests.")}
+          </div>
+        `;
+
+        if (window.NexusNotice) {
+          NexusNotice.error(
+            "Could not load cancellation requests",
+            error.message || "Please try again."
+          );
+        }
+
+        console.error("Cancellation requests load error:", error);
+        return;
+      }
+
+      cancellationRequests = data || [];
+
+      document.getElementById("pendingCancellationCount").textContent =
+        cancellationRequests.filter(item => item.status === "pending").length;
+
+      document.getElementById("approvedCancellationCount").textContent =
+        cancellationRequests.filter(item => item.status === "approved").length;
+
+      document.getElementById("rejectedCancellationCount").textContent =
+        cancellationRequests.filter(item => item.status === "rejected").length;
+
+      if (!cancellationRequests.length) {
+        body.innerHTML = `
+          <div class="admin-cancel-empty">
+            No cancellation requests yet.
+          </div>
+        `;
+        return;
+      }
+
+      body.innerHTML = cancellationRequests.map(request => {
+        const buyerEmail = request.orders?.buyer_email || "";
+        const buyerName = getBuyerName(request);
+        const buyerCompany = request.orders?.buyer_company || "";
+        const productTitle = getProductTitle(request);
+        const isPending = request.status === "pending";
+
+        return `
+          <article class="admin-cancel-card">
+            <div class="admin-cancel-main">
+              <div>
+                <span class="${statusPill(request.status)}">
+                  ${escapeHtml(request.status || "pending")}
+                </span>
+
+                <h3>${escapeHtml(productTitle)}</h3>
+
+                <p class="admin-cancel-reason">
+                  ${escapeHtml(request.reason || "No reason provided.")}
+                </p>
+              </div>
+
+              <div class="admin-cancel-actions">
+                ${
+                  isPending
+                    ? `
+                      <button class="btn btn-primary btn-small" type="button" onclick="openReviewModal('${request.id}', 'approve')">
+                        Approve
+                      </button>
+
+                      <button class="btn btn-secondary btn-small" type="button" onclick="openReviewModal('${request.id}', 'reject')">
+                        Reject
+                      </button>
+                    `
+                    : `<span class="admin-reviewed-label">Reviewed</span>`
+                }
+              </div>
+            </div>
+
+            <div class="admin-cancel-meta">
+              <div>
+                <span>Buyer</span>
+                <strong>${escapeHtml(buyerName)}</strong>
+                <small>${escapeHtml(buyerEmail || "No email")}</small>
+                ${buyerCompany ? `<small>${escapeHtml(buyerCompany)}</small>` : ""}
+              </div>
+
+              <div>
+                <span>Requested</span>
+                <strong>${escapeHtml(dateLabel(request.created_at))}</strong>
+              </div>
+
+              <div>
+                <span>Decision notes</span>
+                <strong>${escapeHtml(request.admin_notes || "—")}</strong>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function openReviewModal(requestId, decision) {
+      const request = cancellationRequests.find(item => item.id === requestId);
+
+      if (!request) {
+        NexusNotice.error(
+          "Request not found",
+          "The cancellation request could not be found. Refresh the page and try again."
+        );
+        return;
+      }
+
+      currentReviewRequest = request;
+      currentReviewDecision = decision;
+
+      const isApprove = decision === "approve";
+      const modal = document.getElementById("cancelReviewModal");
+      const eyebrow = document.getElementById("reviewModalEyebrow");
+      const title = document.getElementById("reviewModalTitle");
+      const summary = document.getElementById("reviewModalSummary");
+      const notes = document.getElementById("reviewAdminNotes");
+      const warning = document.getElementById("reviewModalWarning");
+      const submitButton = document.getElementById("reviewSubmitButton");
+
+      const buyerEmail = request.orders?.buyer_email || "";
+      const buyerName = getBuyerName(request);
+      const buyerCompany = request.orders?.buyer_company || "";
+      const productTitle = getProductTitle(request);
+
+      eyebrow.textContent = isApprove ? "Approve cancellation" : "Reject cancellation";
+      title.textContent = isApprove ? "Approve this cancellation?" : "Reject this cancellation?";
+      notes.value = request.admin_notes || "";
+
+      warning.style.display = isApprove ? "" : "none";
+      submitButton.textContent = isApprove ? "Approve cancellation" : "Reject request";
+      submitButton.className = isApprove ? "btn btn-primary" : "btn btn-secondary";
+
+      summary.innerHTML = `
+        <div>
+          <span>Product</span>
+          <strong>${escapeHtml(productTitle)}</strong>
+        </div>
+
+        <div>
+          <span>Buyer</span>
+          <strong>${escapeHtml(buyerName)}</strong>
+          <small>${escapeHtml(buyerEmail || "No email")}</small>
+          ${buyerCompany ? `<small>${escapeHtml(buyerCompany)}</small>` : ""}
+        </div>
+
+        <div>
+          <span>Buyer reason</span>
+          <p>${escapeHtml(request.reason || "No reason provided.")}</p>
+        </div>
+      `;
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+
+      setTimeout(() => notes.focus(), 100);
+    }
+
+    function closeReviewModal() {
+      const modal = document.getElementById("cancelReviewModal");
+
+      if (!modal) return;
+
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+
+      currentReviewRequest = null;
+      currentReviewDecision = null;
+    }
+
+    async function submitReviewDecision() {
+      if (!currentReviewRequest || !currentReviewDecision) {
+        NexusNotice.error(
+          "Missing decision",
+          "No cancellation request is currently selected."
+        );
+        return;
+      }
+
+      const button = document.getElementById("reviewSubmitButton");
+      const originalText = button ? button.textContent : "Submit decision";
+      const adminNotes = document.getElementById("reviewAdminNotes").value || "";
+
+      if (currentReviewDecision === "approve" && adminNotes.trim().length < 5) {
+        NexusNotice.warning(
+          "Add approval notes",
+          "Please add a short note explaining why this cancellation is approved."
+        );
+        return;
+      }
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Saving...";
+      }
+
+      const { data, error } = await NexusDB.reviewAutomationCancellation({
+        request_id: currentReviewRequest.id,
+        decision: currentReviewDecision,
+        admin_notes: adminNotes
+      });
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+
+      if (error) {
+        NexusNotice.error(
+          "Could not review cancellation",
+          error.message || "Please try again."
+        );
+
+        console.error("Review cancellation error:", error);
+        return;
+      }
+
+      closeReviewModal();
+
+      NexusNotice.success(
+        "Cancellation request updated",
+        data?.message || "The cancellation request was reviewed successfully."
+      );
+
+      await loadCancellationRequests();
+    }
+
+    document.addEventListener("DOMContentLoaded", initCancellationRequestsPage);
+  </script>
+</body>
+</html>

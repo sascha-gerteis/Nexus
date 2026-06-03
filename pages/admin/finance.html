@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <title>Finance | Nexus AI Admin</title>
+</head>
+<body data-admin="true" data-admin-page="finance">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+  <div class="dashboard">
+    <aside class="sidebar"></aside>
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Finance</span>
+        <h2>Revenue share and developer earnings.</h2>
+        <p>Track platform gross, Stripe fees, Nexus share, developer earnings, and manual payout requests.</p>
+      </div>
+
+      <div id="financeSummary"></div>
+
+      <div class="table-wrap" style="margin-top:1.5rem">
+        <table>
+          <thead>
+            <tr>
+              <th>Developer</th>
+              <th>Product</th>
+              <th>Gross</th>
+              <th>Nexus</th>
+              <th>Developer</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="financeRows"></tbody>
+        </table>
+      </div>
+
+      <section class="card" style="margin-top:1.5rem">
+        <div class="admin-table-head">
+          <div>
+            <h2>Manual payout requests</h2>
+            <p>Send the money outside Nexus, then mark the request as paid with a payment reference.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Developer</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Method</th>
+                <th>Requested</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="payoutRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+  <script src="/assets/js/nexus-app.js"></script>
+</body>
+</html>

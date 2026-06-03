@@ -1,0 +1,156 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Buyer Login | Nexus AI</title>
+</head>
+
+<body data-page="buyer-login">
+  <main class="buyer-auth-page">
+    <div class="buyer-auth-card">
+      <a class="logo" href="/index.html">
+        <span>Nexus</span>
+      </a>
+
+      
+
+      <h1>Login before purchasing.</h1>
+
+      <p>
+        Login to continue your automation setup, create your order request, and access your buyer dashboard.
+      </p>
+
+      <button class="btn btn-secondary btn-full" type="button" id="googleLoginButton">
+        Continue with Google
+      </button>
+
+      <div class="auth-divider"><span>or</span></div>
+
+      <form id="buyerLoginForm">
+        <div class="form-grid">
+          <div class="full">
+            <label>Email</label>
+            <input class="input" name="email" type="email" required placeholder="you@company.com">
+          </div>
+
+          <div class="full">
+            <label>Password</label>
+            <input class="input" name="password" type="password" required placeholder="Your password">
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" style="margin-top:1rem">
+          Login
+        </button>
+      </form>
+
+      <div class="buyer-auth-links">
+        <span>No account yet?</span>
+        <a href="/pages/buyer/register.html" id="registerLink">Create buyer account</a>
+      </div>
+
+      <div class="buyer-auth-links">
+        <span>Forgot your password?</span>
+        <a href="#" id="forgotPasswordLink">Send reset link</a>
+      </div>
+
+      <div id="buyerAuthStatus"></div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const statusBox = document.getElementById("buyerAuthStatus");
+
+      if (typeof NexusDB === "undefined") {
+        statusBox.innerHTML = `
+          <div class="error">
+            NexusDB failed to load. Check /assets/js/nexus-db.js for errors.
+          </div>
+        `;
+        return;
+      }
+
+      if (typeof NexusDB.buyerSignIn !== "function") {
+        statusBox.innerHTML = `
+          <div class="error">
+            NexusDB loaded, but buyerSignIn is missing.
+          </div>
+        `;
+        return;
+      }
+
+      const params = new URLSearchParams(location.search);
+      const next = params.get("next") || "/pages/buyer/dashboard.html";
+
+      const registerLink = document.getElementById("registerLink");
+      if (registerLink) {
+        registerLink.href = "/pages/buyer/register.html?next=" + encodeURIComponent(next);
+      }
+
+      const googleButton = document.getElementById("googleLoginButton");
+      if (googleButton) {
+        googleButton.addEventListener("click", async function () {
+          const { error } = await NexusDB.buyerSignInWithOAuth("google", next);
+          if (error) NexusUI.toast(NexusDB.friendlyAuthMessage(error));
+        });
+      }
+
+      const forgotPasswordLink = document.getElementById("forgotPasswordLink");
+      if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener("click", async function (event) {
+          event.preventDefault();
+          const email = String(document.querySelector("[name='email']")?.value || "").trim();
+          if (!email) {
+            NexusUI.toast("Enter your email first.");
+            return;
+          }
+          const { error } = await NexusDB.sendPasswordResetEmail(email, "buyer", next);
+          NexusUI.toast(error ? NexusDB.friendlyAuthMessage(error) : "Password reset link sent.");
+        });
+      }
+
+      const form = document.getElementById("buyerLoginForm");
+
+      form.addEventListener("submit", async function(event) {
+        event.preventDefault();
+
+        const formData = new FormData(event.target);
+        const email = String(formData.get("email") || "").trim();
+        const password = String(formData.get("password") || "");
+
+        const { data, error } = await NexusDB.buyerSignIn(email, password);
+
+        if (error) {
+          NexusUI.toast(NexusDB.friendlyAuthMessage(error));
+          return;
+        }
+
+        const user = data?.user;
+
+        if (user) {
+          await NexusDB.ensureBuyerProfileFromUser(user);
+        }
+
+        location.href = next;
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <title>Buyer Settings | Nexus AI</title>
+</head>
+<body data-page="buyer-settings">
+  <header class="site-header" id="globalNav" data-active="dashboard"></header>
+
+  <main class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Buyer Dashboard</div>
+      <a href="/pages/buyer/dashboard.html">Dashboard</a>
+      <a class="active" href="/pages/buyer/settings.html">Settings</a>
+      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+    </aside>
+
+    <section class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Buyer settings</span>
+        <h2>Account details.</h2>
+        <p>Keep your contact information ready for setup forms, custom automation requests, and support.</p>
+      </div>
+
+      <form class="card" id="buyerSettingsForm">
+        <div class="form-grid">
+          <div>
+            <label>Name</label>
+            <input class="input" name="name" required>
+          </div>
+          <div>
+            <label>Email</label>
+            <input class="input" name="email" type="email" disabled>
+          </div>
+          <div>
+            <label>Company</label>
+            <input class="input" name="company">
+          </div>
+          <div>
+            <label>Phone</label>
+            <input class="input" name="phone">
+          </div>
+          <div class="full">
+            <label>Website</label>
+            <input class="input" name="website">
+          </div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:1rem">Save settings</button>
+      </form>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async function () {
+      const user = await NexusDB.requireBuyer(location.pathname);
+      if (!user) return;
+
+      const form = document.getElementById("buyerSettingsForm");
+      const { data, error } = await NexusDB.getCurrentBuyerAccount();
+
+      if (error) {
+        NexusUI.toast(error.message || "Could not load settings.");
+      }
+
+      const profile = data?.buyer_profile || data?.profile || {};
+      form.elements.name.value = profile.name || data?.profile?.full_name || user.user_metadata?.full_name || "";
+      form.elements.email.value = user.email || profile.email || "";
+      form.elements.company.value = profile.company || "";
+      form.elements.phone.value = profile.phone || "";
+      form.elements.website.value = profile.website || "";
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const formData = new FormData(form);
+        const payload = {
+          name: String(formData.get("name") || ""),
+          company: String(formData.get("company") || ""),
+          phone: String(formData.get("phone") || ""),
+          website: String(formData.get("website") || "")
+        };
+        const { error: saveError } = await NexusDB.updateCurrentBuyerAccount(payload);
+        NexusUI.toast(saveError ? saveError.message : "Settings saved.");
+      });
+    });
+  </script>
+</body>
+</html>

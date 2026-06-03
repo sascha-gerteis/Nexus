@@ -1,0 +1,635 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Complete Setup | Nexus AI</title>
+</head>
+
+<body data-page="buyer-setup">
+  <header class="site-header">
+    <div class="container nav">
+      <a class="logo" href="/index.html">
+        <span>Nexus</span>
+      </a>
+
+      <nav class="nav-links">
+        <a class="nav-link" href="/index.html">Home</a>
+        <a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a>
+        <a class="nav-link active" href="/pages/buyer/dashboard.html">Dashboard</a>
+        <a class="nav-link" href="/pages/contact/index.html">Support</a>
+        <button class="btn btn-secondary btn-small" type="button" onclick="NexusDB.signOut()">Logout</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="buyer-setup-page">
+    <section class="container">
+      <div id="setupRoot">
+        <div class="card">
+          <h2>Loading setup form...</h2>
+          <p>Please wait while Nexus prepares your automation setup form.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+
+  <script>
+    let activeCustomerAutomation = null;
+    let activeProduct = null;
+    let latestSubmission = null;
+
+    function getParam(name) {
+      return new URLSearchParams(location.search).get(name);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function normalizeSetupSchema(schema) {
+      if (!schema) return [];
+
+      if (Array.isArray(schema)) return schema;
+
+      if (typeof schema === "string") {
+        try {
+          const parsed = JSON.parse(schema);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      return [];
+    }
+
+    function fieldRequired(field) {
+      return field.required ? "required" : "";
+    }
+
+    function renderField(field, existingAnswers = {}, options = {}) {
+      const name = field.name || "";
+      const label = field.label || name;
+      const type = field.type || "text";
+      const required = fieldRequired(field);
+      const value = type === "secret" ? "" : (existingAnswers[name] || "");
+
+      if (!name) return "";
+
+      if (type === "textarea") {
+        return `
+          <div class="full">
+            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            <textarea
+              class="textarea"
+              name="${escapeHtml(name)}"
+              ${required}
+              placeholder="${escapeHtml(field.placeholder || "")}"
+            >${escapeHtml(value)}</textarea>
+            ${field.description ? `<small>${escapeHtml(field.description)}</small>` : ""}
+          </div>
+        `;
+      }
+
+      if (type === "select") {
+        const optionsList = Array.isArray(field.options) ? field.options : [];
+
+        return `
+          <div>
+            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            <select class="select" name="${escapeHtml(name)}" ${required}>
+              <option value="">Choose...</option>
+              ${optionsList.map(option => `
+                <option value="${escapeHtml(option)}" ${String(value) === String(option) ? "selected" : ""}>
+                  ${escapeHtml(option)}
+                </option>
+              `).join("")}
+            </select>
+            ${field.description ? `<small>${escapeHtml(field.description)}</small>` : ""}
+          </div>
+        `;
+      }
+
+      if (type === "secret") {
+        const secretRequired = field.required && !options.hasSubmitted ? "required" : "";
+        const placeholder = options.hasSubmitted
+          ? "Leave blank to keep saved credential"
+          : (field.placeholder || "Paste API key, token, or secret value");
+
+        return `
+          <div>
+            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            <input
+              class="input"
+              type="password"
+              name="${escapeHtml(name)}"
+              value=""
+              ${secretRequired}
+              placeholder="${escapeHtml(placeholder)}"
+              autocomplete="off"
+              data-secret-field="true"
+            >
+            <small>
+              ${escapeHtml(field.description || "This credential is used only for this automation and is never shown back after saving.")}
+              ${options.hasSubmitted ? " Leave blank to keep the saved value." : ""}
+            </small>
+          </div>
+        `;
+      }
+
+      const htmlType = ["text", "email", "url", "number"].includes(type) ? type : "text";
+
+      return `
+        <div>
+          <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+          <input
+            class="input"
+            type="${htmlType}"
+            name="${escapeHtml(name)}"
+            value="${escapeHtml(value)}"
+            ${required}
+            placeholder="${escapeHtml(field.placeholder || "")}"
+          >
+          ${field.description ? `<small>${escapeHtml(field.description)}</small>` : ""}
+        </div>
+      `;
+    }
+
+
+
+async function resolveProductFromCustomerAutomation(automation) {
+  /*
+    Try every possible shape first.
+    Supabase joins can come back as object, array, or under different keys depending on the query.
+  */
+  const possibleProduct =
+    (Array.isArray(automation.automations) ? automation.automations[0] : automation.automations) ||
+    (Array.isArray(automation.automation) ? automation.automation[0] : automation.automation) ||
+    (Array.isArray(automation.product) ? automation.product[0] : automation.product) ||
+    null;
+
+  if (
+    possibleProduct &&
+    (
+      possibleProduct.setup_schema ||
+      possibleProduct.credential_schema ||
+      possibleProduct.title
+    )
+  ) {
+    return possibleProduct;
+  }
+
+  /*
+    Fallback:
+    If the customer automation only has automation_id, fetch the product directly.
+    This prevents the setup form from falling back to generic notes just because the join failed.
+  */
+  const automationId =
+    automation.automation_id ||
+    automation.automations_id ||
+    automation.product_id ||
+    automation.orders?.automation_id ||
+    (Array.isArray(automation.orders) ? automation.orders[0]?.automation_id : "");
+
+  if (!automationId) {
+    console.warn("Could not resolve automation_id from customer automation:", automation);
+    return possibleProduct || {};
+  }
+
+  if (typeof NexusDB.getAutomationById === "function") {
+    const { data, error } = await NexusDB.getAutomationById(automationId);
+
+    if (!error && data) {
+      return data;
+    }
+
+    console.warn("Fallback getAutomationById failed:", error);
+  }
+
+  return possibleProduct || {};
+}
+
+
+
+
+
+
+    async function initSetupPage() {
+      const root = document.getElementById("setupRoot");
+      const customerAutomationId = getParam("id");
+
+      const user = await NexusDB.requireBuyer(location.pathname + location.search);
+      if (!user) return;
+
+      if (!customerAutomationId) {
+        root.innerHTML = `
+          <div class="card">
+            <h2>Setup link is missing.</h2>
+            <p>Go back to your buyer dashboard and choose the automation you want to set up.</p>
+            <a class="btn btn-primary" href="/pages/buyer/dashboard.html">Go to dashboard</a>
+          </div>
+        `;
+        return;
+      }
+
+      const [{ data: automation, error }, { data: submission }] = await Promise.all([
+        NexusDB.getBuyerCustomerAutomationById(customerAutomationId),
+        NexusDB.getLatestSetupSubmission(customerAutomationId)
+      ]);
+
+      if (error || !automation) {
+        root.innerHTML = `
+          <div class="card">
+            <h2>Automation not found.</h2>
+            <p>This setup page could not be loaded. Please return to your dashboard.</p>
+            <a class="btn btn-primary" href="/pages/buyer/dashboard.html">Go to dashboard</a>
+          </div>
+        `;
+        return;
+      }
+
+      activeCustomerAutomation = automation;
+activeProduct = await resolveProductFromCustomerAutomation(automation);
+latestSubmission = submission;
+
+renderSetupForm(root);
+    }
+
+    function renderSetupForm(root) {
+      const product = activeProduct || {};
+      const automation = activeCustomerAutomation || {};
+      const order = Array.isArray(automation.orders)
+        ? automation.orders[0] || {}
+        : automation.orders || {};
+
+      const setupSchema = normalizeSetupSchema(product.setup_schema);
+      const credentialSchema = normalizeSetupSchema(product.credential_schema);
+
+      const existingAnswers = latestSubmission?.answers || {};
+      const installType = automation.install_type || order.install_type || "self_serve";
+     const hasSubmitted = !!latestSubmission;
+const isGuided = installType === "nexus_guided";
+
+const runtimeStatus = String(automation.runtime_status || "").toLowerCase();
+const status = String(automation.status || "").toLowerCase();
+
+const isRunning =
+  runtimeStatus === "running" ||
+  status === "running";
+
+const needsCustomerAction =
+  automation.needs_customer_action === true &&
+  !isRunning;
+
+const hasRuntimeError =
+  runtimeStatus === "error" &&
+  !needsCustomerAction &&
+  !isRunning;
+
+const lastErrorMessage = automation.last_error_message || "";
+const lastErrorCode = automation.last_error_code || "";
+const lastErrorNode = automation.last_error_node || "";
+
+const showCustomerError =
+  !isRunning && automation.needs_customer_action;
+
+const showAdminHiddenError =
+  !isRunning &&
+  String(automation.runtime_status || "").toLowerCase() === "error" &&
+  !automation.needs_customer_action;
+      const hasAnySchema = setupSchema.length || credentialSchema.length;
+
+const setupFieldsHtml = setupSchema.length
+  ? setupSchema.map(field => renderField(field, existingAnswers, { hasSubmitted })).join("")
+  : (
+      hasAnySchema
+        ? ""
+        : `
+          <div class="full">
+            <div class="error">
+              <strong>This automation has no setup schema loaded.</strong><br>
+              The product may have a schema in Supabase, but this setup page did not receive it.
+              Check that customer_automations.automation_id points to the correct automation and that
+              NexusDB.getBuyerCustomerAutomationById joins the automations table with setup_schema and credential_schema.
+            </div>
+          </div>
+        `
+    );
+
+      const credentialFieldsHtml = credentialSchema.length
+        ? `
+          <div class="full setup-form-section-title">
+            <h3>Credentials / Access</h3>
+            <p>
+              Paste customer-owned credentials only, such as a Meta access token.
+              Developer-paid services like Apify, Gemini, YouTube API keys, and internal infrastructure are handled by Nexus.
+            </p>
+          </div>
+
+          ${credentialSchema.map(field => renderField(field, existingAnswers, { hasSubmitted, isCredential: true })).join("")}
+        `
+        : "";
+
+      const formFields = setupFieldsHtml + credentialFieldsHtml;
+
+      root.innerHTML = `
+        <div class="buyer-setup-layout">
+          <aside class="buyer-setup-summary">
+            <span class="${NexusUI.pillClass(product.color || "blue")}">
+              ${escapeHtml(product.badge || product.category || "Automation")}
+            </span>
+
+            <h1>${escapeHtml(product.title || automation.name || "Automation setup")}</h1>
+
+            <p>
+              ${escapeHtml(product.short_description || "Complete the setup details so Nexus can launch this automation.")}
+            </p>
+
+            <div class="setup-meta-list">
+              <div>
+                <span>Payment</span>
+                <strong>${escapeHtml(order.payment_status || "paid")}</strong>
+              </div>
+
+              <div>
+                <span>Setup method</span>
+                <strong>${isGuided ? "Nexus Guided Install" : "Self-Serve"}</strong>
+              </div>
+
+              <div>
+                <span>Setup status</span>
+                <strong>${hasSubmitted ? "Submitted" : "Required"}</strong>
+              </div>
+            </div>
+
+            <div class="setup-help-box">
+              <strong>${isGuided ? "Guided install selected" : "Self-serve setup"}</strong>
+              <p>
+                ${
+                  isGuided
+                    ? "Submit the intake details below. Nexus will contact you to complete configuration."
+                    : "Submit the required setup details. If this automation is self-serve, Nexus will start the workflow automatically."
+                }
+              </p>
+            </div>
+
+            ${
+              credentialSchema.length
+                ? `
+                  <div class="setup-help-box">
+                    <strong>Credentials required</strong>
+                    <p>
+                      This automation asks for ${credentialSchema.length} credential field${credentialSchema.length === 1 ? "" : "s"}.
+                      Leave a saved credential blank if you are updating setup details and do not want to change it.
+                    </p>
+                  </div>
+                `
+                : ""
+            }
+
+            <a class="btn btn-secondary btn-full" href="/pages/buyer/dashboard.html">
+              Back to dashboard
+            </a>
+          </aside>
+
+          <section class="buyer-setup-card">
+            <span class="eyebrow">${hasSubmitted ? "Update setup" : "Complete setup"}</span>
+
+            <h2>${hasSubmitted ? "Your setup was submitted." : "Tell Nexus what this automation needs."}</h2>
+
+           <p>
+  ${
+    hasSubmitted
+      ? "You can update the form below if something changed. Nexus will use the latest submission."
+      : "These questions are specific to this automation. After submission, Nexus will prepare the workflow and display outputs in your dashboard."
+  }
+</p>
+
+${
+  isRunning
+    ? `
+      <div class="success" style="margin:1rem 0">
+        <strong>Automation running</strong><br>
+        Nexus is currently processing your automation. Outputs or errors will appear in your dashboard when the run finishes.
+      </div>
+    `
+    : ""
+}
+
+${
+  needsCustomerAction
+    ? `
+      <div class="error" style="margin:1rem 0">
+        <strong>Action required</strong><br>
+        ${escapeHtml(lastErrorMessage || "Some setup details need to be updated before this automation can continue.")}
+        ${
+          lastErrorCode
+            ? `<br><small>Error code: ${escapeHtml(lastErrorCode)}</small>`
+            : ""
+        }
+        ${
+          lastErrorNode
+            ? `<br><small>Failed step: ${escapeHtml(lastErrorNode)}</small>`
+            : ""
+        }
+        <br><br>
+        Please update the fields below and submit again.
+      </div>
+    `
+    : ""
+}
+
+${
+  hasRuntimeError
+    ? `
+      <div class="error" style="margin:1rem 0">
+        <strong>Automation failed</strong><br>
+        Nexus has been notified. You do not need to change anything right now.
+      </div>
+    `
+    : ""
+}
+
+<form id="buyerSetupForm">
+
+${
+  needsCustomerAction
+    ? `
+      <div class="error" style="margin:1rem 0">
+        <strong>Action required</strong><br>
+        ${escapeHtml(lastErrorMessage || "Some setup details need to be updated before this automation can continue.")}
+        ${
+          lastErrorCode
+            ? `<br><small>Error code: ${escapeHtml(lastErrorCode)}</small>`
+            : ""
+        }
+        <br><br>
+        Please update the fields below and submit again.
+      </div>
+    `
+    : hasRuntimeError
+      ? `
+        <div class="error" style="margin:1rem 0">
+          <strong>Automation failed</strong><br>
+          Nexus has been notified. You do not need to change anything right now.
+        </div>
+      `
+      : ""
+}
+
+<form id="buyerSetupForm">
+              <div class="form-grid">
+                ${formFields}
+
+                ${
+                  isGuided
+                    ? `
+                      <div>
+                        <label>Best contact person</label>
+                        <input class="input" name="guided_contact_name" value="${escapeHtml(existingAnswers.guided_contact_name || "")}" placeholder="Name">
+                      </div>
+
+                      <div>
+                        <label>Preferred contact method</label>
+                        <select class="select" name="guided_contact_method">
+                          <option value="">Choose...</option>
+                          <option value="Email" ${existingAnswers.guided_contact_method === "Email" ? "selected" : ""}>Email</option>
+                          <option value="Phone" ${existingAnswers.guided_contact_method === "Phone" ? "selected" : ""}>Phone</option>
+                          <option value="WhatsApp" ${existingAnswers.guided_contact_method === "WhatsApp" ? "selected" : ""}>WhatsApp</option>
+                          <option value="Google Meet" ${existingAnswers.guided_contact_method === "Google Meet" ? "selected" : ""}>Google Meet</option>
+                        </select>
+                      </div>
+
+                      <div class="full">
+                        <label>Preferred setup time / notes</label>
+                        <textarea class="textarea" name="guided_notes" placeholder="Tell Nexus when and how to contact your team.">${escapeHtml(existingAnswers.guided_notes || "")}</textarea>
+                      </div>
+                    `
+                    : ""
+                }
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="margin-top:1rem">
+                ${hasSubmitted ? "Update setup details" : "Submit setup details"}
+              </button>
+            </form>
+
+            <div id="setupSubmitResult"></div>
+          </section>
+        </div>
+      `;
+
+      document.getElementById("buyerSetupForm").onsubmit = submitSetupForm;
+    }
+
+    async function submitSetupForm(event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const button = form.querySelector("button[type='submit']");
+      const originalText = button.textContent;
+
+      button.disabled = true;
+      button.textContent = "Submitting setup...";
+
+      const formData = new FormData(form);
+      const answers = {};
+
+      for (const [key, value] of formData.entries()) {
+        answers[key] = String(value || "").trim();
+      }
+
+      const automation = activeCustomerAutomation;
+
+      if (!automation || !automation.id) {
+        NexusUI.toast("Automation was not loaded. Refresh and try again.");
+        button.disabled = false;
+        button.textContent = originalText;
+        return;
+      }
+
+      if (typeof NexusDB.submitAutomationSetup !== "function") {
+        NexusUI.toast("Setup submit function is missing in nexus-db.js.");
+        button.disabled = false;
+        button.textContent = originalText;
+        return;
+      }
+
+      const { data, error } = await NexusDB.submitAutomationSetup({
+        customer_automation_id: automation.id,
+        answers
+      });
+
+      if (error) {
+        NexusUI.toast(error.message || "Could not submit setup.");
+
+        document.getElementById("setupSubmitResult").innerHTML = `
+  <div class="success" style="margin-top:1rem">
+    <strong>Setup submitted.</strong><br>
+    ${
+      data?.triggered_n8n
+        ? "Your automation is running now. Outputs or errors will appear in your dashboard."
+        : "Nexus has received your setup details. Your automation will be prepared next."
+    }
+  </div>
+`;
+
+        button.disabled = false;
+        button.textContent = originalText;
+        return;
+      }
+
+      latestSubmission = data?.submission || {
+        answers
+      };
+
+      document.getElementById("setupSubmitResult").innerHTML = `
+        <div class="success" style="margin-top:1rem">
+          <strong>Setup submitted.</strong><br>
+          ${
+            data?.triggered_n8n
+              ? "Your automation has started. Outputs will appear in your dashboard when it finishes."
+              : "Nexus has received your setup details. Your automation will be prepared next."
+          }
+        </div>
+      `;
+
+      NexusUI.toast(
+        data?.triggered_n8n
+          ? "Setup submitted. Automation started."
+          : "Setup submitted."
+      );
+
+      button.disabled = false;
+      button.textContent = "Update setup details";
+
+      setTimeout(function () {
+        location.href = "/pages/buyer/dashboard.html";
+      }, 1800);
+    }
+
+    document.addEventListener("DOMContentLoaded", initSetupPage);
+  </script>
+</body>
+</html>

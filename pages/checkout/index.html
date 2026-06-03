@@ -1,0 +1,79 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Checkout | Nexus AI</title>
+</head>
+
+<body data-page="checkout">
+  <header class="site-header">
+    <div class="container nav">
+      <a class="logo" href="/index.html">
+        <span>Nexus</span>
+      </a>
+
+      <nav class="nav-links">
+        <a class="nav-link" href="/index.html">Home</a>
+        <a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a>
+        <a class="nav-link" href="/pages/developers/index.html">Developers</a>
+        <a class="nav-link" href="/pages/about/index.html">About</a>
+        <a class="nav-link" href="/pages/contact/index.html">Contact</a>
+        <a class="btn btn-secondary btn-small" href="/pages/developers/waitlist.html">Developer Waitlist</a>
+
+        <span class="buyer-nav-slot" id="buyerNavSlot">
+          <a class="btn btn-primary btn-small" href="/pages/buyer/login.html">Login</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="checkout-page-section">
+      <div class="container">
+        <div id="checkoutRoot">
+          <div class="card">
+            <h2>Loading checkout...</h2>
+            <p>Please wait while Nexus prepares your automation setup page.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-row">
+      <div>
+        <strong>Nexus</strong><br>
+        <span>The trusted marketplace layer for business automation.</span>
+      </div>
+
+      <div class="footer-links">
+        <a href="/pages/marketplace/index.html">Marketplace</a>
+        <a href="/pages/developers/index.html">Developers</a>
+        <a href="/pages/developers/waitlist.html">Developer Waitlist</a>
+        <a href="/pages/about/index.html">About</a>
+        <a href="/pages/contact/index.html">Contact</a>
+        <a href="/pages/legal/privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+  <script src="/assets/js/nexus-buyer-nav.js"></script>
+  <script src="/assets/js/nexus-app.js"></script>
+</body>
+</html>

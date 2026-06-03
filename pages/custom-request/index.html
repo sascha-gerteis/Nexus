@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <title>Custom Automation Request | Nexus AI</title>
+</head>
+<body data-page="custom-request">
+  <header class="site-header" id="globalNav" data-active="marketplace"></header>
+
+  <main>
+    <section class="section alt">
+      <div class="container">
+        <a class="btn btn-secondary btn-small" id="backLink" href="/pages/marketplace/index.html">Back</a>
+        <div class="section-head left" style="margin-top:1rem">
+          <span class="eyebrow">Custom automation request</span>
+          <h1 id="requestTitle">Request a custom automation.</h1>
+          <p id="requestIntro">Tell Nexus what you want automated and we will review the scope, tools, timeline, and next step.</p>
+        </div>
+
+        <div class="grid-2">
+          <article class="card" id="productContext">
+            <span class="pill blue">Custom quote</span>
+            <h3>Built around your process</h3>
+            <p>Use this form for AI agents, workflow automations, dashboards, reporting systems, and micro-SaaS style internal tools.</p>
+          </article>
+
+          <form class="card" id="customRequestForm">
+            <div class="form-grid">
+              <div><label>Name</label><input class="input" name="name" required></div>
+              <div><label>Email</label><input class="input" name="email" type="email" required></div>
+              <div><label>Company</label><input class="input" name="company"></div>
+              <div><label>Phone</label><input class="input" name="phone"></div>
+              <div class="full"><label>Website</label><input class="input" name="website"></div>
+              <div class="full"><label>What do you want automated?</label><textarea class="textarea" name="automation_goal" required></textarea></div>
+              <div class="full"><label>Current manual process</label><textarea class="textarea" name="current_process"></textarea></div>
+              <div class="full"><label>Tools/systems involved</label><input class="input" name="tools" placeholder="Google Sheets, Slack, HubSpot, n8n, APIs..."></div>
+              <div class="full"><label>Desired output/result</label><textarea class="textarea" name="desired_output"></textarea></div>
+              <div><label>Budget range</label><input class="input" name="budget_range" placeholder="Example: 10,000-30,000 THB"></div>
+              <div><label>Timeline/urgency</label><input class="input" name="timeline" placeholder="This week, this month, flexible..."></div>
+              <div class="full"><label>Extra notes</label><textarea class="textarea" name="notes"></textarea></div>
+            </div>
+            <button class="btn btn-primary" style="margin-top:1rem">Send request</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async function () {
+      const params = new URLSearchParams(location.search);
+      const slug = params.get("slug") || "";
+      const form = document.getElementById("customRequestForm");
+      let product = null;
+
+      if (document.referrer && document.referrer.startsWith(location.origin)) {
+        document.getElementById("backLink").href = document.referrer;
+      }
+
+      if (slug) {
+        const { data } = await NexusDB.getAutomationBySlug(slug);
+        product = data || null;
+
+        if (product) {
+          document.getElementById("requestTitle").textContent = `Request: ${product.title}`;
+          document.getElementById("requestIntro").textContent = product.short_description || product.outcome || "Send your request and Nexus will review the scope.";
+          document.getElementById("productContext").innerHTML = `
+            <span class="pill blue">Custom quote</span>
+            <h3>${NexusUI.escapeHtml(product.title || "Custom automation")}</h3>
+            <p>${NexusUI.escapeHtml(product.long_description || product.short_description || "")}</p>
+            ${product.outcome ? `<p><strong>Outcome:</strong> ${NexusUI.escapeHtml(product.outcome)}</p>` : ""}
+          `;
+        }
+      }
+
+      const { data: session } = await NexusDB.getSession();
+      if (session?.session?.user) {
+        const user = session.session.user;
+        form.elements.email.value = user.email || "";
+
+        if (typeof NexusDB.getCurrentBuyerAccount === "function") {
+          const { data } = await NexusDB.getCurrentBuyerAccount();
+          const buyer = data?.buyer_profile || {};
+          form.elements.name.value = buyer.name || data?.profile?.full_name || user.user_metadata?.full_name || "";
+          form.elements.company.value = buyer.company || "";
+          form.elements.phone.value = buyer.phone || "";
+          form.elements.website.value = buyer.website || "";
+        }
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const formData = new FormData(form);
+        const fields = Object.fromEntries(formData.entries());
+        const title = product?.title || "General custom automation";
+        const readable = [
+          `Product: ${title}`,
+          `Name: ${fields.name}`,
+          `Email: ${fields.email}`,
+          `Company: ${fields.company || ""}`,
+          `Phone: ${fields.phone || ""}`,
+          `Website: ${fields.website || ""}`,
+          "",
+          `Goal: ${fields.automation_goal || ""}`,
+          `Current process: ${fields.current_process || ""}`,
+          `Tools: ${fields.tools || ""}`,
+          `Desired output: ${fields.desired_output || ""}`,
+          `Budget: ${fields.budget_range || ""}`,
+          `Timeline: ${fields.timeline || ""}`,
+          `Notes: ${fields.notes || ""}`
+        ].join("\n");
+
+        const payload = {
+          name: fields.name || "",
+          email: fields.email || "",
+          company: fields.company || "",
+          inquiry_type: "custom_automation",
+          source: "custom_request_product",
+          subject: `Custom automation request: ${title}`,
+          message: readable,
+          metadata: {
+            product_id: product?.id || null,
+            product_slug: product?.slug || slug || "",
+            product_title: title,
+            intake: fields
+          },
+          status: "new"
+        };
+
+        const submit = NexusDB.submitContactMessage || NexusDB.createContactMessage || NexusDB.createContact;
+        const { error } = await submit(payload);
+
+        if (error) {
+          NexusUI.toast(error.message || "Could not send request.");
+          return;
+        }
+
+        location.href = "/pages/contact/index.html?sent=custom-request";
+      });
+    });
+  </script>
+</body>
+</html>

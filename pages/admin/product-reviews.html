@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <title>Product Review Queue | Nexus AI</title>
+</head>
+<body data-admin="true" data-admin-page="product-reviews">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+  <div class="dashboard">
+    <aside class="sidebar"></aside>
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Review queue</span>
+        <h2>Approve developer products.</h2>
+        <p>Pending developer submissions stay here until Nexus approves or rejects them.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Status</th>
+              <th>Price</th>
+              <th>Developer</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminProductRows"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+  <script src="/assets/js/nexus-app.js"></script>
+</body>
+</html>

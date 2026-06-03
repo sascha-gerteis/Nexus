@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Buyer Dashboard | Nexus AI</title>
+</head>
+
+<body data-page="buyer-dashboard">
+  <header class="site-header" id="globalNav" data-active="dashboard"></header>
+
+  <main class="buyer-dashboard-tabs-page">
+    <section class="buyer-dashboard-tabs-hero">
+      <div class="container">
+        <span class="eyebrow">Buyer dashboard</span>
+        <h1 id="buyerWelcome">Your automation dashboard.</h1>
+        <p>
+          Track your automations, view outputs, complete setup, and monitor important activity from one clean dashboard.
+        </p>
+
+        <div class="buyer-dashboard-quick-status">
+          <div>
+            <span>Account status</span>
+            <strong id="buyerMainStatus">Loading...</strong>
+            <p id="buyerMainStatusText">Checking your automation status...</p>
+          </div>
+
+          <div class="buyer-dashboard-hero-actions">
+            <a class="btn btn-primary" href="/pages/marketplace/index.html">Browse automations</a>
+            <a class="btn btn-secondary" href="/pages/contact/index.html">Get support</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="buyer-dashboard-tabs-content">
+      <div class="container">
+        <div class="buyer-overview-strip">
+          <article>
+            <span>Automations</span>
+            <strong id="buyerAutomationCount">0</strong>
+          </article>
+
+          <article>
+            <span>Ready</span>
+            <strong id="buyerReadyCount">0</strong>
+          </article>
+
+          <article>
+            <span>Outputs</span>
+            <strong id="buyerOutputCount">0</strong>
+          </article>
+
+          <article>
+            <span>Issues</span>
+            <strong id="buyerIssueCount">0</strong>
+          </article>
+        </div>
+
+        <div class="buyer-tabs-shell">
+          <div class="buyer-tabs">
+            <button class="buyer-tab active" type="button" data-tab="overview">Overview</button>
+            <button class="buyer-tab" type="button" data-tab="automations">My Automations</button>
+            <button class="buyer-tab" type="button" data-tab="outputs">Outputs</button>
+            <button class="buyer-tab" type="button" data-tab="activity">Activity</button>
+            <button class="buyer-tab" type="button" data-tab="orders">Orders</button>
+          </div>
+
+          <section class="buyer-tab-panel active" data-tab-panel="overview">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Overview</span>
+                <h2>What needs your attention?</h2>
+                <p>Your most important automation updates in one place.</p>
+              </div>
+            </div>
+
+            <div id="overviewRoot" class="buyer-overview-dashboard">
+              Loading overview...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="automations">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">My automations</span>
+                <h2>Purchased automations</h2>
+                <p>Manage setup, status, and latest results for each automation.</p>
+              </div>
+            </div>
+
+            <div id="buyerAutomationsList" class="buyer-clean-list">
+              Loading automations...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="outputs">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Outputs</span>
+                <h2>Automation outputs</h2>
+                <p>Reports, generated files, and workflow results from your automations.</p>
+              </div>
+            </div>
+
+            <div id="buyerOutputsList" class="buyer-clean-list">
+              Loading outputs...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="activity">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Activity</span>
+                <h2>Setup and runtime logs</h2>
+                <p>Important status updates, setup events, and runtime errors.</p>
+              </div>
+            </div>
+
+            <div id="buyerEventsList" class="buyer-activity-timeline">
+              Loading activity...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="orders">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Orders</span>
+                <h2>Orders and billing</h2>
+                <p>Your purchased automations and payment status.</p>
+              </div>
+            </div>
+
+            <div id="buyerOrdersList" class="buyer-clean-list">
+              Loading orders...
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="nexus-modal-lite" id="cancelAutomationModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeCancellationModal()"></div>
+
+    <div class="nexus-modal-lite-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeCancellationModal()">×</button>
+
+      <span class="eyebrow">Cancellation request</span>
+
+      <h2>Request cancellation</h2>
+
+      <p id="cancelAutomationModalText">
+        Tell Nexus why you want to cancel this automation. Your request will be reviewed before anything is cancelled.
+      </p>
+
+      <form id="cancelAutomationForm">
+        <input type="hidden" id="cancelCustomerAutomationId">
+
+        <label>Reason for cancellation</label>
+        <textarea
+          class="textarea"
+          id="cancelReason"
+          required
+          minlength="10"
+          placeholder="Example: We no longer need this automation, or we want to switch to another setup."
+        ></textarea>
+
+        <div class="modal-lite-actions">
+          <button class="btn btn-secondary" type="button" onclick="closeCancellationModal()">
+            Keep automation
+          </button>
+
+          <button class="btn btn-primary" type="submit">
+            Submit request
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="nexus-modal-lite" id="buyerNoticeModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeBuyerNoticeModal()"></div>
+
+    <div class="nexus-modal-lite-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeBuyerNoticeModal()">×</button>
+
+      <span class="eyebrow" id="buyerNoticeEyebrow">Update</span>
+
+      <h2 id="buyerNoticeTitle">Request submitted</h2>
+
+      <p id="buyerNoticeMessage">
+        Your request was submitted successfully.
+      </p>
+
+      <div class="modal-lite-actions">
+        <button class="btn btn-primary" type="button" onclick="closeBuyerNoticeModal()">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js"></script>
+<script src="/assets/js/nexus-notice.js"></script>
+<script src="/assets/js/nexus-db.js"></script>
+<script src="/assets/js/nexus-app.js"></script>
+
+  <script>
+    let dashboardData = {
+      profile: null,
+      orders: [],
+      automations: [],
+      events: [],
+      outputs: []
+    };
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function dateLabel(value) {
+      if (!value) return "";
+      return new Date(value).toLocaleString();
+    }
+
+    function humanizeStatus(value) {
+  const raw = String(value || "").trim().toLowerCase();
+
+  const labels = {
+    "": "Not started",
+
+    not_started: "Not started",
+    not_configured: "Not configured",
+    configured: "Configured",
+    healthy: "Healthy",
+    attention_required: "Needs attention",
+
+    requested: "Setup requested",
+    submitted: "Submitted",
+    complete: "Complete",
+    completed: "Complete",
+
+    pending_setup: "Setup needed",
+    setup_requested: "Setup requested",
+    setting_up: "Setting up",
+
+    guided_install_needed: "Install request needed",
+    guided_install_requested: "Install requested",
+    guided_install_contacted: "Nexus contacted you",
+    guided_install_in_progress: "Install in progress",
+    waiting_for_nexus_install: "Waiting for Nexus install",
+
+    running: "Running",
+    queued: "Queued",
+    success: "Success",
+    error: "Error",
+    failed: "Failed",
+    blocked: "Blocked",
+    cancelled: "Cancelled",
+
+    paid: "Paid",
+    pending: "Pending",
+    expired: "Expired",
+    payment_failed: "Payment failed",
+    checkout_started: "Checkout started",
+
+    self_serve: "Self-serve",
+    self_server: "Self-serve",
+    nexus_install: "Nexus Guided Install",
+    nexus_guided: "Nexus Guided Install",
+    guided_install: "Nexus Guided Install"
+  };
+
+  if (labels[raw]) return labels[raw];
+
+  return raw
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function humanizeInstallType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+
+  if (
+    raw.includes("nexus") ||
+    raw.includes("guided")
+  ) {
+    return "Nexus Guided Install";
+  }
+
+  if (
+    raw.includes("self") ||
+    raw === "setup"
+  ) {
+    return "Self-serve";
+  }
+
+  return humanizeStatus(raw || "self_serve");
+}
+
+function humanizeSetupStatus(item) {
+  const setupStatus = String(item?.setup_status || "not_started").toLowerCase();
+
+  if (isGuidedInstall(item)) {
+    if (setupStatus === "guided_install_requested") return "Install requested";
+    if (setupStatus === "guided_install_contacted") return "Nexus contacted you";
+    if (setupStatus === "guided_install_in_progress") return "Install in progress";
+    if (setupStatus === "completed" || setupStatus === "complete") return "Install complete";
+    if (setupStatus === "blocked") return "Blocked";
+    if (setupStatus === "cancelled") return "Cancelled";
+
+    return "Install request needed";
+  }
+
+  return humanizeStatus(setupStatus);
+}
+
+    function getLatestOutputForAutomation(outputs, customerAutomationId) {
+      return (outputs || []).find(output => output.customer_automation_id === customerAutomationId) || null;
+    }
+
+    function isGuidedInstall(item) {
+      const installType = String(item?.install_type || "").toLowerCase();
+      const setupStatus = String(item?.setup_status || "").toLowerCase();
+
+      return (
+        installType.includes("guided") ||
+        installType.includes("nexus") ||
+        setupStatus.includes("guided_install")
+      );
+    }
+
+    function getBuyerSetupUrl(item) {
+      if (isGuidedInstall(item)) {
+        return `/pages/buyer/install-request.html?id=${encodeURIComponent(item.id)}`;
+      }
+
+      return `/pages/buyer/setup.html?id=${encodeURIComponent(item.id)}`;
+    }
+
+    function getBuyerSetupActionLabel(item) {
+      const setupStatus = String(item?.setup_status || "").toLowerCase();
+
+      if (isGuidedInstall(item)) {
+        if (setupStatus === "completed") return "View install request";
+        if (setupStatus === "guided_install_requested") return "View install request";
+        if (setupStatus === "guided_install_contacted") return "View install request";
+        if (setupStatus === "guided_install_in_progress") return "View install request";
+        return "Complete install request";
+      }
+
+      if (setupStatus === "submitted" || setupStatus === "completed" || setupStatus === "complete") {
+        return "View setup";
+      }
+
+      return "Complete setup";
+    }
+
+   function getSetupDisplayLabel(item) {
+  return humanizeSetupStatus(item);
+}
+    function getAutomationActionButton(item, latestOutput, state) {
+      const setupUrl = getBuyerSetupUrl(item);
+      const setupLabel = getBuyerSetupActionLabel(item);
+      const supportLink = "/pages/contact/index.html";
+      const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+
+      if (state.label === "Ready" && latestOutput) {
+        return `<a class="btn btn-primary btn-small" href="${outputLink}">View latest output</a>`;
+      }
+
+      if (state.label === "Issue detected") {
+        return `<a class="btn btn-primary btn-small" href="${supportLink}">Contact support</a>`;
+      }
+
+      return `<a class="btn btn-primary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>`;
+    }
+
+    function openBuyerNoticeModal(type, title, message) {
+      const modal = document.getElementById("buyerNoticeModal");
+      const eyebrow = document.getElementById("buyerNoticeEyebrow");
+      const titleEl = document.getElementById("buyerNoticeTitle");
+      const messageEl = document.getElementById("buyerNoticeMessage");
+
+      if (!modal) {
+        NexusUI.toast(message || title || "Update");
+        return;
+      }
+
+      if (eyebrow) {
+        eyebrow.textContent = type === "error" ? "Error" : "Success";
+      }
+
+      if (titleEl) {
+        titleEl.textContent = title || (type === "error" ? "Something went wrong" : "Request submitted");
+      }
+
+      if (messageEl) {
+        messageEl.textContent = message || "";
+      }
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeBuyerNoticeModal() {
+      const modal = document.getElementById("buyerNoticeModal");
+
+      if (!modal) return;
+
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    function pillClassFromTone(tone) {
+      if (tone === "green") return "pill green";
+      if (tone === "red") return "pill red";
+      if (tone === "orange") return "pill orange";
+      if (tone === "purple") return "pill purple";
+      return "pill blue";
+    }
+
+    function automationState(item, latestOutput) {
+      const setupStatus = String(item.setup_status || "not_started").toLowerCase();
+      const runtimeStatus = String(item.runtime_status || "not_started").toLowerCase();
+      const healthStatus = String(item.health_status || "not_configured").toLowerCase();
+      const status = String(item.status || "").toLowerCase();
+
+      if (
+        item.last_error_message ||
+        runtimeStatus === "error" ||
+        runtimeStatus === "failed" ||
+        healthStatus === "error" ||
+        healthStatus === "unhealthy" ||
+        status === "error"
+      ) {
+        return {
+          label: "Issue detected",
+          tone: "red",
+          description: item.last_error_message || "This automation needs attention. Nexus is reviewing the issue.",
+          primaryAction: "Contact support"
+        };
+      }
+
+      if (isGuidedInstall(item)) {
+        if (setupStatus === "completed" || setupStatus === "complete") {
+          return {
+            label: "Install complete",
+            tone: "green",
+            description: "Nexus Guided Install has been completed for this automation.",
+            primaryAction: "View install request"
+          };
+        }
+
+        if (setupStatus === "guided_install_requested") {
+          return {
+            label: "Install requested",
+            tone: "orange",
+            description: "Your Nexus Guided Install request was submitted. Nexus will contact you soon.",
+            primaryAction: "View install request"
+          };
+        }
+
+        if (setupStatus === "guided_install_contacted") {
+          return {
+            label: "Contacted",
+            tone: "blue",
+            description: "Nexus has contacted you or your technical contact for installation.",
+            primaryAction: "View install request"
+          };
+        }
+
+        if (setupStatus === "guided_install_in_progress") {
+          return {
+            label: "Install in progress",
+            tone: "blue",
+            description: "Nexus is currently preparing this automation with your team.",
+            primaryAction: "View install request"
+          };
+        }
+
+        if (setupStatus === "blocked") {
+          return {
+            label: "Blocked",
+            tone: "red",
+            description: item.last_error_message || "Nexus needs more information to complete installation.",
+            primaryAction: "View install request"
+          };
+        }
+
+        return {
+          label: "Install request needed",
+          tone: "orange",
+          description: "Complete the Nexus Guided Install request so Nexus can coordinate setup.",
+          primaryAction: "Complete install request"
+        };
+      }
+
+      if (latestOutput || runtimeStatus === "success" || setupStatus === "complete" || setupStatus === "completed" || status === "active") {
+        return {
+          label: "Ready",
+          tone: "green",
+          description: "This automation is configured and has produced an output.",
+          primaryAction: "View output"
+        };
+      }
+
+      if (runtimeStatus === "running" || healthStatus === "running" || status === "running") {
+        return {
+          label: "Running",
+          tone: "orange",
+          description: "Your automation is currently running. Outputs will appear when it finishes.",
+          primaryAction: "View status"
+        };
+      }
+
+      if (status === "waiting_for_nexus" || setupStatus === "submitted") {
+        return {
+          label: "Setting up",
+          tone: "orange",
+          description: "Your setup was submitted. Nexus is preparing the automation.",
+          primaryAction: "View setup"
+        };
+      }
+
+      return {
+        label: "Needs setup",
+        tone: "orange",
+        description: "Complete the setup form to start this automation.",
+        primaryAction: "Complete setup"
+      };
+    }
+
+    function orderStatusLabel(order) {
+  const payment = String(order.payment_status || "").toLowerCase();
+  const status = String(order.order_status || "").toLowerCase();
+
+  if (payment === "paid") return "Paid";
+  if (payment === "expired") return "Expired";
+  if (payment === "payment_failed") return "Payment failed";
+  if (status === "checkout_started") return "Checkout started";
+  if (status === "guided_install_needed") return "Install request needed";
+  if (status === "guided_install_requested") return "Install requested";
+  if (status === "guided_install_contacted") return "Nexus contacted you";
+  if (status === "guided_install_in_progress") return "Install in progress";
+  if (status === "completed") return "Complete";
+  if (status === "cancelled") return "Cancelled";
+
+  return humanizeStatus(order.order_status || order.payment_status || "pending");
+}
+    function activateTab(tabName) {
+      document.querySelectorAll(".buyer-tab").forEach(button => {
+        button.classList.toggle("active", button.dataset.tab === tabName);
+      });
+
+      document.querySelectorAll(".buyer-tab-panel").forEach(panel => {
+        panel.classList.toggle("active", panel.dataset.tabPanel === tabName);
+      });
+
+      localStorage.setItem("nexus_buyer_dashboard_tab", tabName);
+    }
+
+    function wireTabs() {
+      document.querySelectorAll(".buyer-tab").forEach(button => {
+        button.addEventListener("click", () => {
+          activateTab(button.dataset.tab);
+        });
+      });
+
+      const savedTab = localStorage.getItem("nexus_buyer_dashboard_tab") || "overview";
+      activateTab(savedTab);
+    }
+
+    async function loadBuyerDashboard() {
+      const user = await NexusDB.requireBuyer("/pages/buyer/dashboard.html");
+      if (!user) return;
+
+      if (typeof NexusDB.ensureCustomerAutomations === "function") {
+  await NexusDB.ensureCustomerAutomations();
+}
+
+const [
+  { data: profile },
+  { data: orders },
+  { data: automations },
+  { data: events },
+  { data: outputs }
+] = await Promise.all([
+  NexusDB.getBuyerProfile(user.id),
+  NexusDB.listBuyerOrders(user.id),
+  NexusDB.listBuyerCustomerAutomations(user.id),
+  NexusDB.listBuyerAutomationEvents(user.id),
+  NexusDB.listBuyerAutomationOutputs
+    ? NexusDB.listBuyerAutomationOutputs()
+    : Promise.resolve({ data: [] })
+]);
+      
+      
+
+      dashboardData = {
+        profile: profile || null,
+        orders: orders || [],
+        automations: automations || [],
+        events: events || [],
+        outputs: outputs || []
+      };
+
+      renderDashboard();
+    }
+
+    function renderDashboard() {
+      const { profile, orders, automations, events, outputs } = dashboardData;
+
+      const states = automations.map(item => {
+        return automationState(item, getLatestOutputForAutomation(outputs, item.id));
+      });
+
+      const readyCount = states.filter(state => state.label === "Ready" || state.label === "Install complete").length;
+      const issueCount = states.filter(state => state.label === "Issue detected" || state.label === "Blocked").length;
+      const runningCount = states.filter(state => state.label === "Running" || state.label === "Install in progress").length;
+      const setupNeededCount = states.filter(state => state.label === "Needs setup" || state.label === "Install request needed").length;
+
+      document.getElementById("buyerWelcome").textContent =
+        profile?.name ? `Welcome back, ${profile.name}.` : "Your automation dashboard.";
+
+      document.getElementById("buyerAutomationCount").textContent = automations.length;
+      document.getElementById("buyerReadyCount").textContent = readyCount;
+      document.getElementById("buyerOutputCount").textContent = outputs.length;
+      document.getElementById("buyerIssueCount").textContent = issueCount;
+
+      const mainStatus = document.getElementById("buyerMainStatus");
+      const mainStatusText = document.getElementById("buyerMainStatusText");
+
+      if (!automations.length) {
+        mainStatus.textContent = "No automations yet";
+        mainStatusText.textContent = "Browse the marketplace to purchase your first automation.";
+      } else if (issueCount > 0) {
+        mainStatus.textContent = "Needs attention";
+        mainStatusText.textContent = `${issueCount} automation${issueCount === 1 ? "" : "s"} need attention.`;
+      } else if (runningCount > 0) {
+        mainStatus.textContent = "Running";
+        mainStatusText.textContent = `${runningCount} automation${runningCount === 1 ? " is" : "s are"} currently running.`;
+      } else if (setupNeededCount > 0) {
+        mainStatus.textContent = "Action required";
+        mainStatusText.textContent = `${setupNeededCount} automation${setupNeededCount === 1 ? "" : "s"} need your next step.`;
+      } else {
+        mainStatus.textContent = "All good";
+        mainStatusText.textContent = "Your automations are configured and healthy.";
+      }
+
+      renderOverview(automations, outputs, events, orders);
+      renderAutomations(automations, outputs);
+      renderOutputs(outputs);
+      renderEvents(events);
+      renderOrders(orders);
+    }
+
+    function renderOverview(automations, outputs, events, orders) {
+      const root = document.getElementById("overviewRoot");
+
+      if (!root) return;
+
+      const latestOutput = outputs[0] || null;
+
+      const priorityAutomation = automations.find(item => {
+        const state = automationState(item, getLatestOutputForAutomation(outputs, item.id));
+        return (
+          state.label === "Issue detected" ||
+          state.label === "Blocked" ||
+          state.label === "Needs setup" ||
+          state.label === "Install request needed" ||
+          state.label === "Running" ||
+          state.label === "Install in progress"
+        );
+      }) || automations[0] || null;
+
+      const priorityLatestOutput = priorityAutomation
+        ? getLatestOutputForAutomation(outputs, priorityAutomation.id)
+        : null;
+
+      const priorityState = priorityAutomation
+        ? automationState(priorityAutomation, priorityLatestOutput)
+        : null;
+
+      const priorityProduct = priorityAutomation?.automations || {};
+
+      root.innerHTML = `
+        <div class="buyer-overview-two-col">
+          <article class="buyer-focus-card">
+            <span class="eyebrow">Next action</span>
+
+            ${
+              priorityAutomation
+                ? `
+                  <div class="buyer-focus-title-row">
+                    <div class="automation-icon ${escapeHtml(priorityProduct.color || "")}">
+                      ${escapeHtml(priorityProduct.icon || "AI")}
+                    </div>
+
+                    <div>
+                      <span class="${pillClassFromTone(priorityState.tone)}">${escapeHtml(priorityState.label)}</span>
+                      <h3>${escapeHtml(priorityAutomation.name || priorityProduct.title || "Automation")}</h3>
+                    </div>
+                  </div>
+
+                  <p>${escapeHtml(priorityState.description)}</p>
+
+                  <div class="buyer-focus-actions">
+                    ${getAutomationActionButton(priorityAutomation, priorityLatestOutput, priorityState)}
+
+                    <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('automations')">
+                      View all automations
+                    </button>
+                  </div>
+                `
+                : `
+                  <h3>No automations yet</h3>
+                  <p>Buy your first automation from the marketplace to start using Nexus.</p>
+                  <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+                `
+            }
+          </article>
+
+          <article class="buyer-focus-card">
+            <span class="eyebrow">Latest output</span>
+
+            ${
+              latestOutput
+                ? `
+                  <h3>${escapeHtml(latestOutput.title || "Automation output")}</h3>
+                  <p>${escapeHtml(latestOutput.summary || "Your latest automation result is ready.")}</p>
+
+                  <div class="buyer-output-mini-meta">
+                    <span>${escapeHtml(latestOutput.automations?.title || "Automation")}</span>
+                    <span>${escapeHtml(dateLabel(latestOutput.created_at))}</span>
+                  </div>
+
+                  <div class="buyer-focus-actions">
+                    <a class="btn btn-primary btn-small" href="/pages/buyer/output.html?id=${latestOutput.id}">
+                      View output
+                    </a>
+
+                    <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('outputs')">
+                      View all outputs
+                    </button>
+                  </div>
+                `
+                : `
+                  <h3>No outputs yet</h3>
+                  <p>Outputs will appear here once your automations finish running.</p>
+                  <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('automations')">
+                    View automations
+                  </button>
+                `
+            }
+          </article>
+        </div>
+
+        <div class="buyer-overview-three-col">
+          <article>
+            <span>Latest activity</span>
+            <strong>${escapeHtml(events[0]?.title || "No activity yet")}</strong>
+            <p>${escapeHtml(events[0]?.message || "Setup, payment, and runtime events will appear here.")}</p>
+          </article>
+
+          <article>
+            <span>Latest order</span>
+            <strong>${escapeHtml(orders[0]?.automation_title || "No orders yet")}</strong>
+            <p>${escapeHtml(orders[0]?.price_display || "Purchases will appear here.")}</p>
+          </article>
+
+          <article>
+            <span>Support</span>
+            <strong>Need help?</strong>
+            <p>Contact Nexus if an automation has an issue or setup question.</p>
+          </article>
+        </div>
+      `;
+    }
+
+    function renderAutomations(automations, outputs) {
+      const root = document.getElementById("buyerAutomationsList");
+
+      if (!root) return;
+
+      if (!automations.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No automations yet</h3>
+            <p>After purchasing an automation, it will appear here.</p>
+            <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = automations.map(item => {
+        const product = item.automations || {};
+        const latestOutput = getLatestOutputForAutomation(outputs, item.id);
+        const state = automationState(item, latestOutput);
+
+        const setupUrl = getBuyerSetupUrl(item);
+        const setupLabel = getBuyerSetupActionLabel(item);
+        const outputLink = latestOutput ? `/pages/buyer/output.html?id=${latestOutput.id}` : "";
+        const primaryButton = getAutomationActionButton(item, latestOutput, state);
+
+        return `
+          <article class="buyer-clean-card automation">
+            <div class="buyer-clean-card-main">
+              <div class="automation-icon ${escapeHtml(product.color || "")}">
+                ${escapeHtml(product.icon || "AI")}
+              </div>
+
+              <div>
+                <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
+                <h3>${escapeHtml(item.name || product.title || "Automation")}</h3>
+                <p>${escapeHtml(product.short_description || state.description)}</p>
+              </div>
+            </div>
+
+            <div class="buyer-clean-card-status">
+              <strong>${escapeHtml(state.description)}</strong>
+
+              ${
+                latestOutput
+                  ? `
+                    <div class="buyer-clean-latest-output">
+                      <span>Latest output</span>
+                      <b>${escapeHtml(latestOutput.title || "Automation output")}</b>
+                      <p>${escapeHtml(latestOutput.summary || "")}</p>
+                    </div>
+                  `
+                  : ""
+              }
+
+              ${
+                item.last_error_message
+                  ? `
+                    <div class="buyer-error-box">
+                      <strong>Automation error</strong>
+                      <p>${escapeHtml(item.last_error_message)}</p>
+                    </div>
+                  `
+                  : ""
+              }
+            </div>
+
+            <div class="buyer-clean-meta-grid">
+              <div>
+                <span>Setup</span>
+                <strong>${escapeHtml(getSetupDisplayLabel(item))}</strong>
+              </div>
+
+             <div>
+  <span>Runtime</span>
+  <strong>${escapeHtml(humanizeStatus(item.runtime_status || "not_started"))}</strong>
+</div>
+
+<div>
+  <span>Health</span>
+  <strong>${escapeHtml(humanizeStatus(item.health_status || "not_configured"))}</strong>
+</div>
+
+            <div class="buyer-clean-actions">
+              ${primaryButton}
+
+              <a class="btn btn-secondary btn-small" href="${setupUrl}">
+                ${escapeHtml(setupLabel)}
+              </a>
+
+              ${
+                latestOutput
+                  ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View output</a>`
+                  : ""
+              }
+            </div>
+
+            <button
+              class="buyer-cancel-link"
+              type="button"
+              data-cancel-automation-id="${item.id}"
+              data-cancel-automation-name="${escapeHtml(item.name || product.title || "Automation")}"
+            >
+              Request cancellation
+            </button>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderOutputs(outputs) {
+      const root = document.getElementById("buyerOutputsList");
+
+      if (!root) return;
+
+      if (!outputs.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No outputs yet</h3>
+            <p>Automation results will appear here once your workflows run.</p>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = outputs.slice(0, 20).map(output => {
+        const product = output.automations || {};
+        const outputLink = `/pages/buyer/output.html?id=${output.id}`;
+
+        return `
+          <article class="buyer-clean-card output">
+            <div>
+              <span class="${NexusUI.pillClass(product.color || "blue")}">
+                ${escapeHtml(output.output_type || product.category || "Output")}
+              </span>
+
+              <h3>${escapeHtml(output.title || "Automation output")}</h3>
+              <p>${escapeHtml(output.summary || "View the generated result from this automation.")}</p>
+
+              <div class="buyer-output-mini-meta">
+                <span>${escapeHtml(product.title || "Automation")}</span>
+                <span>${escapeHtml(dateLabel(output.created_at))}</span>
+              </div>
+            </div>
+
+            <a class="btn btn-secondary btn-small" href="${outputLink}">View</a>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderEvents(events) {
+      const root = document.getElementById("buyerEventsList");
+
+      if (!root) return;
+
+      if (!events.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No activity yet</h3>
+            <p>Setup, payment, and runtime logs will appear here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = events.slice(0, 30).map(event => {
+        const isError =
+          String(event.event_type || "").includes("failed") ||
+          String(event.title || "").toLowerCase().includes("failed") ||
+          String(event.title || "").toLowerCase().includes("error");
+
+        return `
+          <article class="buyer-activity-row ${isError ? "error" : ""}">
+            <div class="buyer-activity-dot"></div>
+
+            <div>
+              <strong>${escapeHtml(event.title || "Update")}</strong>
+              <p>${escapeHtml(event.message || "")}</p>
+              <span>${escapeHtml(dateLabel(event.created_at))}</span>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderOrders(orders) {
+      const root = document.getElementById("buyerOrdersList");
+
+      if (!root) return;
+
+      if (!orders.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No orders yet</h3>
+            <p>Your purchases will appear here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = orders.slice(0, 20).map(order => {
+        const label = orderStatusLabel(order);
+        const paid = String(order.payment_status || "").toLowerCase() === "paid";
+
+        return `
+          <article class="buyer-clean-card order">
+            <div>
+              <span class="${paid ? "pill green" : "pill orange"}">${escapeHtml(label)}</span>
+              <h3>${escapeHtml(order.automation_title || order.automations?.title || "Automation")}</h3>
+              <p>${escapeHtml(order.price_display || "")}</p>
+
+              <div class="buyer-output-mini-meta">
+                <span>${escapeHtml(humanizeInstallType(order.install_type || "self_serve"))}</span>
+                <span>${escapeHtml(dateLabel(order.created_at))}</span>
+              </div>
+            </div>
+
+            <div class="buyer-order-status-side">
+              <strong>${escapeHtml(order.currency || "")}</strong>
+              <span>${escapeHtml(humanizeStatus(order.payment_status || "pending"))}</span>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function openCancellationModal(customerAutomationId, automationName) {
+      const modal = document.getElementById("cancelAutomationModal");
+      const input = document.getElementById("cancelCustomerAutomationId");
+      const reason = document.getElementById("cancelReason");
+      const text = document.getElementById("cancelAutomationModalText");
+
+      if (!modal || !input || !reason) {
+        console.error("Cancellation modal elements are missing.");
+        NexusUI.toast("Cancellation modal is missing on this page.");
+        return;
+      }
+
+      input.value = customerAutomationId;
+      reason.value = "";
+
+      if (text) {
+        text.textContent = `Tell Nexus why you want to cancel “${automationName}”. Your request will be reviewed before anything is cancelled.`;
+      }
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+
+      setTimeout(() => {
+        reason.focus();
+      }, 100);
+    }
+
+    function closeCancellationModal() {
+      const modal = document.getElementById("cancelAutomationModal");
+
+      if (!modal) return;
+
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    async function submitCancellationRequest(event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const button = form.querySelector("button[type='submit']");
+      const originalText = button ? button.textContent : "";
+
+      const customerAutomationId = document.getElementById("cancelCustomerAutomationId")?.value || "";
+      const reason = document.getElementById("cancelReason")?.value.trim() || "";
+
+      if (!customerAutomationId) {
+        NexusNotice.error("Automation missing", "Automation ID is missing.");
+        return;
+      }
+
+      if (reason.length < 10) {
+        NexusNotice.warning("Reason required", "Please provide a reason with at least 10 characters.");
+        return;
+      }
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Submitting...";
+      }
+
+      const { data, error } = await NexusDB.requestAutomationCancellation({
+        customer_automation_id: customerAutomationId,
+        reason
+      });
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+
+      if (error) {
+        NexusNotice.error(
+  "Could not submit request",
+  error.message || "Could not submit cancellation request."
+);
+
+        console.error("Cancellation request error:", error);
+        return;
+      }
+
+      closeCancellationModal();
+
+      NexusNotice.success(
+  "Cancellation request submitted",
+  data?.message || "Nexus will review your cancellation request."
+);
+
+      await loadBuyerDashboard();
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      wireTabs();
+
+      const cancelForm = document.getElementById("cancelAutomationForm");
+
+      if (cancelForm) {
+        cancelForm.addEventListener("submit", submitCancellationRequest);
+      }
+
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-cancel-automation-id]");
+
+        if (!button) return;
+
+        const customerAutomationId = button.dataset.cancelAutomationId;
+        const automationName = button.dataset.cancelAutomationName || "Automation";
+
+        openCancellationModal(customerAutomationId, automationName);
+      });
+
+      await loadBuyerDashboard();
+    });
+  </script>
+</body>
+</html>

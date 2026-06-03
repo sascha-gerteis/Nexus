@@ -1,0 +1,30 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/nexus.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/assets/js/config.js"></script><title>Developer Profile | Nexus Admin</title></head><body data-admin="true" data-admin-page="developer-profile"><header class="site-header"><div class="container nav"><a class="logo" href="/index.html"><span>Nexus AI</span></a><nav class="nav-links"><a class="nav-link" href="/index.html">Home</a><a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a><a class="nav-link" href="/pages/developers/index.html">Developers</a><a class="nav-link" href="/pages/about/index.html">About</a><a class="nav-link" href="/pages/contact/index.html">Contact</a><a class="btn btn-primary btn-small" href="/pages/developers/waitlist.html">Developer Waitlist</a></nav></div></header><div class="dashboard"><aside class="sidebar"><div class="sidebar-title">Nexus Admin</div><a href="/pages/admin/dashboard.html">Overview</a><a href="/pages/admin/automations.html">Products</a><a href="/pages/admin/product-form.html">Create Product</a><a href="/pages/admin/developer-profile.html">Developer Profile</a><a href="/pages/admin/reviews.html">Reviews</a><a href="/pages/admin/messages.html">Contact Messages</a><a href="/pages/admin/waitlist.html">Developer Waitlist</a><a href="/pages/admin/checkout-intents.html">Checkout Prep</a><a href="/pages/marketplace/index.html">View Marketplace</a><a href="#" onclick="NexusDB.signOut()">Logout</a></aside><main class="main"><div class="section-head left"><span class="eyebrow">Developer profile</span><h2>Edit your public operator profile.</h2><p>Change banner image URL, base64 image, color, or gradient.</p></div>
+<form id="developerForm" class="card">
+  <div class="form-grid">
+    <div><label>Display name</label><input class="input" name="display_name" required></div>
+    <div><label>Handle</label><input class="input" name="handle" required></div>
+    <div><label>Type</label><input class="input" name="type" placeholder="Verified Nexus Operator"></div>
+    <div><label>Avatar letters</label><input class="input" name="avatar_letter" maxlength="2"></div>
+    <div><label>Website</label><input class="input" name="website"></div>
+    <div><label>Rating</label><input class="input" name="rating" type="number" step="0.1"></div>
+    <div><label>Review count</label><input class="input" name="review_count" type="number"></div>
+    <div><label>Verified</label><select class="select" name="verified"><option value="">No</option><option value="on">Yes</option></select></div>
+    <div class="full"><h2>Profile banner</h2></div>
+    <div><label>Banner image URL</label><input class="input" name="banner_url" placeholder="https://..."></div>
+    <div><label>Banner color / gradient</label><input class="input" name="banner_color" placeholder="linear-gradient(135deg,#2563ff,#00c2ff)"></div>
+    <div class="full"><label>Banner base64 image</label><textarea class="textarea" name="banner_base64" placeholder="data:image/png;base64,..."></textarea></div>
+    <div class="full"><label>Short description</label><textarea class="textarea" name="short_description"></textarea></div>
+    <div class="full"><label>Bio</label><textarea class="textarea" name="bio"></textarea></div>
+    <div class="full"><label>Skills, one per line</label><textarea class="textarea" name="skills"></textarea></div>
+  </div>
+  <button class="btn btn-primary" style="margin-top:1rem">Save developer profile</button>
+</form>
+</main></div><div class="modal-backdrop" id="productModal"><div class="modal"><div class="modal-side" id="modalSide"></div><div class="modal-main" id="modalMain"></div></div></div><div class="toast" id="toast"></div><script src="/assets/js/nexus-ui.js"></script>
+<script src="/assets/js/nexus-db.js"></script>
+<script src="/assets/js/nexus-buyer-nav.js"></script>
+<script src="/assets/js/nexus-app.js"></script></body></html>

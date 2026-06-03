@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Reviews | Nexus Admin</title>
+</head>
+
+<body data-admin="true" data-admin-page="reviews">
+  <header class="site-header">
+    <div class="container nav">
+      <a class="logo" href="/index.html">
+        <span>Nexus AI</span>
+      </a>
+    </div>
+  </header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+
+      <a href="/pages/admin/dashboard.html">Overview</a>
+      <a href="/pages/admin/automations.html">Products</a>
+      <a href="/pages/admin/product-form.html">Create Product</a>
+      <a href="/pages/admin/developer-profile.html">Developer Profile</a>
+      <a class="active" href="/pages/admin/reviews.html">Reviews</a>
+      <a href="/pages/admin/messages.html">Contact Messages</a>
+      <a href="/pages/admin/waitlist.html">Developer Waitlist</a>
+      <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
+      <a href="/pages/marketplace/index.html">View Marketplace</a>
+      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+    </aside>
+
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Reviews</span>
+        <h2>Manage product and developer reviews.</h2>
+        <p>
+          Phase 1 reviews are admin-managed. Approved reviews show publicly on product popups and developer profiles.
+          Later, buyer-submitted verified reviews can be added after checkout and buyer accounts are working.
+        </p>
+      </div>
+
+      <div id="reviewStatus"></div>
+
+      <section class="admin-review-layout">
+        <form id="reviewForm" class="card admin-review-form">
+          <h2>Add review</h2>
+
+          <div class="form-grid">
+            <div>
+              <label>Review type</label>
+              <select class="select" name="review_type" id="review_type" required>
+                <option value="product">Product review</option>
+                <option value="developer">Developer review</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Status</label>
+              <select class="select" name="status" id="status">
+                <option value="approved">Approved</option>
+                <option value="pending">Pending</option>
+                <option value="hidden">Hidden</option>
+              </select>
+            </div>
+
+            <div class="full" id="productReviewField">
+              <label>Product</label>
+              <select class="select" name="automation_id" id="automation_id">
+                <option value="">Loading products...</option>
+              </select>
+            </div>
+
+            <div class="full" id="developerReviewField">
+              <label>Developer / operator</label>
+              <select class="select" name="developer_id" id="developer_id">
+                <option value="">Loading developers...</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Reviewer name</label>
+              <input class="input" name="reviewer_name" required placeholder="Sarah K.">
+            </div>
+
+            <div>
+              <label>Rating</label>
+              <input class="input" name="rating" type="number" min="1" max="5" step="0.1" value="5" required>
+            </div>
+
+            <div>
+              <label>Reviewer role</label>
+              <input class="input" name="reviewer_role" placeholder="Marketing Manager">
+            </div>
+
+            <div>
+              <label>Company</label>
+              <input class="input" name="reviewer_company" placeholder="ABC Company">
+            </div>
+
+            <div class="full">
+              <label>Review text</label>
+              <textarea
+                class="textarea"
+                name="review_text"
+                required
+                placeholder="This automation saved our team hours every week..."
+              ></textarea>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" style="margin-top:1rem">
+            Add review
+          </button>
+        </form>
+
+        <div class="card admin-review-guide">
+          <h2>Where reviews show</h2>
+
+          <div class="admin-review-guide-item">
+            <strong>Product reviews</strong>
+            <p>
+              Show inside the product popup. Use this for feedback about one specific automation.
+            </p>
+          </div>
+
+          <div class="admin-review-guide-item">
+            <strong>Developer reviews</strong>
+            <p>
+              Show on the developer profile page. Use this for feedback about the operator, setup quality,
+              communication, or support.
+            </p>
+          </div>
+
+          <div class="admin-review-guide-item">
+            <strong>Approved only</strong>
+            <p>
+              Only reviews with status <strong>approved</strong> appear publicly.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top:1rem">
+        <div class="admin-table-head">
+          <div>
+            <h2>All reviews</h2>
+            <p>Manage existing product and developer reviews.</p>
+          </div>
+        </div>
+
+        <div style="overflow:auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Reviewer</th>
+                <th>Type</th>
+                <th>Target</th>
+                <th>Rating</th>
+                <th>Review</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+
+            <tbody id="reviewRows">
+              <tr>
+                <td colspan="7">Loading reviews...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+  <script src="/assets/js/nexus-app.js"></script>
+</body>
+</html>

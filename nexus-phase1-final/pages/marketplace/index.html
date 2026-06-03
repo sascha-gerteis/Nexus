@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Marketplace | Nexus AI</title>
+</head>
+
+<body data-page="marketplace">
+  <header class="site-header" id="globalNav" data-active="marketplace"></header>
+
+
+  <main>
+    <!-- CLEAN SHORT HERO -->
+    <section class="marketplace-page-hero marketplace-page-hero-clean">
+      <div class="container">
+        <div class="marketplace-hero-inner marketplace-hero-inner-clean">
+          <span class="eyebrow">Nexus Marketplace</span>
+
+          <h1>Find ready-made business automations.</h1>
+
+          <p>
+            Browse AI tools, workflow automations, reports, chatbots, and operational systems.
+            Preview each product before choosing your setup path.
+          </p>
+
+          <div class="marketplace-hero-actions">
+            <a class="btn btn-primary" href="#marketplace-products">Browse products</a>
+            <a class="btn btn-secondary" href="/pages/contact/index.html">Request custom automation</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCT AREA -->
+    <section class="marketplace-product-section" id="marketplace-products">
+      <div class="container">
+        <div class="marketplace-product-header marketplace-product-header-compact">
+          <div>
+            <span class="marketplace-small-label">Marketplace</span>
+            <h2>Available automations</h2>
+            <p>
+              Search and filter products below. Preview opens the product popup.
+              Buy opens the dedicated setup page.
+            </p>
+          </div>
+
+          <div id="marketCurrency"></div>
+        </div>
+
+        <!-- SEARCH + FILTER BAR -->
+        <div class="marketplace-control-bar">
+          <div class="marketplace-control-search">
+            <span class="marketplace-search-symbol">⌕</span>
+
+            <input
+              id="searchInput"
+              data-filter
+              type="text"
+              placeholder="Search reports, chatbots, social listening, lead automation..."
+            >
+          </div>
+
+          <div class="marketplace-control-filters">
+            <select class="select" id="categoryFilter" data-filter>
+              <option value="all">All categories</option>
+              <option>Marketing</option>
+              <option>Reporting</option>
+              <option>Customer Support</option>
+              <option>Operations</option>
+              <option>Custom</option>
+            </select>
+
+            <select class="select" id="setupFilter" data-filter>
+              <option value="all">All setup types</option>
+              <option value="self">Self-serve</option>
+              <option value="guided">Guided</option>
+              <option value="assisted">Assisted</option>
+            </select>
+
+            <select class="select" id="priceFilter" data-filter>
+              <option value="all">All pricing</option>
+              <option value="monthly">Monthly</option>
+              <option value="one_time">One-time</option>
+              <option value="setup_fee">Setup fee</option>
+              <option value="custom_quote">Custom quote</option>
+              <option value="free_demo">Free demo</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- QUICK CATEGORY CHIPS -->
+        <div class="marketplace-chip-row marketplace-chip-row-under-controls">
+          <button type="button" onclick="NexusMarketplaceSetCategory('all')">All</button>
+          <button type="button" onclick="NexusMarketplaceSetCategory('Marketing')">Marketing</button>
+          <button type="button" onclick="NexusMarketplaceSetCategory('Reporting')">Reporting</button>
+          <button type="button" onclick="NexusMarketplaceSetCategory('Customer Support')">Customer Support</button>
+          <button type="button" onclick="NexusMarketplaceSetCategory('Operations')">Operations</button>
+        </div>
+
+        
+        <div class="marketplace-grid" id="marketplaceGrid">
+          <div class="loading">Loading marketplace...</div>
+        </div>
+
+        <div class="marketplace-bottom-card">
+          <div>
+            <span class="eyebrow">Need something specific?</span>
+            <h2>Request a custom automation.</h2>
+            <p>
+              If you cannot find the workflow you need, send Nexus a request.
+              We can help determine whether it fits an existing product, a guided setup, or a future marketplace listing.
+            </p>
+          </div>
+
+          <a class="btn btn-primary" href="/pages/contact/index.html">Request custom automation</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-row">
+      <div>
+        <strong>Nexus AI</strong><br>
+        <span>The trusted marketplace layer for business automation.</span>
+      </div>
+
+      <div class="footer-links">
+        <a href="/pages/marketplace/index.html">Marketplace</a>
+        <a href="/pages/developers/index.html">Developers</a>
+        <a href="/pages/developers/waitlist.html">Developer Waitlist</a>
+        <a href="/pages/about/index.html">About</a>
+        <a href="/pages/contact/index.html">Contact</a>
+        <a href="/pages/legal/privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+
+  <div class="modal-backdrop" id="productModal">
+    <div class="modal">
+      <div class="modal-side" id="modalSide"></div>
+      <div class="modal-main" id="modalMain"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+  <script src="/assets/js/nexus-buyer-nav.js"></script>
+  <script src="/assets/js/nexus-app.js"></script>
+
+  <script>
+    function NexusMarketplaceSetCategory(category) {
+      const select = document.getElementById("categoryFilter");
+
+      if (!select) return;
+
+      select.value = category;
+      select.dispatchEvent(new Event("input", { bubbles: true }));
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+
+      document.getElementById("marketplace-products").scrollIntoView({
+        behavior: "smooth"
+      });
+    }
+  </script>
+</body>
+</html>

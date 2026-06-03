@@ -1,0 +1,659 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function cleanString(value: unknown) {
+  return String(value || "").trim();
+}
+
+function numberValue(value: unknown) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function boolValue(value: unknown) {
+  return value === true || value === "true" || value === "on";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function cleanLines(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => cleanString(item)).filter(Boolean).slice(0, 30);
+  }
+
+  return cleanString(value)
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
+function parseJsonValue(value: unknown, fallback: unknown) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) return fallback;
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error("One of the workflow JSON fields is invalid JSON.");
+    }
+  }
+
+  return value;
+}
+
+function cleanOptions(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item === "string") return cleanString(item);
+      if (isRecord(item)) {
+        return {
+          label: cleanString(item.label || item.value || item.name),
+          value: cleanString(item.value || item.label || item.name),
+        };
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
+function cleanSchema(value: unknown) {
+  const parsed = parseJsonValue(value, []);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((item) => {
+      if (!isRecord(item)) return null;
+
+      const name = cleanString(item.name)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 80);
+
+      if (!name) return null;
+
+      return {
+        name,
+        label: cleanString(item.label || item.name).slice(0, 120),
+        type: cleanString(item.type || "text").slice(0, 40),
+        required: boolValue(item.required),
+        placeholder: cleanString(item.placeholder).slice(0, 240),
+        description: cleanString(item.description).slice(0, 500),
+        options: cleanOptions(item.options),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 50);
+}
+
+function cleanWorkflowMappings(value: unknown) {
+  const parsed = parseJsonValue(value, []);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((item) => {
+      if (!isRecord(item)) return null;
+
+      const placeholder = cleanString(item.placeholder).slice(0, 160);
+      const source = cleanString(item.source || item.kind || item.type).toLowerCase();
+      const key = cleanString(item.key || item.name)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 80);
+
+      if (!placeholder || !source || !key) return null;
+
+      return {
+        placeholder,
+        source,
+        key,
+        description: cleanString(item.description).slice(0, 300),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80);
+}
+
+function cleanJsonObject(value: unknown) {
+  const parsed = parseJsonValue(value, {});
+  return isRecord(parsed) ? parsed : {};
+}
+
+function cleanJsonArray(value: unknown) {
+  const parsed = parseJsonValue(value, []);
+  return Array.isArray(parsed) ? parsed.slice(0, 100) : [];
+}
+
+function cleanWorkflowJson(value: unknown) {
+  const parsed = parseJsonValue(value, null);
+  if (parsed === null) return null;
+  if (!isRecord(parsed)) {
+    throw new Error("n8n workflow JSON must be a JSON object exported from n8n.");
+  }
+
+  const serialized = JSON.stringify(parsed);
+  if (serialized.length > 1500000) {
+    throw new Error("n8n workflow JSON is too large. Keep the export under about 1.5 MB for this MVP.");
+  }
+
+  return parsed;
+}
+
+function normalizeSlug(value: unknown, fallback: string) {
+  const base = cleanString(value || fallback)
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72);
+
+  return base || `product-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function cleanCustomizations(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      const record = item && typeof item === "object" && !Array.isArray(item)
+        ? item as Record<string, unknown>
+        : {};
+
+      return {
+        name: cleanString(record.name),
+        description: cleanString(record.description),
+        price_note: cleanString(record.price_note),
+      };
+    })
+    .filter((item) => item.name)
+    .slice(0, 5);
+}
+
+function stableJson(value: unknown) {
+  return JSON.stringify(value || null);
+}
+
+async function requireDeveloper(req: Request) {
+  const authHeader = req.headers.get("Authorization") || "";
+
+  if (!authHeader.startsWith("Bearer ")) {
+    return { user: null, profile: null, developer: null, error: "Missing auth token." };
+  }
+
+  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: authHeader,
+      },
+    },
+  });
+
+  const token = authHeader.replace("Bearer ", "").trim();
+  const { data: userData, error: userError } = await userClient.auth.getUser(token);
+
+  if (userError || !userData?.user) {
+    return { user: null, profile: null, developer: null, error: "Invalid auth token." };
+  }
+
+  const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("id, email, role, full_name")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    return { user: userData.user, profile: null, developer: null, error: "Developer profile not found." };
+  }
+
+  if (profile.role !== "developer") {
+    return { user: userData.user, profile, developer: null, error: "Developer access required." };
+  }
+
+  const { data: developer, error: developerError } = await adminClient
+    .from("developers")
+    .select("id, profile_id, display_name, handle")
+    .eq("profile_id", userData.user.id)
+    .maybeSingle();
+
+  if (developerError || !developer) {
+    return { user: userData.user, profile, developer: null, error: "Developer account not found." };
+  }
+
+  return { user: userData.user, profile, developer, error: null };
+}
+
+async function findAvailableSlug(adminClient: any, requestedSlug: string, productId = "") {
+  const baseSlug = normalizeSlug(requestedSlug, "developer-product");
+
+  for (let index = 0; index < 20; index++) {
+    const candidate = index === 0 ? baseSlug : `${baseSlug}-${index + 1}`;
+    const { data, error } = await adminClient
+      .from("automations")
+      .select("id")
+      .eq("slug", candidate)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    if (!data || data.id === productId) return candidate;
+  }
+
+  return `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function buildProductPayload(body: Record<string, unknown>, developerId: string, status: "draft" | "pending_review", slug: string) {
+  const listingType = cleanString(body.listing_type) === "custom_request"
+    ? "custom_request"
+    : "standard";
+
+  const pricingType = listingType === "custom_request"
+    ? "custom_quote"
+    : cleanString(body.pricing_type) || "custom_quote";
+
+  const currency = cleanString(body.currency).toUpperCase() === "THB" ? "THB" : "USD";
+  const title = cleanString(body.title);
+  const priceUsd = numberValue(body.price_usd);
+  const priceThb = numberValue(body.price_thb);
+  const setupFeeUsd = numberValue(body.setup_fee_usd);
+  const setupFeeThb = numberValue(body.setup_fee_thb);
+  const workflowJson = listingType === "custom_request"
+    ? null
+    : cleanWorkflowJson(body.n8n_workflow_json);
+  const requestedRuntimeType = cleanString(body.runtime_type);
+  const runtimeType = listingType === "custom_request"
+    ? "manual"
+    : workflowJson
+      ? "n8n_managed"
+      : requestedRuntimeType === "n8n_managed"
+        ? "n8n_managed"
+        : "manual";
+  const detectedPlaceholders = cleanJsonObject(body.detected_placeholders);
+  const placeholderValidationErrors = cleanJsonArray(body.placeholder_validation_errors);
+  const placeholderValidationStatus = ["valid", "needs_fix", "not_checked"].includes(cleanString(body.placeholder_validation_status))
+    ? cleanString(body.placeholder_validation_status)
+    : workflowJson
+      ? "not_checked"
+      : "not_checked";
+
+  return {
+    developer_id: developerId,
+    title,
+    slug,
+    category: cleanString(body.category),
+    badge: cleanString(body.badge),
+    icon: (cleanString(body.icon) || "AI").slice(0, 3).toUpperCase(),
+    color: cleanString(body.color) || "blue",
+    status,
+    listing_type: listingType,
+    featured: false,
+
+    pricing_type: pricingType,
+    currency,
+    price: currency === "THB" ? priceThb : priceUsd,
+    price_usd: priceUsd,
+    price_thb: priceThb,
+    setup_fee: currency === "THB" ? setupFeeThb : setupFeeUsd,
+    setup_fee_usd: setupFeeUsd,
+    setup_fee_thb: setupFeeThb,
+
+    delivery_time: cleanString(body.delivery_time),
+    setup_type: cleanString(body.setup_type),
+    best_for: cleanString(body.best_for),
+
+    rating: 0,
+    review_count: 0,
+    sales_count: 0,
+
+    preview_type: "custom",
+    preview_mode: cleanString(body.preview_mode) || "template",
+    preview_title: cleanString(body.preview_title),
+    preview_description: cleanString(body.preview_description),
+    preview_code: cleanString(body.preview_code),
+    preview_image_url: cleanString(body.preview_image_url),
+    preview_base64: cleanString(body.preview_base64),
+
+    short_description: cleanString(body.short_description),
+    long_description: cleanString(body.long_description),
+    problem: cleanString(body.problem),
+    outcome: cleanString(body.outcome),
+
+    who_it_is_for: cleanLines(body.who_it_is_for),
+    outputs: cleanLines(body.outputs),
+    required_inputs: cleanLines(body.required_inputs),
+    required_tools: cleanLines(body.required_tools),
+    setup_steps: cleanLines(body.setup_steps),
+    trust_points: cleanLines(body.trust_points),
+    customizations: cleanCustomizations(body.customizations),
+
+    runtime_type: runtimeType,
+    runtime_output_mode: "standard",
+    setup_schema: cleanSchema(body.setup_schema),
+    credential_schema: cleanSchema(body.credential_schema),
+    workflow_placeholder_mappings: cleanWorkflowMappings(body.workflow_placeholder_mappings),
+    detected_placeholders: detectedPlaceholders,
+    placeholder_validation_status: placeholderValidationStatus,
+    placeholder_validation_errors: placeholderValidationErrors,
+    n8n_workflow_json: workflowJson,
+
+    updated_at: nowIso(),
+  };
+}
+
+async function createProductReviewNotification(adminClient: any, developer: any, product: any) {
+  try {
+    await adminClient.from("admin_notifications").insert({
+      notification_type: "developer_product_review",
+      title: "New developer product review",
+      message: `${developer.display_name || "A developer"} submitted ${product.title || "a product"} for review.`,
+      related_automation_id: product.id,
+      status: "unread",
+      created_at: nowIso(),
+    });
+  } catch (error) {
+    console.warn("Could not create developer product review notification:", error);
+  }
+}
+
+async function listProducts(adminClient: any, developer: any) {
+  const { data, error } = await adminClient
+    .from("automations")
+    .select("*, developers(display_name, handle, avatar_letter)")
+    .eq("developer_id", developer.id)
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return {
+    products: data || [],
+  };
+}
+
+async function getProduct(adminClient: any, developer: any, productId: string) {
+  const { data, error } = await adminClient
+    .from("automations")
+    .select("*, developers(display_name, handle, avatar_letter)")
+    .eq("id", productId)
+    .eq("developer_id", developer.id)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return { error: "Product not found.", status: 404 };
+
+  return {
+    product: data,
+  };
+}
+
+async function saveProduct(adminClient: any, developer: any, body: Record<string, unknown>, submitForReview = false) {
+  const productId = cleanString(body.id);
+  const title = cleanString(body.title);
+
+  if (!title) {
+    return { error: "Product title is required.", status: 400 };
+  }
+
+  if (!cleanString(body.short_description)) {
+    return { error: "Short description is required.", status: 400 };
+  }
+
+  let existingProduct = null;
+
+  if (productId) {
+    const loaded = await getProduct(adminClient, developer, productId);
+
+    if (loaded.error) return loaded;
+
+    existingProduct = loaded.product;
+
+    if (existingProduct.status === "archived") {
+      return {
+        error: "Archived products cannot be edited. Create a new product instead.",
+        status: 403,
+      };
+    }
+  }
+
+  const status = submitForReview ? "pending_review" : "draft";
+  const slug = await findAvailableSlug(
+    adminClient,
+    cleanString(body.slug) || title,
+    productId,
+  );
+  let payload;
+
+  try {
+    payload = buildProductPayload(body, developer.id, status, slug);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Product workflow fields are invalid.",
+      status: 400,
+    };
+  }
+
+  if (
+    submitForReview &&
+    payload.listing_type === "standard" &&
+    payload.runtime_type === "n8n_managed" &&
+    !payload.n8n_workflow_json
+  ) {
+    return {
+      error: "Upload or paste the n8n workflow JSON before submitting this workflow product for review.",
+      status: 400,
+    };
+  }
+
+  if (
+    submitForReview &&
+    payload.runtime_type === "n8n_managed" &&
+    payload.placeholder_validation_status === "needs_fix"
+  ) {
+    return {
+      error: "Fix workflow placeholder issues before submitting for review.",
+      status: 400,
+    };
+  }
+
+  const workflowJsonChanged = existingProduct
+    ? stableJson(existingProduct.n8n_workflow_json) !== stableJson(payload.n8n_workflow_json)
+    : Boolean(payload.n8n_workflow_json);
+
+  if (workflowJsonChanged) {
+    Object.assign(payload, {
+      runtime_webhook_url: null,
+      runtime_webhook_path: null,
+      n8n_webhook_url: null,
+      n8n_workflow_id: null,
+      n8n_workflow_name: null,
+      n8n_normalized_workflow_json: null,
+      n8n_import_status: payload.n8n_workflow_json ? "not_imported" : "not_imported",
+      n8n_import_error: null,
+      n8n_last_synced_at: null,
+      n8n_imported_at: null,
+      n8n_last_import_result: {},
+      n8n_last_test_status: "not_tested",
+      n8n_last_test_error: null,
+      n8n_last_test_result: null,
+      n8n_last_tested_at: null,
+    });
+  }
+
+  if (!productId) {
+    const { data, error } = await adminClient
+      .from("automations")
+      .insert({
+        ...payload,
+        created_at: nowIso(),
+      })
+      .select("*, developers(display_name, handle, avatar_letter)")
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    if (submitForReview) {
+      await createProductReviewNotification(adminClient, developer, data);
+    }
+
+    return {
+      product: data,
+      message: submitForReview ? "Product submitted for review." : "Draft saved.",
+    };
+  }
+
+  const { data, error } = await adminClient
+    .from("automations")
+    .update(payload)
+    .eq("id", productId)
+    .eq("developer_id", developer.id)
+    .select("*, developers(display_name, handle, avatar_letter)")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  if (submitForReview) {
+    await createProductReviewNotification(adminClient, developer, data);
+  }
+
+  return {
+    product: data,
+    message: submitForReview ? "Product submitted for review." : "Draft saved.",
+  };
+}
+
+async function removeProduct(adminClient: any, developer: any, productId: string) {
+  if (!productId) {
+    return {
+      error: "Product id is required.",
+      status: 400,
+    };
+  }
+
+  const loaded = await getProduct(adminClient, developer, productId);
+
+  if (loaded.error) return loaded;
+
+  const product = loaded.product;
+
+  if (["draft", "pending_review"].includes(product.status)) {
+    const { error } = await adminClient
+      .from("automations")
+      .delete()
+      .eq("id", product.id)
+      .eq("developer_id", developer.id);
+
+    if (error) throw new Error(error.message);
+
+    return {
+      product: null,
+      message: "Product removed.",
+    };
+  }
+
+  if (product.status === "archived") {
+    return {
+      product,
+      message: "Product is already archived.",
+    };
+  }
+
+  const { data, error } = await adminClient
+    .from("automations")
+    .update({
+      status: "archived",
+      updated_at: nowIso(),
+      internal_notes: `${cleanString(product.internal_notes)}${product.internal_notes ? "\n\n" : ""}[${nowIso()}] Archived by developer ${developer.display_name || developer.id}.`,
+    })
+    .eq("id", product.id)
+    .eq("developer_id", developer.id)
+    .select("*, developers(display_name, handle, avatar_letter)")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    product: data,
+    message: "Product removed from the marketplace.",
+  };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
+
+  if (req.method === "GET") {
+    return jsonResponse({
+      ok: true,
+      message: "developer-products is alive.",
+    });
+  }
+
+  if (req.method !== "POST") {
+    return errorResponse("Method not allowed.", 405);
+  }
+
+  try {
+    const { developer, error: authError } = await requireDeveloper(req);
+
+    if (authError || !developer) {
+      return errorResponse(authError || "Developer access required.", 401);
+    }
+
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const body = await req.json().catch(() => ({}));
+    const action = cleanString(body.action) || "list";
+
+    let result;
+
+    if (action === "list") {
+      result = await listProducts(adminClient, developer);
+    } else if (action === "get") {
+      result = await getProduct(adminClient, developer, cleanString(body.id));
+    } else if (action === "save_draft") {
+      result = await saveProduct(adminClient, developer, body, false);
+    } else if (action === "submit_for_review") {
+      result = await saveProduct(adminClient, developer, body, true);
+    } else if (action === "remove") {
+      result = await removeProduct(adminClient, developer, cleanString(body.id));
+    } else {
+      return errorResponse("Unknown developer products action.", 400);
+    }
+
+    if (result.error) {
+      return errorResponse(result.error, result.status || 400);
+    }
+
+    return jsonResponse({
+      ok: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return errorResponse(
+      error instanceof Error ? error.message : "Could not manage developer product.",
+      500,
+    );
+  }
+});

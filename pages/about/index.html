@@ -1,0 +1,472 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>About | Nexus AI</title>
+</head>
+
+<body>
+<header class="site-header" id="globalNav" data-active="about"></header>
+
+  <main>
+    <!-- HERO -->
+    <section class="about-hero">
+      <div class="container">
+        <div class="about-hero-content">
+          <h1>
+            A marketplace for solving business problems with automation.
+          </h1>
+
+          <p>
+            Nexus helps businesses find packaged solutions for repeat work, reporting, support,
+            lead handling, internal operations, and customer workflows. The goal is simple:
+            make useful automation easy to understand, buy, set up, and trust.
+          </p>
+
+          <div class="about-hero-actions">
+            <a class="btn btn-primary" href="/pages/marketplace/index.html">Explore marketplace</a>
+            <a class="btn btn-secondary" href="/pages/contact/index.html">Talk to Nexus</a>
+          </div>
+
+          <div class="about-hero-stats">
+            <div class="about-stat-card">
+              <span>01</span>
+              <strong>Find</strong>
+              <p>Browse products by business issue and outcome.</p>
+            </div>
+
+            <div class="about-stat-card">
+              <span>02</span>
+              <strong>Preview</strong>
+              <p>Understand the result before setup or checkout.</p>
+            </div>
+
+            <div class="about-stat-card">
+              <span>03</span>
+              <strong>Deploy</strong>
+              <p>Choose self-serve or Nexus guided setup.</p>
+            </div>
+
+            <div class="about-stat-card">
+              <span>04</span>
+              <strong>Trust</strong>
+              <p>Use reviews, profiles, and clear expectations to decide.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CORE PROBLEM -->
+    <section class="section about-problem-section">
+      <div class="container">
+        <div class="about-split">
+          <div class="about-split-copy">
+            <h2>
+              Buying automation is still too confusing.
+            </h2>
+
+            <p>
+              Most companies can point to the work that slows them down: reports, inboxes, handoffs,
+              customer questions, follow-ups, and data updates. The hard part is turning those problems
+              into a reliable process without wasting weeks comparing tools or managing a custom build.
+            </p>
+
+            <p>
+              Today, a business often has to choose between hiring an agency, buying another narrow tool,
+              downloading a technical template, or building internally. Nexus creates a clearer path:
+              productized solutions that explain the outcome and setup before you commit.
+            </p>
+          </div>
+
+          <div class="about-problem-board">
+            <div class="about-board-header">
+              <span></span>
+              <span></span>
+              <span></span>
+              <strong>Current market</strong>
+            </div>
+
+            <div class="about-problem-list">
+              <div class="about-problem-item danger">
+                <strong>Template libraries</strong>
+                <p>Useful for technical users, but risky for teams that cannot debug, host, or maintain them.</p>
+              </div>
+
+              <div class="about-problem-item warning">
+                <strong>Vague software tools</strong>
+                <p>Many products sound impressive but do not clearly show what they deliver or how they fit daily operations.</p>
+              </div>
+
+              <div class="about-problem-item neutral">
+                <strong>Custom agencies</strong>
+                <p>Can work, but are often slow, expensive, and hard to compare before committing.</p>
+              </div>
+
+              <div class="about-problem-item good">
+                <strong>Nexus</strong>
+                <p>A marketplace layer that packages useful automations as understandable business products.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHAT NEXUS IS -->
+    <section class="section about-what-section">
+      <div class="container">
+        <div class="section-head">
+          <h2>Not another tool list. Not a workflow dump.</h2>
+          <p>
+            Nexus is designed to make automation understandable for business buyers and structured enough
+            for builders to package their work into clear, repeatable products.
+          </p>
+        </div>
+
+        <div class="about-definition-grid">
+          <article class="about-definition-card primary">
+            <div class="about-definition-number">01</div>
+            <h3>A marketplace for business outcomes</h3>
+            <p>
+              Products are listed by the result they create: reports, alerts, customer support,
+              social listening, lead handling, internal handoffs, and operational workflows.
+            </p>
+          </article>
+
+          <article class="about-definition-card">
+            <div class="about-definition-number">02</div>
+            <h3>A trust layer between buyers and builders</h3>
+            <p>
+              Buyers should not need to evaluate raw workflow files or API logic. Nexus makes the product,
+              expected result, setup path, builder profile, and responsibilities visible.
+            </p>
+          </article>
+
+          <article class="about-definition-card">
+            <div class="about-definition-number">03</div>
+            <h3>A setup path, not just a download</h3>
+            <p>
+              Each product can support self-serve setup or Nexus guided setup. That means businesses can choose
+              the level of help they need before they buy.
+            </p>
+          </article>
+
+          <article class="about-definition-card">
+            <div class="about-definition-number">04</div>
+            <h3>A future distribution layer for developers</h3>
+            <p>
+              Approved builders can list useful solutions, explain setup requirements, define options,
+              and sell through Nexus without managing every buyer from scratch.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS VISUAL -->
+    <section class="section about-flow-section">
+      <div class="container">
+        <div class="section-head">
+          <h2>The Nexus marketplace flow.</h2>
+          <p>
+            The platform is built around clarity. A buyer should understand the business problem, the expected output,
+            the setup effort, and the next step without touching the technical workflow itself.
+          </p>
+        </div>
+
+        <div class="about-flow-map">
+          <div class="about-flow-step">
+            <div class="about-flow-dot">1</div>
+            <h3>Browse</h3>
+            <p>Search products by business issue, category, pricing, setup type, or expected result.</p>
+          </div>
+
+          <div class="about-flow-line"></div>
+
+          <div class="about-flow-step">
+            <div class="about-flow-dot">2</div>
+            <h3>Preview</h3>
+            <p>Open a listing and review the result, requirements, reviews, and available options.</p>
+          </div>
+
+          <div class="about-flow-line"></div>
+
+          <div class="about-flow-step">
+            <div class="about-flow-dot">3</div>
+            <h3>Choose setup</h3>
+            <p>Select self-serve or Nexus guided setup depending on how much support is needed.</p>
+          </div>
+
+          <div class="about-flow-line"></div>
+
+          <div class="about-flow-step">
+            <div class="about-flow-dot">4</div>
+            <h3>Deploy</h3>
+            <p>Checkout, dashboards, messaging, and setup records keep the handoff organized.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BUYERS / DEVELOPERS -->
+    <section class="section about-audience-section">
+      <div class="container">
+        <div class="about-audience-grid">
+          <div class="about-audience-card buyer">
+            <h2>Improve a process without becoming technical.</h2>
+
+            <p>
+              Nexus is for teams that know where time is being lost but do not want to manage workflow builders,
+              integrations, or unclear software promises. The marketplace turns automation into something a business
+              user can compare, request, and launch with the right level of support.
+            </p>
+
+            <ul>
+              <li>Start from the business issue you want to solve.</li>
+              <li>See what the product delivers before committing.</li>
+              <li>Choose self-serve or Nexus guided setup.</li>
+              <li>Message the builder or Nexus when the fit is unclear.</li>
+              <li>Use profiles, reviews, and trust points to compare options.</li>
+            </ul>
+
+            <a class="btn btn-primary" href="/pages/marketplace/index.html">Browse marketplace</a>
+          </div>
+
+          <div class="about-audience-card developer">
+            <h2>Turn useful builds into business-ready products.</h2>
+
+            <p>
+              Builders can use Nexus as a distribution layer for repeatable work. Instead of selling every project
+              from scratch, they can package proven automations with clear outcomes, setup requirements, previews,
+              and customization options buyers can understand.
+            </p>
+
+            <ul>
+              <li>List products around the business result they create.</li>
+              <li>Add previews, screenshots, examples, and setup notes.</li>
+              <li>Offer customization without making the buyer technical.</li>
+              <li>Build credibility through profiles, reviews, and support history.</li>
+              <li>Let Nexus handle the marketplace layer around your work.</li>
+            </ul>
+
+            <a class="btn btn-secondary" href="/pages/developers/waitlist.html">Join developer waitlist</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SELF SERVE VS GUIDED -->
+    <section class="section about-setup-section">
+      <div class="container">
+        <div class="section-head">
+          <h2>Choose the setup path that matches the process.</h2>
+          <p>
+            Some products are simple enough to launch with clear instructions. Others need configuration, testing,
+            or business context. Nexus keeps both paths clear before a buyer commits.
+          </p>
+        </div>
+
+        <div class="about-setup-grid">
+          <div class="about-setup-card">
+            <div class="about-setup-badge">Self-Serve</div>
+            <h3>For simple automations</h3>
+            <p>
+              The buyer can provide the required details, connect accounts, follow the setup steps, and start using
+              the product with minimal support.
+            </p>
+
+            <div class="about-setup-list">
+              <span>Best when:</span>
+              <ul>
+                <li>The workflow is standardized.</li>
+                <li>The buyer has the required accounts ready.</li>
+                <li>The setup steps are simple and repeatable.</li>
+                <li>No deep custom integration is needed.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="about-setup-card highlighted">
+            <div class="about-setup-badge">Nexus Guided Setup</div>
+            <h3>For higher-value or complex setups</h3>
+            <p>
+              Nexus helps prepare, configure, test, and launch the product so the business gets the result without
+              managing the technical setup alone.
+            </p>
+
+            <div class="about-setup-list">
+              <span>Best when:</span>
+              <ul>
+                <li>The automation connects multiple tools.</li>
+                <li>Business data or knowledge needs preparation.</li>
+                <li>The company wants a managed setup experience.</li>
+                <li>Reliability matters from the first launch.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRUST FLYWHEEL -->
+    <section class="section about-flywheel-section">
+      <div class="container">
+        <div class="about-flywheel-grid">
+          <div class="about-flywheel-copy">
+            <h2>Nexus becomes stronger as real outcomes become visible.</h2>
+
+            <p>
+              The long-term value is not only listing products. The real value is building trust around what actually
+              works for different businesses. Reviews, setup difficulty, industry fit, and buyer outcomes make each
+              listing easier to judge over time.
+            </p>
+
+            <p>
+              More products bring more buyers. More buyers create better feedback. Better feedback improves product
+              quality and recommendations. That is how Nexus becomes a practical hub for business automation, not just
+              a directory of tools.
+            </p>
+          </div>
+
+          <div class="about-flywheel-visual">
+            <div class="about-flywheel-center">Nexus Trust Layer</div>
+
+            <div class="about-flywheel-node node-1">
+              <strong>More products</strong>
+              <span>Automations become marketplace listings.</span>
+            </div>
+
+            <div class="about-flywheel-node node-2">
+              <strong>More buyers</strong>
+              <span>Businesses compare real solutions.</span>
+            </div>
+
+            <div class="about-flywheel-node node-3">
+              <strong>More reviews</strong>
+              <span>Results create marketplace trust.</span>
+            </div>
+
+            <div class="about-flywheel-node node-4">
+              <strong>Better recommendations</strong>
+              <span>Nexus learns what works for whom.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROADMAP -->
+    <section class="section about-roadmap-section">
+      <div class="container">
+        <div class="section-head">
+          <h2>Launch the marketplace first, then deepen the operating layer.</h2>
+          <p>
+            Nexus is being built in stages so product discovery, requests, messaging, setup, and admin review are
+            reliable before heavier infrastructure is added.
+          </p>
+        </div>
+
+        <div class="about-roadmap-grid">
+          <div class="about-roadmap-card active">
+            <span>Phase 1</span>
+            <h3>Marketplace foundation</h3>
+            <p>
+              Product listings, previews, custom requests, buyer accounts, developer profiles, messaging,
+              checkout flow, and admin review.
+            </p>
+          </div>
+
+          <div class="about-roadmap-card">
+            <span>Phase 2</span>
+            <h3>Orders and setup quality</h3>
+            <p>
+              Cleaner order history, guided setup tracking, product quality checks, and better buyer communication.
+            </p>
+          </div>
+
+          <div class="about-roadmap-card">
+            <span>Phase 3</span>
+            <h3>Developer operations</h3>
+            <p>
+              Developer product management, approval flow, product performance, inquiries, and seller support tools.
+            </p>
+          </div>
+
+          <div class="about-roadmap-card">
+            <span>Phase 4</span>
+            <h3>Managed automation layer</h3>
+            <p>
+              Hosting, health checks, error monitoring, credential safety, runtime logs, and stronger quality controls.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="section about-final-cta">
+      <div class="container">
+        <div class="about-final-card">
+          <h2>Start with the business issue you want solved.</h2>
+
+          <p>
+            Browse available products, preview the expected result, or contact Nexus when you need a process built
+            around your own tools and team.
+          </p>
+
+          <div class="about-final-actions">
+            <a class="btn btn-primary" href="/pages/marketplace/index.html">Explore marketplace</a>
+            <a class="btn btn-secondary" href="/pages/contact/index.html">Contact Nexus</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-row">
+      <div>
+        <strong>Nexus</strong><br>
+        <span>The trusted marketplace layer for business automation.</span>
+      </div>
+
+      <div class="footer-links">
+        <a href="/pages/marketplace/index.html">Marketplace</a>
+        <a href="/pages/developers/index.html">Developers</a>
+        <a href="/pages/developers/waitlist.html">Developer Waitlist</a>
+        <a href="/pages/about/index.html">About</a>
+        <a href="/pages/contact/index.html">Contact</a>
+        <a href="/pages/legal/privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+
+  <div class="modal-backdrop" id="productModal">
+    <div class="modal">
+      <div class="modal-side" id="modalSide"></div>
+      <div class="modal-main" id="modalMain"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/config.js"></script>
+<script src="/assets/js/nexus-ui.js"></script>
+<script src="/assets/js/nexus-db.js"></script>
+<script src="/assets/js/nexus-buyer-nav.js"></script>
+<script src="/assets/js/nexus-app.js"></script>
+</body>
+</html>
+

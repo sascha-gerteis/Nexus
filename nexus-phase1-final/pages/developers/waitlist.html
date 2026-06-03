@@ -1,0 +1,52 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/nexus.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/assets/js/config.js"></script><title>Developer Waitlist | Nexus AI</title></head>
+<body data-page="developer-waitlist"><header class="site-header"><div class="container nav"><a class="logo" href="/index.html"><span>Nexus AI</span></a><nav class="nav-links">
+  <a class="nav-link" href="/index.html">Home</a>
+  <a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a>
+  <a class="nav-link" href="/pages/developers/index.html">Developers</a>
+  <a class="nav-link" href="/pages/about/index.html">About</a>
+  <a class="nav-link" href="/pages/contact/index.html">Contact</a>
+  <a class="btn btn-secondary btn-small" href="/pages/developers/waitlist.html">Developer Waitlist</a>
+
+  <span class="buyer-nav-slot" id="buyerNavSlot">
+    <a class="btn btn-primary btn-small" href="/pages/buyer/login.html">Login</a>
+  </span>
+</nav></div></header>
+<main>
+<section class="section alt">
+  <div class="container">
+    <div class="grid-2">
+      <div>
+        <span class="eyebrow">Developer waitlist</span>
+        <h1 style="font-size:clamp(3rem,5vw,5rem);line-height:.95;letter-spacing:-.07em;color:var(--navy);margin:1rem 0">Build once. Sell through Nexus later.</h1>
+        <p style="color:var(--muted);font-size:1.1rem;line-height:1.8">Nexus developer accounts are not fully open yet. Join the waitlist if you build useful n8n, Make, Python, Node.js, or AI automations that businesses could buy as packaged outcomes.</p>
+        <div class="grid-2" style="margin-top:1rem">
+          <div class="card"><h3>What Nexus reviews</h3><p>Outcome clarity, setup requirements, preview quality, reliability, and whether the product can be understood by non-technical buyers.</p></div>
+          <div class="card"><h3>Future seller flow</h3><p>Developers will submit automations, upload files, add previews, set customization options, and get reviewed before going live.</p></div>
+        </div>
+      </div>
+      <form class="card" id="waitlistForm">
+        <h2>Join the waitlist</h2>
+        <div class="form-grid">
+          <div><label>Name</label><input class="input" name="name" required></div>
+          <div><label>Email</label><input class="input" type="email" name="email" required></div>
+          <div><label>Company / studio</label><input class="input" name="company"></div>
+          <div><label>Website</label><input class="input" name="website"></div>
+          <div class="full"><label>What kind of automation do you build?</label><input class="input" name="automation_type" placeholder="n8n, Make, Python, chatbots, reporting..."></div>
+          <div class="full"><label>Experience</label><textarea class="textarea" name="experience"></textarea></div>
+          <div class="full"><label>Message</label><textarea class="textarea" name="message"></textarea></div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:1rem">Join waitlist</button>
+      </form>
+    </div>
+  </div>
+</section>
+</main>
+<footer class="footer"><div class="container footer-row"><div><strong>Nexus AI</strong><br><span>The trusted marketplace layer for business automation.</span></div><div class="footer-links"><a href="/pages/marketplace/index.html">Marketplace</a><a href="/pages/developers/index.html">Developers</a><a href="/pages/developers/waitlist.html">Developer Waitlist</a><a href="/pages/about/index.html">About</a><a href="/pages/contact/index.html">Contact</a><a href="/pages/legal/privacy.html">Privacy</a></div></div></footer><div class="modal-backdrop" id="productModal"><div class="modal"><div class="modal-side" id="modalSide"></div><div class="modal-main" id="modalMain"></div></div></div><div class="toast" id="toast"></div><script src="/assets/js/nexus-ui.js"></script>
+<script src="/assets/js/nexus-db.js"></script>
+<script src="/assets/js/nexus-buyer-nav.js"></script>
+<script src="/assets/js/nexus-app.js"></script></body></html>

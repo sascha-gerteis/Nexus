@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Create Buyer Account | Nexus AI</title>
+</head>
+
+<body data-page="buyer-register">
+  <main class="buyer-auth-page">
+    <div class="buyer-auth-card buyer-auth-card-wide">
+      <a class="logo" href="/index.html">
+        <span>Nexus AI</span>
+      </a>
+
+      
+
+      <h1>Create your buyer account.</h1>
+
+      <p>
+        Your buyer dashboard will show purchased/requested automations, setup status, and future automation outputs.
+      </p>
+
+      <form id="buyerRegisterForm">
+        <div class="form-grid">
+          <div>
+            <label>Name</label>
+            <input class="input" name="name" required placeholder="Your name">
+          </div>
+
+          <div>
+            <label>Email</label>
+            <input class="input" name="email" type="email" required placeholder="you@company.com">
+          </div>
+
+          <div>
+            <label>Password</label>
+            <input class="input" name="password" type="password" required placeholder="Create password">
+          </div>
+
+          <div>
+            <label>Company</label>
+            <input class="input" name="company" placeholder="Company name">
+          </div>
+
+          <div>
+            <label>Phone</label>
+            <input class="input" name="phone" placeholder="+66...">
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" style="margin-top:1rem">
+          Create account
+        </button>
+      </form>
+
+      <div class="buyer-auth-links">
+        <span>Already have an account?</span>
+        <a href="/pages/buyer/login.html" id="loginLink">Login</a>
+      </div>
+
+      <div id="buyerAuthStatus"></div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js"></script>
+  <script src="/assets/js/nexus-db.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const statusBox = document.getElementById("buyerAuthStatus");
+
+      if (typeof NexusDB === "undefined") {
+        statusBox.innerHTML = `
+          <div class="error">
+            NexusDB failed to load. Check /assets/js/nexus-db.js for errors.
+          </div>
+        `;
+        return;
+      }
+
+      if (typeof NexusDB.buyerSignUp !== "function") {
+        statusBox.innerHTML = `
+          <div class="error">
+            NexusDB loaded, but buyerSignUp is missing.
+          </div>
+        `;
+        return;
+      }
+
+      const params = new URLSearchParams(location.search);
+      const next = params.get("next") || "/pages/buyer/dashboard.html";
+
+      const loginLink = document.getElementById("loginLink");
+      if (loginLink) {
+        loginLink.href = "/pages/buyer/login.html?next=" + encodeURIComponent(next);
+      }
+
+      const form = document.getElementById("buyerRegisterForm");
+
+      form.addEventListener("submit", async function(event) {
+        event.preventDefault();
+
+        const formData = new FormData(event.target);
+
+        const name = String(formData.get("name") || "").trim();
+        const email = String(formData.get("email") || "").trim();
+        const password = String(formData.get("password") || "");
+        const company = String(formData.get("company") || "").trim();
+        const website = String(formData.get("website") || "").trim();
+        const phone = String(formData.get("phone") || "").trim();
+
+        const { data, error } = await NexusDB.buyerSignUp(email, password, {
+          full_name: name,
+          company
+        });
+
+        if (error) {
+          NexusUI.toast(error.message);
+          return;
+        }
+
+        if (data?.user && data?.session) {
+          const { data: existingProfile } = await NexusDB.getProfile(data.user.id);
+
+await NexusDB.upsertProfile({
+  id: data.user.id,
+  email,
+  full_name: existingProfile?.full_name || name,
+  role: existingProfile?.role || "buyer"
+});
+
+          await NexusDB.upsertProfile({
+            id: data.user.id,
+            email,
+            full_name: name,
+            role: "buyer"
+          });
+
+          NexusUI.toast("Account created.");
+          setTimeout(function() {
+            location.href = next;
+          }, 700);
+          return;
+        }
+
+        statusBox.innerHTML = `
+          <div class="success">
+            <strong>Account created.</strong><br>
+            If Supabase email confirmation is enabled, confirm your email first, then login.
+          </div>
+        `;
+
+        setTimeout(function() {
+          location.href = "/pages/buyer/login.html?next=" + encodeURIComponent(next);
+        }, 1800);
+      });
+    });
+  </script>
+</body>
+</html>

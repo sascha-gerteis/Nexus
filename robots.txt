@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nexus-ai.software/sitemap.xml
+
+# AI-readable Nexus profile:
+# https://nexus-ai.software/llms.txt
