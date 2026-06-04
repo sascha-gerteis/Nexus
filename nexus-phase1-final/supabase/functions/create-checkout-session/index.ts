@@ -9,7 +9,28 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const SITE_URL = Deno.env.get("SITE_URL") || "https://nexus-ai.software";
+const PRODUCTION_SITE_URL = "https://nexus-ai.software";
+
+function cleanSiteUrl(value = "") {
+  const raw = String(value || "").trim().replace(/\/+$/, "");
+
+  if (!raw) return PRODUCTION_SITE_URL;
+
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase();
+
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return PRODUCTION_SITE_URL;
+    }
+
+    return url.origin;
+  } catch {
+    return PRODUCTION_SITE_URL;
+  }
+}
+
+const SITE_URL = cleanSiteUrl(Deno.env.get("SITE_URL") || PRODUCTION_SITE_URL);
 
 const FX_API_BASE_URL = "https://api.frankfurter.dev";
 
@@ -583,7 +604,7 @@ updated_at: nowIso(),
         },
       ],
       success_url: `${SITE_URL}/pages/checkout/success.html?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${SITE_URL}/pages/checkout/cancel.html?order_id=${order.id}`,
+      cancel_url: `${SITE_URL}/pages/checkout/index.html?slug=${encodeURIComponent(product.slug || "")}&step=setup&checkout=cancelled&order_id=${order.id}`,
       metadata,
     };
 

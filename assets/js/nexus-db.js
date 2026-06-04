@@ -1,4 +1,6 @@
 const NexusDB = (() => {
+  const PRODUCTION_SITE_ORIGIN = "https://nexus-ai.software";
+
   function readConfigValue(names) {
     for (const name of names) {
       if (typeof window[name] !== "undefined" && window[name]) {
@@ -40,7 +42,7 @@ const NexusDB = (() => {
     "NEXUS_SITE_URL",
     "APP_URL",
     "PUBLIC_SITE_URL"
-  ]) || "https://nexus-ai.software";
+  ]) || PRODUCTION_SITE_ORIGIN;
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     console.error("Missing Supabase config. Check assets/js/config.js");
@@ -293,15 +295,16 @@ const NexusDB = (() => {
   }
 
   function authRedirectOrigin() {
-    const configuredOrigin = cleanSiteOrigin(SITE_URL || "https://nexus-ai.software");
+    const configuredOrigin = cleanSiteOrigin(SITE_URL || PRODUCTION_SITE_ORIGIN);
     const currentOrigin = cleanSiteOrigin(location.origin);
+    const allowLocalAuthRedirect = window.NEXUS_ALLOW_LOCAL_AUTH_REDIRECT === true;
 
-    if (isLocalOrigin(currentOrigin)) {
+    if (allowLocalAuthRedirect && isLocalOrigin(currentOrigin)) {
       return currentOrigin;
     }
 
     if (!configuredOrigin || isLocalOrigin(configuredOrigin)) {
-      return "https://nexus-ai.software";
+      return PRODUCTION_SITE_ORIGIN;
     }
 
     return configuredOrigin;

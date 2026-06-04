@@ -66,14 +66,24 @@ img{max-width:100%;display:block}
 .logo{
   font-size:1.7rem;
   font-weight:950;
-  letter-spacing:-.075em;
+  letter-spacing:-.045em;
   white-space:nowrap;
+  display:inline-flex;
+  align-items:center;
+  line-height:1.15;
+  padding:.08rem .18rem .12rem 0;
+  overflow:visible;
+  min-width:max-content;
 }
 .logo span{
   background:linear-gradient(135deg,var(--navy),var(--blue),var(--cyan));
   -webkit-background-clip:text;
   -webkit-text-fill-color:transparent;
   background-clip:text;
+  display:inline-block;
+  line-height:1.15;
+  padding:.03em .18em .08em 0;
+  overflow:visible;
 }
 .nav-links{display:flex;align-items:center;gap:.35rem;flex-wrap:nowrap;justify-content:flex-end}
 .nav-link{
@@ -3213,7 +3223,7 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
    ========================================================= */
 
 body[data-page="marketplace"] .marketplace-page-hero-clean {
-  padding: 5.8rem 0 3.1rem;
+  padding: 7rem 0 3.1rem;
   background:
     radial-gradient(circle at 50% 0%, rgba(0, 194, 255, 0.14), transparent 30%),
     radial-gradient(circle at 15% 22%, rgba(37, 99, 255, 0.08), transparent 28%),
@@ -3229,7 +3239,7 @@ body[data-page="marketplace"] .marketplace-hero-inner-clean {
 
 body[data-page="marketplace"] .marketplace-hero-inner-clean h1 {
   font-size: clamp(3rem, 5.5vw, 5.7rem);
-  line-height: 0.9;
+  line-height: 0.94;
   letter-spacing: -0.085em;
   color: var(--navy);
   margin: 1rem auto 1rem;
@@ -3331,8 +3341,28 @@ body[data-page="marketplace"] .marketplace-search-symbol {
   place-items: center;
   background: #eff7ff;
   color: var(--blue);
-  font-size: 1.25rem;
-  font-weight: 950;
+  position: relative;
+}
+
+body[data-page="marketplace"] .marketplace-search-symbol::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border: 3px solid currentColor;
+  border-radius: 999px;
+  transform: translate(-2px, -2px);
+}
+
+body[data-page="marketplace"] .marketplace-search-symbol::after {
+  content: "";
+  width: 11px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  transform: rotate(45deg);
 }
 
 body[data-page="marketplace"] .marketplace-control-search input {
