@@ -3094,7 +3094,7 @@ function globalNav(active = "") {
   return `
     <div class="container nav">
       <a class="logo" href="/index.html">
-        <span>Nexus</span>
+        <span>Nexus&nbsp;</span>
       </a>
 
       <button
