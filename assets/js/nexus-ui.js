@@ -1293,6 +1293,7 @@ const I18N = {
 };
 
 let languageNavigationGuardStarted = false;
+let mobileNavDismissGuardStarted = false;
 let lastLocalizedLinkLanguage = "";
 let translationObserver = null;
 let isApplyingTranslations = false;
@@ -3233,8 +3234,25 @@ if (accountButton) {
     link.addEventListener("click", () => {
       nav.classList.remove("open");
       toggle?.setAttribute("aria-expanded", "false");
+      document.body.classList.remove("mobile-nav-open");
     });
   });
+
+  if (!mobileNavDismissGuardStarted) {
+    mobileNavDismissGuardStarted = true;
+
+    document.addEventListener("click", (event) => {
+      const currentNav = document.getElementById("globalNavLinks");
+      const currentToggle = document.getElementById("mobileNavToggle");
+
+      if (!currentNav?.classList.contains("open")) return;
+      if (currentNav.contains(event.target) || currentToggle?.contains(event.target)) return;
+
+      currentNav.classList.remove("open");
+      currentToggle?.setAttribute("aria-expanded", "false");
+      document.body.classList.remove("mobile-nav-open");
+    });
+  }
 
   header.dataset.nexusNavMounted = "true";
   header.dataset.nexusNavActive = active;
@@ -3248,6 +3266,7 @@ function toggleMobileNav() {
 
   const isOpen = nav.classList.toggle("open");
   toggle?.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  document.body.classList.toggle("mobile-nav-open", isOpen);
 }
 
 let activeMessageThreadId = "";

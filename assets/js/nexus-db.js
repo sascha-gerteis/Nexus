@@ -283,11 +283,31 @@ const NexusDB = (() => {
     }
   }
 
-  function authRedirectOrigin() {
-    return cleanSiteOrigin(SITE_URL || location.origin);
+  function isLocalOrigin(origin = "") {
+    try {
+      const hostname = new URL(origin).hostname;
+      return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    } catch {
+      return false;
+    }
   }
 
-  function accountLoginPath(accountType = "buyer", nextUrl = "") {
+  function authRedirectOrigin() {
+    const configuredOrigin = cleanSiteOrigin(SITE_URL || "https://nexus-ai.software");
+    const currentOrigin = cleanSiteOrigin(location.origin);
+
+    if (isLocalOrigin(currentOrigin)) {
+      return currentOrigin;
+    }
+
+    if (!configuredOrigin || isLocalOrigin(configuredOrigin)) {
+      return "https://nexus-ai.software";
+    }
+
+    return configuredOrigin;
+  }
+
+  function accountLoginPath(accountType = "buyer", nextUrl = "", reason = "") {
     const account = String(accountType || "buyer").toLowerCase() === "developer"
       ? "developer"
       : "buyer";
@@ -297,13 +317,24 @@ const NexusDB = (() => {
     const fallbackNext = account === "developer"
       ? "/pages/developer/dashboard.html"
       : "/pages/buyer/dashboard.html";
+    const url = new URL(loginPath, location.origin);
+    url.searchParams.set("next", safeNextPath(nextUrl, fallbackNext));
 
-    return `${loginPath}?next=${encodeURIComponent(safeNextPath(nextUrl, fallbackNext))}`;
+    if (reason) {
+      url.searchParams.set("reason", String(reason));
+    }
+
+    return `${url.pathname}${url.search}`;
   }
 
-  function buyerAuthRedirectUrl(nextUrl = "") {
+  function buyerAuthRedirectUrl(nextUrl = "", reason = "") {
     const redirectUrl = new URL("/pages/buyer/login.html", authRedirectOrigin());
-    redirectUrl.searchParams.set("next", nextUrl || "/pages/buyer/dashboard.html");
+    redirectUrl.searchParams.set("next", safeNextPath(nextUrl, "/pages/buyer/dashboard.html"));
+
+    if (reason) {
+      redirectUrl.searchParams.set("reason", String(reason));
+    }
+
     return redirectUrl.toString();
   }
 
@@ -318,7 +349,7 @@ const NexusDB = (() => {
     return redirectUrl.toString();
   }
 
-  async function buyerSignInWithOAuth(provider, nextUrl = "") {
+  async function buyerSignInWithOAuth(provider, nextUrl = "", reason = "") {
     const cleanProvider = String(provider || "").toLowerCase();
 
     if (cleanProvider !== "google") {
@@ -333,7 +364,7 @@ const NexusDB = (() => {
     return supabase.auth.signInWithOAuth({
       provider: cleanProvider,
       options: {
-        redirectTo: buyerAuthRedirectUrl(nextUrl),
+        redirectTo: buyerAuthRedirectUrl(nextUrl, reason),
         queryParams: {
           prompt: "select_account"
         }

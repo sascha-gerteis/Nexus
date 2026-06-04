@@ -31,9 +31,9 @@
 
       
 
-      <h1>Create your buyer account.</h1>
+      <h1 id="buyerRegisterTitle">Create your buyer account.</h1>
 
-      <p>
+      <p id="buyerRegisterIntro">
         Your buyer dashboard will show purchased/requested automations, setup status, and future automation outputs.
       </p>
 
@@ -114,16 +114,27 @@
 
       const params = new URLSearchParams(location.search);
       const next = params.get("next") || "/pages/buyer/dashboard.html";
+      const reason = params.get("reason") || "";
+      const title = document.getElementById("buyerRegisterTitle");
+      const intro = document.getElementById("buyerRegisterIntro");
+
+      if (reason === "message") {
+        if (title) title.textContent = "Create an account to message the developer.";
+        if (intro) intro.textContent = "Your buyer dashboard will keep this conversation, replies, products, setup details, and future outputs in one place.";
+      }
 
       const loginLink = document.getElementById("loginLink");
       if (loginLink) {
-        loginLink.href = "/pages/buyer/login.html?next=" + encodeURIComponent(next);
+        const loginUrl = new URL("/pages/buyer/login.html", location.origin);
+        loginUrl.searchParams.set("next", next);
+        if (reason) loginUrl.searchParams.set("reason", reason);
+        loginLink.href = `${loginUrl.pathname}${loginUrl.search}`;
       }
 
       const googleButton = document.getElementById("googleRegisterButton");
       if (googleButton) {
         googleButton.addEventListener("click", async function () {
-          const { error } = await NexusDB.buyerSignInWithOAuth("google", next);
+          const { error } = await NexusDB.buyerSignInWithOAuth("google", next, reason);
           if (error) NexusUI.toast(NexusDB.friendlyAuthMessage(error));
         });
       }

@@ -346,8 +346,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const { data: sessionData } = await NexusDB.getSession();
 
     if (!sessionData?.session?.user) {
-      alert("Please login as a buyer to message the developer.");
-      location.href = NexusDB.accountLoginPath("buyer", location.pathname + location.search);
+      location.href = NexusDB.accountLoginPath("buyer", location.pathname + location.search, "message");
       return;
     }
 
@@ -1058,8 +1057,7 @@ async function submitCheckoutIntent(event) {
     const { data: sessionData } = await NexusDB.getSession();
 
     if (!sessionData?.session?.user) {
-      alert("Please login as a buyer to message this developer.");
-      location.href = NexusDB.accountLoginPath("buyer", location.pathname + location.search);
+      location.href = NexusDB.accountLoginPath("buyer", location.pathname + location.search, "message");
       return;
     }
 

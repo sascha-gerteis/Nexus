@@ -8736,7 +8736,11 @@ body[data-page="checkout"] .site-header {
 
 @media (max-width: 980px) {
   .site-header {
-    z-index: 500;
+    z-index: 1000;
+  }
+
+  body.mobile-nav-open {
+    overflow: hidden;
   }
 
   .nav {
@@ -8762,23 +8766,24 @@ body[data-page="checkout"] .site-header {
   .nav-links {
     display: none;
     position: fixed;
-    top: 76px;
-    left: 1rem;
-    right: 1rem;
-    max-height: calc(100vh - 96px);
+    top: calc(68px + max(.45rem, env(safe-area-inset-top)));
+    left: max(.75rem, env(safe-area-inset-left));
+    right: max(.75rem, env(safe-area-inset-right));
+    max-height: calc(100dvh - 84px);
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     background: rgba(255, 255, 255, .98);
     border: 1px solid #dbeafe;
-    border-radius: 22px;
+    border-radius: 20px;
     box-shadow: 0 24px 70px rgba(15, 23, 42, .18);
-    padding: .9rem;
-    z-index: 600;
+    padding: .75rem;
+    z-index: 1100;
   }
 
   .nav-links.open {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: .55rem;
   }
 
@@ -8791,18 +8796,31 @@ body[data-page="checkout"] .site-header {
 
   .nav-links .nav-link,
   .nav-dropdown-trigger {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    padding: .78rem .9rem;
-    min-height: 44px;
+    padding: .85rem .95rem;
+    min-height: 48px;
+    border-radius: 15px;
+  }
+
+  .nav-dropdown-menu a {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
   }
 
   .nav-controls {
     width: 100%;
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     gap: .5rem;
     align-items: center;
     margin: .15rem 0;
+  }
+
+  .currency-select {
+    min-height: 46px;
   }
 
   .currency-select-wrap,
@@ -8932,6 +8950,7 @@ body[data-page="checkout"] .site-header {
 
   .home-hero-content h1,
   .about-hero-content h1,
+  .market-clean-hero-content h1,
   .contact-hero-content h1,
   body[data-page="privacy"] .privacy-hero-inner h1,
   .buyer-dashboard-tabs-hero h1,
@@ -8944,9 +8963,49 @@ body[data-page="checkout"] .site-header {
 
   .home-hero-content,
   .about-hero-content,
+  .market-clean-hero-content,
   .contact-hero-content,
   body[data-page="privacy"] .privacy-hero-inner {
     text-align: left;
+  }
+
+  .home-hero-content p,
+  .about-hero-content p,
+  .market-clean-hero-content p,
+  .contact-hero-content p,
+  body[data-page="privacy"] .privacy-hero-inner p,
+  .section-head p {
+    font-size: .96rem;
+    line-height: 1.58;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .home-metric-card p,
+  .about-stat-card p,
+  .contact-quick-card p,
+  .product-card p,
+  .home-flow-card p,
+  .home-roadmap-card p,
+  .home-audience-card p,
+  .home-trust-copy p,
+  .home-final-card p,
+  .about-definition-card p,
+  .about-audience-card p,
+  .contact-path-card p,
+  .contact-detail-card span,
+  .contact-example-card p {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .home-problem-copy p + p,
+  .about-split-copy p + p {
+    display: none;
   }
 
   .home-hero-actions,

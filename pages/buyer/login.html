@@ -31,9 +31,9 @@
 
       
 
-      <h1>Login before purchasing.</h1>
+      <h1 id="buyerLoginTitle">Login before purchasing.</h1>
 
-      <p>
+      <p id="buyerLoginIntro">
         Login to continue your automation setup, create your order request, and access your buyer dashboard.
       </p>
 
@@ -104,16 +104,46 @@
 
       const params = new URLSearchParams(location.search);
       const next = params.get("next") || "/pages/buyer/dashboard.html";
+      const reason = params.get("reason") || "";
+      const title = document.getElementById("buyerLoginTitle");
+      const intro = document.getElementById("buyerLoginIntro");
+
+      const loginCopy = {
+        message: {
+          title: "Login to message the developer.",
+          intro: "Sign in or create a buyer account to open your conversation and keep replies in your dashboard."
+        },
+        default: {
+          title: "Login before purchasing.",
+          intro: "Login to continue your automation setup, create your order request, and access your buyer dashboard."
+        }
+      };
+      const copy = loginCopy[reason] || loginCopy.default;
+
+      if (title) title.textContent = copy.title;
+      if (intro) intro.textContent = copy.intro;
+
+      NexusDB.getSession().then(async function (result) {
+        const user = result?.data?.session?.user;
+        if (!user) return;
+        await NexusDB.ensureBuyerProfileFromUser(user);
+        location.replace(next);
+      }).catch(function () {
+        // Keep the login form available when the session check fails.
+      });
 
       const registerLink = document.getElementById("registerLink");
       if (registerLink) {
-        registerLink.href = "/pages/buyer/register.html?next=" + encodeURIComponent(next);
+        const registerUrl = new URL("/pages/buyer/register.html", location.origin);
+        registerUrl.searchParams.set("next", next);
+        if (reason) registerUrl.searchParams.set("reason", reason);
+        registerLink.href = `${registerUrl.pathname}${registerUrl.search}`;
       }
 
       const googleButton = document.getElementById("googleLoginButton");
       if (googleButton) {
         googleButton.addEventListener("click", async function () {
-          const { error } = await NexusDB.buyerSignInWithOAuth("google", next);
+          const { error } = await NexusDB.buyerSignInWithOAuth("google", next, reason);
           if (error) NexusUI.toast(NexusDB.friendlyAuthMessage(error));
         });
       }
