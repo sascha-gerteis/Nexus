@@ -677,9 +677,32 @@ const NexusDB = (() => {
   }
 
   async function createWaitlist(payload) {
+    const fallbackAutomationType = payload.__fallback_automation_type || payload.automation_type || "";
+    const insertPayload = { ...payload };
+    delete insertPayload.__fallback_automation_type;
+
+    const result = await supabase
+      .from("developer_waitlist")
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    const schemaMissing = result.error?.message && (
+      result.error.message.includes("automation_categories") ||
+      result.error.message.includes("build_stack") ||
+      result.error.message.includes("build_stack_other")
+    );
+
+    if (!schemaMissing) return result;
+
+    const legacyPayload = { ...insertPayload, automation_type: fallbackAutomationType };
+    delete legacyPayload.automation_categories;
+    delete legacyPayload.build_stack;
+    delete legacyPayload.build_stack_other;
+
     return supabase
       .from("developer_waitlist")
-      .insert(payload)
+      .insert(legacyPayload)
       .select()
       .single();
   }

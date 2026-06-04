@@ -2185,19 +2185,61 @@ if (shouldImportN8n) {
 
     if (!form) return;
 
+    form.querySelectorAll(".dropdown-multiselect").forEach((dropdown) => {
+      const label = dropdown.querySelector("[data-multiselect-label]");
+      const inputs = Array.from(dropdown.querySelectorAll("input[type='checkbox']"));
+      const updateLabel = () => {
+        const selected = inputs
+          .filter((input) => input.checked)
+          .map((input) => input.closest("label")?.querySelector("span")?.textContent?.trim() || input.value)
+          .filter(Boolean);
+
+        if (!label) return;
+        if (!selected.length) {
+          label.textContent = label.dataset.empty || "Select options";
+          return;
+        }
+
+        label.textContent = selected.length <= 2
+          ? selected.join(", ")
+          : `${selected.slice(0, 2).join(", ")} +${selected.length - 2}`;
+      };
+
+      inputs.forEach((input) => input.addEventListener("change", updateLabel));
+      updateLabel();
+    });
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
       const formData = new FormData(event.target);
+      const selectedCategories = formData
+        .getAll("automation_categories")
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+      const selectedStack = formData
+        .getAll("build_stack")
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+      const otherPlatforms = String(formData.get("platforms_other") || "").trim();
+      const categorySummary = selectedCategories.join(", ");
+      const stackSummary = [...selectedStack, otherPlatforms].filter(Boolean).join(", ");
+      const legacyAutomationType = [
+        categorySummary ? `Types: ${categorySummary}` : "",
+        stackSummary ? `Stack: ${stackSummary}` : "",
+      ].filter(Boolean).join("\n");
 
       const { error } = await NexusDB.createWaitlist({
         name: String(formData.get("name") || ""),
         email: String(formData.get("email") || ""),
-        company: String(formData.get("company") || ""),
-        website: String(formData.get("website") || ""),
-        automation_type: String(formData.get("automation_type") || ""),
+        company: "",
+        website: "",
+        automation_type: "",
+        automation_categories: selectedCategories,
+        build_stack: selectedStack,
+        build_stack_other: otherPlatforms,
+        __fallback_automation_type: legacyAutomationType,
         experience: String(formData.get("experience") || ""),
-        message: String(formData.get("message") || ""),
         status: "new",
       });
 
@@ -2255,28 +2297,40 @@ if (shouldImportN8n) {
     if (!body) return;
 
     if (error) {
-      body.innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="6">${NexusUI.escapeHtml(error.message)}</td></tr>`;
       return;
     }
 
     body.innerHTML =
       (data || [])
         .map((waitlist) => {
+          const formatList = (value) => Array.isArray(value)
+            ? value.filter(Boolean).join(", ")
+            : String(value || "");
+          const categories = formatList(waitlist.automation_categories);
+          const stack = [formatList(waitlist.build_stack), waitlist.build_stack_other]
+            .filter(Boolean)
+            .join(", ");
+          const legacyFocus = !categories && !stack
+            ? NexusUI.escapeHtml(waitlist.automation_type || "").replace(/\n/g, "<br>")
+            : "";
+          const experience = NexusUI.escapeHtml(waitlist.experience || "").replace(/\n/g, "<br>");
           return `
             <tr>
               <td>
-                <strong>${waitlist.name}</strong><br>
-                <span style="color:var(--muted);font-size:.85rem">${waitlist.email}</span>
+                <strong>${NexusUI.escapeHtml(waitlist.name || "")}</strong><br>
+                <span style="color:var(--muted);font-size:.85rem">${NexusUI.escapeHtml(waitlist.email || "")}</span>
               </td>
 
-              <td>${waitlist.company || ""}</td>
-              <td>${waitlist.automation_type || ""}</td>
-              <td>${waitlist.status}</td>
+              <td>${NexusUI.escapeHtml(categories) || legacyFocus}</td>
+              <td>${NexusUI.escapeHtml(stack)}</td>
+              <td>${experience}</td>
+              <td>${NexusUI.escapeHtml(waitlist.status || "")}</td>
               <td>${new Date(waitlist.created_at).toLocaleString()}</td>
             </tr>
           `;
         })
-        .join("") || `<tr><td colspan="5">No waitlist signups yet.</td></tr>`;
+        .join("") || `<tr><td colspan="6">No waitlist signups yet.</td></tr>`;
   }
 
   async function renderMessages() {

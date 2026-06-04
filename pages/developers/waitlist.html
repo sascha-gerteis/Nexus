@@ -1,7 +1,7 @@
 ﻿<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/css/nexus.css?v=20260604-logo-icon">
+<link rel="stylesheet" href="/assets/css/nexus.css?v=20260604-waitlist-fields">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/assets/js/config.js"></script><title>Developer Waitlist | Nexus AI</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -41,11 +41,62 @@
         <div class="form-grid">
           <div><label>Name</label><input class="input" name="name" required></div>
           <div><label>Email</label><input class="input" type="email" name="email" required></div>
-          <div><label>Company / studio</label><input class="input" name="company"></div>
-          <div><label>Website</label><input class="input" name="website"></div>
-          <div class="full"><label>What kind of automation do you build?</label><input class="input" name="automation_type" placeholder="n8n, Make, Python, chatbots, reporting..."></div>
+          <div class="full">
+            <label>Automation types you build</label>
+            <details class="dropdown-multiselect">
+              <summary><span data-multiselect-label data-empty="Select automation types">Select automation types</span></summary>
+              <div class="dropdown-options" aria-label="Automation types you build">
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="All automation types"><span>All automation types</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Business workflow automation"><span>Business workflows</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="AI agents / LLM workflows"><span>AI agents / LLMs</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="API integrations / webhooks"><span>API integrations</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Data pipelines / ETL"><span>Data pipelines</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Reporting dashboards"><span>Reporting dashboards</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="CRM / sales ops automation"><span>CRM / sales ops</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Marketing automation"><span>Marketing automation</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Support / chatbot automation"><span>Support / chatbots</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Finance / operations automation"><span>Finance / ops</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Ecommerce automation"><span>Ecommerce automation</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="RPA / browser or desktop bots"><span>RPA / browser bots</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Internal tools / micro-SaaS"><span>Internal tools</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="DevOps / cloud automation"><span>DevOps / cloud</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Document / OCR automation"><span>Documents / OCR</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Voice / phone / WhatsApp automation"><span>Voice / messaging</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Custom code automation"><span>Custom code</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="automation_categories" value="Other"><span>Other</span></label>
+              </div>
+            </details>
+          </div>
+          <div class="full">
+            <label>Build stack / platforms</label>
+            <details class="dropdown-multiselect">
+              <summary><span data-multiselect-label data-empty="Select build stack">Select build stack</span></summary>
+              <div class="dropdown-options" aria-label="Build stack and platforms">
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Platform agnostic"><span>Platform agnostic</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="n8n"><span>n8n</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Make"><span>Make</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Zapier"><span>Zapier</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Microsoft Power Automate"><span>Power Automate</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Pipedream"><span>Pipedream</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Workato / Tray.io"><span>Workato / Tray.io</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="UiPath / RPA tools"><span>UiPath / RPA</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Airflow / Prefect / Dagster"><span>Airflow / Prefect</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Python"><span>Python</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Node.js / TypeScript"><span>Node.js / TS</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="OpenAI / Claude / LLM APIs"><span>LLM APIs</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="LangChain / LangGraph"><span>LangChain / LangGraph</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="CrewAI / AutoGen"><span>CrewAI / AutoGen</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="LlamaIndex / RAG"><span>LlamaIndex / RAG</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Supabase / Firebase"><span>Supabase / Firebase</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="AWS / GCP / Azure"><span>AWS / GCP / Azure</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Selenium / Playwright"><span>Selenium / Playwright</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="APIs / webhooks"><span>APIs / webhooks</span></label>
+                <label class="dropdown-option"><input type="checkbox" name="build_stack" value="Other"><span>Other</span></label>
+              </div>
+            </details>
+            <input class="input platform-other-input" name="platforms_other" placeholder="Other stack, platform, or framework">
+          </div>
           <div class="full"><label>Experience</label><textarea class="textarea" name="experience"></textarea></div>
-          <div class="full"><label>Message</label><textarea class="textarea" name="message"></textarea></div>
         </div>
         <button class="btn btn-primary" style="margin-top:1rem">Join waitlist</button>
       </form>
@@ -54,6 +105,6 @@
 </section>
 </main>
 <footer class="footer"><div class="container footer-row"><div><strong>Nexus</strong><br><span>The trusted marketplace layer for business automation.</span></div><div class="footer-links"><a href="/pages/marketplace/index.html">Marketplace</a><a href="/pages/developers/index.html">Developers</a><a href="/pages/developers/waitlist.html">Developer Waitlist</a><a href="/pages/about/index.html">About</a><a href="/pages/contact/index.html">Contact</a><a href="/pages/legal/privacy.html">Privacy</a></div></div></footer><div class="modal-backdrop" id="productModal"><div class="modal"><div class="modal-side" id="modalSide"></div><div class="modal-main" id="modalMain"></div></div></div><div class="toast" id="toast"></div><script src="/assets/js/nexus-ui.js?v=20260604-logo-icon"></script>
-<script src="/assets/js/nexus-db.js"></script>
+<script src="/assets/js/nexus-db.js?v=20260604-waitlist-fields"></script>
 <script src="/assets/js/nexus-buyer-nav.js"></script>
-<script src="/assets/js/nexus-app.js"></script></body></html>
+<script src="/assets/js/nexus-app.js?v=20260604-waitlist-fields"></script></body></html>

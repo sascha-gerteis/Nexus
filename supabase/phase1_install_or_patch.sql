@@ -103,11 +103,25 @@ create table if not exists developer_waitlist (
   company text,
   website text,
   automation_type text,
+  automation_categories text[] not null default '{}'::text[],
+  build_stack text[] not null default '{}'::text[],
+  build_stack_other text,
   experience text,
   message text,
   status text default 'new',
   created_at timestamptz default now()
 );
+
+alter table developer_waitlist
+  add column if not exists automation_categories text[] not null default '{}'::text[],
+  add column if not exists build_stack text[] not null default '{}'::text[],
+  add column if not exists build_stack_other text;
+
+create index if not exists idx_developer_waitlist_automation_categories
+on developer_waitlist using gin (automation_categories);
+
+create index if not exists idx_developer_waitlist_build_stack
+on developer_waitlist using gin (build_stack);
 
 create table if not exists contact_messages (
   id uuid primary key default gen_random_uuid(),

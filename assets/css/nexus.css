@@ -297,6 +297,105 @@ img{max-width:100%;display:block}
 .input:focus,.select:focus,.textarea:focus{border-color:rgba(14,165,233,.55);box-shadow:0 0 0 4px rgba(14,165,233,.09)}
 label{display:block;color:var(--navy);font-weight:850;font-size:.86rem;margin-bottom:.35rem}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}
+.platform-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+  gap:.5rem;
+  margin:.35rem 0 .75rem;
+}
+.platform-option{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  min-height:42px;
+  margin:0;
+  padding:.62rem .7rem;
+  border:1px solid #dbe4ef;
+  border-radius:14px;
+  background:#f8fbff;
+  color:#334b67;
+  font-size:.82rem;
+  font-weight:800;
+  line-height:1.2;
+  cursor:pointer;
+}
+.platform-option input{
+  width:16px;
+  height:16px;
+  flex:0 0 auto;
+  accent-color:var(--blue);
+}
+.platform-option span{display:block}
+.platform-other-input{margin-top:.15rem}
+.dropdown-multiselect{
+  position:relative;
+  margin:.35rem 0 .75rem;
+}
+.dropdown-multiselect summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.75rem;
+  min-height:50px;
+  border:1px solid #dbe4ef;
+  border-radius:14px;
+  padding:.92rem 1rem;
+  background:#fff;
+  color:var(--ink);
+  font-size:.95rem;
+  font-weight:800;
+  list-style:none;
+  cursor:pointer;
+}
+.dropdown-multiselect summary::-webkit-details-marker{display:none}
+.dropdown-multiselect summary:after{
+  content:"";
+  width:9px;
+  height:9px;
+  border-right:2px solid #5d6f86;
+  border-bottom:2px solid #5d6f86;
+  transform:rotate(45deg) translateY(-2px);
+  transition:.16s ease;
+}
+.dropdown-multiselect[open] summary{
+  border-color:rgba(14,165,233,.55);
+  box-shadow:0 0 0 4px rgba(14,165,233,.09);
+}
+.dropdown-multiselect[open] summary:after{transform:rotate(225deg) translateY(-2px)}
+.dropdown-options{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:.5rem;
+  margin-top:.55rem;
+  padding:.7rem;
+  border:1px solid #dbe4ef;
+  border-radius:18px;
+  background:#f8fbff;
+  box-shadow:var(--shadow2);
+}
+.dropdown-option{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  min-height:40px;
+  margin:0;
+  padding:.58rem .66rem;
+  border:1px solid #e4ecf5;
+  border-radius:12px;
+  background:#fff;
+  color:#334b67;
+  font-size:.82rem;
+  font-weight:800;
+  line-height:1.2;
+  cursor:pointer;
+}
+.dropdown-option input{
+  width:16px;
+  height:16px;
+  flex:0 0 auto;
+  accent-color:var(--blue);
+}
+.dropdown-option span{display:block}
 
 .product-card{
   position:relative;
