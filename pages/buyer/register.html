@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -8,12 +8,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260604-logo-icon">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260605-mvp-public">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
 
-  <title>Create Buyer Account | Nexus AI</title>
+  <title>Create Buyer Account | Nexus</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
@@ -34,7 +34,7 @@
       <h1 id="buyerRegisterTitle">Create your buyer account.</h1>
 
       <p id="buyerRegisterIntro">
-        Your buyer dashboard will show purchased/requested automations, setup status, and future automation outputs.
+        Your buyer dashboard will show purchased and requested automations, setup status, messages, and automation outputs.
       </p>
 
       <button class="btn btn-secondary btn-full" type="button" id="googleRegisterButton">
@@ -120,7 +120,7 @@
 
       if (reason === "message") {
         if (title) title.textContent = "Create an account to message the developer.";
-        if (intro) intro.textContent = "Your buyer dashboard will keep this conversation, replies, products, setup details, and future outputs in one place.";
+        if (intro) intro.textContent = "Your buyer dashboard will keep this conversation, replies, products, setup details, and automation outputs in one place.";
       }
 
       const loginLink = document.getElementById("loginLink");

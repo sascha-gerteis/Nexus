@@ -492,8 +492,9 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
 
 /* Footer */
 .footer{background:#f8fbff;color:#556b86;padding:2rem 0;margin-top:auto;border-top:1px solid #e5eef7}
-.footer-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
-.footer-links{display:flex;gap:1rem;flex-wrap:wrap}
+.footer-row{display:flex;justify-content:space-between;align-items:flex-start;gap:1.25rem;flex-wrap:wrap}
+.footer-row > div:first-child{min-width:190px;max-width:360px}
+.footer-links{display:flex;gap:.65rem 1rem;flex-wrap:wrap;justify-content:flex-end;align-items:center}
 .footer-links a{color:#56708c;font-weight:750}
 
 /* State */
@@ -517,8 +518,8 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
   .grid-3,.grid-4,.form-grid,.card-actions,.meta-grid,.preview-kpis,.choice-grid,.hero-market-mini{grid-template-columns:1fr}
   .section-head{text-align:left}
   .preview-row{grid-template-columns:1fr}
-  .footer-row{display:block}
-  .footer-links{margin-top:1rem}
+  .footer-row{display:flex;flex-direction:column;align-items:flex-start}
+  .footer-links{margin-top:.75rem;justify-content:flex-start}
 }
 
 
@@ -9197,5 +9198,138 @@ body[data-page="checkout"] .site-header {
 
   .message-center-detail {
     min-height: 420px;
+  }
+}
+
+/* =========================================================
+   PUBLIC MVP RESPONSIVE HARDENING
+   ========================================================= */
+
+.card,
+.product-card,
+.home-product-visual,
+.home-comparison-board,
+.home-trust-visual,
+.about-flywheel-visual,
+.modal,
+.preview-window,
+.privacy-card,
+.contact-side-card {
+  min-width: 0;
+}
+
+h1,
+h2,
+h3,
+p,
+li,
+td,
+th,
+.btn,
+.tag,
+.pill,
+.nav-link {
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 980px) {
+  .home-product-visual,
+  .home-comparison-board,
+  .home-trust-visual,
+  .about-flywheel-visual {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .dropdown-options {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .privacy-table-wrap,
+  .marketplace-controls,
+  .marketplace-filter-bar,
+  .checkout-shell,
+  .guided-install-shell {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .section {
+    padding: 3.2rem 0;
+  }
+
+  .section-head h2,
+  .home-final-card h2,
+  .about-final-card h2,
+  .marketplace-bottom-card h2 {
+    font-size: clamp(1.85rem, 9vw, 2.65rem) !important;
+    line-height: 1.02 !important;
+    letter-spacing: -0.045em !important;
+  }
+
+  .card,
+  .product-card,
+  .home-metric-card,
+  .home-flow-card,
+  .home-roadmap-card,
+  .about-roadmap-card,
+  .contact-path-card,
+  .contact-faq-item {
+    padding: 1rem;
+    border-radius: 20px;
+  }
+
+  .dropdown-options {
+    grid-template-columns: 1fr;
+    max-height: 58vh;
+    overflow-y: auto;
+  }
+
+  .dropdown-multiselect summary,
+  .input,
+  .select,
+  .textarea {
+    min-height: 46px;
+  }
+
+  .home-trust-visual,
+  .about-flywheel-visual {
+    min-height: auto;
+  }
+
+  .home-trust-center,
+  .home-trust-node,
+  .about-flywheel-center,
+  .about-flywheel-node {
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    margin-bottom: .65rem;
+  }
+}
+
+.footer .btn,
+.footer a {
+  width: auto;
+}
+
+@media (max-width: 640px) {
+  .footer {
+    padding: 1.5rem 0;
+  }
+
+  .footer-links {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .55rem;
+  }
+
+  .footer-links a {
+    width: auto !important;
+    min-height: auto;
+    padding: .15rem 0;
   }
 }
