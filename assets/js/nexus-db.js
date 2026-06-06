@@ -516,6 +516,17 @@ const NexusDB = (() => {
   }
 
   async function countWaitlist() {
+    const functionResult = await callNexusFunction("submit-developer-waitlist", {
+      action: "admin_count",
+    });
+
+    if (!functionResult.error) {
+      return {
+        data: Number(functionResult.data?.count || 0),
+        error: null,
+      };
+    }
+
     return countRows("developer_waitlist");
   }
 
@@ -676,38 +687,111 @@ const NexusDB = (() => {
       .eq("id", id);
   }
 
-  async function createWaitlist(payload) {
+  function isWaitlistDuplicateError(error) {
+    const message = String(error?.message || error?.details || "");
+    return error?.code === "23505" || /duplicate key|already exists|conflict/i.test(message);
+  }
+
+  function isWaitlistSchemaMissing(error) {
+    const message = String(error?.message || error?.details || "");
+    return (
+      message.includes("automation_categories") ||
+      message.includes("build_stack") ||
+      message.includes("build_stack_other") ||
+      message.includes("schema cache")
+    );
+  }
+
+  function isWaitlistConflictTargetMissing(error) {
+    const message = String(error?.message || error?.details || "");
+    return error?.code === "42P10" || /no unique or exclusion constraint/i.test(message);
+  }
+
+  function waitlistSuccess(payload = {}) {
+    return {
+      data: {
+        ok: true,
+        already_exists: true,
+        email: payload.email || "",
+      },
+      error: null,
+    };
+  }
+
+  async function saveWaitlistPayload(payload) {
+    const upsertResult = await supabase
+      .from("developer_waitlist")
+      .upsert(payload, { onConflict: "email", ignoreDuplicates: true });
+
+    if (!upsertResult.error || isWaitlistDuplicateError(upsertResult.error)) {
+      return waitlistSuccess(payload);
+    }
+
+    if (!isWaitlistConflictTargetMissing(upsertResult.error)) {
+      return upsertResult;
+    }
+
+    const insertResult = await supabase
+      .from("developer_waitlist")
+      .insert(payload);
+
+    if (!insertResult.error || isWaitlistDuplicateError(insertResult.error)) {
+      return waitlistSuccess(payload);
+    }
+
+    return insertResult;
+  }
+
+  async function insertWaitlistDirect(payload) {
     const fallbackAutomationType = payload.__fallback_automation_type || payload.automation_type || "";
     const insertPayload = { ...payload };
     delete insertPayload.__fallback_automation_type;
 
-    const result = await supabase
-      .from("developer_waitlist")
-      .insert(insertPayload)
-      .select()
-      .single();
+    const result = await saveWaitlistPayload(insertPayload);
 
-    const schemaMissing = result.error?.message && (
-      result.error.message.includes("automation_categories") ||
-      result.error.message.includes("build_stack") ||
-      result.error.message.includes("build_stack_other")
-    );
+    if (!isWaitlistSchemaMissing(result.error)) return result;
 
-    if (!schemaMissing) return result;
+    const legacyPayload = {
+      name: insertPayload.name,
+      email: insertPayload.email,
+      automation_type: fallbackAutomationType,
+      experience: insertPayload.experience || "",
+      status: insertPayload.status || "new",
+    };
 
-    const legacyPayload = { ...insertPayload, automation_type: fallbackAutomationType };
-    delete legacyPayload.automation_categories;
-    delete legacyPayload.build_stack;
-    delete legacyPayload.build_stack_other;
+    return saveWaitlistPayload(legacyPayload);
+  }
 
-    return supabase
-      .from("developer_waitlist")
-      .insert(legacyPayload)
-      .select()
-      .single();
+  async function createWaitlist(payload) {
+    const functionResult = await callNexusFunction("submit-developer-waitlist", payload);
+
+    if (!functionResult.error) {
+      return {
+        data: functionResult.data?.waitlist || functionResult.data,
+        error: null,
+      };
+    }
+
+    const functionErrorMessage = String(functionResult.error?.message || "");
+    if (/please enter|required|valid email/i.test(functionErrorMessage)) {
+      return functionResult;
+    }
+
+    return functionResult;
   }
 
   async function listWaitlist() {
+    const functionResult = await callNexusFunction("submit-developer-waitlist", {
+      action: "admin_list",
+    });
+
+    if (!functionResult.error) {
+      return {
+        data: functionResult.data?.waitlist || [],
+        error: null,
+      };
+    }
+
     return supabase
       .from("developer_waitlist")
       .select("*")

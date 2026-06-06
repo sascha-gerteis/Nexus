@@ -2212,7 +2212,17 @@ if (shouldImportN8n) {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
+      const submitButton = form.querySelector("button[type='submit'], button:not([type])");
+      const originalButtonText = submitButton?.textContent || "Join waitlist";
       const formData = new FormData(event.target);
+      const name = String(formData.get("name") || "").trim();
+      const email = String(formData.get("email") || "").trim();
+
+      if (!name || !email) {
+        NexusUI.toast("Please enter your name and email.");
+        return;
+      }
+
       const selectedCategories = formData
         .getAll("automation_categories")
         .map((value) => String(value || "").trim())
@@ -2229,9 +2239,14 @@ if (shouldImportN8n) {
         stackSummary ? `Stack: ${stackSummary}` : "",
       ].filter(Boolean).join("\n");
 
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = "Joining...";
+      }
+
       const { error } = await NexusDB.createWaitlist({
-        name: String(formData.get("name") || ""),
-        email: String(formData.get("email") || ""),
+        name,
+        email,
         company: "",
         website: "",
         automation_type: "",
@@ -2244,7 +2259,11 @@ if (shouldImportN8n) {
       });
 
       if (error) {
-        NexusUI.toast(error.message);
+        NexusUI.toast(error.message || "Could not join the waitlist. Please try again.");
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalButtonText;
+        }
         return;
       }
 
@@ -2311,6 +2330,9 @@ if (shouldImportN8n) {
           const stack = [formatList(waitlist.build_stack), waitlist.build_stack_other]
             .filter(Boolean)
             .join(", ");
+          const sourceLabel = waitlist.source === "contact_messages"
+            ? `<br><span style="color:var(--muted);font-size:.75rem">Fallback capture</span>`
+            : "";
           const legacyFocus = !categories && !stack
             ? NexusUI.escapeHtml(waitlist.automation_type || "").replace(/\n/g, "<br>")
             : "";
@@ -2319,7 +2341,7 @@ if (shouldImportN8n) {
             <tr>
               <td>
                 <strong>${NexusUI.escapeHtml(waitlist.name || "")}</strong><br>
-                <span style="color:var(--muted);font-size:.85rem">${NexusUI.escapeHtml(waitlist.email || "")}</span>
+                <span style="color:var(--muted);font-size:.85rem">${NexusUI.escapeHtml(waitlist.email || "")}</span>${sourceLabel}
               </td>
 
               <td>${NexusUI.escapeHtml(categories) || legacyFocus}</td>

@@ -10,5 +10,8 @@ verify_jwt = false
 [functions.submit-review]
 verify_jwt = false
 
+[functions.submit-developer-waitlist]
+verify_jwt = false
+
 [functions.developer-stripe-account]
 verify_jwt = false

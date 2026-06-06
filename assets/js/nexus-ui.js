@@ -143,37 +143,10 @@ async function refreshUsdToThbRate() {
       return parsed.rates.THB;
     }
   } catch {
-    // Fall through to the live refresh when the cache cannot be read.
+    // Keep using the local fallback if cache is unreadable.
   }
 
-  try {
-    const response = await fetch("https://api.frankfurter.dev/v2/latest?from=USD&to=THB,EUR,GBP,JPY");
-    const data = await response.json();
-
-    const rates = {
-      ...FX_FALLBACK_RATES,
-      ...(data.rates || {})
-    };
-
-    if (!response.ok || !rates.THB || rates.THB <= 0) {
-      throw new Error("Invalid FX response");
-    }
-
-    localStorage.setItem(
-      FX_CACHE_KEY,
-      JSON.stringify({
-        rates,
-        created_at: Date.now(),
-        source: "frankfurter_live"
-      })
-    );
-
-    document.dispatchEvent(new CustomEvent("fxratechange"));
-
-    return rates.THB;
-  } catch {
-    return getCachedFxRates().THB;
-  }
+  return getCachedFxRates().THB;
 }
 
 function getProductBaseAmount(product) {
