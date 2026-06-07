@@ -2,6 +2,9 @@ const NexusApp = (() => {
   let liveAutomations = [];
   let activeProduct = null;
   let selectedCustomizationName = "";
+  let marketplaceDrawTimer = null;
+  const compareSlugs = new Set();
+  const MAX_COMPARE_PRODUCTS = 3;
 
   async function init() {
     NexusUI.wireModal();
@@ -74,6 +77,218 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     forceBuyLinksToCheckoutPage();
   }
 
+  function productBySlug(slug) {
+    const normalized = decodeURIComponent(String(slug || ""));
+    return liveAutomations.find((product) => String(product.slug || "") === normalized) || null;
+  }
+
+  function applyTranslationsIfNeeded(root) {
+    if (NexusUI.getLanguage?.() !== "en") {
+      NexusUI.applyTranslations?.(root);
+    }
+  }
+
+  function summarizeList(value, fallback = "Not specified") {
+    if (Array.isArray(value)) {
+      const list = value.filter(Boolean).map((item) => String(item).trim()).filter(Boolean);
+      return list.length ? list.join(", ") : fallback;
+    }
+
+    const text = String(value || "").trim();
+    return text || fallback;
+  }
+
+  function compareProducts() {
+    return Array.from(compareSlugs)
+      .map(productBySlug)
+      .filter(Boolean);
+  }
+
+  function ensureCompareTray() {
+    if (document.body.dataset.page !== "marketplace") return null;
+
+    let tray = document.getElementById("compareTray");
+
+    if (!tray) {
+      tray = document.createElement("div");
+      tray.id = "compareTray";
+      tray.className = "compare-tray";
+      document.body.appendChild(tray);
+    }
+
+    return tray;
+  }
+
+  function renderCompareTray() {
+    const tray = ensureCompareTray();
+    if (!tray) return;
+
+    const products = compareProducts();
+
+    if (!products.length) {
+      tray.classList.remove("show");
+      tray.innerHTML = "";
+      return;
+    }
+
+    tray.classList.add("show");
+    tray.innerHTML = `
+      <div class="compare-tray-inner">
+        <div class="compare-tray-summary">
+          <strong>${products.length}/${MAX_COMPARE_PRODUCTS} selected</strong>
+          <span>${products.map((product) => NexusUI.escapeHtml(NexusUI.localizeRecord(product, "title"))).join(" / ")}</span>
+        </div>
+        <div class="compare-tray-actions">
+          <button class="btn btn-secondary btn-small" type="button" onclick="NexusApp.clearCompare()">Clear</button>
+          <button class="btn btn-primary btn-small" type="button" onclick="NexusApp.openCompare()" ${products.length < 2 ? "disabled" : ""}>
+            Compare
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function toggleCompare(slug) {
+    const normalized = decodeURIComponent(String(slug || ""));
+
+    if (!normalized || !productBySlug(normalized)) {
+      NexusUI.toast("Product not found.");
+      return;
+    }
+
+    if (compareSlugs.has(normalized)) {
+      compareSlugs.delete(normalized);
+    } else {
+      if (compareSlugs.size >= MAX_COMPARE_PRODUCTS) {
+        NexusUI.toast(`Compare up to ${MAX_COMPARE_PRODUCTS} products.`);
+        return;
+      }
+
+      compareSlugs.add(normalized);
+    }
+
+    drawMarketplace();
+  }
+
+  function clearCompare() {
+    compareSlugs.clear();
+    drawMarketplace();
+  }
+
+  function scheduleMarketplaceDraw() {
+    if (marketplaceDrawTimer) {
+      clearTimeout(marketplaceDrawTimer);
+    }
+
+    marketplaceDrawTimer = setTimeout(() => {
+      marketplaceDrawTimer = null;
+      drawMarketplace();
+    }, 80);
+  }
+
+  function compareCell(product, field, fallback = "Not specified") {
+    if (field === "price") return NexusUI.money(product);
+    if (field === "developer") return product.developers?.display_name || "Nexus Internal";
+    if (field === "rating") return `${product.rating || "New"} (${product.review_count || 0})`;
+    if (field === "outputs") return summarizeList(NexusUI.localizeArray?.(product, "outputs") || product.outputs, fallback);
+    if (field === "required_tools") return summarizeList(NexusUI.localizeArray?.(product, "required_tools") || product.required_tools, fallback);
+
+    return summarizeList(NexusUI.localizeRecord?.(product, field, product[field]) || product[field], fallback);
+  }
+
+  function openCompare() {
+    const products = compareProducts();
+
+    if (products.length < 2) {
+      NexusUI.toast("Select at least two products to compare.");
+      return;
+    }
+
+    closeCompare();
+
+    const rows = [
+      ["Price", "price"],
+      ["Category", "category"],
+      ["Setup", "setup_type"],
+      ["Best for", "best_for"],
+      ["Delivery", "delivery_time"],
+      ["Outputs", "outputs"],
+      ["Tools needed", "required_tools"],
+      ["Builder", "developer"],
+      ["Reviews", "rating"],
+    ];
+
+    const modal = document.createElement("div");
+    modal.className = "compare-modal-backdrop open";
+    modal.id = "compareModal";
+    modal.onclick = (event) => {
+      if (event.target === modal) closeCompare();
+    };
+    modal.innerHTML = `
+      <div class="compare-modal">
+        <div class="compare-modal-head">
+          <div>
+            <span class="marketplace-small-label">Compare</span>
+            <h2>Compare automations</h2>
+            <p>Check price, setup effort, outputs, and fit before choosing a product.</p>
+          </div>
+          <button class="close" type="button" onclick="NexusApp.closeCompare()">Close</button>
+        </div>
+
+        <div class="compare-table-wrap">
+          <table class="compare-table">
+            <thead>
+              <tr>
+                <th>Compare</th>
+                ${products.map((product) => `
+                  <th>
+                    <strong>${NexusUI.escapeHtml(NexusUI.localizeRecord(product, "title"))}</strong>
+                    <span>${NexusUI.escapeHtml(NexusUI.localizeRecord(product, "short_description", ""))}</span>
+                  </th>
+                `).join("")}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(([label, field]) => `
+                <tr>
+                  <td>${NexusUI.escapeHtml(label)}</td>
+                  ${products.map((product) => `
+                    <td>${NexusUI.escapeHtml(compareCell(product, field))}</td>
+                  `).join("")}
+                </tr>
+              `).join("")}
+              <tr>
+                <td>Action</td>
+                ${products.map((product) => {
+                  const slug = encodeURIComponent(product.slug || "");
+                  const href = product.listing_type === "custom_request"
+                    ? `/pages/custom-request/index.html?slug=${slug}`
+                    : `/pages/checkout/index.html?slug=${slug}&step=setup`;
+                  const label = product.listing_type === "custom_request" ? "Request" : "Buy";
+
+                  return `
+                    <td>
+                      <div class="compare-action-stack">
+                        <button class="btn btn-secondary btn-small" type="button" onclick="NexusApp.closeCompare(); NexusApp.openProduct('${NexusUI.escapeAttribute(product.slug || "")}')">Preview</button>
+                        <a class="btn btn-primary btn-small" href="${href}">${label}</a>
+                      </div>
+                    </td>
+                  `;
+                }).join("")}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+  }
+
+  function closeCompare() {
+    document.getElementById("compareModal")?.remove();
+  }
+
   async function renderHome() {
     const { data, error } = await NexusDB.listLiveAutomations();
     const grid = document.getElementById("featuredGrid");
@@ -94,7 +309,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       liveAutomations.slice(0, 3).map(NexusUI.productCard).join("") ||
       `<div class="card"><h3>No live products yet</h3><p>Use the hidden admin URL to publish your first automation.</p></div>`;
 
-    NexusUI.applyTranslations?.(grid);
+    applyTranslationsIfNeeded(grid);
     renderHomeProductVisual(liveAutomations);
     forceBuyLinksToCheckoutPage();
   }
@@ -140,12 +355,12 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
           <p>Publish one marketplace product and this section will become a real product card.</p>
         </div>
       `;
-      NexusUI.applyTranslations?.(root);
+      applyTranslationsIfNeeded(root);
       return;
     }
 
     root.innerHTML = NexusUI.productCard(product);
-    NexusUI.applyTranslations?.(root);
+    applyTranslationsIfNeeded(root);
   }
 
   async function renderMarketplace() {
@@ -167,8 +382,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     drawMarketplace();
 
     document.querySelectorAll("[data-filter]").forEach((element) => {
-      element.addEventListener("input", drawMarketplace);
-      element.addEventListener("change", drawMarketplace);
+      element.addEventListener("input", scheduleMarketplaceDraw);
+      element.addEventListener("change", scheduleMarketplaceDraw);
     });
 
     forceBuyLinksToCheckoutPage();
@@ -208,10 +423,16 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     }
 
     grid.innerHTML =
-      items.map(NexusUI.productCard).join("") ||
+      items
+        .map((product) => NexusUI.productCard(product, {
+          showCompare: true,
+          compareSelected: compareSlugs.has(String(product.slug || "")),
+        }))
+        .join("") ||
       `<div class="card"><h3>No results</h3><p>Try changing the filters.</p></div>`;
 
-    NexusUI.applyTranslations?.(grid);
+    applyTranslationsIfNeeded(grid);
+    renderCompareTray();
     forceBuyLinksToCheckoutPage();
   }
 
@@ -2494,6 +2715,10 @@ if (shouldImportN8n) {
  return {
   init,
   openProduct,
+  toggleCompare,
+  clearCompare,
+  openCompare,
+  closeCompare,
   openSetupChoice,
   startProductMessage,
   startDeveloperMessage,

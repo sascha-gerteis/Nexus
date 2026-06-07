@@ -50,12 +50,43 @@ const NexusDB = (() => {
 
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const AUTH_CACHE_TTL_MS = 30 * 1000;
+  const QUERY_CACHE_TTL_MS = 20 * 1000;
+  const PUBLIC_AUTOMATION_CARD_SELECT = `
+    id,
+    title,
+    slug,
+    category,
+    badge,
+    short_description,
+    delivery_time,
+    setup_type,
+    pricing_type,
+    price,
+    price_usd,
+    price_thb,
+    setup_fee,
+    setup_fee_usd,
+    setup_fee_thb,
+    currency,
+    rating,
+    review_count,
+    color,
+    icon,
+    listing_type,
+    best_for,
+    outputs,
+    required_tools,
+    developer_id,
+    developers(id, display_name, avatar_letter, type, rating, handle)
+  `;
   let sessionCache = { result: null, promise: null, expiresAt: 0 };
   const profileCache = new Map();
+  const queryCache = new Map();
 
   function clearAuthCaches() {
     sessionCache = { result: null, promise: null, expiresAt: 0 };
     profileCache.clear();
+    queryCache.clear();
   }
 
   supabase.auth.onAuthStateChange(() => {
@@ -100,6 +131,53 @@ const NexusDB = (() => {
       });
 
     return sessionCache.promise;
+  }
+
+  function isSchemaError(error) {
+    const message = String(error?.message || error?.details || "");
+    return /schema cache|could not find|column .* does not exist|relationship/i.test(message);
+  }
+
+  async function cachedQuery(key, factory, ttl = QUERY_CACHE_TTL_MS) {
+    const now = Date.now();
+    const cached = queryCache.get(key);
+
+    if (cached?.result && cached.expiresAt > now) {
+      return cached.result;
+    }
+
+    if (cached?.promise) {
+      return cached.promise;
+    }
+
+    const promise = Promise.resolve()
+      .then(factory)
+      .then((result) => {
+        if (result?.error) {
+          queryCache.delete(key);
+          return result;
+        }
+
+        queryCache.set(key, {
+          result,
+          promise: null,
+          expiresAt: Date.now() + ttl
+        });
+
+        return result;
+      })
+      .catch((error) => {
+        queryCache.delete(key);
+        throw error;
+      });
+
+    queryCache.set(key, {
+      result: null,
+      promise,
+      expiresAt: now + ttl
+    });
+
+    return promise;
   }
 
   async function getProfile(userId) {
@@ -479,40 +557,60 @@ const NexusDB = (() => {
   }
 
   async function listLiveAutomations() {
-    return supabase
-      .from("automations")
-      .select("*, developers(*)")
-      .eq("status", "live")
-      .order("created_at", { ascending: false });
+    return cachedQuery("automations:live:cards", async () => {
+      const leanResult = await supabase
+        .from("automations")
+        .select(PUBLIC_AUTOMATION_CARD_SELECT)
+        .eq("status", "live")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (!leanResult.error || !isSchemaError(leanResult.error)) {
+        return leanResult;
+      }
+
+      return supabase
+        .from("automations")
+        .select("*, developers(*)")
+        .eq("status", "live")
+        .order("created_at", { ascending: false })
+        .limit(100);
+    }, 30 * 1000);
   }
 
-  async function countRows(table, configureQuery) {
-    let query = supabase
-      .from(table)
-      .select("*", { count: "exact", head: true });
+  async function countRows(table, configureQuery, cacheKey = table) {
+    return cachedQuery(cacheKey, async () => {
+      let query = supabase
+        .from(table)
+        .select("*", { count: "exact", head: true });
 
-    if (typeof configureQuery === "function") {
-      query = configureQuery(query);
-    }
+      if (typeof configureQuery === "function") {
+        query = configureQuery(query);
+      }
 
-    const { count, error } = await query;
+      const { count, error } = await query;
 
-    return {
-      data: error ? null : count || 0,
-      error
-    };
+      return {
+        data: error ? null : count || 0,
+        error
+      };
+    }, 10 * 1000);
   }
 
   async function countAutomations(status = "") {
-    return countRows("automations", (query) => status ? query.eq("status", status) : query);
+    return countRows(
+      "automations",
+      (query) => status ? query.eq("status", status) : query,
+      `count:automations:${status || "all"}`
+    );
   }
 
   async function countDevelopers() {
-    return countRows("developers");
+    return countRows("developers", null, "count:developers");
   }
 
   async function countReviews() {
-    return countRows("reviews");
+    return countRows("reviews", null, "count:reviews");
   }
 
   async function countWaitlist() {
@@ -531,26 +629,29 @@ const NexusDB = (() => {
   }
 
   async function countContacts() {
-    return countRows("contact_messages");
+    return countRows("contact_messages", null, "count:contact_messages");
   }
 
   async function countCheckoutIntents() {
-    return countRows("checkout_intents");
+    return countRows("checkout_intents", null, "count:checkout_intents");
   }
 
   async function listAllAutomations() {
     return supabase
       .from("automations")
       .select("*, developers(*)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(250);
   }
 
   async function getAutomationBySlug(slug) {
-    return supabase
-      .from("automations")
-      .select("*, developers(*)")
-      .eq("slug", slug)
-      .maybeSingle();
+    return cachedQuery(`automation:slug:${slug}`, () => supabase
+        .from("automations")
+        .select("*, developers(*)")
+        .eq("slug", slug)
+        .maybeSingle(),
+      30 * 1000
+    );
   }
 
   async function getAutomationById(id) {
@@ -577,18 +678,23 @@ const NexusDB = (() => {
   }
 
   async function listDevelopers() {
-    return supabase
-      .from("developers")
-      .select("*")
-      .order("created_at", { ascending: true });
+    return cachedQuery("developers:list", () => supabase
+        .from("developers")
+        .select("*")
+        .order("created_at", { ascending: true })
+        .limit(100),
+      30 * 1000
+    );
   }
 
   async function getDeveloper(id) {
-    return supabase
-      .from("developers")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
+    return cachedQuery(`developer:${id}`, () => supabase
+        .from("developers")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle(),
+      30 * 1000
+    );
   }
 
   async function updateDeveloper(id, payload) {
@@ -601,54 +707,82 @@ const NexusDB = (() => {
   }
 
   async function listDeveloperAutomations(developerId) {
-    return supabase
-      .from("automations")
-      .select("*, developers(*)")
-      .eq("developer_id", developerId)
-      .eq("status", "live")
-      .order("created_at", { ascending: false });
+    return cachedQuery(`developer:${developerId}:automations`, async () => {
+      const leanResult = await supabase
+        .from("automations")
+        .select(PUBLIC_AUTOMATION_CARD_SELECT)
+        .eq("developer_id", developerId)
+        .eq("status", "live")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (!leanResult.error || !isSchemaError(leanResult.error)) {
+        return leanResult;
+      }
+
+      return supabase
+        .from("automations")
+        .select("*, developers(*)")
+        .eq("developer_id", developerId)
+        .eq("status", "live")
+        .order("created_at", { ascending: false })
+        .limit(100);
+    },
+      30 * 1000
+    );
   }
 
   async function listReviews() {
     return supabase
       .from("reviews")
       .select("*, automations(title, slug), developers(display_name, handle)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(200);
   }
 
   async function listApprovedReviews() {
-    return supabase
-      .from("reviews")
-      .select("*, automations(title, slug, developer_id), developers(display_name, handle)")
-      .eq("status", "approved")
-      .order("created_at", { ascending: false });
+    return cachedQuery("reviews:approved", () => supabase
+        .from("reviews")
+        .select("*, automations(title, slug, developer_id), developers(display_name, handle)")
+        .eq("status", "approved")
+        .order("created_at", { ascending: false })
+        .limit(100),
+      30 * 1000
+    );
   }
 
   async function listProductReviews(automationId) {
-    return supabase
-      .from("reviews")
-      .select("*")
-      .eq("automation_id", automationId)
-      .eq("review_type", "product")
-      .eq("status", "approved")
-      .order("created_at", { ascending: false });
+    return cachedQuery(`reviews:product:${automationId}`, () => supabase
+        .from("reviews")
+        .select("*")
+        .eq("automation_id", automationId)
+        .eq("review_type", "product")
+        .eq("status", "approved")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      30 * 1000
+    );
   }
 
   async function listDeveloperReviews(developerId) {
-    return supabase
-      .from("reviews")
-      .select("*, automations(title, slug)")
-      .eq("developer_id", developerId)
-      .eq("review_type", "developer")
-      .eq("status", "approved")
-      .order("created_at", { ascending: false });
+    return cachedQuery(`reviews:developer:${developerId}`, () => supabase
+        .from("reviews")
+        .select("*, automations(title, slug)")
+        .eq("developer_id", developerId)
+        .eq("review_type", "developer")
+        .eq("status", "approved")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      30 * 1000
+    );
   }
 
   async function listAllReviewsDetailed() {
     return supabase
       .from("reviews")
       .select("*, automations(title, slug), developers(display_name, handle)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(250);
   }
 
   async function createReview(payload) {
@@ -795,7 +929,8 @@ const NexusDB = (() => {
     return supabase
       .from("developer_waitlist")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(250);
   }
 
   async function createContact(payload) {
@@ -810,7 +945,8 @@ const NexusDB = (() => {
     return supabase
       .from("contact_messages")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(250);
   }
 
   async function createCheckoutIntent(payload) {
@@ -825,7 +961,8 @@ const NexusDB = (() => {
     return supabase
       .from("checkout_intents")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(250);
   }
 
   async function createBuyerOrder(payload) {
@@ -841,14 +978,16 @@ const NexusDB = (() => {
       .from("orders")
       .select("*, automations(title, slug, category, icon, color), developers(display_name, avatar_letter)")
       .eq("buyer_id", userId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
   }
 
   async function listAllOrders() {
     return supabase
       .from("orders")
       .select("*, automations(title, slug), developers(display_name, handle)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(250);
   }
 
   async function createCustomerAutomation(payload) {
@@ -864,14 +1003,16 @@ const NexusDB = (() => {
       .from("customer_automations")
       .select("*, automations(title, slug, category, icon, color), developers(display_name, avatar_letter)")
       .eq("buyer_id", userId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
   }
 
   async function listAllCustomerAutomations() {
     return supabase
       .from("customer_automations")
       .select("*, orders(buyer_name, buyer_email, buyer_company), automations(title, slug), developers(display_name, handle)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(250);
   }
 
   async function createAutomationEvent(payload) {
@@ -887,7 +1028,8 @@ const NexusDB = (() => {
       .from("automation_events")
       .select("*, customer_automations(name)")
       .eq("buyer_id", userId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
   }
 
   async function createAdminNotification(payload) {
@@ -902,7 +1044,8 @@ const NexusDB = (() => {
     return supabase
       .from("admin_notifications")
       .select("*, orders(automation_title, buyer_name, buyer_email, buyer_company)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
   }
 
   async function markAdminNotificationRead(id) {
@@ -925,7 +1068,7 @@ const NexusDB = (() => {
 
 async function callNexusFunction(functionName, payload = {}) {
   try {
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData } = await getSession();
     const token = sessionData?.session?.access_token;
 
     const response = await fetch(`${getFunctionsBaseUrl()}/${functionName}`, {
@@ -1302,7 +1445,8 @@ async function listBuyerOutputs(userId) {
     `)
     .eq("buyer_id", userId)
     .eq("status", "published")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(100);
 }
 
 async function listOutputsForCustomerAutomation(customerAutomationId) {
@@ -1321,7 +1465,8 @@ async function listOutputsForCustomerAutomation(customerAutomationId) {
     .eq("customer_automation_id", customerAutomationId)
     .eq("buyer_id", user.id)
     .eq("status", "published")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(100);
 }
 async function importN8nWorkflow(automationId) {
   return callNexusFunction("import-n8n-workflow", {
@@ -1332,16 +1477,16 @@ async function listBuyerCustomerAutomations(userId) {
   let buyerId = userId || "";
 
   if (!buyerId) {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authUser, error: authError } = await getUser();
 
-    if (authError || !authData?.user) {
+    if (authError || !authUser) {
       return {
         data: [],
         error: { message: "You must be logged in." }
       };
     }
 
-    buyerId = authData.user.id;
+    buyerId = authUser.id;
   }
 
   const { data, error } = await supabase
@@ -1372,7 +1517,8 @@ async function listBuyerCustomerAutomations(userId) {
       )
     `)
     .eq("buyer_id", buyerId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(100);
 
   if (error) {
     console.error("listBuyerCustomerAutomations error:", error);
@@ -1422,7 +1568,8 @@ async function listBuyerAutomationOutputs() {
     `)
     .eq("buyer_id", user.id)
     .eq("status", "published")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(100);
 }
 
 async function getBuyerAutomationOutput(outputId) {
@@ -1543,7 +1690,8 @@ async function listContactMessages() {
   return supabase
     .from("contact_messages")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(250);
 }
 
 async function updateContactMessage(id, updates) {
@@ -1567,7 +1715,8 @@ async function listContactMessages() {
   return supabase
     .from("contact_messages")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(250);
 }
 
 async function updateContactMessage(id, updates) {

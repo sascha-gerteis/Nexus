@@ -653,10 +653,14 @@ function productColorTheme(color) {
     `;
   }
 
-  function productCard(product) {
+  function productCard(product, options = {}) {
+    const cardOptions = options && typeof options === "object" && !Array.isArray(options) ? options : {};
     const developer = product.developers || {};
     const slug = encodeURIComponent(product.slug || "");
+    const rawSlug = String(product.slug || "");
     const isCustomRequest = product.listing_type === "custom_request";
+    const showCompare = Boolean(cardOptions.showCompare);
+    const compareSelected = Boolean(cardOptions.compareSelected);
     const ctaHref = isCustomRequest
       ? `/pages/custom-request/index.html?slug=${slug}`
       : `/pages/checkout/index.html?slug=${slug}&step=setup`;
@@ -698,6 +702,17 @@ function productColorTheme(color) {
           <span class="tag">${escapeHtml(l(localizeRecord(product, "delivery_time", "Custom")))}</span>
           <span class="tag">&#9733; ${escapeHtml(l(product.rating || "New"))} (${escapeHtml(product.review_count || 0)})</span>
         </div>
+
+        ${showCompare ? `
+          <button
+            type="button"
+            class="compare-toggle ${compareSelected ? "active" : ""}"
+            aria-pressed="${compareSelected ? "true" : "false"}"
+            onclick="event.stopPropagation(); NexusApp.toggleCompare('${escapeAttribute(rawSlug)}')"
+          >
+            <span>${compareSelected ? "Selected" : "Compare"}</span>
+          </button>
+        ` : ""}
 
         <div class="meta-grid">
           <div class="meta">
@@ -2951,16 +2966,6 @@ async function getNavDestination(active = "") {
       };
     }
 
-    let profile = null;
-
-    if (typeof NexusDB.getProfile === "function") {
-      const result = await NexusDB.getProfile(user.id);
-      profile = result?.data || null;
-    }
-
-    const isAdmin = profile?.role === "admin";
-    const isDeveloper = profile?.role === "developer";
-
     /*
       On dashboard/admin pages, logged-in users should see Logout.
       On public pages, logged-in users should see Dashboard/Admin.
@@ -2978,10 +2983,20 @@ async function getNavDestination(active = "") {
         label: t("nav_logout"),
         href: "#",
         action: "logout",
-        isAdmin,
+        isAdmin: false,
         isLoggedIn: true
       };
     }
+
+    let profile = null;
+
+    if (typeof NexusDB.getProfile === "function") {
+      const result = await NexusDB.getProfile(user.id);
+      profile = result?.data || null;
+    }
+
+    const isAdmin = profile?.role === "admin";
+    const isDeveloper = profile?.role === "developer";
 
     if (isAdmin) {
       return {
