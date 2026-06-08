@@ -29,6 +29,18 @@ function parseMoneyFromDisplay(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function roundMoney(value: number) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function cleanObject(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
 function isMissingWalletSchemaError(error: any) {
   const message = [
     error?.message,
@@ -37,7 +49,7 @@ function isMissingWalletSchemaError(error: any) {
     error?.code,
   ].filter(Boolean).join(" ");
 
-  return /developer_earnings|developer_payout_requests|stripe_connected_account_id|stripe_connect_|developer_earning_|payout_request|schema cache|relation .* does not exist|could not find .* column/i.test(message);
+  return /developer_earnings|developer_payout_requests|stripe_connected_account_id|stripe_connect_|developer_earning_|payout_request|payout_method|payout_details|payment_receipt|platform_net_amount|created_at|requested_at|earnings_ids|source_id|schema cache|relation .* does not exist|could not find .* column/i.test(message);
 }
 
 function isConnectNotEnabledError(error: unknown) {
@@ -277,6 +289,7 @@ function summarizeEarnings(rows: any[]) {
         stripe_fee_amount: 0,
         net_amount: 0,
         platform_fee_amount: 0,
+        platform_net_amount: 0,
         developer_amount: 0,
         pending_amount: 0,
         available_amount: 0,
@@ -298,6 +311,10 @@ function summarizeEarnings(rows: any[]) {
     total.stripe_fee_amount += Number(row.stripe_fee_amount || 0);
     total.net_amount += Number(row.net_amount || 0);
     total.platform_fee_amount += Number(row.platform_fee_amount || 0);
+    total.platform_net_amount += Number(
+      row.platform_net_amount ??
+        Math.round((Number(row.platform_fee_amount || 0) - Number(row.stripe_fee_amount || 0)) * 100) / 100
+    );
     total.developer_amount += developerAmount;
 
     if (["available", "unrequested", "recorded"].includes(payoutStatus)) total.available_amount += developerAmount;
@@ -313,10 +330,193 @@ function summarizeEarnings(rows: any[]) {
   return Object.values(totals);
 }
 
+function orderGrossAmount(order: any) {
+  return roundMoney(
+    Number(order.stripe_amount_total || 0) ||
+      Number(order.price || 0) ||
+      parseMoneyFromDisplay(order.price_display)
+  );
+}
+
+async function getSubscriptionInvoiceSnapshot(subscriptionId: string) {
+  if (!subscriptionId) {
+    return {
+      sourceType: "order_payment",
+      sourceId: "",
+      grossAmount: 0,
+      paymentIntentId: "",
+    };
+  }
+
+  try {
+    const subscription: any = await stripe.subscriptions.retrieve(subscriptionId, {
+      expand: ["latest_invoice.payment_intent"],
+    });
+    const invoice: any = subscription.latest_invoice;
+    const paymentIntent: any = invoice?.payment_intent;
+
+    return {
+      sourceType: "subscription_invoice",
+      sourceId: cleanString(invoice?.id),
+      grossAmount: roundMoney(Number(invoice?.amount_paid || 0) / 100),
+      paymentIntentId: typeof paymentIntent === "string" ? paymentIntent : cleanString(paymentIntent?.id),
+    };
+  } catch (error) {
+    console.warn("Could not retrieve subscription invoice for wallet backfill:", error);
+
+    return {
+      sourceType: "subscription_invoice",
+      sourceId: subscriptionId,
+      grossAmount: 0,
+      paymentIntentId: "",
+    };
+  }
+}
+
+async function backfillDeveloperEarningsForPaidOrders(adminClient: any, developer: any) {
+  const result = {
+    message: "",
+    warning: "",
+  };
+
+  const { data: paidOrders, error: ordersError } = await adminClient
+    .from("orders")
+    .select("*")
+    .eq("developer_id", developer.id)
+    .eq("payment_status", "paid")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (ordersError) {
+    if (isMissingWalletSchemaError(ordersError)) {
+      result.warning = `${ordersError.message || "Could not read paid developer orders."} ${WALLET_SQL_HINT}`;
+      return result;
+    }
+    throw new Error(ordersError.message);
+  }
+
+  const orders = paidOrders || [];
+  if (!orders.length) return result;
+
+  const { data: existing, error: existingError } = await adminClient
+    .from("developer_earnings")
+    .select("order_id, source_type, source_id")
+    .eq("developer_id", developer.id);
+
+  if (existingError) {
+    if (isMissingWalletSchemaError(existingError)) {
+      result.warning = `${existingError.message || "Could not read existing developer earnings."} ${WALLET_SQL_HINT}`;
+      return result;
+    }
+    throw new Error(existingError.message);
+  }
+
+  const existingOrderIds = new Set((existing || []).map((row: any) => row.order_id).filter(Boolean));
+  const existingSources = new Set(
+    (existing || [])
+      .map((row: any) => `${cleanString(row.source_type)}:${cleanString(row.source_id)}`)
+      .filter((key: string) => key !== ":")
+  );
+
+  let created = 0;
+
+  for (const order of orders) {
+    if (!order?.id || existingOrderIds.has(order.id)) continue;
+
+    let sourceType = "order_payment";
+    let sourceId = cleanString(order.stripe_payment_intent_id || order.stripe_checkout_session_id || order.id);
+    let paymentIntentId = cleanString(order.stripe_payment_intent_id);
+    let grossAmount = orderGrossAmount(order);
+
+    if (cleanString(order.stripe_subscription_id)) {
+      const snapshot = await getSubscriptionInvoiceSnapshot(cleanString(order.stripe_subscription_id));
+      sourceType = snapshot.sourceType || "subscription_invoice";
+      sourceId = snapshot.sourceId || cleanString(order.stripe_subscription_id || order.id);
+      paymentIntentId = snapshot.paymentIntentId || paymentIntentId;
+      grossAmount = snapshot.grossAmount || grossAmount;
+    }
+
+    if (!grossAmount || grossAmount <= 0 || existingSources.has(`${sourceType}:${sourceId}`)) continue;
+
+    const currency = cleanString(order.currency || order.stripe_currency || "THB").toUpperCase();
+    const stripeFeeAmount = roundMoney(Number(order.stripe_fee_amount || 0));
+    const netAmount = roundMoney(Math.max(0, grossAmount - stripeFeeAmount));
+    const platformFeeAmount = roundMoney(Number(order.platform_fee_amount || 0) || grossAmount * 0.2);
+    const developerAmount = roundMoney(Number(order.developer_earning_amount || 0) || grossAmount * 0.8);
+    const platformNetAmount = roundMoney(
+      Number(order.platform_net_amount ?? Number.NaN) ||
+        Math.max(0, platformFeeAmount - stripeFeeAmount)
+    );
+
+    const { error } = await adminClient
+      .from("developer_earnings")
+      .insert({
+        developer_id: developer.id,
+        automation_id: order.automation_id || null,
+        order_id: order.id,
+        source_type: sourceType,
+        source_id: sourceId,
+        currency,
+        gross_amount: grossAmount,
+        stripe_fee_amount: stripeFeeAmount,
+        net_amount: netAmount,
+        platform_fee_amount: platformFeeAmount,
+        platform_net_amount: platformNetAmount,
+        developer_amount: developerAmount,
+        platform_fee_bps: 2000,
+        developer_share_bps: 8000,
+        status: "available",
+        transfer_status: "available",
+        payout_status: "available",
+        stripe_payment_intent_id: paymentIntentId,
+        metadata: {
+          source: "developer_wallet_paid_order_backfill",
+          automation_title: order.automation_title || "",
+          buyer_email: order.buyer_email || "",
+          stripe_checkout_session_id: order.stripe_checkout_session_id || "",
+          stripe_subscription_id: order.stripe_subscription_id || "",
+        },
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      });
+
+    if (error) {
+      if (isMissingWalletSchemaError(error)) {
+        result.warning = `${error.message || "Could not create developer earning."} ${WALLET_SQL_HINT}`;
+        return result;
+      }
+      console.warn("Could not backfill developer earning:", error.message);
+      continue;
+    }
+
+    await adminClient
+      .from("orders")
+      .update({
+        stripe_fee_amount: stripeFeeAmount,
+        net_amount: netAmount,
+        platform_fee_amount: platformFeeAmount,
+        platform_net_amount: platformNetAmount,
+        developer_earning_amount: developerAmount,
+        revenue_share_status: "allocated",
+        updated_at: nowIso(),
+      })
+      .eq("id", order.id);
+
+    existingOrderIds.add(order.id);
+    existingSources.add(`${sourceType}:${sourceId}`);
+    created += 1;
+  }
+
+  result.message = created ? `Backfilled ${created} paid developer order${created === 1 ? "" : "s"} into wallet.` : "";
+  return result;
+}
+
 async function getWalletSummary(adminClient: any, developer: any) {
+  const backfill = await backfillDeveloperEarningsForPaidOrders(adminClient, developer);
+
   const { data: earnings, error } = await adminClient
     .from("developer_earnings")
-    .select("*, automations(title, slug), orders(buyer_name, buyer_email, automation_title, created_at)")
+    .select("*")
     .eq("developer_id", developer.id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -353,19 +553,33 @@ async function getWalletSummary(adminClient: any, developer: any) {
     totals: summarizeEarnings(earnings || []),
     earnings: earnings || [],
     payout_requests: payoutRequests || [],
-    schema_warning: payoutError ? WALLET_SQL_HINT : "",
+    schema_warning: backfill.warning || (payoutError ? WALLET_SQL_HINT : ""),
+    backfill_message: backfill.message,
   };
 }
 
 async function requestManualPayout(adminClient: any, user: any, developer: any, body: any) {
   const currency = cleanString(body.currency || "THB").toUpperCase();
-  const payoutMethod = cleanString(body.payout_method || "manual_bank_transfer");
+  const payoutMethod = cleanString(body.payout_method || developer.payout_method || "manual_bank_transfer");
   const developerNote = cleanString(body.developer_note || body.note);
-  const payoutDetails = typeof body.payout_details === "object" && body.payout_details
-    ? body.payout_details
-    : {
-        details: cleanString(body.payout_details || body.payoutDetails),
-      };
+  const savedDetails = cleanObject(developer.payout_details);
+  const submittedDetails = cleanObject(body.payout_details);
+  const payoutDetails = Object.keys(submittedDetails).length
+    ? submittedDetails
+    : cleanString(body.payout_details || body.payoutDetails)
+      ? { details: cleanString(body.payout_details || body.payoutDetails) }
+      : savedDetails;
+
+  if (
+    !Object.keys(payoutDetails).length ||
+    !cleanString(
+      (payoutDetails as any).details ||
+        (payoutDetails as any).account_number ||
+        (payoutDetails as any).promptpay
+    )
+  ) {
+    return errorResponse("Add payout details before requesting a payout.", 400);
+  }
 
   const { data: earnings, error } = await adminClient
     .from("developer_earnings")
@@ -382,7 +596,7 @@ async function requestManualPayout(adminClient: any, user: any, developer: any, 
     return sum + Number(row.developer_amount || 0);
   }, 0);
 
-  const minThb = Number(Deno.env.get("MIN_MANUAL_PAYOUT_THB") || 500);
+  const minThb = Number(Deno.env.get("MIN_MANUAL_PAYOUT_THB") || 0);
 
   if (!eligible.length || amount <= 0) {
     return errorResponse("No available earnings to request for this currency.", 400);
@@ -420,7 +634,6 @@ async function requestManualPayout(adminClient: any, user: any, developer: any, 
     .update({
       payout_request_id: payoutRequest.id,
       payout_status: "requested",
-      transfer_status: "requested",
       updated_at: nowIso(),
     })
     .in("id", earningsIds);
@@ -442,11 +655,53 @@ async function requestManualPayout(adminClient: any, user: any, developer: any, 
   });
 }
 
+async function updatePayoutSettings(adminClient: any, developer: any, body: any) {
+  const payoutMethod = cleanString(body.payout_method || body.method || "manual_bank_transfer");
+  const payoutDetails = cleanObject(body.payout_details);
+  const payoutNote = cleanString(body.payout_note || body.note);
+
+  if (
+    !Object.keys(payoutDetails).length ||
+    !cleanString(
+      (payoutDetails as any).details ||
+        (payoutDetails as any).account_number ||
+        (payoutDetails as any).promptpay
+    )
+  ) {
+    return errorResponse("Payout details are required.", 400);
+  }
+
+  const { data, error } = await adminClient
+    .from("developers")
+    .update({
+      payout_method: payoutMethod,
+      payout_details: payoutDetails,
+      payout_note: payoutNote,
+      payout_settings_updated_at: nowIso(),
+      updated_at: nowIso(),
+    })
+    .eq("id", developer.id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return jsonResponse({
+    ok: true,
+    developer: data,
+    message: "Payout settings saved.",
+  });
+}
+
 async function adminUpdatePayoutRequest(adminClient: any, adminUser: any, body: any) {
   const payoutRequestId = cleanString(body.payout_request_id || body.id);
   const status = cleanString(body.status).toLowerCase();
   const adminNote = cleanString(body.admin_note);
   const paymentReference = cleanString(body.payment_reference);
+  const paymentReceiptUrl = cleanString(body.payment_receipt_url || body.receipt_url);
+  const paymentReceiptFileName = cleanString(body.payment_receipt_file_name || body.receipt_file_name);
+  const paymentReceiptMimeType = cleanString(body.payment_receipt_mime_type || body.receipt_mime_type);
+  const paymentReceiptBase64 = cleanString(body.payment_receipt_base64 || body.receipt_base64);
 
   if (!payoutRequestId) {
     return errorResponse("payout_request_id is required.", 400);
@@ -474,6 +729,10 @@ async function adminUpdatePayoutRequest(adminClient: any, adminUser: any, body: 
       status,
       admin_note: adminNote || payoutRequest.admin_note,
       payment_reference: paymentReference || payoutRequest.payment_reference,
+      payment_receipt_url: paymentReceiptUrl || payoutRequest.payment_receipt_url,
+      payment_receipt_file_name: paymentReceiptFileName || payoutRequest.payment_receipt_file_name,
+      payment_receipt_mime_type: paymentReceiptMimeType || payoutRequest.payment_receipt_mime_type,
+      payment_receipt_base64: paymentReceiptBase64 || payoutRequest.payment_receipt_base64,
       reviewed_at: nowIso(),
       paid_at: paidAt,
       paid_by: status === "paid" ? adminUser.id : payoutRequest.paid_by,
@@ -541,6 +800,7 @@ function summarizePaidOrders(rows: any[], earnings: any[] = []) {
         stripe_fee_amount: 0,
         net_amount: 0,
         platform_fee_amount: 0,
+        platform_net_amount: 0,
         developer_amount: 0,
         internal_or_unallocated_gross_amount: 0,
       };
@@ -555,12 +815,17 @@ function summarizePaidOrders(rows: any[], earnings: any[] = []) {
     const stripeFee = Number(row.stripe_fee_amount || 0);
     const developerAmount = Number(row.developer_earning_amount || 0);
     const platformFee = Number(row.platform_fee_amount || 0);
+    const platformNet = Number(
+      row.platform_net_amount ??
+        Math.round((platformFee - stripeFee) * 100) / 100
+    );
 
     totals[currency].gross_amount += amount;
     totals[currency].stripe_fee_amount += stripeFee;
     totals[currency].net_amount += Number(row.net_amount || Math.max(0, amount - stripeFee));
     totals[currency].developer_amount += developerAmount;
     totals[currency].platform_fee_amount += platformFee;
+    totals[currency].platform_net_amount += platformNet;
 
     if (!earningOrderIds.has(row.id)) {
       totals[currency].internal_or_unallocated_gross_amount += amount;
@@ -600,7 +865,7 @@ async function getAdminFinanceSummary(adminClient: any) {
 
   const { data: developers, error: developerError } = await adminClient
     .from("developers")
-    .select("id, display_name, handle, stripe_connected_account_id, stripe_connect_onboarding_status, stripe_connect_payouts_enabled, stripe_connect_charges_enabled, stripe_connect_last_synced_at")
+    .select("id, display_name, handle")
     .order("display_name", { ascending: true });
 
   if (developerError) throw new Error(developerError.message);
@@ -735,11 +1000,15 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "update_payout_settings") {
+      return await updatePayoutSettings(adminClient, developer, body);
+    }
+
     if (action === "request_manual_payout") {
       return await requestManualPayout(adminClient, user, developer, body);
     }
 
-    return errorResponse("Unknown developer Stripe action.", 400);
+    return errorResponse("Unknown developer wallet action.", 400);
   } catch (error) {
     console.error(error);
 

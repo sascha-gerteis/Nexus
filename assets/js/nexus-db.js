@@ -73,6 +73,11 @@ const NexusDB = (() => {
     color,
     icon,
     listing_type,
+    runtime_webhook_url,
+    n8n_webhook_url,
+    n8n_workflow_id,
+    n8n_import_status,
+    n8n_last_test_status,
     best_for,
     outputs,
     required_tools,
@@ -178,6 +183,27 @@ const NexusDB = (() => {
     });
 
     return promise;
+  }
+
+  function clearQueryCache() {
+    queryCache.clear();
+  }
+
+  function isPassingWorkflowTest(status) {
+    return ["passed", "passed_with_expected_test_callback_error"].includes(String(status || "").toLowerCase());
+  }
+
+  function isPublicAutomationRunnable(product) {
+    return true;
+  }
+
+  function filterPublicAutomationsResult(result) {
+    if (!result || result.error || !Array.isArray(result.data)) return result;
+
+    return {
+      ...result,
+      data: result.data.filter(isPublicAutomationRunnable)
+    };
   }
 
   async function getProfile(userId) {
@@ -566,15 +592,17 @@ const NexusDB = (() => {
         .limit(100);
 
       if (!leanResult.error || !isSchemaError(leanResult.error)) {
-        return leanResult;
+        return filterPublicAutomationsResult(leanResult);
       }
 
-      return supabase
+      const fallbackResult = await supabase
         .from("automations")
         .select("*, developers(*)")
         .eq("status", "live")
         .order("created_at", { ascending: false })
         .limit(100);
+
+      return filterPublicAutomationsResult(fallbackResult);
     }, 30 * 1000);
   }
 
@@ -670,6 +698,15 @@ const NexusDB = (() => {
       .single();
   }
 
+  async function updateAutomation(id, payload) {
+    return supabase
+      .from("automations")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single();
+  }
+
   async function deleteAutomation(id) {
     return supabase
       .from("automations")
@@ -681,6 +718,7 @@ const NexusDB = (() => {
     return cachedQuery("developers:list", () => supabase
         .from("developers")
         .select("*")
+        .eq("status", "active")
         .order("created_at", { ascending: true })
         .limit(100),
       30 * 1000
@@ -692,6 +730,7 @@ const NexusDB = (() => {
         .from("developers")
         .select("*")
         .eq("id", id)
+        .eq("status", "active")
         .maybeSingle(),
       30 * 1000
     );
@@ -976,7 +1015,7 @@ const NexusDB = (() => {
   async function listBuyerOrders(userId) {
     return supabase
       .from("orders")
-      .select("*, automations(title, slug, category, icon, color), developers(display_name, avatar_letter)")
+      .select("*, automations(title, slug, category, icon, color), developers(id, display_name, handle, avatar_letter)")
       .eq("buyer_id", userId)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -1264,6 +1303,13 @@ async function getDeveloperWalletSummary() {
   });
 }
 
+async function updateDeveloperPayoutSettings(payload = {}) {
+  return callNexusFunction("developer-stripe-account", {
+    action: "update_payout_settings",
+    ...payload
+  });
+}
+
 async function getAdminFinanceSummary() {
   return callNexusFunction("developer-stripe-account", {
     action: "admin_get_finance_summary"
@@ -1281,6 +1327,40 @@ async function updateDeveloperPayoutRequest(payload = {}) {
   return callNexusFunction("developer-stripe-account", {
     action: "admin_update_payout_request",
     ...payload
+  });
+}
+
+async function callDemoMarketplace(payload = {}) {
+  const result = await callNexusFunction("demo-marketplace", payload);
+
+  if (!result.error && payload.action !== "get_status") {
+    clearQueryCache();
+  }
+
+  return result;
+}
+
+async function getDemoMarketplaceStatus() {
+  return callDemoMarketplace({
+    action: "get_status"
+  });
+}
+
+async function enableDemoMarketplace() {
+  return callDemoMarketplace({
+    action: "enable"
+  });
+}
+
+async function disableDemoMarketplace() {
+  return callDemoMarketplace({
+    action: "disable"
+  });
+}
+
+async function resetDemoMarketplace() {
+  return callDemoMarketplace({
+    action: "reset"
   });
 }
 
@@ -1473,6 +1553,20 @@ async function importN8nWorkflow(automationId) {
     automation_id: automationId
   });
 }
+
+async function startN8nWorkflowTest(automationId) {
+  return callNexusFunction("test-n8n-workflow", {
+    mode: "start",
+    automation_id: automationId
+  });
+}
+
+async function checkN8nWorkflowTest(payload = {}) {
+  return callNexusFunction("test-n8n-workflow", {
+    mode: payload.test_run_id || payload.testRunId ? "check" : "latest",
+    ...payload
+  });
+}
 async function listBuyerCustomerAutomations(userId) {
   let buyerId = userId || "";
 
@@ -1502,6 +1596,12 @@ async function listBuyerCustomerAutomations(userId) {
         short_description,
         category,
         status
+      ),
+      developers(
+        id,
+        display_name,
+        handle,
+        avatar_letter
       ),
       orders(
         id,
@@ -1842,9 +1942,14 @@ async function updateAdminInstallRequest(payload) {
     createDeveloperStripeOnboardingLink,
     createDeveloperStripeDashboardLink,
     getDeveloperWalletSummary,
+    updateDeveloperPayoutSettings,
     getAdminFinanceSummary,
     requestDeveloperManualPayout,
     updateDeveloperPayoutRequest,
+    getDemoMarketplaceStatus,
+    enableDemoMarketplace,
+    disableDemoMarketplace,
+    resetDemoMarketplace,
 
     upsertBuyerProfile,
     getBuyerProfile,
@@ -1860,6 +1965,7 @@ async function updateAdminInstallRequest(payload) {
     getAutomationBySlug,
     getAutomationById,
     upsertAutomation,
+    updateAutomation,
     deleteAutomation,
 
     listDevelopers,
@@ -1906,6 +2012,8 @@ createSetupSubmission,
 listBuyerOutputs,
 listOutputsForCustomerAutomation,
 importN8nWorkflow,
+startN8nWorkflowTest,
+checkN8nWorkflowTest,
 listBuyerCustomerAutomations,
 listBuyerAutomationOutputs,
 getBuyerAutomationOutput,

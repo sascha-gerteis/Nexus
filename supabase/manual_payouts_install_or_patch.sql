@@ -7,8 +7,15 @@ alter table if exists public.orders
   add column if not exists stripe_fee_amount numeric(12, 2) default 0,
   add column if not exists net_amount numeric(12, 2) default 0,
   add column if not exists platform_fee_amount numeric(12, 2) default 0,
+  add column if not exists platform_net_amount numeric(12, 2) default 0,
   add column if not exists developer_earning_amount numeric(12, 2) default 0,
   add column if not exists revenue_share_status text default 'unallocated';
+
+alter table if exists public.developers
+  add column if not exists payout_method text default 'manual_bank_transfer',
+  add column if not exists payout_details jsonb not null default '{}'::jsonb,
+  add column if not exists payout_note text,
+  add column if not exists payout_settings_updated_at timestamptz;
 
 create table if not exists public.developer_earnings (
   id uuid primary key default gen_random_uuid(),
@@ -23,6 +30,7 @@ create table if not exists public.developer_earnings (
   stripe_fee_amount numeric(12, 2) not null default 0,
   net_amount numeric(12, 2) not null default 0,
   platform_fee_amount numeric(12, 2) not null default 0,
+  platform_net_amount numeric(12, 2) not null default 0,
   developer_amount numeric(12, 2) not null default 0,
   platform_fee_bps integer not null default 2000,
   developer_share_bps integer not null default 8000,
@@ -49,15 +57,18 @@ alter table if exists public.developer_earnings
   add column if not exists stripe_fee_amount numeric(12, 2) not null default 0,
   add column if not exists net_amount numeric(12, 2) not null default 0,
   add column if not exists platform_fee_amount numeric(12, 2) not null default 0,
+  add column if not exists platform_net_amount numeric(12, 2) not null default 0,
   add column if not exists developer_amount numeric(12, 2) not null default 0,
   add column if not exists platform_fee_bps integer not null default 2000,
   add column if not exists developer_share_bps integer not null default 8000,
   add column if not exists status text not null default 'available',
+  add column if not exists transfer_status text not null default 'available',
   add column if not exists payout_status text not null default 'available',
   add column if not exists stripe_payment_intent_id text,
   add column if not exists stripe_charge_id text,
   add column if not exists stripe_balance_transaction_id text,
   add column if not exists metadata jsonb not null default '{}'::jsonb,
+  add column if not exists created_at timestamptz not null default now(),
   add column if not exists updated_at timestamptz not null default now();
 
 create table if not exists public.developer_payout_requests (
@@ -73,6 +84,10 @@ create table if not exists public.developer_payout_requests (
   developer_note text,
   admin_note text,
   payment_reference text,
+  payment_receipt_url text,
+  payment_receipt_file_name text,
+  payment_receipt_mime_type text,
+  payment_receipt_base64 text,
   status text not null default 'pending',
   requested_at timestamptz not null default now(),
   reviewed_at timestamptz,
@@ -84,29 +99,152 @@ create table if not exists public.developer_payout_requests (
 );
 
 alter table if exists public.developer_payout_requests
-  add column if not exists developer_id uuid references public.developers(id) on delete cascade,
-  add column if not exists requested_by uuid references public.profiles(id) on delete set null,
-  add column if not exists paid_by uuid references public.profiles(id) on delete set null,
-  add column if not exists currency text not null default 'THB',
-  add column if not exists amount numeric(12, 2) not null default 0,
-  add column if not exists earnings_ids uuid[] not null default array[]::uuid[],
-  add column if not exists payout_method text not null default 'manual_bank_transfer',
-  add column if not exists payout_details jsonb not null default '{}'::jsonb,
-  add column if not exists developer_note text,
-  add column if not exists admin_note text,
-  add column if not exists payment_reference text,
-  add column if not exists reviewed_at timestamptz,
-  add column if not exists paid_at timestamptz,
+  add column if not exists developer_id uuid references public.developers(id) on delete cascade;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists requested_by uuid references public.profiles(id) on delete set null;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists paid_by uuid references public.profiles(id) on delete set null;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists currency text not null default 'THB';
+
+alter table if exists public.developer_payout_requests
+  add column if not exists amount numeric(12, 2) not null default 0;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists earnings_ids uuid[] not null default array[]::uuid[];
+
+alter table if exists public.developer_payout_requests
+  add column if not exists payout_method text not null default 'manual_bank_transfer';
+
+alter table if exists public.developer_payout_requests
+  add column if not exists payout_details jsonb not null default '{}'::jsonb;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists developer_note text;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists admin_note text;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists payment_reference text;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists payment_receipt_url text;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists payment_receipt_file_name text;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists payment_receipt_mime_type text;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists payment_receipt_base64 text;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists status text not null default 'pending';
+
+alter table if exists public.developer_payout_requests
+  add column if not exists requested_at timestamptz not null default now();
+
+alter table if exists public.developer_payout_requests
+  add column if not exists reviewed_at timestamptz;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists paid_at timestamptz;
+
+alter table if exists public.developer_payout_requests
+  add column if not exists created_at timestamptz not null default now();
+
+alter table if exists public.developer_payout_requests
   add column if not exists updated_at timestamptz not null default now();
 
 alter table if exists public.developer_earnings
   drop constraint if exists developer_earnings_payout_request_id_fkey;
 
 alter table if exists public.developer_earnings
+  drop constraint if exists developer_earnings_source_type_check;
+
+alter table if exists public.developer_earnings
+  drop constraint if exists developer_earnings_status_check;
+
+alter table if exists public.developer_earnings
+  drop constraint if exists developer_earnings_transfer_status_check;
+
+alter table if exists public.developer_earnings
+  drop constraint if exists developer_earnings_payout_status_check;
+
+alter table if exists public.developer_payout_requests
+  drop constraint if exists developer_payout_requests_status_check;
+
+alter table if exists public.developer_earnings
+  add constraint developer_earnings_source_type_check
+  check (source_type in ('order_payment', 'subscription_invoice', 'manual_adjustment'));
+
+alter table if exists public.developer_earnings
+  add constraint developer_earnings_status_check
+  check (status in (
+    'available',
+    'requested',
+    'approved',
+    'paid',
+    'transferred',
+    'pending',
+    'failed',
+    'refunded',
+    'disputed',
+    'refunded_after_payout',
+    'disputed_after_payout',
+    'cancelled'
+  ));
+
+alter table if exists public.developer_earnings
+  add constraint developer_earnings_transfer_status_check
+  check (transfer_status in (
+    'available',
+    'requested',
+    'approved',
+    'paid',
+    'transferred',
+    'pending',
+    'failed',
+    'refunded',
+    'disputed',
+    'refunded_after_payout',
+    'disputed_after_payout',
+    'cancelled'
+  ));
+
+alter table if exists public.developer_earnings
+  add constraint developer_earnings_payout_status_check
+  check (payout_status in (
+    'available',
+    'unrequested',
+    'recorded',
+    'requested',
+    'approved',
+    'paid',
+    'transferred',
+    'pending',
+    'failed',
+    'refunded',
+    'disputed',
+    'refunded_after_payout',
+    'disputed_after_payout',
+    'cancelled'
+  ));
+
+alter table if exists public.developer_earnings
   add constraint developer_earnings_payout_request_id_fkey
   foreign key (payout_request_id)
   references public.developer_payout_requests(id)
   on delete set null;
+
+alter table if exists public.developer_payout_requests
+  add constraint developer_payout_requests_status_check
+  check (status in ('pending', 'approved', 'paid', 'rejected', 'cancelled'));
 
 create index if not exists idx_developer_earnings_developer
   on public.developer_earnings(developer_id);

@@ -51,6 +51,37 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function cleanString(value: unknown) {
+  return String(value || "").trim();
+}
+
+function isPassingWorkflowTest(status: unknown) {
+  return ["passed", "passed_with_expected_test_callback_error"].includes(cleanString(status).toLowerCase());
+}
+
+function hasAttachedCheckoutFlow(product: any) {
+  if (cleanString(product?.listing_type) === "custom_request") return true;
+
+  return Boolean(
+    product?.n8n_workflow_json ||
+      cleanString(product?.n8n_workflow_id) ||
+      cleanString(product?.runtime_webhook_url || product?.n8n_webhook_url)
+  );
+}
+
+async function pauseInvalidCheckoutProduct(adminClient: any, product: any) {
+  const now = nowIso();
+
+  await adminClient
+    .from("automations")
+    .update({
+      status: "paused",
+      updated_at: now,
+      internal_notes: `${cleanString(product.internal_notes)}${product.internal_notes ? "\n\n" : ""}[${now}] Auto-paused because checkout product is missing an attached workflow/flow.`,
+    })
+    .eq("id", product.id);
+}
+
 function normalizeCurrency(value: unknown): SupportedCheckoutCurrency {
   const currency = String(value || "THB").trim().toLowerCase() as SupportedCheckoutCurrency;
   return SUPPORTED_CHECKOUT_CURRENCIES.includes(currency) ? currency : "thb";
@@ -668,6 +699,14 @@ Deno.serve(async (req) => {
       return errorResponse("This product is not live.", 400);
     }
 
+    if (!hasAttachedCheckoutFlow(product)) {
+      await pauseInvalidCheckoutProduct(adminClient, product);
+      return errorResponse(
+        "This product was paused because it has no workflow attached. Please contact Nexus or choose another automation.",
+        409,
+      );
+    }
+
     if (product.pricing_type === "custom_quote" || product.pricing_type === "free_demo") {
       return errorResponse("This product is not available for direct checkout.", 400);
     }
@@ -684,12 +723,22 @@ Deno.serve(async (req) => {
       fxDate,
     } = await ensureStripePrice(adminClient, product, currency);
 
+    const { data: existingProfile, error: existingProfileError } = await adminClient
+      .from("profiles")
+      .select("id, full_name, role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (existingProfileError) {
+      return errorResponse(existingProfileError.message, 500);
+    }
+
     await adminClient.from("profiles").upsert(
       {
         id: user.id,
         email: buyerEmail,
-        full_name: buyerName,
-        role: "buyer",
+        full_name: existingProfile?.full_name || buyerName,
+        role: existingProfile?.role || "buyer",
       },
       { onConflict: "id" },
     );

@@ -1834,11 +1834,11 @@ async function activateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowI
    AUTH
    ========================================================= */
 
-async function requireAdmin(req: Request, supabaseUrl: string, anonKey: string, serviceRoleKey: string) {
+async function requireMarketplaceOperator(req: Request, supabaseUrl: string, anonKey: string, serviceRoleKey: string) {
   const authHeader = req.headers.get("Authorization") || "";
 
   if (!authHeader.startsWith("Bearer ")) {
-    return { user: null, error: "Missing auth token" };
+    return { user: null, profile: null, developer: null, error: "Missing auth token" };
   }
 
   const token = authHeader.replace("Bearer ", "");
@@ -1856,20 +1856,36 @@ async function requireAdmin(req: Request, supabaseUrl: string, anonKey: string, 
   const { data: userData, error: userError } = await userClient.auth.getUser(token);
 
   if (userError || !userData?.user) {
-    return { user: null, error: "Invalid auth token" };
+    return { user: null, profile: null, developer: null, error: "Invalid auth token" };
   }
 
   const { data: profile, error: profileError } = await adminClient
     .from("profiles")
-    .select("role")
+    .select("id, role")
     .eq("id", userData.user.id)
     .maybeSingle();
 
-  if (profileError || profile?.role !== "admin") {
-    return { user: null, error: "Admin access required" };
+  if (profileError || !["admin", "developer"].includes(profile?.role)) {
+    return { user: null, profile: null, developer: null, error: "Admin or developer access required" };
   }
 
-  return { user: userData.user, error: null };
+  let developer = null;
+
+  if (profile.role === "developer") {
+    const { data: developerRow, error: developerError } = await adminClient
+      .from("developers")
+      .select("id, profile_id")
+      .eq("profile_id", userData.user.id)
+      .maybeSingle();
+
+    if (developerError || !developerRow) {
+      return { user: userData.user, profile, developer: null, error: "Developer account not found" };
+    }
+
+    developer = developerRow;
+  }
+
+  return { user: userData.user, profile, developer, error: null };
 }
 
 /* =========================================================
@@ -1924,7 +1940,7 @@ Deno.serve(async (req) => {
       return errorResponse("Missing NEXUS_RUNTIME_SECRET.", 500);
     }
 
-    const { error: authError } = await requireAdmin(req, supabaseUrl, anonKey, serviceRoleKey);
+    const { profile, developer, error: authError } = await requireMarketplaceOperator(req, supabaseUrl, anonKey, serviceRoleKey);
 
     if (authError) {
       return errorResponse(authError, 401);
@@ -1947,6 +1963,10 @@ Deno.serve(async (req) => {
 
     if (productError || !product) {
       return errorResponse(productError?.message || "Automation product not found.", 404);
+    }
+
+    if (profile?.role === "developer" && product.developer_id !== developer?.id) {
+      return errorResponse("Developer can only import their own products.", 403);
     }
 
     if (!product.n8n_workflow_json) {

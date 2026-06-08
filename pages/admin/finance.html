@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260607-fast">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260608-devfix">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
   <title>Finance | Nexus AI Admin</title>
@@ -22,39 +22,70 @@
   <div class="dashboard">
     <aside class="sidebar"></aside>
     <main class="main">
-      <div class="section-head left">
-        <span class="eyebrow">Finance</span>
-        <h2>Revenue share and developer earnings.</h2>
-        <p>Track platform gross, Stripe fees, Nexus share, developer earnings, and manual payout requests.</p>
-      </div>
+      <section class="admin-launch-hero finance-hero">
+        <div>
+          <span class="eyebrow">Finance</span>
+          <h1>Revenue and payout control.</h1>
+          <p>
+            Track all paid orders, Nexus revenue, Stripe fees, developer earnings, and manual payout requests
+            from one clean finance view.
+          </p>
+        </div>
 
-      <div id="financeSummary"></div>
+        <div class="admin-launch-actions">
+          <a class="btn btn-primary" href="/pages/admin/orders.html">View orders</a>
+          <a class="btn btn-secondary" href="/pages/admin/dashboard.html">Admin overview</a>
+        </div>
+      </section>
 
-      <div class="table-wrap" style="margin-top:1.5rem">
-        <table>
-          <thead>
-            <tr>
-              <th>Developer</th>
-              <th>Product</th>
-              <th>Gross</th>
-              <th>Nexus</th>
-              <th>Developer</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="financeRows"></tbody>
-        </table>
-      </div>
-
-      <section class="card" style="margin-top:1.5rem">
-        <div class="admin-table-head">
+      <section class="finance-section">
+        <div class="admin-dashboard-section-head">
           <div>
-            <h2>Manual payout requests</h2>
-            <p>Send the money outside Nexus, then mark the request as paid with a payment reference.</p>
+            <span class="eyebrow">Snapshot</span>
+            <h2>Money overview</h2>
+            <p>Total paid volume, platform revenue, developer share, and payout pressure.</p>
           </div>
         </div>
 
-        <div class="table-wrap">
+        <div id="financeSummary"></div>
+      </section>
+
+      <section class="finance-section finance-panel">
+        <div class="admin-table-head">
+          <div>
+            <span class="eyebrow">Orders</span>
+            <h2>Paid order finance</h2>
+            <p>Every paid order appears here, including Nexus-owned products and developer products.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap finance-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Buyer / developer</th>
+                <th>Product</th>
+                <th>Gross</th>
+                <th>Nexus net</th>
+                <th>Developer share</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="financeRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="finance-section finance-panel">
+        <div class="admin-table-head">
+          <div>
+            <span class="eyebrow">Payouts</span>
+            <h2>Manual payout requests</h2>
+            <p>Send the money outside Nexus, then mark the request as paid with a payment reference and optional receipt link.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap finance-table-wrap">
           <table>
             <thead>
               <tr>
@@ -73,8 +104,9 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="/assets/js/nexus-ui.js?v=20260607-fast"></script>
-  <script src="/assets/js/nexus-db.js?v=20260607-fast"></script>
-  <script src="/assets/js/nexus-app.js?v=20260607-fast"></script>
+  <input id="payoutReceiptInput" type="file" accept="image/*,.pdf,application/pdf" hidden>
+  <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
+  <script src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
+  <script src="/assets/js/nexus-app.js?v=20260608-devfix"></script>
 </body>
 </html>

@@ -88,6 +88,14 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     }
   }
 
+  function isRequestOnlyProduct(product) {
+    return Boolean(
+      product?.is_demo ||
+      product?.listing_type === "custom_request" ||
+      product?.pricing_type === "custom_quote"
+    );
+  }
+
   function summarizeList(value, fallback = "Not specified") {
     if (Array.isArray(value)) {
       const list = value.filter(Boolean).map((item) => String(item).trim()).filter(Boolean);
@@ -261,10 +269,10 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
                 <td>Action</td>
                 ${products.map((product) => {
                   const slug = encodeURIComponent(product.slug || "");
-                  const href = product.listing_type === "custom_request"
+                  const href = isRequestOnlyProduct(product)
                     ? `/pages/custom-request/index.html?slug=${slug}`
                     : `/pages/checkout/index.html?slug=${slug}&step=setup`;
-                  const label = product.listing_type === "custom_request" ? "Request" : "Buy";
+                  const label = isRequestOnlyProduct(product) ? "Request" : "Buy";
 
                   return `
                     <td>
@@ -506,7 +514,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       ${NexusUI.renderCustomizations(product, "modal")}
     `;
 
-    const isCustomRequest = product.listing_type === "custom_request";
+    const isCustomRequest = isRequestOnlyProduct(product);
     const ctaHref = isCustomRequest
       ? `/pages/custom-request/index.html?slug=${encodeURIComponent(product.slug)}`
       : `/pages/checkout/index.html?slug=${encodeURIComponent(product.slug)}&step=setup`;
@@ -646,6 +654,29 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   }
 
   activeProduct = product;
+
+  if (isRequestOnlyProduct(product)) {
+    const requestHref = `/pages/custom-request/index.html?slug=${encodeURIComponent(product.slug || "")}`;
+
+    root.innerHTML = `
+      <div class="card">
+        <span class="${NexusUI.pillClass(product.color)}">
+          ${NexusUI.escapeHtml(product.badge || product.category || "Custom request")}
+        </span>
+        <h2>${NexusUI.escapeHtml(product.title || "Custom automation request")}</h2>
+        <p>
+          This product is handled as a custom quote, so it does not use Stripe checkout.
+          Send the request and Nexus will follow up with the next steps.
+        </p>
+        <div class="card-actions">
+          <a class="btn btn-primary" href="${requestHref}">Request custom automation</a>
+          <a class="btn btn-secondary" href="/pages/marketplace/index.html">Back to marketplace</a>
+        </div>
+      </div>
+    `;
+    NexusUI.applyTranslations?.(root);
+    return;
+  }
 
   /*
     IMPORTANT:
@@ -1323,7 +1354,10 @@ async function submitCheckoutIntent(event) {
     if (document.body.dataset.adminPage === "customer-automations") return;
     if (document.body.dataset.adminPage === "dashboard") await renderAdminDashboard();
     if (document.body.dataset.adminPage === "automations") await renderAdminAutomations();
-    if (document.body.dataset.adminPage === "product-reviews") await renderAdminAutomations();
+    if (document.body.dataset.adminPage === "product-reviews") {
+      wireProductReviewFilters();
+      await renderAdminAutomations();
+    }
     if (document.body.dataset.adminPage === "finance") await renderAdminFinance();
     if (document.body.dataset.adminPage === "automation-form") await wireAutomationForm();
     if (document.body.dataset.adminPage === "developer-profile") await wireDeveloperProfileForm();
@@ -1346,7 +1380,8 @@ async function submitCheckoutIntent(event) {
       reviews,
       waitlist,
       messages,
-      checkout
+      checkout,
+      finance
     ] = await Promise.all([
       NexusDB.countAutomations ? NexusDB.countAutomations() : NexusDB.listAllAutomations(),
       NexusDB.countAutomations ? NexusDB.countAutomations("live") : NexusDB.listAllAutomations(),
@@ -1356,6 +1391,7 @@ async function submitCheckoutIntent(event) {
       NexusDB.countWaitlist ? NexusDB.countWaitlist() : NexusDB.listWaitlist(),
       NexusDB.countContacts ? NexusDB.countContacts() : NexusDB.listContacts(),
       NexusDB.countCheckoutIntents ? NexusDB.countCheckoutIntents() : NexusDB.listCheckoutIntents(),
+      NexusDB.getAdminFinanceSummary ? NexusDB.getAdminFinanceSummary() : Promise.resolve({ data: null, error: null }),
     ]);
 
     document.getElementById("totalProducts").textContent = NexusDB.countAutomations ? countValue(totalProducts) : totalProducts.data?.length || 0;
@@ -1373,6 +1409,138 @@ async function submitCheckoutIntent(event) {
     document.getElementById("totalWaitlist").textContent = NexusDB.countWaitlist ? countValue(waitlist) : waitlist.data?.length || 0;
     document.getElementById("totalMessages").textContent = NexusDB.countContacts ? countValue(messages) : messages.data?.length || 0;
     document.getElementById("totalCheckout").textContent = NexusDB.countCheckoutIntents ? countValue(checkout) : checkout.data?.length || 0;
+    const payoutMetric = document.getElementById("totalPayoutRequests");
+    if (payoutMetric) {
+      const payoutRequests = finance?.error ? [] : finance?.data?.payout_requests || [];
+      payoutMetric.textContent = payoutRequests
+        .filter((item) => ["pending", "approved"].includes(String(item.status || "").toLowerCase()))
+        .length;
+    }
+
+    await renderDemoMarketplaceStatus();
+  }
+
+  function setDemoMarketplaceBusy(isBusy) {
+    ["demoModeEnable", "demoModeDisable", "demoModeReset"].forEach((id) => {
+      const button = document.getElementById(id);
+      if (button) button.disabled = Boolean(isBusy);
+    });
+  }
+
+  async function renderDemoMarketplaceStatus() {
+    const statusEl = document.getElementById("demoModeStatus");
+    const countsEl = document.getElementById("demoModeCounts");
+    const pill = document.getElementById("demoModePill");
+    const enableButton = document.getElementById("demoModeEnable");
+    const disableButton = document.getElementById("demoModeDisable");
+
+    if (!statusEl || !countsEl) return;
+
+    if (typeof NexusDB.getDemoMarketplaceStatus !== "function") {
+      statusEl.textContent = "Unavailable";
+      countsEl.textContent = "Demo marketplace function is missing.";
+      return;
+    }
+
+    const { data, error } = await NexusDB.getDemoMarketplaceStatus();
+
+    if (error) {
+      statusEl.textContent = "Unavailable";
+      countsEl.textContent = error.message || "Could not load demo marketplace status.";
+      pill?.classList.remove("green", "orange");
+      pill?.classList.add("red");
+      return;
+    }
+
+    const enabled = Boolean(data?.enabled);
+    const counts = data?.counts || {};
+
+    statusEl.textContent = enabled ? "On" : "Off";
+    countsEl.textContent = `${counts.developers || 0} demo developers, ${counts.products || 0} demo products, ${counts.reviews || 0} demo reviews. Public now: ${counts.live_products || 0} products, ${counts.active_developers || 0} developers.`;
+
+    if (pill) {
+      pill.classList.remove("green", "orange", "red");
+      pill.classList.add(enabled ? "green" : "orange");
+      pill.textContent = enabled ? "Demo mode on" : "Demo mode off";
+    }
+
+    if (enableButton) enableButton.disabled = enabled;
+    if (disableButton) disableButton.disabled = !enabled;
+  }
+
+  async function enableDemoMarketplace() {
+    if (typeof NexusDB.enableDemoMarketplace !== "function") {
+      NexusUI.toast("Demo marketplace function is missing.");
+      return;
+    }
+
+    setDemoMarketplaceBusy(true);
+    NexusUI.toast("Turning on demo marketplace...");
+
+    const { data, error } = await NexusDB.enableDemoMarketplace();
+
+    if (error) {
+      NexusUI.toast(error.message || "Could not turn on demo marketplace.");
+      setDemoMarketplaceBusy(false);
+      await renderDemoMarketplaceStatus();
+      return;
+    }
+
+    NexusUI.toast(data?.message || "Demo marketplace mode is on.");
+    await renderAdminDashboard();
+    setDemoMarketplaceBusy(false);
+  }
+
+  async function disableDemoMarketplace() {
+    const confirmed = confirm("Turn off demo marketplace mode?\n\nSynthetic demo developers, products, and reviews will be hidden. Real marketplace data will not be changed.");
+    if (!confirmed) return;
+
+    if (typeof NexusDB.disableDemoMarketplace !== "function") {
+      NexusUI.toast("Demo marketplace function is missing.");
+      return;
+    }
+
+    setDemoMarketplaceBusy(true);
+    NexusUI.toast("Turning off demo marketplace...");
+
+    const { data, error } = await NexusDB.disableDemoMarketplace();
+
+    if (error) {
+      NexusUI.toast(error.message || "Could not turn off demo marketplace.");
+      setDemoMarketplaceBusy(false);
+      await renderDemoMarketplaceStatus();
+      return;
+    }
+
+    NexusUI.toast(data?.message || "Demo marketplace mode is off.");
+    await renderAdminDashboard();
+    setDemoMarketplaceBusy(false);
+  }
+
+  async function resetDemoMarketplace() {
+    const confirmed = confirm("Reset demo marketplace content?\n\nThis restores the synthetic demo developers, products, and reviews. The current on/off status will be preserved.");
+    if (!confirmed) return;
+
+    if (typeof NexusDB.resetDemoMarketplace !== "function") {
+      NexusUI.toast("Demo marketplace function is missing.");
+      return;
+    }
+
+    setDemoMarketplaceBusy(true);
+    NexusUI.toast("Resetting demo marketplace content...");
+
+    const { data, error } = await NexusDB.resetDemoMarketplace();
+
+    if (error) {
+      NexusUI.toast(error.message || "Could not reset demo marketplace content.");
+      setDemoMarketplaceBusy(false);
+      await renderDemoMarketplaceStatus();
+      return;
+    }
+
+    NexusUI.toast(data?.message || "Demo marketplace content was reset.");
+    await renderAdminDashboard();
+    setDemoMarketplaceBusy(false);
   }
 
   async function renderAdminFinance() {
@@ -1396,46 +1564,126 @@ async function submitCheckoutIntent(event) {
       return;
     }
 
-    const summary = data?.summary || data || {};
     const earnings = data?.earnings || data?.recent_earnings || [];
+    const paidOrders = data?.paid_orders || [];
+    const orderTotals = data?.order_totals || [];
     const payoutRequests = data?.payout_requests || [];
     const moneyValue = (value, currency = "THB") => {
       return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(Number(value || 0));
     };
-    const totalFromRows = (field) => (earnings || []).reduce((sum, item) => sum + Number(item[field] || 0), 0);
-    const requestedTotal = payoutRequests
-      .filter((item) => ["pending", "approved"].includes(String(item.status || "").toLowerCase()))
-      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-    const paidPayoutTotal = payoutRequests
-      .filter((item) => String(item.status || "").toLowerCase() === "paid")
-      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const earningByOrder = new Map();
+    (earnings || []).forEach((earning) => {
+      if (earning.order_id) earningByOrder.set(earning.order_id, earning);
+    });
+    const fallbackOrderTotals = (() => {
+      const totals = new Map();
+      (paidOrders || []).forEach((order) => {
+        const currency = String(order.currency || order.stripe_currency || "THB").toUpperCase();
+        const current = totals.get(currency) || {
+          currency,
+          gross_amount: 0,
+          stripe_fee_amount: 0,
+          net_amount: 0,
+          platform_fee_amount: 0,
+          developer_amount: 0,
+        };
+        const earning = earningByOrder.get(order.id) || {};
+        const gross =
+          Number(order.stripe_amount_total || 0) ||
+          Number(earning.gross_amount || 0) ||
+          Number(String(order.price_display || "").replace(/[^0-9.-]+/g, "")) ||
+          0;
+        const stripeFee = Number(order.stripe_fee_amount || earning.stripe_fee_amount || 0);
+        const developerAmount = Number(order.developer_earning_amount || earning.developer_amount || 0);
+        const platformAmount = Number(order.platform_fee_amount || earning.platform_fee_amount || Math.max(0, gross - developerAmount));
+
+        current.gross_amount += gross;
+        current.stripe_fee_amount += stripeFee;
+        current.net_amount += Number(order.net_amount || earning.net_amount || Math.max(0, gross - stripeFee));
+        current.platform_fee_amount += platformAmount;
+        current.developer_amount += developerAmount;
+        totals.set(currency, current);
+      });
+
+      return Array.from(totals.values());
+    })();
+    const financeTotals = orderTotals.length ? orderTotals : fallbackOrderTotals;
+    const payoutTotalFor = (currency, statuses) => {
+      const wanted = new Set(statuses);
+      const targetCurrency = String(currency || "THB").toUpperCase();
+      return payoutRequests
+        .filter((item) => String(item.currency || "THB").toUpperCase() === targetCurrency)
+        .filter((item) => wanted.has(String(item.status || "").toLowerCase()))
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    };
 
     if (summaryRoot) {
       summaryRoot.innerHTML = `
-        <div class="grid-4">
-          <div class="card"><h3>${moneyValue(totalFromRows("gross_amount"))}</h3><p>Gross volume</p></div>
-          <div class="card"><h3>${moneyValue(totalFromRows("stripe_fee_amount"))}</h3><p>Stripe fees</p></div>
-          <div class="card"><h3>${moneyValue(totalFromRows("platform_fee_amount"))}</h3><p>Nexus revenue</p></div>
-          <div class="card"><h3>${moneyValue(totalFromRows("developer_amount"))}</h3><p>Developer earnings</p></div>
-          <div class="card"><h3>${moneyValue(requestedTotal)}</h3><p>Requested payouts</p></div>
-          <div class="card"><h3>${moneyValue(paidPayoutTotal)}</h3><p>Paid payouts</p></div>
-        </div>
+        ${
+          financeTotals.map((total) => {
+            const currency = total.currency || "THB";
+            const gross = Number(total.gross_amount || 0);
+            const stripeFees = Number(total.stripe_fee_amount || 0);
+            const developerAmount = Number(total.developer_amount || 0);
+            const nexusGross = Number(total.platform_fee_amount || 0) + Number(total.internal_or_unallocated_gross_amount || 0);
+            const nexusNet = Number(total.net_amount || Math.max(0, gross - stripeFees)) - developerAmount;
+            const requestedTotal = payoutTotalFor(currency, ["pending", "approved"]);
+            const paidPayoutTotal = payoutTotalFor(currency, ["paid"]);
+
+            return `
+              <div class="finance-summary-grid">
+                <div class="finance-summary-card"><span>Paid volume</span><h3>${moneyValue(gross, currency)}</h3><p>All successful Nexus checkouts.</p></div>
+                <div class="finance-summary-card"><span>Stripe fees</span><h3>${moneyValue(stripeFees, currency)}</h3><p>Fees recorded by webhook data.</p></div>
+                <div class="finance-summary-card"><span>Nexus gross</span><h3>${moneyValue(nexusGross, currency)}</h3><p>Nexus-owned revenue and platform share.</p></div>
+                <div class="finance-summary-card"><span>Nexus net</span><h3>${moneyValue(nexusNet, currency)}</h3><p>After developer share and Stripe fees.</p></div>
+                <div class="finance-summary-card"><span>Developer share</span><h3>${moneyValue(developerAmount, currency)}</h3><p>Internal balance owed to developers.</p></div>
+                <div class="finance-summary-card"><span>Requested</span><h3>${moneyValue(requestedTotal, currency)}</h3><p>Payout requests waiting or approved.</p></div>
+                <div class="finance-summary-card"><span>Paid out</span><h3>${moneyValue(paidPayoutTotal, currency)}</h3><p>Manual payouts marked complete.</p></div>
+              </div>
+            `;
+          }).join("") || `
+            <div class="finance-summary-grid">
+              <div class="finance-summary-card"><span>Paid volume</span><h3>${moneyValue(0)}</h3><p>No paid orders recorded yet.</p></div>
+              <div class="finance-summary-card"><span>Developer share</span><h3>${moneyValue(0)}</h3><p>No developer earnings yet.</p></div>
+              <div class="finance-summary-card"><span>Requested</span><h3>${moneyValue(payoutTotalFor("THB", ["pending", "approved"]))}</h3><p>Payout requests waiting or approved.</p></div>
+              <div class="finance-summary-card"><span>Paid out</span><h3>${moneyValue(payoutTotalFor("THB", ["paid"]))}</h3><p>Manual payouts marked complete.</p></div>
+            </div>
+          `
+        }
       `;
     }
 
     if (rows) {
-      rows.innerHTML = (earnings || [])
-        .map((item) => `
+      rows.innerHTML = (paidOrders || [])
+        .map((order) => {
+          const earning = earningByOrder.get(order.id) || {};
+          const currency = order.currency || order.stripe_currency || earning.currency || "THB";
+          const gross =
+            Number(order.stripe_amount_total || 0) ||
+            Number(earning.gross_amount || 0) ||
+            Number(String(order.price_display || "").replace(/[^0-9.-]+/g, "")) ||
+            0;
+          const developerAmount = Number(order.developer_earning_amount || earning.developer_amount || 0);
+          const platformNet = order.platform_net_amount !== undefined && order.platform_net_amount !== null
+            ? Number(order.platform_net_amount || 0)
+            : Number(order.net_amount || earning.net_amount || gross) - developerAmount;
+          const developerName = order.developers?.display_name || earning.developers?.display_name || "Nexus internal";
+
+          return `
           <tr>
-            <td>${NexusUI.escapeHtml(item.developer_name || item.developers?.display_name || item.developer?.display_name || item.developer_id || "")}</td>
-            <td>${NexusUI.escapeHtml(item.automation_title || item.automations?.title || item.product_title || item.automation_id || "")}</td>
-            <td>${moneyValue(item.gross_amount || item.gross || 0, item.currency || "THB")}</td>
-            <td>${moneyValue(item.platform_fee_amount || item.platform_amount || item.nexus_cut || 0, item.currency || "THB")}</td>
-            <td>${moneyValue(item.developer_amount || item.developer_earning || 0, item.currency || "THB")}</td>
-            <td><span class="pill">${item.payout_status || item.transfer_status || item.status || "recorded"}</span></td>
+            <td>
+              ${NexusUI.escapeHtml(order.buyer_email || order.buyer_name || "")}
+              <br><span style="color:var(--muted);font-size:.85rem">${NexusUI.escapeHtml(developerName)}</span>
+            </td>
+            <td>${NexusUI.escapeHtml(order.automation_title || order.automations?.title || earning.automations?.title || "")}</td>
+            <td>${moneyValue(gross, currency)}</td>
+            <td>${moneyValue(platformNet, currency)}</td>
+            <td>${moneyValue(developerAmount, currency)}</td>
+            <td><span class="pill">${NexusUI.escapeHtml(order.revenue_share_status || earning.payout_status || order.payment_status || "paid")}</span></td>
           </tr>
-        `)
-        .join("") || `<tr><td colspan="6">No developer earnings yet.</td></tr>`;
+        `;
+        })
+        .join("") || `<tr><td colspan="6">No paid orders yet.</td></tr>`;
     }
 
     if (payoutRows) {
@@ -1443,6 +1691,10 @@ async function submitCheckoutIntent(event) {
         .map((request) => {
           const status = String(request.status || "pending").toLowerCase();
           const canAct = status === "pending" || status === "approved";
+          const receiptHref = request.payment_receipt_base64
+            ? `data:${NexusUI.escapeAttribute(request.payment_receipt_mime_type || "application/octet-stream")};base64,${NexusUI.escapeAttribute(request.payment_receipt_base64)}`
+            : NexusUI.escapeAttribute(request.payment_receipt_url || "");
+          const receiptLabel = request.payment_receipt_file_name || request.payment_receipt_url || "";
 
           return `
             <tr>
@@ -1468,7 +1720,14 @@ async function submitCheckoutIntent(event) {
                         Reject
                       </button>
                     `
-                    : NexusUI.escapeHtml(request.payment_reference || "")
+                    : `
+                      ${NexusUI.escapeHtml(request.payment_reference || "")}
+                      ${
+                        receiptHref
+                          ? `<br><a href="${receiptHref}" target="_blank" rel="noopener">${NexusUI.escapeHtml(receiptLabel || "Receipt")}</a>`
+                          : ""
+                      }
+                    `
                 }
               </td>
             </tr>
@@ -1480,10 +1739,16 @@ async function submitCheckoutIntent(event) {
 
   async function updatePayoutRequest(id, status) {
     let paymentReference = "";
+    let paymentReceiptUrl = "";
+    let paymentReceiptFile = null;
     let adminNote = "";
 
     if (status === "paid") {
       paymentReference = prompt("Payment reference, bank transfer note, or receipt ID:") || "";
+      if (confirm("Attach a receipt file now?")) {
+        paymentReceiptFile = await pickPayoutReceiptFile();
+      }
+      paymentReceiptUrl = prompt("Receipt URL or file link (optional):") || "";
     } else if (status === "rejected") {
       adminNote = prompt("Reason for rejecting this payout request:") || "";
     }
@@ -1492,6 +1757,10 @@ async function submitCheckoutIntent(event) {
       payout_request_id: id,
       status,
       payment_reference: paymentReference,
+      payment_receipt_url: paymentReceiptUrl,
+      payment_receipt_file_name: paymentReceiptFile?.name || "",
+      payment_receipt_mime_type: paymentReceiptFile?.type || "",
+      payment_receipt_base64: paymentReceiptFile?.base64 || "",
       admin_note: adminNote
     });
 
@@ -1504,12 +1773,124 @@ async function submitCheckoutIntent(event) {
     await renderAdminFinance();
   }
 
+  function pickPayoutReceiptFile() {
+    const input = document.getElementById("payoutReceiptInput");
+
+    if (!input) return Promise.resolve(null);
+
+    return new Promise((resolve) => {
+      let settled = false;
+      let timeoutId = null;
+      const done = (value) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        window.removeEventListener("focus", onFocus);
+        resolve(value);
+      };
+      const onFocus = () => {
+        setTimeout(() => {
+          if (!input.files || !input.files.length) done(null);
+        }, 600);
+      };
+
+      input.value = "";
+      input.onchange = async () => {
+        const file = input.files && input.files[0];
+        if (!file) {
+          done(null);
+          return;
+        }
+
+        if (file.size > 3 * 1024 * 1024) {
+          NexusUI.toast("Receipt file is too large. Use a file under 3 MB or paste a receipt link.");
+          done(null);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          done({
+            name: file.name,
+            type: file.type || "application/octet-stream",
+            base64: result.includes(",") ? result.split(",").pop() : result,
+          });
+        };
+        reader.onerror = () => done(null);
+        reader.readAsDataURL(file);
+      };
+      window.addEventListener("focus", onFocus);
+      timeoutId = setTimeout(() => done(null), 60000);
+      input.click();
+    });
+  }
+
+  function currentProductReviewFilter() {
+    const value = new URLSearchParams(window.location.search).get("status") || "pending_review";
+    return ["pending_review", "approved", "all"].includes(value) ? value : "pending_review";
+  }
+
+  function isDeveloperProduct(product) {
+    return Boolean(product?.developer_id || product?.developers?.id);
+  }
+
+  function productMatchesReviewFilter(product, filter) {
+    if (!isDeveloperProduct(product)) return false;
+    const status = String(product.status || "").toLowerCase();
+
+    if (filter === "pending_review") return status === "pending_review";
+    if (filter === "approved") return status === "live" || status === "paused";
+    if (filter === "all") return true;
+
+    return status === filter;
+  }
+
+  function updateProductReviewFilters(products) {
+    const isReviewPage = document.body.dataset.adminPage === "product-reviews";
+    if (!isReviewPage) return;
+
+    const filter = currentProductReviewFilter();
+    const developerProducts = (products || []).filter(isDeveloperProduct);
+    const pending = developerProducts.filter((product) => product.status === "pending_review").length;
+    const approved = developerProducts.filter((product) => ["live", "paused"].includes(String(product.status || "").toLowerCase())).length;
+
+    document.querySelectorAll("[data-review-status]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.reviewStatus === filter);
+    });
+
+    const pendingCount = document.getElementById("pendingReviewCount");
+    const approvedCount = document.getElementById("approvedReviewCount");
+    const allCount = document.getElementById("allReviewCount");
+
+    if (pendingCount) pendingCount.textContent = pending;
+    if (approvedCount) approvedCount.textContent = approved;
+    if (allCount) allCount.textContent = developerProducts.length;
+  }
+
+  function wireProductReviewFilters() {
+    const buttons = document.querySelectorAll("[data-review-status]");
+    if (!buttons.length || document.body.dataset.reviewFiltersWired === "true") return;
+
+    document.body.dataset.reviewFiltersWired = "true";
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const status = button.dataset.reviewStatus || "pending_review";
+        const url = new URL(window.location.href);
+        url.searchParams.set("status", status);
+        window.history.replaceState({}, "", url);
+        buttons.forEach((item) => item.classList.toggle("active", item.dataset.reviewStatus === status));
+        await renderAdminAutomations();
+      });
+    });
+  }
+
   async function renderAdminAutomations() {
     const { data, error } = await NexusDB.listAllAutomations();
     const body = document.getElementById("adminProductRows");
-    const reviewOnly =
-      document.body.dataset.adminPage === "product-reviews" ||
-      new URLSearchParams(window.location.search).get("status") === "pending_review";
+    const isReviewPage = document.body.dataset.adminPage === "product-reviews";
+    const reviewFilter = currentProductReviewFilter();
 
     if (!body) return;
 
@@ -1518,15 +1899,31 @@ async function submitCheckoutIntent(event) {
       return;
     }
 
+    updateProductReviewFilters(data || []);
+
+    const filteredProducts = (data || []).filter((product) => {
+      if (!isReviewPage) return true;
+      return productMatchesReviewFilter(product, reviewFilter);
+    });
+
+    const emptyLabel = isReviewPage
+      ? reviewFilter === "approved"
+        ? "No approved developer products yet."
+        : reviewFilter === "all"
+          ? "No developer products yet."
+          : "No pending developer products."
+      : "No products yet.";
+
     body.innerHTML =
-      (data || [])
-        .filter((product) => !reviewOnly || product.status === "pending_review")
+      filteredProducts
         .map((product) => {
           return `
             <tr>
               <td>
-                <strong>${product.title}</strong><br>
-                <span style="color:var(--muted);font-size:.85rem">${product.slug}</span>
+                <strong>${NexusUI.escapeHtml(product.title || "")}</strong>
+                ${product.is_demo ? `<span class="pill orange" style="margin-left:.4rem">Demo</span>` : ""}
+                <br>
+                <span style="color:var(--muted);font-size:.85rem">${NexusUI.escapeHtml(product.slug || "")}</span>
               </td>
 
               <td>
@@ -1564,7 +1961,7 @@ async function submitCheckoutIntent(event) {
             </tr>
           `;
         })
-        .join("") || `<tr><td colspan="5">No products yet.</td></tr>`;
+        .join("") || `<tr><td colspan="5">${emptyLabel}</td></tr>`;
   }
 async function pauseAutomation(id) {
   const confirmed = confirm(
@@ -1594,10 +1991,15 @@ async function approveDeveloperProduct(id) {
   const confirmed = confirm("Approve this product and publish it live?");
   if (!confirmed) return;
 
-  const { data: product, error: productError } = await NexusDB.getAutomationById(id);
+  let { data: product, error: productError } = await NexusDB.getAutomationById(id);
 
   if (productError || !product) {
     NexusUI.toast(productError?.message || "Product not found.");
+    return;
+  }
+
+  if (product.listing_type !== "custom_request" && !product.n8n_workflow_json) {
+    NexusUI.toast("This developer product needs an attached n8n workflow before approval.");
     return;
   }
 
@@ -1609,10 +2011,20 @@ async function approveDeveloperProduct(id) {
       NexusUI.toast(importError.message || "Workflow import failed.");
       return;
     }
+
+    const refreshed = await NexusDB.getAutomationById(id);
+    product = refreshed.data || product;
   }
 
-  const { error } = await NexusDB.upsertAutomation({
-    id,
+  if (
+    product.listing_type !== "custom_request" &&
+    !["passed", "passed_with_expected_test_callback_error"].includes(String(product.n8n_last_test_status || "").toLowerCase())
+  ) {
+    NexusUI.toast("Run a successful technical test before approving this developer product.");
+    return;
+  }
+
+  const { error } = await NexusDB.updateAutomation(id, {
     status: "live",
     updated_at: new Date().toISOString()
   });
@@ -2730,6 +3142,9 @@ if (shouldImportN8n) {
   pauseAutomation,
   approveDeveloperProduct,
   rejectDeveloperProduct,
+  enableDemoMarketplace,
+  disableDemoMarketplace,
+  resetDemoMarketplace,
   updateReviewStatus,
   updatePayoutRequest,
   deleteReview,

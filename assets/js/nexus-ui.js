@@ -658,7 +658,10 @@ function productColorTheme(color) {
     const developer = product.developers || {};
     const slug = encodeURIComponent(product.slug || "");
     const rawSlug = String(product.slug || "");
-    const isCustomRequest = product.listing_type === "custom_request";
+    const isCustomRequest =
+      Boolean(product.is_demo) ||
+      product.listing_type === "custom_request" ||
+      product.pricing_type === "custom_quote";
     const showCompare = Boolean(cardOptions.showCompare);
     const compareSelected = Boolean(cardOptions.compareSelected);
     const ctaHref = isCustomRequest

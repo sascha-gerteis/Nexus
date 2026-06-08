@@ -190,6 +190,60 @@ function stableJson(value: unknown) {
   return JSON.stringify(value || null);
 }
 
+function isPassingWorkflowTest(status: unknown) {
+  return ["passed", "passed_with_expected_test_callback_error"].includes(cleanString(status).toLowerCase());
+}
+
+function hasAttachedWorkflowFlow(product: any) {
+  if (cleanString(product?.listing_type) === "custom_request") return true;
+
+  return Boolean(
+    product?.n8n_workflow_json ||
+      cleanString(product?.n8n_workflow_id) ||
+      cleanString(product?.runtime_webhook_url || product?.n8n_webhook_url)
+  );
+}
+
+async function autoPauseInvalidLiveProducts(adminClient: any, products: any[], reason = "Missing workflow attachment") {
+  const invalidLiveProducts = (products || []).filter((product) => {
+    return cleanString(product.status).toLowerCase() === "live" && !hasAttachedWorkflowFlow(product);
+  });
+
+  if (!invalidLiveProducts.length) {
+    return { products, paused_count: 0 };
+  }
+
+  const now = nowIso();
+  const ids = invalidLiveProducts.map((product) => product.id).filter(Boolean);
+
+  const { error } = await adminClient
+    .from("automations")
+    .update({
+      status: "paused",
+      updated_at: now,
+    })
+    .in("id", ids);
+
+  if (error) throw new Error(error.message);
+
+  const pausedSet = new Set(ids);
+  const patched = products.map((product) => {
+    if (!pausedSet.has(product.id)) return product;
+
+    return {
+      ...product,
+      status: "paused",
+      auto_pause_reason: reason,
+      updated_at: now,
+    };
+  });
+
+  return {
+    products: patched,
+    paused_count: ids.length,
+  };
+}
+
 async function requireDeveloper(req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
 
@@ -382,8 +436,11 @@ async function listProducts(adminClient: any, developer: any) {
 
   if (error) throw new Error(error.message);
 
+  const checked = await autoPauseInvalidLiveProducts(adminClient, data || []);
+
   return {
-    products: data || [],
+    products: checked.products || [],
+    auto_paused_count: checked.paused_count || 0,
   };
 }
 
@@ -449,16 +506,49 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
     };
   }
 
-  if (
-    submitForReview &&
-    payload.listing_type === "standard" &&
-    payload.runtime_type === "n8n_managed" &&
-    !payload.n8n_workflow_json
-  ) {
+  const workflowJsonChanged = existingProduct
+    ? stableJson(existingProduct.n8n_workflow_json) !== stableJson(payload.n8n_workflow_json)
+    : Boolean(payload.n8n_workflow_json);
+
+  if (submitForReview && payload.listing_type === "standard" && !payload.n8n_workflow_json) {
     return {
       error: "Upload or paste the n8n workflow JSON before submitting this workflow product for review.",
       status: 400,
     };
+  }
+
+  if (submitForReview && payload.listing_type === "standard" && !productId) {
+    return {
+      error: "Save the product as a draft first, then import and test the workflow before submitting for review.",
+      status: 400,
+    };
+  }
+
+  if (submitForReview && payload.listing_type === "standard" && workflowJsonChanged) {
+    return {
+      error: "Save the latest workflow draft, import it to n8n, and run a successful technical test before submitting for review.",
+      status: 400,
+    };
+  }
+
+  if (submitForReview && payload.listing_type === "standard" && existingProduct) {
+    const imported = existingProduct.n8n_import_status === "imported" &&
+      cleanString(existingProduct.n8n_workflow_id) &&
+      cleanString(existingProduct.runtime_webhook_url || existingProduct.n8n_webhook_url);
+
+    if (!imported) {
+      return {
+        error: "Import this workflow to Nexus n8n before submitting it for review.",
+        status: 400,
+      };
+    }
+
+    if (!isPassingWorkflowTest(existingProduct.n8n_last_test_status)) {
+      return {
+        error: "Run a successful technical test before submitting this workflow product for review.",
+        status: 400,
+      };
+    }
   }
 
   if (
@@ -471,10 +561,6 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
       status: 400,
     };
   }
-
-  const workflowJsonChanged = existingProduct
-    ? stableJson(existingProduct.n8n_workflow_json) !== stableJson(payload.n8n_workflow_json)
-    : Boolean(payload.n8n_workflow_json);
 
   if (workflowJsonChanged) {
     Object.assign(payload, {

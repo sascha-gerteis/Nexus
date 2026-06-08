@@ -47,6 +47,17 @@ function stripeAmountToMajor(value: unknown) {
   return roundMoney(Number(value || 0) / 100);
 }
 
+function isMissingWalletSchemaError(error: any) {
+  const message = [
+    error?.message,
+    error?.details,
+    error?.hint,
+    error?.code,
+  ].filter(Boolean).join(" ");
+
+  return /developer_earnings|developer_payout_requests|platform_net_amount|payout_request|created_at|requested_at|earnings_ids|source_id|schema cache|relation .* does not exist|could not find .* column/i.test(message);
+}
+
 function addMonths(date: Date, months: number) {
   const next = new Date(date.getTime());
   const day = next.getUTCDate();
@@ -168,6 +179,7 @@ async function safeUpdateOrder(orderId: string, payload: Record<string, unknown>
     "stripe_fee_amount",
     "net_amount",
     "platform_fee_amount",
+    "platform_net_amount",
     "developer_earning_amount",
     "revenue_share_status",
   ]) {
@@ -305,6 +317,43 @@ async function getStripeFeeSnapshot(paymentIntentId = "") {
   }
 }
 
+async function getInvoicePaymentSnapshot(invoiceId = "") {
+  if (!invoiceId) {
+    return {
+      sourceType: "subscription_invoice",
+      sourceId: "",
+      grossAmount: 0,
+      paymentIntentId: "",
+      stripeFeeAmount: undefined as number | undefined,
+    };
+  }
+
+  try {
+    const invoice: any = await stripe.invoices.retrieve(invoiceId, {
+      expand: ["payment_intent"],
+    });
+    const paymentIntent: any = invoice.payment_intent;
+
+    return {
+      sourceType: "subscription_invoice",
+      sourceId: cleanString(invoice.id),
+      grossAmount: stripeAmountToMajor(invoice.amount_paid || 0),
+      paymentIntentId: typeof paymentIntent === "string" ? paymentIntent : cleanString(paymentIntent?.id),
+      stripeFeeAmount: undefined as number | undefined,
+    };
+  } catch (error) {
+    console.warn("Could not retrieve subscription invoice snapshot:", error);
+
+    return {
+      sourceType: "subscription_invoice",
+      sourceId: invoiceId,
+      grossAmount: 0,
+      paymentIntentId: "",
+      stripeFeeAmount: undefined as number | undefined,
+    };
+  }
+}
+
 async function recordDeveloperEarningForOrder(
   order: any,
   options: {
@@ -319,28 +368,10 @@ async function recordDeveloperEarningForOrder(
   const sourceId = cleanString(options.sourceId);
   if (!sourceId) return;
 
-  const { data: existing } = await adminClient
-    .from("developer_earnings")
-    .select("id")
-    .eq("source_type", options.sourceType)
-    .eq("source_id", sourceId)
-    .maybeSingle();
-
-  if (existing?.id) return;
-
   const automationProduct = await getAutomationProduct(order.automation_id);
   const developer = one(automationProduct?.developers);
   const developerHandle = cleanString(developer?.handle).toLowerCase();
   const developerId = cleanString(order.developer_id || automationProduct?.developer_id);
-
-  if (!developerId || developerHandle === "nexus-internal") {
-    await safeUpdateOrder(order.id, {
-      revenue_share_status: "nexus_internal",
-      updated_at: nowIso(),
-    });
-    return;
-  }
-
   const currency = cleanString(order.currency || order.stripe_currency || "THB").toUpperCase();
   const feeSnapshot = options.stripeFeeAmount !== undefined
     ? {
@@ -357,8 +388,61 @@ async function recordDeveloperEarningForOrder(
   );
   const stripeFeeAmount = roundMoney(feeSnapshot.stripeFeeAmount || 0);
   const netAmount = roundMoney(Math.max(0, grossAmount - stripeFeeAmount));
-  const platformFeeAmount = roundMoney(netAmount * 0.2);
-  const developerAmount = roundMoney(Math.max(0, netAmount - platformFeeAmount));
+
+  if (!developerId || developerHandle === "nexus-internal") {
+    await safeUpdateOrder(order.id, {
+      stripe_fee_amount: stripeFeeAmount,
+      net_amount: netAmount,
+      platform_fee_amount: grossAmount,
+      platform_net_amount: netAmount,
+      developer_earning_amount: 0,
+      revenue_share_status: "nexus_internal",
+      updated_at: nowIso(),
+    });
+    return;
+  }
+
+  const platformFeeAmount = roundMoney(grossAmount * 0.2);
+  const developerAmount = roundMoney(grossAmount * 0.8);
+  const platformNetAmount = roundMoney(platformFeeAmount - stripeFeeAmount);
+
+  const orderFinancialPatch = {
+    stripe_fee_amount: stripeFeeAmount,
+    net_amount: netAmount,
+    platform_fee_amount: platformFeeAmount,
+    platform_net_amount: platformNetAmount,
+    developer_earning_amount: developerAmount,
+    updated_at: nowIso(),
+  };
+
+  const { data: existing, error: existingError } = await adminClient
+    .from("developer_earnings")
+    .select("id")
+    .eq("source_type", options.sourceType)
+    .eq("source_id", sourceId)
+    .maybeSingle();
+
+  if (existingError) {
+    if (isMissingWalletSchemaError(existingError)) {
+      await safeUpdateOrder(order.id, {
+        ...orderFinancialPatch,
+        revenue_share_status: "wallet_schema_missing",
+      });
+      console.warn("Developer wallet schema missing. Run manual_payouts_install_or_patch.sql.");
+      return;
+    }
+
+    console.warn("Could not check existing developer earning:", existingError.message);
+    return;
+  }
+
+  if (existing?.id) {
+    await safeUpdateOrder(order.id, {
+      ...orderFinancialPatch,
+      revenue_share_status: "allocated",
+    });
+    return;
+  }
 
   const { error } = await adminClient
     .from("developer_earnings")
@@ -373,6 +457,7 @@ async function recordDeveloperEarningForOrder(
       stripe_fee_amount: stripeFeeAmount,
       net_amount: netAmount,
       platform_fee_amount: platformFeeAmount,
+      platform_net_amount: platformNetAmount,
       developer_amount: developerAmount,
       platform_fee_bps: 2000,
       developer_share_bps: 8000,
@@ -393,18 +478,83 @@ async function recordDeveloperEarningForOrder(
     });
 
   if (error) {
+    if (isMissingWalletSchemaError(error)) {
+      await safeUpdateOrder(order.id, {
+        ...orderFinancialPatch,
+        revenue_share_status: "wallet_schema_missing",
+      });
+      console.warn("Developer wallet schema missing. Run manual_payouts_install_or_patch.sql.");
+      return;
+    }
+
     console.warn("Could not create developer earning:", error.message);
     return;
   }
 
   await safeUpdateOrder(order.id, {
-    stripe_fee_amount: stripeFeeAmount,
-    net_amount: netAmount,
-    platform_fee_amount: platformFeeAmount,
-    developer_earning_amount: developerAmount,
+    ...orderFinancialPatch,
     revenue_share_status: "allocated",
-    updated_at: nowIso(),
   });
+}
+
+async function markDeveloperEarningForCharge(
+  charge: Stripe.Charge,
+  nextStatus: "refunded" | "disputed",
+) {
+  const chargeId = cleanString(charge.id);
+  const paymentIntentId = typeof charge.payment_intent === "string"
+    ? charge.payment_intent
+    : "";
+
+  let result = chargeId
+    ? await adminClient
+      .from("developer_earnings")
+      .select("*")
+      .eq("stripe_charge_id", chargeId)
+      .maybeSingle()
+    : { data: null, error: null };
+
+  if (!result.data && paymentIntentId) {
+    result = await adminClient
+      .from("developer_earnings")
+      .select("*")
+      .eq("stripe_payment_intent_id", paymentIntentId)
+      .maybeSingle();
+  }
+
+  if (result.error || !result.data) {
+    if (result.error && !isMissingWalletSchemaError(result.error)) {
+      console.warn("Could not load earning for charge update:", result.error.message);
+    }
+    return;
+  }
+
+  const wasPaid = cleanString(result.data.payout_status).toLowerCase() === "paid";
+  const payoutStatus = wasPaid ? `${nextStatus}_after_payout` : nextStatus;
+
+  await adminClient
+    .from("developer_earnings")
+    .update({
+      status: payoutStatus,
+      transfer_status: payoutStatus,
+      payout_status: payoutStatus,
+      metadata: {
+        ...(result.data.metadata || {}),
+        last_finance_event: nextStatus,
+        stripe_charge_id: chargeId,
+        stripe_payment_intent_id: paymentIntentId,
+        updated_by: "stripe_webhook",
+      },
+      updated_at: nowIso(),
+    })
+    .eq("id", result.data.id);
+
+  if (result.data.order_id) {
+    await safeUpdateOrder(result.data.order_id, {
+      revenue_share_status: payoutStatus,
+      updated_at: nowIso(),
+    });
+  }
 }
 
 async function activateScheduleIfReady(order: any, subscriptionStatus = "") {
@@ -523,6 +673,36 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         paymentIntentId: stripePaymentIntentId,
         metadata: {
           checkout_session_id: session.id,
+        },
+      },
+    );
+  }
+
+  if (isSubscription && isPaid) {
+    const invoiceId = typeof (session as any).invoice === "string" ? (session as any).invoice : "";
+    const invoiceSnapshot = await getInvoicePaymentSnapshot(invoiceId);
+
+    await recordDeveloperEarningForOrder(
+      {
+        ...order,
+        payment_status: "paid",
+        stripe_subscription_id: stripeSubscriptionId,
+        stripe_payment_intent_id: invoiceSnapshot.paymentIntentId || stripePaymentIntentId,
+        stripe_customer_id: stripeCustomerId,
+      },
+      {
+        sourceType: invoiceSnapshot.sourceType,
+        sourceId: invoiceSnapshot.sourceId || stripeSubscriptionId || session.id,
+        grossAmount:
+          invoiceSnapshot.grossAmount ||
+          stripeAmountToMajor(session.amount_total || 0) ||
+          Number(order.stripe_amount_total || 0),
+        paymentIntentId: invoiceSnapshot.paymentIntentId || stripePaymentIntentId,
+        stripeFeeAmount: invoiceSnapshot.stripeFeeAmount,
+        metadata: {
+          checkout_session_id: session.id,
+          stripe_invoice_id: invoiceId,
+          stripe_subscription_id: stripeSubscriptionId,
         },
       },
     );
@@ -881,6 +1061,24 @@ Deno.serve(async (request) => {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         await handleSubscriptionDeleted(subscription);
+        break;
+      }
+
+      case "charge.refunded": {
+        const charge = event.data.object as Stripe.Charge;
+        await markDeveloperEarningForCharge(charge, "refunded");
+        break;
+      }
+
+      case "charge.dispute.created": {
+        const dispute = event.data.object as Stripe.Dispute;
+        const chargeId = typeof dispute.charge === "string" ? dispute.charge : "";
+
+        if (chargeId) {
+          const charge = await stripe.charges.retrieve(chargeId);
+          await markDeveloperEarningForCharge(charge, "disputed");
+        }
+
         break;
       }
 

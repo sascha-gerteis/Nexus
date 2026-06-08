@@ -12,7 +12,7 @@
     rel="stylesheet"
   >
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260607-fast">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260608-devfix">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -124,6 +124,12 @@
             <strong id="totalCheckout">0</strong>
             <p>Saved buyer checkout records.</p>
           </a>
+
+          <a class="admin-metric-card" href="/pages/admin/finance.html">
+            <span>Payout requests</span>
+            <strong id="totalPayoutRequests">0</strong>
+            <p>Developer payouts waiting for review or payment.</p>
+          </a>
         </div>
       </section>
 
@@ -205,6 +211,25 @@
             <p>See new developer interest before opening the platform broadly.</p>
             <div class="admin-control-stats"><span>Access</span><strong>Controlled</strong></div>
           </a>
+
+          <div class="admin-control-card" id="demoMarketplaceCard">
+            <span class="pill orange" id="demoModePill">Demo mode</span>
+            <h3>Demo marketplace</h3>
+            <p>Turn synthetic demo developers and products on for sales demos, then hide them again before launch.</p>
+            <div class="admin-control-stats"><span>Status</span><strong id="demoModeStatus">Loading...</strong></div>
+            <p id="demoModeCounts" style="font-size:.86rem;color:var(--muted);margin-top:.65rem">Checking demo content...</p>
+            <div class="hero-actions" style="justify-content:flex-start;margin-top:.8rem;gap:.5rem">
+              <button class="btn btn-primary btn-small" id="demoModeEnable" type="button" onclick="NexusApp.enableDemoMarketplace()">
+                Turn on demo marketplace
+              </button>
+              <button class="btn btn-secondary btn-small" id="demoModeDisable" type="button" onclick="NexusApp.disableDemoMarketplace()">
+                Turn off demo marketplace
+              </button>
+              <button class="btn btn-secondary btn-small" id="demoModeReset" type="button" onclick="NexusApp.resetDemoMarketplace()">
+                Reset demo content
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -219,8 +244,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260607-fast"></script>
-  <script src="/assets/js/nexus-db.js?v=20260607-fast"></script>
-  <script src="/assets/js/nexus-app.js?v=20260607-fast"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
+  <script src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
+  <script src="/assets/js/nexus-app.js?v=20260608-devfix"></script>
 </body>
 </html>

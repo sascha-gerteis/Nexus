@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260607-fast">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260608-walletinline">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
   <title>Developer Dashboard | Nexus AI</title>
@@ -20,140 +20,307 @@
 <body data-page="developer-dashboard">
   <header class="site-header" id="globalNav" data-active="dashboard"></header>
 
-  <main class="dashboard">
-    <aside class="sidebar">
-      <div class="sidebar-title">Developer</div>
-      <a class="active" href="#profile" data-dev-tab="profile">Profile</a>
-      <a href="#products" data-dev-tab="products">Products</a>
-      <a href="#messages" data-dev-tab="messages">Messages</a>
-      <a href="#wallet" data-dev-tab="wallet">Wallet</a>
-      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+  <main class="developer-console">
+    <aside class="developer-console-sidebar" aria-label="Developer workspace">
+      <div class="developer-sidebar-brand">
+        <span>NX</span>
+        <div>
+          <strong>Developer dashboard</strong>
+        </div>
+      </div>
+
+      <nav class="developer-console-nav">
+        <a class="active" href="#profile" data-dev-tab="profile">
+          <span>01</span>
+          <strong>Profile</strong>
+        </a>
+        <a href="#products" data-dev-tab="products">
+          <span>02</span>
+          <strong>Products</strong>
+        </a>
+        <a href="#messages" data-dev-tab="messages">
+          <span>03</span>
+          <strong>Messages</strong>
+        </a>
+        <a href="#wallet" data-dev-tab="wallet">
+          <span>04</span>
+          <strong>Wallet</strong>
+        </a>
+      </nav>
     </aside>
 
-    <section class="main developer-dashboard-main">
-      <section class="developer-launch-hero">
-        <div>
+    <section class="developer-console-main">
+      <section class="developer-console-hero">
+        <div class="developer-console-hero-copy">
           <span class="eyebrow">Developer dashboard</span>
-          <h1 id="developerDashboardTitle">Your profile is live.</h1>
+          <h1 id="developerDashboardTitle">Manage your Nexus storefront.</h1>
           <p>
-            Manage your public marketplace profile, submit products for Nexus approval,
-            handle buyer messages, track product earnings, and request manual payouts from Nexus.
+            Edit your public profile, submit products, reply to buyers, and track payout balance.
           </p>
         </div>
 
-        <div class="developer-launch-actions">
+        <div class="developer-console-hero-actions">
           <a class="btn btn-primary" id="developerPublicProfileLink" href="/pages/developers/index.html" target="_blank">View public profile</a>
-          <button class="btn btn-secondary" type="button" onclick="activeTab('products')">Submit product</button>
+          <button class="btn btn-secondary" type="button" onclick="openProductEditor()">Add product</button>
         </div>
       </section>
 
-      <div class="grid-3" id="developerOverview"></div>
+      <div class="developer-overview-grid" id="developerOverview">
+        <div class="developer-console-stat skeleton-card"></div>
+        <div class="developer-console-stat skeleton-card"></div>
+        <div class="developer-console-stat skeleton-card"></div>
+        <div class="developer-console-stat skeleton-card"></div>
+      </div>
 
-      <section class="dev-panel" data-dev-panel="profile">
-        <form class="card" id="developerProfileForm">
-          <h3>Marketplace profile</h3>
-          <div class="form-grid">
-            <div><label>Display name</label><input class="input" name="display_name" required></div>
-            <div><label>Handle</label><input class="input" name="handle" required></div>
-            <div><label>Type</label><input class="input" name="type"></div>
-            <div><label>Avatar letters</label><input class="input" name="avatar_letter" maxlength="2"></div>
-            <div class="full"><label>Website</label><input class="input" name="website"></div>
-            <div class="full"><label>Short description</label><textarea class="textarea" name="short_description"></textarea></div>
-            <div class="full"><label>Bio</label><textarea class="textarea" name="bio"></textarea></div>
-            <div class="full"><label>Skills</label><textarea class="textarea" name="skills" placeholder="One skill per line or comma separated"></textarea></div>
-            <div><label>Banner URL</label><input class="input" name="banner_url"></div>
-            <div><label>Banner color</label><input class="input" name="banner_color" placeholder="linear-gradient(135deg,#2563ff,#00c2ff)"></div>
-            <div class="full"><label>Banner base64</label><textarea class="textarea" name="banner_base64"></textarea></div>
+      <section class="developer-panel" data-dev-panel="profile">
+        <div class="developer-panel-head">
+          <div>
+            <span class="eyebrow">Profile</span>
+            <h2>Public builder profile</h2>
+            <p>This is what buyers see when they open your developer profile.</p>
           </div>
-          <button class="btn btn-primary" style="margin-top:1rem">Save profile</button>
+          <button class="btn btn-secondary btn-small" type="button" onclick="openProfileEditor()">Edit profile</button>
+        </div>
+
+        <div class="developer-profile-summary" id="developerProfileSummary">
+          Loading profile...
+        </div>
+
+        <form class="developer-form-surface developer-editor-modal" id="developerProfileForm" aria-hidden="true">
+          <div class="developer-modal-head">
+            <div>
+              <h3>Edit public profile</h3>
+              <p>Update what buyers see in the developer directory and profile page.</p>
+            </div>
+            <button class="btn btn-secondary btn-small" type="button" onclick="closeProfileEditor()">Close</button>
+          </div>
+
+          <section class="developer-form-section">
+            <div>
+              <h3>Identity</h3>
+              <p>Your name, handle, and positioning in the developer directory.</p>
+            </div>
+            <div class="developer-field-grid">
+              <div><label>Display name</label><input class="input" name="display_name" required></div>
+              <div><label>Handle</label><input class="input" name="handle" required></div>
+              <div><label>Developer type</label><input class="input" name="type" placeholder="Automation builder, reporting specialist..."></div>
+              <div><label>Avatar letters</label><input class="input" name="avatar_letter" maxlength="2" placeholder="NX"></div>
+              <div class="full"><label>Website</label><input class="input" name="website" placeholder="https://"></div>
+            </div>
+          </section>
+
+          <section class="developer-form-section">
+            <div>
+              <h3>Buyer-facing copy</h3>
+              <p>Keep it outcome-focused. Buyers should quickly understand what you can solve.</p>
+            </div>
+            <div class="developer-field-grid">
+              <div class="full"><label>Short description</label><textarea class="textarea" name="short_description" rows="3"></textarea></div>
+              <div class="full"><label>Bio</label><textarea class="textarea" name="bio" rows="5"></textarea></div>
+              <div class="full"><label>Skills</label><textarea class="textarea" name="skills" rows="4" placeholder="One skill per line or comma separated"></textarea></div>
+            </div>
+          </section>
+
+          <details class="developer-form-section developer-details-section">
+            <summary>
+              <span>
+                <strong>Visuals</strong>
+                <small>Optional banner settings for your profile.</small>
+              </span>
+            </summary>
+            <div class="developer-field-grid">
+              <div><label>Banner URL</label><input class="input" name="banner_url"></div>
+              <div><label>Banner color</label><input class="input" name="banner_color" placeholder="linear-gradient(135deg,#2563ff,#00c2ff)"></div>
+              <div class="full"><label>Banner base64</label><textarea class="textarea" name="banner_base64" rows="4"></textarea></div>
+            </div>
+          </details>
+
+          <div class="developer-form-actions">
+            <button class="btn btn-primary" type="submit">Save profile</button>
+          </div>
         </form>
       </section>
 
-      <section class="dev-panel" data-dev-panel="products" hidden>
-        <div class="grid-2">
-          <form class="card" id="developerProductForm">
-            <h3>Submit product</h3>
-            <input type="hidden" name="id">
-            <div class="form-grid">
-              <div><label>Title</label><input class="input" name="title" required></div>
-              <div><label>Slug</label><input class="input" name="slug"></div>
-              <div><label>Listing type</label><select class="select" name="listing_type"><option value="standard">Standard product</option><option value="custom_request">Custom request</option></select></div>
-              <div><label>Pricing</label><select class="select" name="pricing_type"><option value="one_time">One-time</option><option value="monthly">Monthly</option><option value="setup_fee">Setup fee</option><option value="custom_quote">Custom quote</option></select></div>
-              <div><label>USD price</label><input class="input" name="price_usd" type="number" step="0.01" min="0"></div>
-              <div><label>THB price</label><input class="input" name="price_thb" type="number" step="0.01" min="0"></div>
-              <div><label>Category</label><input class="input" name="category"></div>
-              <div><label>Badge</label><input class="input" name="badge"></div>
-              <div class="full"><label>Short description</label><textarea class="textarea" name="short_description"></textarea></div>
-              <div class="full"><label>Long description</label><textarea class="textarea" name="long_description"></textarea></div>
-              <div class="full"><label>Business outcome</label><textarea class="textarea" name="outcome"></textarea></div>
-              <div class="full"><label>n8n workflow JSON</label><input class="input" id="workflowUpload" type="file" accept=".json,application/json"><textarea class="textarea" name="n8n_workflow_json" placeholder="Paste exported n8n workflow JSON"></textarea></div>
-              <div class="full"><label>Setup schema JSON</label><textarea class="textarea" name="setup_schema" placeholder="[]"></textarea></div>
-              <div class="full"><label>Internal notes for Nexus</label><textarea class="textarea" name="internal_notes"></textarea></div>
+      <section class="developer-panel" data-dev-panel="products" hidden>
+        <div class="developer-panel-head">
+          <div>
+            <span class="eyebrow">Products</span>
+            <h2>Submit automation products</h2>
+            <p>Save drafts while you prepare the product. Submit when Nexus should review and publish it.</p>
+          </div>
+          <button class="btn btn-primary btn-small" type="button" onclick="openProductEditor()">Add product</button>
+        </div>
+
+        <div class="developer-product-workspace">
+          <form class="developer-form-surface developer-product-editor developer-editor-modal wide" id="developerProductForm" aria-hidden="true">
+            <div class="developer-editor-head">
+              <div>
+                <h3>Product editor</h3>
+                <p>Use clear business outcomes, realistic setup requirements, and an import-ready workflow.</p>
+              </div>
+              <input type="hidden" name="id">
+              <button class="btn btn-secondary btn-small" type="button" onclick="closeProductEditor()">Close</button>
             </div>
-            <div class="hero-actions" style="justify-content:flex-start;margin-top:1rem">
+
+            <section class="developer-form-section compact">
+              <div>
+                <h3>Basics</h3>
+                <p>How the product appears in marketplace cards and search.</p>
+              </div>
+              <div class="developer-field-grid">
+                <div><label>Title</label><input class="input" name="title" required></div>
+                <div><label>Slug</label><input class="input" name="slug"></div>
+                <div><label>Listing type</label><select class="select" name="listing_type"><option value="standard">Standard product</option><option value="custom_request">Custom request</option></select></div>
+                <div><label>Pricing</label><select class="select" name="pricing_type"><option value="one_time">One-time</option><option value="monthly">Monthly</option><option value="setup_fee">Setup fee</option><option value="custom_quote">Custom quote</option></select></div>
+                <div><label>USD price</label><input class="input" name="price_usd" type="number" step="0.01" min="0"></div>
+                <div><label>THB price</label><input class="input" name="price_thb" type="number" step="0.01" min="0"></div>
+                <div><label>Category</label><input class="input" name="category"></div>
+                <div><label>Badge</label><input class="input" name="badge"></div>
+              </div>
+            </section>
+
+            <section class="developer-form-section compact">
+              <div>
+                <h3>Positioning</h3>
+                <p>Explain the manual work removed and the result the buyer receives.</p>
+              </div>
+              <div class="developer-field-grid">
+                <div class="full"><label>Short description</label><textarea class="textarea" name="short_description" rows="3"></textarea></div>
+                <div class="full"><label>Long description</label><textarea class="textarea" name="long_description" rows="5"></textarea></div>
+                <div class="full"><label>Business outcome</label><textarea class="textarea" name="outcome" rows="4"></textarea></div>
+              </div>
+            </section>
+
+            <details class="developer-form-section developer-details-section" open>
+              <summary>
+                <span>
+                  <strong>Workflow and setup</strong>
+                  <small>Required before Nexus can approve a standard paid product.</small>
+                </span>
+              </summary>
+              <div class="developer-field-grid">
+                <div class="full">
+                  <label>n8n workflow JSON</label>
+                  <input class="input" id="workflowUpload" type="file" accept=".json,application/json">
+                  <textarea class="textarea code-textarea" name="n8n_workflow_json" rows="8" placeholder="Paste exported n8n workflow JSON"></textarea>
+                </div>
+                <div class="full"><label>Setup schema JSON</label><textarea class="textarea code-textarea" name="setup_schema" rows="6" placeholder="[]"></textarea></div>
+                <div class="full"><label>Internal notes for Nexus</label><textarea class="textarea" name="internal_notes" rows="4"></textarea></div>
+              </div>
+            </details>
+
+            <div class="developer-form-actions split">
               <button class="btn btn-secondary" type="button" id="saveProductDraft">Save draft</button>
               <button class="btn btn-primary" type="submit">Submit for review</button>
             </div>
           </form>
 
-          <div class="card">
-            <h3>Your products</h3>
-            <div id="developerProductList"></div>
-          </div>
+          <section class="developer-products-panel">
+            <div class="developer-list-head">
+              <div>
+                <h3>Your products</h3>
+                <p>Drafts, review items, and live products.</p>
+              </div>
+            </div>
+            <div class="developer-product-list" id="developerProductList">Loading products...</div>
+          </section>
         </div>
       </section>
 
-      <section class="dev-panel" data-dev-panel="messages" hidden>
-        <div class="card">
-          <h3>Messages</h3>
-          <div id="developerMessages">Loading messages...</div>
+      <section class="developer-panel" data-dev-panel="messages" hidden>
+        <div class="developer-panel-head">
+          <div>
+            <span class="eyebrow">Messages</span>
+            <h2>Buyer conversations</h2>
+            <p>Reply to buyers and keep product questions inside Nexus.</p>
+          </div>
         </div>
+        <div class="developer-message-shell" id="developerMessages">Loading messages...</div>
       </section>
 
-      <section class="dev-panel" data-dev-panel="wallet" hidden>
-        <div class="card">
-          <h3>Wallet and payouts</h3>
-          <p>Buyer checkout is handled by Nexus. Your approved developer earnings appear here, and payouts are requested from Nexus manually for MVP.</p>
-          <div id="walletStatus">Loading wallet...</div>
-
-          <div class="form-grid" style="margin-top:1rem">
-            <div>
-              <label>Payout method</label>
-              <select class="select" id="manualPayoutMethod">
-                <option value="manual_bank_transfer">Bank transfer</option>
-                <option value="promptpay">PromptPay</option>
-                <option value="wise">Wise</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            <div class="full">
-              <label>Payout details</label>
-              <textarea
-                class="textarea"
-                id="manualPayoutDetails"
-                placeholder="Bank name, account holder, account number, PromptPay number, or other payout instructions."
-              ></textarea>
-            </div>
-
-            <div class="full">
-              <label>Note to Nexus</label>
-              <textarea class="textarea" id="manualPayoutNote" placeholder="Optional note for this payout request."></textarea>
-            </div>
+      <section class="developer-panel" data-dev-panel="wallet" hidden>
+        <div class="developer-panel-head">
+          <div>
+            <span class="eyebrow">Wallet</span>
+            <h2>Earnings and manual payouts</h2>
+            <p>Nexus collects buyer payments, records your 80% developer share, and sends payouts manually during MVP.</p>
           </div>
+        </div>
+
+        <div class="developer-wallet-layout">
+          <section class="developer-wallet-main">
+            <div id="walletStatus">Loading wallet...</div>
+          </section>
+
+          <aside class="developer-payout-panel">
+            <h3>Payout settings</h3>
+            <p>Keep payout details saved, then request manual payouts from your balance cards.</p>
+
+            <div class="developer-settings-preview" id="payoutSettingsPreview">
+              Loading payout settings...
+            </div>
+
+            <button class="btn btn-secondary btn-small" type="button" onclick="openPayoutSettings()">
+              Edit payout settings
+            </button>
+
+            <div class="developer-field-stack developer-payout-editor" id="payoutSettingsModal" hidden aria-hidden="true">
+              <div class="developer-modal-head">
+                <div>
+                  <h3>Edit payout settings</h3>
+                  <p>These details are visible to Nexus admin when you request a payout.</p>
+                </div>
+                <button class="btn btn-secondary btn-small" type="button" onclick="closePayoutSettings()">Close</button>
+              </div>
+              <div>
+                <label>Payout method</label>
+                <select class="select" id="manualPayoutMethod">
+                  <option value="manual_bank_transfer">Bank transfer</option>
+                  <option value="promptpay">PromptPay</option>
+                  <option value="wise">Wise</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label>Payout details</label>
+                <textarea
+                  class="textarea"
+                  id="manualPayoutDetails"
+                  rows="6"
+                  placeholder="Bank name, account holder, account number, PromptPay number, or other payout instructions."
+                ></textarea>
+              </div>
+
+              <div>
+                <label>Note to Nexus</label>
+                <textarea class="textarea" id="manualPayoutNote" rows="4" placeholder="Optional note for this payout request."></textarea>
+              </div>
+
+              <button class="btn btn-secondary" type="button" id="savePayoutSettings">
+                Save payout settings
+              </button>
+
+              <div id="payoutRequestFeedback" aria-live="polite"></div>
+            </div>
+          </aside>
         </div>
       </section>
     </section>
   </main>
 
   <div class="toast" id="toast"></div>
-  <script src="/assets/js/nexus-ui.js?v=20260607-fast"></script>
-  <script src="/assets/js/nexus-db.js?v=20260607-fast"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
+  <script src="/assets/js/nexus-db.js?v=20260608-walletinline"></script>
   <script>
-    const state = { account: null, products: [] };
+    const state = { account: null, products: [], wallet: null };
 
     function activeTab(tab) {
-      document.querySelectorAll("[data-dev-tab]").forEach((link) => link.classList.toggle("active", link.dataset.devTab === tab));
+      document.querySelectorAll("[data-dev-tab]").forEach((link) => {
+        const isActive = link.dataset.devTab === tab;
+        link.classList.toggle("active", isActive);
+        link.setAttribute("aria-current", isActive ? "page" : "false");
+      });
       document.querySelectorAll("[data-dev-panel]").forEach((panel) => panel.hidden = panel.dataset.devPanel !== tab);
     }
 
@@ -165,6 +332,231 @@
       const raw = String(value || "").trim();
       if (!raw) return fallback;
       return JSON.parse(raw);
+    }
+
+    function getDeveloper() {
+      return state.account?.developer || state.account?.data?.developer || {};
+    }
+
+    function openModalElement(element) {
+      if (!element) return;
+      element.classList.add("open");
+      element.setAttribute("aria-hidden", "false");
+      document.body.classList.add("developer-modal-open");
+    }
+
+    function closeModalElement(element) {
+      if (!element) return;
+      element.classList.remove("open");
+      element.setAttribute("aria-hidden", "true");
+      if (!document.querySelector(".developer-editor-modal.open")) {
+        document.body.classList.remove("developer-modal-open");
+      }
+    }
+
+    function openProfileEditor() {
+      openModalElement(document.getElementById("developerProfileForm"));
+    }
+
+    function closeProfileEditor() {
+      closeModalElement(document.getElementById("developerProfileForm"));
+    }
+
+    function resetProductForm() {
+      const form = document.getElementById("developerProductForm");
+      if (!form) return;
+      form.reset();
+      form.elements.id.value = "";
+      form.elements.listing_type.value = "standard";
+      form.elements.pricing_type.value = "one_time";
+      form.elements.setup_schema.value = "[]";
+    }
+
+    function openProductEditor(product = null) {
+      activeTab("products");
+      if (!product) resetProductForm();
+      openModalElement(document.getElementById("developerProductForm"));
+      setTimeout(() => document.querySelector("#developerProductForm [name='title']")?.focus(), 80);
+    }
+
+    function closeProductEditor() {
+      closeModalElement(document.getElementById("developerProductForm"));
+    }
+
+    function openPayoutSettings() {
+      const panel = document.getElementById("payoutSettingsModal");
+      if (!panel) return;
+      panel.hidden = false;
+      panel.classList.add("open");
+      panel.setAttribute("aria-hidden", "false");
+      setTimeout(() => document.getElementById("manualPayoutDetails")?.focus(), 80);
+    }
+
+    function closePayoutSettings() {
+      const panel = document.getElementById("payoutSettingsModal");
+      if (!panel) return;
+      panel.classList.remove("open");
+      panel.hidden = true;
+      panel.setAttribute("aria-hidden", "true");
+    }
+
+    function profileCompleteness(developer) {
+      const fields = ["display_name", "handle", "type", "short_description", "bio", "skills", "website"];
+      const completed = fields.filter((field) => {
+        const value = developer?.[field];
+        return Array.isArray(value) ? value.length > 0 : Boolean(String(value || "").trim());
+      }).length;
+      return Math.round((completed / fields.length) * 100);
+    }
+
+    function productStatusText(status) {
+      const value = String(status || "draft").replace(/_/g, " ");
+      return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    function statusClass(status) {
+      const value = String(status || "").toLowerCase();
+      if (value === "live" || value === "approved" || value === "active" || value === "published") return "pill green";
+      if (value.includes("reject") || value === "archived" || value === "removed") return "pill red";
+      if (value.includes("review") || value === "pending") return "pill orange";
+      return "pill";
+    }
+
+    function productPriceLabel(product) {
+      const pricing = String(product?.pricing_type || "custom_quote");
+      if (pricing === "custom_quote" || product?.listing_type === "custom_request") return "Custom quote";
+      const thb = Number(product?.price_thb || 0);
+      const usd = Number(product?.price_usd || 0);
+      const base = thb > 0 ? moneyValue(thb, "THB") : usd > 0 ? moneyValue(usd, "USD") : "Price pending";
+      return pricing === "monthly" ? `${base} / month` : base;
+    }
+
+    function isPassingTestStatus(status) {
+      return ["passed", "passed_with_expected_test_callback_error"].includes(String(status || "").toLowerCase());
+    }
+
+    function productReadiness(product) {
+      if (product?.listing_type === "custom_request") {
+        return {
+          label: "Request listing",
+          className: "pill blue",
+          detail: "Custom request products do not need workflow runtime."
+        };
+      }
+
+      if (!product?.n8n_workflow_json) {
+        return {
+          label: "Workflow missing",
+          className: "pill red",
+          detail: "Attach an n8n workflow JSON before this can be reviewed."
+        };
+      }
+
+      if (product.n8n_import_status !== "imported") {
+        return {
+          label: "Import needed",
+          className: "pill orange",
+          detail: "Import the workflow to Nexus n8n before review."
+        };
+      }
+
+      if (!isPassingTestStatus(product.n8n_last_test_status)) {
+        return {
+          label: "Test needed",
+          className: "pill orange",
+          detail: "Run a successful technical test before review."
+        };
+      }
+
+      return {
+        label: "Runtime ready",
+        className: "pill green",
+        detail: "Workflow imported and technical test passed."
+      };
+    }
+
+    function renderProfileSummary() {
+      const root = document.getElementById("developerProfileSummary");
+      if (!root) return;
+
+      const developer = getDeveloper();
+      const skills = Array.isArray(developer.skills) ? developer.skills : lines(developer.skills);
+
+      root.innerHTML = `
+        <article class="developer-summary-card">
+          <div class="developer-summary-avatar">${NexusUI.escapeHtml(developer.avatar_letter || "NX")}</div>
+          <div class="developer-summary-main">
+            <div class="developer-summary-title">
+              <div>
+                <h3>${NexusUI.escapeHtml(developer.display_name || "Unnamed developer")}</h3>
+                <p>${NexusUI.escapeHtml(developer.type || "Automation builder")}</p>
+              </div>
+              <span class="${statusClass(developer.status || "active")}">${NexusUI.escapeHtml(productStatusText(developer.status || "active"))}</span>
+            </div>
+            <p>${NexusUI.escapeHtml(developer.short_description || "Add a short description so buyers understand what you build.")}</p>
+            <div class="developer-product-meta">
+              <span>${NexusUI.escapeHtml(developer.handle ? `@${developer.handle}` : "Handle missing")}</span>
+              <span>${NexusUI.escapeHtml(developer.website || "Website not added")}</span>
+              <span>${developer.verified ? "Verified" : "Verification pending"}</span>
+            </div>
+            <div class="developer-skill-row">
+              ${
+                skills.slice(0, 8).map((skill) => `<span>${NexusUI.escapeHtml(skill)}</span>`).join("") ||
+                "<span>No skills added yet</span>"
+              }
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderOverview() {
+      const root = document.getElementById("developerOverview");
+      if (!root) return;
+
+      const developer = getDeveloper();
+      const products = state.products || [];
+      const liveProducts = products.filter((product) => ["live", "approved", "active", "published"].includes(String(product.status || "").toLowerCase())).length;
+      const firstCurrencyTotal = state.wallet?.totals?.[0] || null;
+      const availableBalance = firstCurrencyTotal ? moneyValue(firstCurrencyTotal.available_amount || 0, firstCurrencyTotal.currency || "THB") : moneyValue(0, "THB");
+      const completeness = profileCompleteness(developer);
+
+      root.innerHTML = `
+        <article class="developer-console-stat">
+          <span>Profile status</span>
+          <strong>${NexusUI.escapeHtml(productStatusText(developer.status || "active"))}</strong>
+          <p>${developer.verified ? "Verified by Nexus." : "Live profile, verification pending."}</p>
+        </article>
+        <article class="developer-console-stat">
+          <span>Products</span>
+          <strong>${liveProducts}/${products.length}</strong>
+          <p>Live products out of total drafts and submissions.</p>
+        </article>
+        <article class="developer-console-stat">
+          <span>Available balance</span>
+          <strong>${availableBalance}</strong>
+          <p>Manual payout balance recorded by Nexus.</p>
+        </article>
+        <article class="developer-console-stat">
+          <span>Profile completeness</span>
+          <strong>${completeness}%</strong>
+          <p>Complete profiles are easier for buyers to trust.</p>
+        </article>
+      `;
+    }
+
+    function renderPayoutSettingsPreview() {
+      const root = document.getElementById("payoutSettingsPreview");
+      if (!root) return;
+
+      const developer = getDeveloper();
+      const method = developer.payout_method || "manual_bank_transfer";
+      const details = payoutDetailsText(developer.payout_details);
+
+      root.innerHTML = `
+        <strong>${NexusUI.escapeHtml(productStatusText(method.replaceAll("_", " ")))}</strong>
+        <p>${NexusUI.escapeHtml(details || "No payout details saved yet.")}</p>
+      `;
     }
 
     function productPayload() {
@@ -196,24 +588,65 @@
         if (!field) return;
         field.value = typeof value === "object" && value !== null ? JSON.stringify(value, null, 2) : value || "";
       });
-      activeTab("products");
+      openProductEditor(product);
     }
 
     function renderProducts() {
       const root = document.getElementById("developerProductList");
       root.innerHTML = (state.products || []).map((product) => `
-        <article class="admin-inbox-message">
-          <div>
-            <strong>${NexusUI.escapeHtml(product.title || "Untitled")}</strong>
-            <p>${NexusUI.escapeHtml(product.short_description || "")}</p>
-            <span class="pill">${NexusUI.escapeHtml(product.status || "draft")}</span>
-          </div>
-          <div class="hero-actions" style="justify-content:flex-start">
-            <button class="btn btn-secondary btn-small" type="button" onclick='fillProduct(${JSON.stringify(product).replace(/'/g, "&apos;")})'>Edit</button>
-            <button class="btn btn-danger btn-small" type="button" onclick="removeProduct('${product.id}')">Remove</button>
-          </div>
-        </article>
-      `).join("") || `<p>No products yet.</p>`;
+        ${(() => {
+          const readiness = productReadiness(product);
+          return `
+            <article class="developer-product-row">
+              <div class="developer-product-main">
+                <div class="developer-product-title-line">
+                  <strong>${NexusUI.escapeHtml(product.title || "Untitled product")}</strong>
+                  <span class="${statusClass(product.status)}">${NexusUI.escapeHtml(productStatusText(product.status || "draft"))}</span>
+                  <span class="${readiness.className}">${NexusUI.escapeHtml(readiness.label)}</span>
+                </div>
+                <p>${NexusUI.escapeHtml(product.short_description || "Add a short buyer-facing description before submitting.")}</p>
+                <p class="developer-product-readiness">${NexusUI.escapeHtml(readiness.detail)}</p>
+                <div class="developer-product-meta">
+                  <span>${NexusUI.escapeHtml(product.category || "Uncategorized")}</span>
+                  <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
+                  <span>${NexusUI.escapeHtml(product.listing_type === "custom_request" ? "Request flow" : "Checkout flow")}</span>
+                  <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
+                </div>
+              </div>
+              <div class="developer-product-actions">
+                ${
+                  product.listing_type !== "custom_request"
+                    ? `<button class="btn btn-secondary btn-small" type="button" data-test-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id && product.n8n_workflow_json ? "" : "disabled"}>Import & test</button>`
+                    : ""
+                }
+                <button class="btn btn-secondary btn-small" type="button" data-edit-product="${NexusUI.escapeAttribute(product.id || "")}">Edit</button>
+                <button class="btn btn-danger btn-small" type="button" data-remove-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id ? "" : "disabled"}>Remove</button>
+              </div>
+            </article>
+          `;
+        })()}
+      `).join("") || `
+        <div class="developer-empty-state">
+          <h3>No products yet</h3>
+          <p>Create a draft, attach the workflow details, then submit it for Nexus approval.</p>
+          <button class="btn btn-primary btn-small" type="button" onclick="openProductEditor()">Create product</button>
+        </div>
+      `;
+
+      root.querySelectorAll("[data-edit-product]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const product = state.products.find((item) => String(item.id || "") === button.dataset.editProduct);
+          if (product) fillProduct(product);
+        });
+      });
+
+      root.querySelectorAll("[data-remove-product]").forEach((button) => {
+        button.addEventListener("click", () => removeProduct(button.dataset.removeProduct));
+      });
+
+      root.querySelectorAll("[data-test-product]").forEach((button) => {
+        button.addEventListener("click", () => importAndTestProduct(button.dataset.testProduct, button));
+      });
     }
 
     async function loadProducts() {
@@ -223,7 +656,12 @@
         return;
       }
       state.products = data?.products || data?.data?.products || data?.product || data?.products || [];
+      const pausedCount = Number(data?.auto_paused_count || 0);
+      if (pausedCount > 0) {
+        NexusUI.toast(`${pausedCount} live product${pausedCount === 1 ? " was" : "s were"} paused because workflow runtime is not ready.`);
+      }
       renderProducts();
+      renderOverview();
     }
 
     async function removeProduct(id) {
@@ -237,6 +675,76 @@
       await loadProducts();
     }
 
+    function wait(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function importAndTestProduct(id, button = null) {
+      const product = state.products.find((item) => String(item.id || "") === String(id || ""));
+
+      if (!product) {
+        NexusUI.toast("Product not found.");
+        return;
+      }
+
+      if (product.listing_type === "custom_request") {
+        NexusUI.toast("Custom request products do not need workflow testing.");
+        return;
+      }
+
+      if (!product.n8n_workflow_json) {
+        NexusUI.toast("Attach and save the n8n workflow JSON first.");
+        openProductEditor(product);
+        return;
+      }
+
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Importing...";
+      }
+
+      try {
+        if (product.n8n_import_status !== "imported") {
+          const { error: importError } = await NexusDB.importN8nWorkflow(product.id);
+          if (importError) throw new Error(importError.message || "Workflow import failed.");
+        }
+
+        if (button) button.textContent = "Testing...";
+
+        const started = await NexusDB.startN8nWorkflowTest(product.id);
+        if (started.error) throw new Error(started.error.message || "Workflow test failed to start.");
+
+        let result = started.data || {};
+
+        for (let index = 0; index < 8 && String(result.status || "").toLowerCase() === "running"; index += 1) {
+          await wait(2000);
+          const checked = await NexusDB.checkN8nWorkflowTest({
+            test_run_id: result.test_run_id,
+            automation_id: product.id
+          });
+          if (checked.error) throw new Error(checked.error.message || "Could not check workflow test.");
+          result = checked.data || result;
+        }
+
+        if (isPassingTestStatus(result.status)) {
+          NexusUI.toast("Workflow imported and test passed.");
+        } else if (String(result.status || "").toLowerCase() === "running") {
+          NexusUI.toast("Workflow test is still running. Check again in a moment.");
+        } else {
+          throw new Error(result.message || result.error_message || "Workflow test did not pass.");
+        }
+      } catch (error) {
+        NexusUI.toast(error.message || "Could not import and test workflow.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "Import & test";
+        }
+        await loadProducts();
+      }
+    }
+
     function moneyValue(value, currency = "THB") {
       return new Intl.NumberFormat(undefined, {
         style: "currency",
@@ -247,9 +755,71 @@
     function payoutStatusPill(status) {
       const value = String(status || "pending").toLowerCase();
       if (value === "paid") return "pill green";
-      if (value === "rejected" || value === "cancelled") return "pill red";
+      if (value === "rejected" || value === "cancelled" || value.includes("refund") || value.includes("dispute")) return "pill red";
       if (value === "approved" || value === "pending") return "pill orange";
       return "pill";
+    }
+
+    function payoutDetailsPayload() {
+      return {
+        details: document.getElementById("manualPayoutDetails").value.trim()
+      };
+    }
+
+    function payoutDetailsText(details) {
+      if (!details || typeof details !== "object") return "";
+      return details.details || details.promptpay || details.account_number || "";
+    }
+
+    function hasSavedPayoutDetails() {
+      const developer = state.account?.developer || state.account?.data?.developer || {};
+      return Boolean(payoutDetailsText(developer.payout_details));
+    }
+
+    function showPayoutFeedback(message = "", type = "error") {
+      const root = document.getElementById("payoutRequestFeedback");
+      if (!root) return;
+
+      root.innerHTML = message
+        ? `<div class="${type === "success" ? "success" : "error"}">${NexusUI.escapeHtml(message)}</div>`
+        : "";
+    }
+
+    async function savePayoutSettings() {
+      const details = payoutDetailsPayload();
+      const method = document.getElementById("manualPayoutMethod").value;
+      const note = document.getElementById("manualPayoutNote").value.trim();
+
+      if (!details.details) {
+        NexusUI.toast("Add payout details before saving.");
+        showPayoutFeedback("Add payout details before saving.");
+        return;
+      }
+
+      showPayoutFeedback("");
+
+      const { data, error } = await NexusDB.updateDeveloperPayoutSettings({
+        payout_method: method,
+        payout_details: details,
+        payout_note: note
+      });
+
+      if (error) {
+        NexusUI.toast(error.message || "Could not save payout settings.");
+        showPayoutFeedback(error.message || "Could not save payout settings.");
+        return;
+      }
+
+      state.account = {
+        ...(state.account || {}),
+        developer: data?.developer || state.account?.developer
+      };
+
+      NexusUI.toast(data?.message || "Payout settings saved.");
+      showPayoutFeedback(data?.message || "Payout settings saved.", "success");
+      renderPayoutSettingsPreview();
+      closePayoutSettings();
+      await loadWallet();
     }
 
     async function requestManualPayout(currency) {
@@ -257,26 +827,29 @@
       const method = document.getElementById("manualPayoutMethod").value;
       const note = document.getElementById("manualPayoutNote").value.trim();
 
-      if (!details) {
-        NexusUI.toast("Add payout details before requesting a payout.");
+      if (!details && !hasSavedPayoutDetails()) {
+        NexusUI.toast("Add or save payout details before requesting a payout.");
+        showPayoutFeedback("Add or save payout details before requesting a payout.");
         return;
       }
+
+      showPayoutFeedback("");
 
       const { data, error } = await NexusDB.requestDeveloperManualPayout({
         currency,
         payout_method: method,
-        payout_details: {
-          details
-        },
+        payout_details: details ? { details } : {},
         developer_note: note
       });
 
       if (error) {
         NexusUI.toast(error.message || "Could not request payout.");
+        showPayoutFeedback(error.message || "Could not request payout.");
         return;
       }
 
       NexusUI.toast(data?.message || "Payout requested.");
+      showPayoutFeedback(data?.message || "Payout requested.", "success");
       document.getElementById("manualPayoutNote").value = "";
       await loadWallet();
     }
@@ -292,6 +865,41 @@
       const totals = data?.totals || [];
       const earnings = data?.earnings || [];
       const payoutRequests = data?.payout_requests || [];
+      const developer = data?.developer || state.account?.developer || {};
+      if (data?.developer) {
+        state.account = { ...(state.account || {}), developer: data.developer };
+      }
+      const savedDetailsText = payoutDetailsText(developer.payout_details);
+      const methodField = document.getElementById("manualPayoutMethod");
+      const detailsField = document.getElementById("manualPayoutDetails");
+
+      if (methodField && developer.payout_method) methodField.value = developer.payout_method;
+      if (detailsField && savedDetailsText && !detailsField.value.trim()) detailsField.value = savedDetailsText;
+      renderPayoutSettingsPreview();
+
+      const productTotals = new Map();
+      for (const earning of earnings) {
+        const earningTitle =
+          earning.automations?.title ||
+          earning.orders?.automation_title ||
+          earning.metadata?.automation_title ||
+          earning.automation_title ||
+          "Automation sale";
+        const key = earning.automation_id || earningTitle || "unknown";
+        const current = productTotals.get(key) || {
+          title: earningTitle,
+          currency: earning.currency || "THB",
+          gross_amount: 0,
+          platform_fee_amount: 0,
+          developer_amount: 0,
+          count: 0
+        };
+        current.gross_amount += Number(earning.gross_amount || 0);
+        current.platform_fee_amount += Number(earning.platform_fee_amount || 0);
+        current.developer_amount += Number(earning.developer_amount || 0);
+        current.count += 1;
+        productTotals.set(key, current);
+      }
 
       root.innerHTML = `
         ${
@@ -299,19 +907,25 @@
             ? `<div class="error">${NexusUI.escapeHtml(data.schema_warning)}</div>`
             : ""
         }
+        ${
+          data?.backfill_message
+            ? `<div class="success">${NexusUI.escapeHtml(data.backfill_message)}</div>`
+            : ""
+        }
 
-        <div class="grid-3">
+        <div class="developer-wallet-balance-grid">
           ${
             totals.map((item) => `
-              <div class="card">
-                <h3>${moneyValue(item.available_amount || 0, item.currency || "THB")}</h3>
-                <p>Available payout balance</p>
-                <small>
-                  Lifetime: ${moneyValue(item.developer_amount || 0, item.currency || "THB")} |
-                  Requested: ${moneyValue(item.requested_amount || 0, item.currency || "THB")} |
-                  Paid: ${moneyValue(item.paid_amount || 0, item.currency || "THB")}
-                </small>
-                <div style="margin-top:1rem">
+              <article class="developer-wallet-balance-card">
+                <span>${NexusUI.escapeHtml(item.currency || "THB")} balance</span>
+                <strong>${moneyValue(item.available_amount || 0, item.currency || "THB")}</strong>
+                <p>Available to request</p>
+                <dl>
+                  <div><dt>Lifetime</dt><dd>${moneyValue(item.developer_amount || 0, item.currency || "THB")}</dd></div>
+                  <div><dt>Requested</dt><dd>${moneyValue(item.requested_amount || 0, item.currency || "THB")}</dd></div>
+                  <div><dt>Paid</dt><dd>${moneyValue(item.paid_amount || 0, item.currency || "THB")}</dd></div>
+                </dl>
+                <div class="developer-wallet-actions">
                   <button
                     class="btn btn-primary btn-small"
                     type="button"
@@ -321,49 +935,79 @@
                     Request payout
                   </button>
                 </div>
-              </div>
+              </article>
             `).join("") || `
-              <div class="card">
-                <h3>${moneyValue(0)}</h3>
-                <p>No earnings yet</p>
-                <small>Developer earnings appear after paid orders for your products.</small>
-              </div>
+              <article class="developer-wallet-balance-card">
+                <span>Balance</span>
+                <strong>${moneyValue(0)}</strong>
+                <p>Developer earnings appear after paid orders for your products.</p>
+              </article>
             `
           }
         </div>
 
-        <div class="grid-2" style="margin-top:1rem">
-          <div class="card">
+        <div class="developer-wallet-section-grid">
+          <section class="developer-wallet-section">
+            <h3>Product earnings</h3>
+            ${
+              Array.from(productTotals.values()).map((item) => `
+                <article class="developer-wallet-list-row">
+                  <div>
+                    <strong>${NexusUI.escapeHtml(item.title)}</strong>
+                    <p>
+                      ${item.count} sale${item.count === 1 ? "" : "s"} |
+                      Gross ${moneyValue(item.gross_amount || 0, item.currency || "THB")} |
+                      Your share ${moneyValue(item.developer_amount || 0, item.currency || "THB")}
+                    </p>
+                  </div>
+                </article>
+              `).join("") || `<p class="developer-muted">No product earnings yet.</p>`
+            }
+          </section>
+
+          <section class="developer-wallet-section">
             <h3>Payout requests</h3>
             ${
               payoutRequests.map((request) => `
-                <article class="admin-inbox-message">
+                <article class="developer-wallet-list-row">
                   <div>
                     <strong>${moneyValue(request.amount || 0, request.currency || "THB")}</strong>
                     <p>${NexusUI.escapeHtml(request.payout_method || "Manual payout")}</p>
                     <span class="${payoutStatusPill(request.status)}">${NexusUI.escapeHtml(request.status || "pending")}</span>
                   </div>
                 </article>
-              `).join("") || `<p>No payout requests yet.</p>`
+              `).join("") || `<p class="developer-muted">No payout requests yet.</p>`
             }
-          </div>
-
-          <div class="card">
-            <h3>Recent earnings</h3>
-            ${
-              earnings.slice(0, 8).map((earning) => `
-                <article class="admin-inbox-message">
-                  <div>
-                    <strong>${moneyValue(earning.developer_amount || 0, earning.currency || "THB")}</strong>
-                    <p>${NexusUI.escapeHtml(earning.automations?.title || earning.orders?.automation_title || "Automation sale")}</p>
-                    <span class="${payoutStatusPill(earning.payout_status)}">${NexusUI.escapeHtml(earning.payout_status || "available")}</span>
-                  </div>
-                </article>
-              `).join("") || `<p>No earnings recorded yet.</p>`
-            }
-          </div>
+          </section>
         </div>
+
+        <section class="developer-wallet-section">
+          <h3>Recent earnings</h3>
+          ${
+            earnings.slice(0, 10).map((earning) => `
+              <article class="developer-wallet-list-row">
+                <div>
+                  <strong>${moneyValue(earning.developer_amount || 0, earning.currency || "THB")}</strong>
+                  <p>
+                    ${NexusUI.escapeHtml(earning.automations?.title || earning.orders?.automation_title || earning.metadata?.automation_title || "Automation sale")}
+                    | Gross ${moneyValue(earning.gross_amount || 0, earning.currency || "THB")}
+                    | Nexus ${moneyValue(earning.platform_fee_amount || 0, earning.currency || "THB")}
+                  </p>
+                  <span class="${payoutStatusPill(earning.payout_status)}">${NexusUI.escapeHtml(earning.payout_status || "available")}</span>
+                </div>
+              </article>
+            `).join("") || `<p class="developer-muted">No earnings recorded yet.</p>`
+          }
+        </section>
+
+        <section class="developer-wallet-note">
+          <strong>How payouts work</strong>
+          <p>Nexus collects the buyer payment, records your 80% developer share as internal balance, and sends manual payouts after you request them. Stripe fees are handled by Nexus accounting and shown to admin.</p>
+        </section>
       `;
+
+      state.wallet = data;
+      renderOverview();
     }
 
     async function loadMessages() {
@@ -395,6 +1039,7 @@
       const developer = account.data?.developer || account.developer || {};
       const profileForm = document.getElementById("developerProfileForm");
       const publicProfileLink = document.getElementById("developerPublicProfileLink");
+      const dashboardTitle = document.getElementById("developerDashboardTitle");
 
       Object.entries(developer).forEach(([key, value]) => {
         const field = profileForm.elements[key];
@@ -402,22 +1047,29 @@
         field.value = Array.isArray(value) ? value.join("\n") : value || "";
       });
 
-      document.getElementById("developerOverview").innerHTML = `
-        <div class="developer-metric-card"><span>Status</span><h3>Live</h3><p>Your profile is active in the developer directory.</p></div>
-        <div class="developer-metric-card"><span>Verification</span><h3>${developer.verified ? "Verified" : "Unverified"}</h3><p>Admin verification is system-controlled.</p></div>
-        <div class="developer-metric-card"><span>Handle</span><h3>${NexusUI.escapeHtml(developer.handle || "Profile")}</h3><p>Your public builder identity on Nexus.</p></div>
-      `;
+      if (dashboardTitle && developer.display_name) {
+        dashboardTitle.textContent = `${developer.display_name}'s Nexus storefront.`;
+      }
 
       if (publicProfileLink && developer.id) {
         publicProfileLink.href = `/pages/developers/profile.html?id=${encodeURIComponent(developer.id)}`;
       }
+
+      renderOverview();
+      renderProfileSummary();
 
       profileForm.addEventListener("submit", async function (event) {
         event.preventDefault();
         const formData = new FormData(profileForm);
         const payload = Object.fromEntries(formData.entries());
         payload.skills = lines(payload.skills);
-        const { error } = await NexusDB.updateCurrentDeveloperProfile(payload);
+        const { data, error } = await NexusDB.updateCurrentDeveloperProfile(payload);
+        if (!error && data?.developer) {
+          state.account = { ...(state.account || {}), developer: data.developer };
+          renderOverview();
+          renderProfileSummary();
+          closeProfileEditor();
+        }
         NexusUI.toast(error ? error.message : "Profile saved.");
       });
 
@@ -431,14 +1083,21 @@
       document.getElementById("workflowUpload").addEventListener("change", async function () {
         const file = this.files && this.files[0];
         if (!file) return;
-        document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(JSON.parse(await file.text()), null, 2);
+        try {
+          document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(JSON.parse(await file.text()), null, 2);
+        } catch (error) {
+          NexusUI.toast("That file is not valid JSON.");
+        }
       });
 
       document.getElementById("saveProductDraft").addEventListener("click", async function () {
         try {
-          const { error } = await NexusDB.saveDeveloperProduct(productPayload());
+          const { data, error } = await NexusDB.saveDeveloperProduct(productPayload());
           if (error) throw new Error(error.message);
           NexusUI.toast("Draft saved.");
+          if (data?.product?.id) {
+            document.getElementById("developerProductForm").elements.id.value = data.product.id;
+          }
           await loadProducts();
         } catch (error) {
           NexusUI.toast(error.message || "Could not save draft.");
@@ -452,14 +1111,19 @@
           if (error) throw new Error(error.message);
           NexusUI.toast("Submitted for review.");
           event.target.reset();
+          closeProductEditor();
           await loadProducts();
         } catch (error) {
           NexusUI.toast(error.message || "Could not submit product.");
         }
       });
 
-      await Promise.all([loadProducts(), loadMessages(), loadWallet()]);
+      document.getElementById("savePayoutSettings").addEventListener("click", savePayoutSettings);
+
       activeTab(new URLSearchParams(location.search).get("tab") || "profile");
+      loadProducts();
+      loadMessages();
+      loadWallet();
     });
   </script>
 </body>

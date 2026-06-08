@@ -87,16 +87,40 @@ async function getUserFromRequest(req: Request, supabaseUrl: string, anonKey: st
   return data.user;
 }
 
-async function isAdmin(adminClient: any, userId: string) {
+async function getOperatorContext(adminClient: any, userId: string) {
   const { data, error } = await adminClient
     .from("profiles")
-    .select("role")
+    .select("id, role")
     .eq("id", userId)
     .maybeSingle();
 
-  if (error) return false;
+  if (error || !data || !["admin", "developer"].includes(data.role)) {
+    return null;
+  }
 
-  return data?.role === "admin" || data?.role === "developer";
+  if (data.role !== "developer") {
+    return { profile: data, developer: null };
+  }
+
+  const { data: developer, error: developerError } = await adminClient
+    .from("developers")
+    .select("id, profile_id")
+    .eq("profile_id", userId)
+    .maybeSingle();
+
+  if (developerError || !developer) return null;
+
+  return { profile: data, developer };
+}
+
+function canAccessAutomation(operator: any, automation: any) {
+  if (operator?.profile?.role === "admin") return true;
+  return Boolean(operator?.developer?.id && automation?.developer_id === operator.developer.id);
+}
+
+function canAccessTestRun(operator: any, testRun: any) {
+  if (operator?.profile?.role === "admin") return true;
+  return Boolean(operator?.developer?.id && testRun?.developer_id === operator.developer.id);
 }
 
 function testValueForField(field: any) {
@@ -901,10 +925,10 @@ Deno.serve(async (req) => {
       return errorResponse("Admin login required.", 401);
     }
 
-    const allowed = await isAdmin(adminClient, user.id);
+    const operator = await getOperatorContext(adminClient, user.id);
 
-    if (!allowed) {
-      return errorResponse("Admin access required.", 403);
+    if (!operator) {
+      return errorResponse("Admin or developer access required.", 403);
     }
 
     const body = await req.json().catch(() => ({}));
@@ -917,12 +941,18 @@ Deno.serve(async (req) => {
 
     if (mode === "start") {
       const automation = await loadAutomation(adminClient, automationId);
+      if (!canAccessAutomation(operator, automation)) {
+        return errorResponse("Developer can only test their own products.", 403);
+      }
       const result = await startTestRun(adminClient, automation, user.id);
       return jsonResponse(result, 200);
     }
 
     if (mode === "check" || mode === "latest") {
       const testRun = await loadTestRun(adminClient, body);
+      if (!canAccessTestRun(operator, testRun)) {
+        return errorResponse("Developer can only check tests for their own products.", 403);
+      }
       const result = await checkTestRun(adminClient, testRun);
       return jsonResponse(result, 200);
     }

@@ -58,6 +58,21 @@ function cleanSkills(value: unknown) {
     .slice(0, 20);
 }
 
+function hasDeveloperIntent(user: any, body: Record<string, unknown>) {
+  const metadata = user?.user_metadata || {};
+
+  return Boolean(
+    metadata.account_type === "developer" ||
+      cleanString(metadata.developer_display_name) ||
+      cleanString(metadata.developer_handle) ||
+      body.developer_login === true ||
+      cleanString(body.display_name) ||
+      cleanString(body.handle) ||
+      cleanString(body.short_description) ||
+      cleanString(body.type)
+  );
+}
+
 function getAuthHeader(req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
   if (!authHeader.startsWith("Bearer ")) return "";
@@ -129,11 +144,12 @@ async function loadDeveloperContext(adminClient: any, user: any) {
 
 async function ensureDeveloperProfile(adminClient: any, user: any, body: Record<string, unknown>) {
   const { profile, developer } = await loadDeveloperContext(adminClient, user);
+  const developerIntent = hasDeveloperIntent(user, body);
 
-  if (profile && profile.role !== "developer") {
+  if (profile && profile.role !== "developer" && !developer && !developerIntent) {
     return {
       data: null,
-      error: `This account is currently a ${profile.role} account, not a developer account. Use a new email for developer signup or change this profile role in Supabase first.`,
+      error: `This account is currently a ${profile.role} account, not a developer account. Sign up through the developer signup page first or use the original developer email.`,
       status: 403,
     };
   }
