@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260608-dashpolish">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260609-buyergrid">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -296,8 +296,8 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
 <script src="/assets/js/nexus-notice.js"></script>
-<script src="/assets/js/nexus-db.js?v=20260608-dashpolish"></script>
-<script src="/assets/js/nexus-app.js?v=20260608-dashpolish"></script>
+<script src="/assets/js/nexus-db.js?v=20260609-buyergrid"></script>
+<script src="/assets/js/nexus-app.js?v=20260609-buyergrid"></script>
 
   <script>
     let dashboardData = {
@@ -663,8 +663,13 @@ function orderStatusLabel(order) {
 }
 
 function developerDisplayName(record) {
-  const developer = record?.developers || {};
-  return developer.display_name || record?.developer_name || "Nexus";
+  const developer = record?.developers || record?.automations?.developers || {};
+  return developer.display_name || record?.developer_name || record?.automations?.developer_name || "Nexus";
+}
+
+function developerDisplayNameOptional(record) {
+  const developer = record?.developers || record?.automations?.developers || {};
+  return developer.display_name || record?.developer_name || record?.automations?.developer_name || "";
 }
 
 function developerAvatar(record) {
@@ -834,7 +839,7 @@ function productTitleFromAutomation(item) {
 
       renderOverview(automations, outputs, events, orders);
       renderAutomations(automations, outputs);
-      renderOutputs(outputs);
+      renderOutputs(outputs, automations);
       renderEvents(events);
       renderOrders(orders);
     }
@@ -978,169 +983,346 @@ function productTitleFromAutomation(item) {
         return;
       }
 
-      root.innerHTML = automations.map(item => {
+      const enriched = automations.map(item => {
         const product = item.automations || {};
         const order = item.orders || {};
         const developerName = developerDisplayName(item);
         const latestOutput = getLatestOutputForAutomation(outputs, item.id);
         const state = automationState(item, latestOutput);
+        const lane = automationLane(state);
+        return { item, product, order, developerName, latestOutput, state, lane };
+      });
 
-        const setupUrl = getBuyerSetupUrl(item);
-        const setupLabel = getBuyerSetupActionLabel(item);
-        const outputLink = latestOutput ? `/pages/buyer/output.html?id=${latestOutput.id}` : "";
-        const primaryButton = getAutomationActionButton(item, latestOutput, state);
-        const productTitle = productTitleFromAutomation(item);
+      const laneCounts = {
+        action: enriched.filter(row => row.lane === "action").length,
+        progress: enriched.filter(row => row.lane === "progress").length,
+        ready: enriched.filter(row => row.lane === "ready").length
+      };
 
-        return `
-          <article class="buyer-clean-card automation buyer-automation-card">
-            <div class="buyer-automation-head">
-              <div class="buyer-clean-card-main">
-                <div class="automation-icon ${escapeHtml(product.color || "")}">
-                  ${escapeHtml(product.icon || "AI")}
-                </div>
+      const sections = [
+        {
+          id: "action",
+          title: "Needs your action",
+          description: "Setup, install requests, or issues to handle first.",
+          empty: "Nothing needs your action right now."
+        },
+        {
+          id: "progress",
+          title: "In setup or running",
+          description: "Nexus or the workflow is working on these automations.",
+          empty: "No automations are currently in progress."
+        },
+        {
+          id: "ready",
+          title: "Ready and producing outputs",
+          description: "Configured automations and completed installs.",
+          empty: "No ready automations yet."
+        }
+      ];
 
-                <div>
-                  <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
-                  <h3>${escapeHtml(productTitle)}</h3>
-                  <p>${escapeHtml(product.short_description || state.description)}</p>
-                </div>
-              </div>
+      root.innerHTML = `
+        <div class="buyer-automation-command">
+          <div class="buyer-automation-summary-grid">
+            <article>
+              <span>Total automations</span>
+              <strong>${automations.length}</strong>
+              <p>Every purchased automation appears below.</p>
+            </article>
+            <article class="${laneCounts.action ? "attention" : ""}">
+              <span>Needs action</span>
+              <strong>${laneCounts.action}</strong>
+              <p>${laneCounts.action ? "Handle these first." : "Nothing urgent."}</p>
+            </article>
+            <article>
+              <span>In progress</span>
+              <strong>${laneCounts.progress}</strong>
+              <p>Setup, install, or runtime activity.</p>
+            </article>
+            <article>
+              <span>Ready</span>
+              <strong>${laneCounts.ready}</strong>
+              <p>Producing or ready to produce output.</p>
+            </article>
+          </div>
 
-              <div class="buyer-builder-chip" title="Builder">
-                <span>${escapeHtml(developerAvatar(item))}</span>
-                <div>
-                  <small>Built by</small>
-                  <strong>${escapeHtml(developerName)}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="buyer-automation-progress">
-              <div class="buyer-clean-card-status">
-                <strong>${escapeHtml(state.description)}</strong>
-
-                ${
-                  latestOutput
-                    ? `
-                      <div class="buyer-clean-latest-output">
-                        <span>Latest output</span>
-                        <b>${escapeHtml(latestOutput.title || "Automation output")}</b>
-                        <p>${escapeHtml(latestOutput.summary || "")}</p>
+          <div class="buyer-automation-lanes">
+            ${
+              sections.map(section => {
+                const rows = enriched.filter(row => row.lane === section.id);
+                return `
+                  <section class="buyer-automation-lane ${section.id}">
+                    <div class="buyer-automation-lane-head">
+                      <div>
+                        <h3>${escapeHtml(section.title)}</h3>
+                        <p>${escapeHtml(section.description)}</p>
                       </div>
-                    `
-                    : ""
-                }
+                      <strong>${rows.length}</strong>
+                    </div>
+                    <div class="buyer-automation-lane-list">
+                      ${
+                        rows.length
+                          ? rows.map(renderAutomationBoardCard).join("")
+                          : `<div class="buyer-lane-empty">${escapeHtml(section.empty)}</div>`
+                      }
+                    </div>
+                  </section>
+                `;
+              }).join("")
+            }
+          </div>
+        </div>
+      `;
+    }
 
-                ${
-                  item.last_error_message
-                    ? `
-                      <div class="buyer-error-box">
-                        <strong>Automation error</strong>
-                        <p>${escapeHtml(item.last_error_message)}</p>
-                      </div>
-                    `
-                    : ""
-                }
-              </div>
+    function automationLane(state) {
+      const label = String(state?.label || "").toLowerCase();
 
-              <div class="buyer-clean-meta-grid">
-                <div>
-                  <span>Setup</span>
-                  <strong>${escapeHtml(getSetupDisplayLabel(item))}</strong>
-                </div>
+      if (
+        label.includes("issue") ||
+        label.includes("blocked") ||
+        label.includes("needs setup") ||
+        label.includes("request needed")
+      ) {
+        return "action";
+      }
 
-                <div>
-                  <span>Runtime</span>
-                  <strong>${escapeHtml(humanizeStatus(item.runtime_status || "not_started"))}</strong>
-                </div>
+      if (
+        label.includes("running") ||
+        label.includes("setting up") ||
+        label.includes("in progress") ||
+        label.includes("requested") ||
+        label.includes("contacted")
+      ) {
+        return "progress";
+      }
 
-                <div>
-                  <span>Order</span>
-                  <strong>${escapeHtml(orderPriceLabel(order))}</strong>
-                </div>
-              </div>
+      return "ready";
+    }
+
+    function renderAutomationBoardCard(row) {
+      const { item, product, order, developerName, latestOutput, state } = row;
+      const productTitle = productTitleFromAutomation(item);
+      const setupUrl = getBuyerSetupUrl(item);
+      const setupLabel = getBuyerSetupActionLabel(item);
+      const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+      const primaryButton = getAutomationActionButton(item, latestOutput, state);
+
+      return `
+        <article class="buyer-automation-board-card">
+          <div class="buyer-automation-board-main">
+            <div class="automation-icon ${escapeHtml(product.color || "")}">
+              ${escapeHtml(product.icon || "AI")}
             </div>
-
-            <div class="buyer-clean-actions">
-              ${primaryButton}
-
-              <a class="btn btn-secondary btn-small" href="${setupUrl}">
-                ${escapeHtml(setupLabel)}
-              </a>
-
-              ${
-                latestOutput
-                  ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View output</a>`
-                  : ""
-              }
-
-              ${
-                product.id
-                  ? `
-                    <button
-                      class="btn btn-secondary btn-small"
-                      type="button"
-                      onclick="openProductReviewModal('${escapeJsString(product.id)}', '${escapeJsString(productTitle)}')"
-                    >
-                      Review product
-                    </button>
-                  `
-                  : ""
-              }
+            <div>
+              <div class="buyer-automation-title-row">
+                <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
+                <span class="buyer-builder-inline">Built by ${escapeHtml(developerName)}</span>
+              </div>
+              <h3>${escapeHtml(productTitle)}</h3>
+              <p>${escapeHtml(product.short_description || state.description)}</p>
             </div>
+          </div>
 
+          <div class="buyer-automation-board-meta">
+            <div>
+              <span>Next step</span>
+              <strong>${escapeHtml(state.primaryAction || setupLabel)}</strong>
+            </div>
+            <div>
+              <span>Setup</span>
+              <strong>${escapeHtml(getSetupDisplayLabel(item))}</strong>
+            </div>
+            <div>
+              <span>Latest output</span>
+              <strong>${escapeHtml(latestOutput ? dateLabel(latestOutput.created_at) : "Not yet")}</strong>
+            </div>
+          </div>
+
+          ${
+            latestOutput
+              ? `
+                <div class="buyer-automation-output-strip">
+                  <span>Latest result</span>
+                  <strong>${escapeHtml(latestOutput.title || "Automation output")}</strong>
+                  <p>${escapeHtml(latestOutput.summary || "Open the output to view details.")}</p>
+                </div>
+              `
+              : ""
+          }
+
+          ${
+            item.last_error_message
+              ? `
+                <div class="buyer-error-box">
+                  <strong>Automation error</strong>
+                  <p>${escapeHtml(item.last_error_message)}</p>
+                </div>
+              `
+              : ""
+          }
+
+          <div class="buyer-automation-card-actions">
+            ${primaryButton}
+            <a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>
+            ${latestOutput ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View latest output</a>` : ""}
+            ${
+              product.id
+                ? `
+                  <button
+                    class="btn btn-secondary btn-small"
+                    type="button"
+                    onclick="openProductReviewModal('${escapeJsString(product.id)}', '${escapeJsString(productTitle)}')"
+                  >
+                    Review product
+                  </button>
+                `
+                : ""
+            }
             <button
-              class="buyer-cancel-link"
+              class="buyer-cancel-link inline"
               type="button"
               data-cancel-automation-id="${item.id}"
               data-cancel-automation-name="${escapeHtml(productTitle)}"
             >
               Request cancellation
             </button>
-          </article>
-        `;
-      }).join("");
+          </div>
+        </article>
+      `;
     }
 
-    function renderOutputs(outputs) {
+    function renderOutputs(outputs, automations = []) {
       const root = document.getElementById("buyerOutputsList");
 
       if (!root) return;
 
       if (!outputs.length) {
+        const waitingAutomations = (automations || []).slice(0, 4);
         root.innerHTML = `
-          <div class="buyer-empty-clean">
-            <h3>No outputs yet</h3>
-            <p>Automation results will appear here once your workflows run.</p>
+          <div class="buyer-output-command">
+            <div class="buyer-empty-clean">
+              <h3>No outputs yet</h3>
+              <p>Automation results will appear here once your workflows run.</p>
+            </div>
+            ${
+              waitingAutomations.length
+                ? `
+                  <div class="buyer-output-awaiting">
+                    <h3>Waiting on first output</h3>
+                    ${waitingAutomations.map(item => `
+                      <article>
+                        <strong>${escapeHtml(productTitleFromAutomation(item))}</strong>
+                        <span>${escapeHtml(getSetupDisplayLabel(item))}</span>
+                      </article>
+                    `).join("")}
+                  </div>
+                `
+                : ""
+            }
           </div>
         `;
         return;
       }
 
-      root.innerHTML = outputs.slice(0, 20).map(output => {
-        const product = output.automations || {};
-        const outputLink = `/pages/buyer/output.html?id=${output.id}`;
+      const latest = outputs[0];
+      const latestContext = outputAutomationContext(latest, automations);
+      const grouped = groupOutputsByAutomation(outputs, automations);
+      const outputAutomations = Object.keys(grouped).length;
+      const awaitingCount = (automations || []).filter(item => !outputs.some(output => output.customer_automation_id === item.id)).length;
 
-        return `
-          <article class="buyer-clean-card output">
+      root.innerHTML = `
+        <div class="buyer-output-command">
+          <div class="buyer-output-hero-card">
             <div>
-              <span class="${NexusUI.pillClass(product.color || "blue")}">
-                ${escapeHtml(output.output_type || product.category || "Output")}
+              <span class="${NexusUI.pillClass(latest.automations?.color || "blue")}">
+                Newest output
               </span>
-
-              <h3>${escapeHtml(output.title || "Automation output")}</h3>
-              <p>${escapeHtml(output.summary || "View the generated result from this automation.")}</p>
-
+              <h3>${escapeHtml(latest.title || "Automation output")}</h3>
+              <p>${escapeHtml(latest.summary || "Open the latest output to view the result.")}</p>
               <div class="buyer-output-mini-meta">
-                <span>${escapeHtml(product.title || "Automation")}</span>
-                <span>${escapeHtml(dateLabel(output.created_at))}</span>
+                <span>${escapeHtml(latestContext.title)}</span>
+                <span>Built by ${escapeHtml(latestContext.developerName)}</span>
+                <span>${escapeHtml(dateLabel(latest.created_at))}</span>
               </div>
             </div>
+            <a class="btn btn-primary btn-small" href="/pages/buyer/output.html?id=${encodeURIComponent(latest.id)}">
+              Open newest output
+            </a>
+          </div>
 
-            <a class="btn btn-secondary btn-small" href="${outputLink}">View</a>
-          </article>
-        `;
-      }).join("");
+          <div class="buyer-output-stats">
+            <article><span>Total outputs</span><strong>${outputs.length}</strong></article>
+            <article><span>Automations with results</span><strong>${outputAutomations}</strong></article>
+            <article><span>Awaiting first result</span><strong>${awaitingCount}</strong></article>
+          </div>
+
+          <div class="buyer-output-library">
+            ${
+              Object.values(grouped).map(group => `
+                <section class="buyer-output-group-card">
+                  <div class="buyer-output-group-head">
+                    <div>
+                      <span>${escapeHtml(group.category || "Output")}</span>
+                      <h3>${escapeHtml(group.title)}</h3>
+                      <p>${group.items.length} ${escapeHtml(group.category || "output")}${group.items.length === 1 ? "" : "s"} from ${escapeHtml(group.title)} by ${escapeHtml(group.developerName)}.</p>
+                    </div>
+                    <a class="btn btn-secondary btn-small" href="/pages/buyer/output.html?id=${encodeURIComponent(group.items[0].id)}">
+                      View latest
+                    </a>
+                  </div>
+                  <div class="buyer-output-row-list">
+                    ${group.items.slice(0, 4).map(output => `
+                      <a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
+                        <div>
+                          <strong>${escapeHtml(output.title || "Automation output")}</strong>
+                          <small>${escapeHtml(group.category || "Output")} from ${escapeHtml(group.title)} by ${escapeHtml(group.developerName)}</small>
+                          <p>${escapeHtml(output.summary || `From ${group.title} by ${group.developerName}.`)}</p>
+                        </div>
+                        <span>${escapeHtml(dateLabel(output.created_at))}</span>
+                      </a>
+                    `).join("")}
+                  </div>
+                </section>
+              `).join("")
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    function outputAutomationContext(output, automations = []) {
+      const product = output?.automations || {};
+      const customerAutomation = (automations || []).find(item => item.id === output?.customer_automation_id) || {};
+      const title =
+        product.title ||
+        customerAutomation.name ||
+        customerAutomation.automations?.title ||
+        output?.customer_automations?.name ||
+        "Automation";
+
+      return {
+        title,
+        category: output?.output_type || product.category || customerAutomation.automations?.category || "Output",
+        developerName: developerDisplayNameOptional(customerAutomation) || developerDisplayNameOptional(output) || "Nexus"
+      };
+    }
+
+    function groupOutputsByAutomation(outputs, automations = []) {
+      return (outputs || []).reduce((groups, output) => {
+        const context = outputAutomationContext(output, automations);
+        const product = output.automations || {};
+        const key = output.customer_automation_id || output.automation_id || product.id || context.title || "output";
+        if (!groups[key]) {
+          groups[key] = {
+            title: context.title,
+            category: context.category,
+            developerName: context.developerName,
+            items: []
+          };
+        }
+        groups[key].items.push(output);
+        return groups;
+      }, {});
     }
 
     function renderEvents(events) {

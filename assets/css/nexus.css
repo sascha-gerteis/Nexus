@@ -5777,6 +5777,374 @@ body[data-page="checkout"] .site-header {
   gap: 0.55rem;
 }
 
+.buyer-automation-command,
+.buyer-output-command {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.buyer-automation-summary-grid,
+.buyer-output-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.buyer-output-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.buyer-automation-summary-grid article,
+.buyer-output-stats article {
+  padding: .75rem;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.buyer-automation-summary-grid article.attention {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.buyer-automation-summary-grid span,
+.buyer-output-stats span {
+  display: block;
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.buyer-automation-summary-grid strong,
+.buyer-output-stats strong {
+  display: block;
+  margin: .22rem 0;
+  color: var(--navy);
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 950;
+}
+
+.buyer-automation-summary-grid p {
+  color: var(--muted);
+  font-size: .84rem;
+  line-height: 1.32;
+  margin: 0;
+}
+
+.buyer-automation-lanes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .9rem;
+  align-items: start;
+}
+
+.buyer-automation-lane {
+  border: 1px solid #e5eefb;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fff, #f8fbff);
+  padding: .8rem;
+  min-width: 0;
+}
+
+.buyer-automation-lane.action {
+  border-color: #fed7aa;
+  background: linear-gradient(180deg, #fff, #fff7ed);
+}
+
+.buyer-automation-lane-head {
+  display: flex;
+  justify-content: space-between;
+  gap: .65rem;
+  align-items: flex-start;
+  margin-bottom: .65rem;
+}
+
+.buyer-automation-lane-head h3,
+.buyer-output-group-head h3,
+.buyer-output-hero-card h3 {
+  margin: 0;
+  color: var(--navy);
+  letter-spacing: -0.035em;
+}
+
+.buyer-automation-lane-head p,
+.buyer-output-group-head p,
+.buyer-output-hero-card p {
+  margin: .25rem 0 0;
+  color: var(--muted);
+  line-height: 1.38;
+}
+
+.buyer-automation-lane-head > strong {
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--blue);
+  background: #eff6ff;
+  font-size: .95rem;
+}
+
+.buyer-automation-lane-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: .55rem;
+}
+
+.buyer-lane-empty {
+  grid-column: 1 / -1;
+  padding: .7rem;
+  border: 1px dashed #bfd7f4;
+  border-radius: 16px;
+  color: var(--muted);
+  background: #fff;
+  font-weight: 800;
+  font-size: .88rem;
+}
+
+.buyer-automation-board-card {
+  display: grid;
+  gap: .6rem;
+  padding: .72rem;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.buyer-automation-board-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .6rem;
+  align-items: flex-start;
+}
+
+.buyer-automation-board-card .automation-icon {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  border-radius: 14px;
+  font-size: .82rem;
+}
+
+.buyer-automation-title-row {
+  display: flex;
+  gap: .45rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.buyer-builder-inline {
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 900;
+}
+
+.buyer-automation-board-card h3 {
+  margin: .3rem 0 .18rem;
+  color: var(--navy);
+  font-size: 1.08rem;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.buyer-automation-board-card p {
+  color: var(--muted);
+  line-height: 1.35;
+  margin: 0;
+  font-size: .88rem;
+}
+
+.buyer-automation-board-main p,
+.buyer-automation-output-strip p,
+.buyer-output-group-head p,
+.buyer-output-hero-card p,
+.buyer-output-row p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.buyer-automation-board-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .38rem;
+}
+
+.buyer-automation-board-meta div {
+  padding: .5rem;
+  border: 1px solid #edf2f7;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.buyer-automation-board-meta span,
+.buyer-automation-output-strip span {
+  display: block;
+  color: #64748b;
+  font-size: .66rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.buyer-automation-board-meta strong,
+.buyer-automation-output-strip strong {
+  display: block;
+  color: var(--navy);
+  margin-top: .2rem;
+  font-size: .82rem;
+  line-height: 1.2;
+}
+
+.buyer-automation-output-strip {
+  padding: .6rem;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: #f8fbff;
+}
+
+.buyer-automation-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  align-items: center;
+}
+
+.buyer-automation-card-actions .btn,
+.buyer-automation-card-actions .buyer-cancel-link.inline {
+  padding: .5rem .68rem;
+  font-size: .78rem;
+  min-height: 36px;
+}
+
+.buyer-cancel-link.inline {
+  margin-left: 0;
+}
+
+.buyer-output-hero-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .85rem;
+  align-items: center;
+  padding: .85rem;
+  border: 1px solid #dbeafe;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(0, 194, 255, .12), transparent 34%),
+    linear-gradient(135deg, #ffffff, #f3f8ff);
+}
+
+.buyer-output-library {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.buyer-output-group-card,
+.buyer-output-awaiting {
+  padding: .8rem;
+  border: 1px solid #e5eefb;
+  border-radius: 20px;
+  background: #fff;
+}
+
+.buyer-output-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: .65rem;
+  margin-bottom: .65rem;
+}
+
+.buyer-output-group-head span {
+  color: #64748b;
+  font-size: .75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.buyer-output-row-list {
+  display: grid;
+  gap: .42rem;
+}
+
+.buyer-output-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .55rem;
+  align-items: center;
+  padding: .58rem;
+  border: 1px solid #edf2f7;
+  border-radius: 14px;
+  color: inherit;
+  background: #f8fbff;
+}
+
+.buyer-output-row:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.buyer-output-row strong {
+  display: block;
+  color: var(--navy);
+}
+
+.buyer-output-row small {
+  display: block;
+  margin-top: .15rem;
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.buyer-output-row p {
+  margin: .18rem 0 0;
+  color: var(--muted);
+  line-height: 1.32;
+  font-size: .86rem;
+}
+
+.buyer-output-row > span {
+  color: #64748b;
+  font-size: .78rem;
+  font-weight: 850;
+  text-align: right;
+}
+
+.buyer-output-awaiting {
+  display: grid;
+  gap: .65rem;
+}
+
+.buyer-output-awaiting h3 {
+  margin: 0;
+  color: var(--navy);
+}
+
+.buyer-output-awaiting article {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .75rem;
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.buyer-output-awaiting strong {
+  color: var(--navy);
+}
+
+.buyer-output-awaiting span {
+  color: var(--muted);
+  font-weight: 850;
+}
+
 .buyer-error-box {
   margin-top: 0.75rem;
   border: 1px solid #fecaca;
@@ -5869,6 +6237,12 @@ body[data-page="checkout"] .site-header {
   color: var(--muted);
 }
 
+@media (max-width: 1180px) {
+  .buyer-output-library {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .buyer-dashboard-quick-status,
   .buyer-overview-two-col,
@@ -5886,8 +6260,16 @@ body[data-page="checkout"] .site-header {
 
   .buyer-clean-card.output,
   .buyer-clean-card.order,
-  .buyer-automation-progress {
+  .buyer-automation-progress,
+  .buyer-automation-lane-list,
+  .buyer-output-hero-card,
+  .buyer-output-library {
     grid-template-columns: 1fr;
+  }
+
+  .buyer-automation-summary-grid,
+  .buyer-output-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .buyer-order-status-side {
@@ -5901,18 +6283,35 @@ body[data-page="checkout"] .site-header {
   }
 
   .buyer-overview-strip,
-  .buyer-clean-meta-grid {
+  .buyer-clean-meta-grid,
+  .buyer-automation-summary-grid,
+  .buyer-output-stats,
+  .buyer-automation-board-meta {
     grid-template-columns: 1fr;
   }
 
   .buyer-clean-card-main,
   .buyer-focus-title-row,
-  .buyer-automation-head {
+  .buyer-automation-head,
+  .buyer-automation-board-main,
+  .buyer-output-group-head,
+  .buyer-output-row,
+  .buyer-output-awaiting article {
     display: grid;
   }
 
   .buyer-builder-chip {
     max-width: 100%;
+  }
+
+  .buyer-output-row > span {
+    text-align: left;
+  }
+
+  .buyer-automation-card-actions,
+  .buyer-output-hero-card .btn {
+    display: grid;
+    width: 100%;
   }
 
   .buyer-tab {
