@@ -12,7 +12,7 @@
     rel="stylesheet"
   >
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260608-devfix">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260610-credentials5">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -39,6 +39,7 @@
   <a href="/pages/admin/automations.html">Products</a>
   <a href="/pages/admin/product-reviews.html">Review Queue</a>
   <a href="/pages/admin/product-form.html">Create Product</a>
+  <a href="/pages/admin/credentials.html">Credentials</a>
   <a href="/pages/admin/customer-automations.html">Cancellation Requests</a>
   <a href="/pages/admin/messages.html">Inquiries</a>
   <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
@@ -62,6 +63,7 @@
 
         <div class="admin-launch-actions">
           <a class="btn btn-primary" href="/pages/admin/product-reviews.html">Review products</a>
+          <a class="btn btn-secondary" href="/pages/admin/credentials.html">Manage credentials</a>
           <a class="btn btn-secondary" href="/pages/admin/messages.html">Open messages</a>
           <a class="btn btn-secondary" href="/pages/marketplace/index.html">View marketplace</a>
         </div>
@@ -170,13 +172,22 @@
             <strong>03</strong>
           </a>
 
+          <a class="admin-action-card priority" href="/pages/admin/credentials.html">
+            <div>
+              <span class="pill red">Credentials</span>
+              <h3>Credential checks</h3>
+              <p>See which credentials each workflow uses, replace keys, and run the latest n8n check.</p>
+            </div>
+            <strong>04</strong>
+          </a>
+
           <a class="admin-action-card" href="/pages/admin/messages.html">
             <div>
               <span class="pill green">Inbox</span>
               <h3>Messages and inquiries</h3>
               <p>Handle contact forms, custom requests, buyer messages, and developer conversations.</p>
             </div>
-            <strong>04</strong>
+            <strong>05</strong>
           </a>
         </div>
       </section>
@@ -203,6 +214,13 @@
             <h3>Revenue overview</h3>
             <p>Review Nexus revenue, developer earnings, and transfer status when payments are enabled.</p>
             <div class="admin-control-stats"><span>Mode</span><strong>MVP</strong></div>
+          </a>
+
+          <a class="admin-control-card" href="/pages/admin/credentials.html">
+            <span class="pill orange">Runtime keys</span>
+            <h3>Credential vault</h3>
+            <p>Manage Nexus and developer-owned keys used by hosted workflow runs.</p>
+            <div class="admin-control-stats"><span>Gate</span><strong>Required</strong></div>
           </a>
 
           <a class="admin-control-card" href="/pages/admin/waitlist.html">
@@ -245,7 +263,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
-  <script src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
-  <script src="/assets/js/nexus-app.js?v=20260608-devfix"></script>
+  <script src="/assets/js/nexus-db.js?v=20260610-credentials5"></script>
+  <script src="/assets/js/nexus-app.js?v=20260610-credentials5"></script>
 </body>
 </html>

@@ -35,6 +35,10 @@ function pickFirstString(...values: unknown[]) {
   return "";
 }
 
+function isTechnicalTestCustomerAutomationId(value: string) {
+  return /^TEST_ADMIN_RUN_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 function getNestedValue(obj: any, path: string) {
   const parts = path.split(".");
   let current = obj;
@@ -456,6 +460,18 @@ Deno.serve(async (req) => {
     }
 
     const status = cleanString(body.status || "success").toLowerCase();
+
+    if (isTechnicalTestCustomerAutomationId(customerAutomationId)) {
+      return jsonResponse({
+        ok: true,
+        status: "technical_test_callback_received",
+        message:
+          "Nexus technical test callback received. No real customer automation or output was created.",
+        test_mode: true,
+        customer_automation_id: customerAutomationId,
+        output_status: status,
+      });
+    }
 
     const { data: customerAutomation, error: automationError } = await adminClient
       .from("customer_automations")

@@ -256,16 +256,20 @@ function getExecutionStatus(execution: any) {
   const status = cleanString(execution?.status).toLowerCase();
   if (status) return status;
 
+  if (execution?.data?.resultData?.error || execution?.resultData?.error || execution?.error) {
+    return "error";
+  }
+
   if (execution?.finished === true && execution?.stoppedAt && !execution?.data?.resultData?.error) {
     return "success";
   }
 
-  if (execution?.finished === false || !execution?.stoppedAt) {
-    return "running";
+  if (execution?.finished === false && execution?.stoppedAt) {
+    return "error";
   }
 
-  if (execution?.data?.resultData?.error || execution?.error) {
-    return "error";
+  if (execution?.finished === false || !execution?.stoppedAt) {
+    return "running";
   }
 
   return "unknown";

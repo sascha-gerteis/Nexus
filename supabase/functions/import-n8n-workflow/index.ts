@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { bindAutomationCredentials } from "../_shared/nexus-credentials.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -47,6 +48,11 @@ function normalizeJsonArray(value: unknown) {
 
 function escapeRegExp(value: string) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isCredentialSchemaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /developer_credentials|automation_credential_requirements|credential_binding|schema cache|relation .* does not exist|could not find .* column/i.test(message);
 }
 
 /* =========================================================
@@ -1912,6 +1918,7 @@ Deno.serve(async (req) => {
         has_n8n_base_url: Boolean(env("N8N_BASE_URL")),
         has_n8n_api_key: Boolean(env("N8N_API_KEY")),
         has_runtime_secret: Boolean(env("NEXUS_RUNTIME_SECRET")),
+        has_credential_secret: Boolean(env("NEXUS_CREDENTIAL_SECRET")),
       },
     });
   }
@@ -1988,6 +1995,40 @@ Deno.serve(async (req) => {
     );
 
     const productForImport = autoSchema.product;
+
+    const credentialBinding = await bindAutomationCredentials({
+      adminClient,
+      product: productForImport,
+      n8nBaseUrl,
+      n8nApiKey,
+      credentialSecret: env("NEXUS_CREDENTIAL_SECRET"),
+      syncMissingN8nCredentials: true,
+    });
+
+    if (!credentialBinding.ok) {
+      await adminClient
+        .from("automations")
+        .update({
+          setup_schema: productForImport.setup_schema,
+          credential_schema: productForImport.credential_schema,
+          n8n_import_status: "failed",
+          n8n_import_error: "Developer credentials required before this workflow can be imported.",
+          n8n_last_import_result: {
+            errors: credentialBinding.errors,
+            credential_slots: credentialBinding.slots,
+            credential_bindings: credentialBinding.bindings,
+          },
+        })
+        .eq("id", automationId);
+
+      return errorResponse("Developer credentials required before this workflow can be imported.", 400, {
+        errors: credentialBinding.errors,
+        credential_slots: credentialBinding.slots,
+        credential_bindings: credentialBinding.bindings,
+      });
+    }
+
+    productForImport.n8n_workflow_json = credentialBinding.workflow;
 
     const mappingValidation = validateWorkflowPlaceholderMappings(
       productForImport,
@@ -2094,10 +2135,17 @@ Deno.serve(async (req) => {
         detected_placeholders: validation.detected,
         placeholder_validation_status: "valid",
         placeholder_validation_errors: [],
+        developer_credential_requirements: credentialBinding.slots,
+        n8n_credential_bindings: credentialBinding.bindings,
+        credential_binding_status: credentialBinding.status,
+        credential_binding_errors: credentialBinding.errors,
+        n8n_last_credential_bound_at: new Date().toISOString(),
         n8n_last_import_result: {
           workflow_id: workflowId,
           webhook_url: normalized.webhookUrl,
           callback_url: normalized.callbackUrl,
+          credential_binding_status: credentialBinding.status,
+          credential_bindings: credentialBinding.bindings,
           custom_mapping_warnings: [
             ...autoSchema.warnings,
             ...mappingValidation.warnings,
@@ -2122,6 +2170,8 @@ Deno.serve(async (req) => {
       workflow_id: workflowId,
       webhook_url: normalized.webhookUrl,
       callback_url: normalized.callbackUrl,
+      credential_binding_status: credentialBinding.status,
+      credential_bindings: credentialBinding.bindings,
       custom_mapping_warnings: [
         ...autoSchema.warnings,
         ...mappingValidation.warnings,
@@ -2132,6 +2182,13 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error(error);
+
+    if (isCredentialSchemaError(error)) {
+      return errorResponse(
+        `${error instanceof Error ? error.message : "Credential vault schema is missing."} Run supabase/developer_credentials_install_or_patch.sql in the Supabase SQL editor, then redeploy developer-credentials and import-n8n-workflow.`,
+        500,
+      );
+    }
 
     return errorResponse(
       error instanceof Error ? error.message : "Could not import n8n workflow.",

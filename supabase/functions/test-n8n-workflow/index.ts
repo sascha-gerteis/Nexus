@@ -54,6 +54,22 @@ function pickFirstString(...values: unknown[]) {
   return "";
 }
 
+function usefulString(value: unknown) {
+  const cleaned = cleanString(value);
+  if (!cleaned) return "";
+  if (cleaned === "{}" || cleaned === "[]" || cleaned === "[object Object]") return "";
+  return cleaned;
+}
+
+function pickFirstUsefulString(...values: unknown[]) {
+  for (const value of values) {
+    const cleaned = usefulString(value);
+    if (cleaned) return cleaned;
+  }
+
+  return "";
+}
+
 function isTerminalStatus(status: string) {
   const safe = cleanString(status).toLowerCase();
   return [
@@ -288,7 +304,7 @@ async function n8nFetch(path: string, options: RequestInit = {}) {
 
 async function getExecutionById(executionId: string) {
   if (!executionId) return null;
-  return await n8nFetch(`/api/v1/executions/${encodeURIComponent(executionId)}`);
+  return await n8nFetch(`/api/v1/executions/${encodeURIComponent(executionId)}?includeData=true`);
 }
 
 async function listRecentExecutions(workflowId: string) {
@@ -319,36 +335,136 @@ function executionIdOf(execution: any) {
   return cleanString(execution?.id || execution?.executionId || execution?.execution_id);
 }
 
+function resultDataOf(execution: any) {
+  return asObject(
+    execution?.data?.resultData ||
+      execution?.data?.executionData?.resultData ||
+      execution?.resultData,
+  );
+}
+
+function errorMessageFromObject(error: any) {
+  const safe = asObject(error);
+  const cause = asObject(safe.cause);
+  const context = asObject(safe.context);
+
+  return pickFirstUsefulString(
+    safe.message,
+    safe.description,
+    safe.errorMessage,
+    safe.reason,
+    cause.message,
+    cause.description,
+    context.message,
+    context.description,
+    typeof error === "string" ? error : "",
+    stringifySafe(error),
+  );
+}
+
+function extractKnownN8nErrorText(value: unknown) {
+  const raw = stringifySafe(value)
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, "\n");
+
+  const patterns = [
+    /Credential with ID\s+"[^"]+"\s+does not exist for type\s+"[^"]+"/i,
+    /Authorization failed\s+-\s+please check your credentials[^"\n\r]*(?:Missing authorization header)?/i,
+    /Missing authorization header/i,
+    /UNAUTHORIZED_NO_AUTH_HEADER/i,
+    /NodeOperationError:\s*([^\n\r]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    const message = usefulString(match?.[1] || match?.[0]);
+    if (message) return message;
+  }
+
+  return "";
+}
+
+function extractRunDataError(resultData: Record<string, unknown>) {
+  const runData = asObject(resultData.runData);
+
+  for (const [nodeName, entries] of Object.entries(runData)) {
+    const nodeExecutions = Array.isArray(entries) ? entries : [entries];
+
+    for (const entry of nodeExecutions) {
+      const safeEntry = asObject(entry);
+      const error = safeEntry.error;
+      const message = errorMessageFromObject(error);
+
+      if (message) {
+        const safeError = asObject(error);
+        const node = asObject(safeError.node);
+
+        return {
+          message,
+          node: pickFirstUsefulString(node.name, safeError.nodeName, nodeName),
+          node_type: pickFirstUsefulString(node.type, safeError.nodeType, safeEntry.nodeType),
+          raw_error: error || {},
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function formatExecutionErrorMessage(message: string, nodeName: string, nodeType: string) {
+  if (!message) return "";
+
+  const parts = [message];
+  const nodeParts = [nodeName, nodeType].filter(Boolean).join(" / ");
+
+  if (nodeParts) {
+    parts.push(`Node: ${nodeParts}`);
+  }
+
+  return parts.join(" ");
+}
+
 function extractExecutionError(execution: any) {
+  const resultData = resultDataOf(execution);
   const error =
-    execution?.data?.resultData?.error ||
-    execution?.data?.executionData?.resultData?.error ||
-    execution?.resultData?.error ||
+    resultData.error ||
     execution?.error ||
     execution?.data?.error ||
     null;
 
-  const lastNodeExecuted = pickFirstString(
-    execution?.data?.resultData?.lastNodeExecuted,
-    execution?.data?.executionData?.resultData?.lastNodeExecuted,
+  const runDataError = extractRunDataError(resultData);
+  const status = cleanString(execution?.status).toLowerCase();
+  const shouldScanRawErrorText = Boolean(error || runDataError || ["error", "failed", "crashed"].includes(status));
+
+  const node = asObject(asObject(error).node);
+  const lastNodeExecuted = pickFirstUsefulString(
+    resultData.lastNodeExecuted,
     execution?.lastNodeExecuted,
-    error?.node?.name,
-    error?.nodeName,
+    node.name,
+    asObject(error).nodeName,
+    runDataError?.node,
   );
 
-  const message = pickFirstString(
-    error?.message,
-    error?.description,
-    error?.errorMessage,
-    error?.cause?.message,
-    execution?.error?.message,
-    stringifySafe(error),
+  const nodeType = pickFirstUsefulString(
+    node.type,
+    asObject(error).nodeType,
+    runDataError?.node_type,
+  );
+
+  const message = pickFirstUsefulString(
+    errorMessageFromObject(error),
+    runDataError?.message,
+    shouldScanRawErrorText ? extractKnownN8nErrorText(resultData) : "",
+    shouldScanRawErrorText ? extractKnownN8nErrorText(execution) : "",
   );
 
   return {
     message,
+    display_message: formatExecutionErrorMessage(message, lastNodeExecuted, nodeType),
     node: lastNodeExecuted,
-    raw_error: error || {},
+    node_type: nodeType,
+    raw_error: error || runDataError?.raw_error || {},
   };
 }
 
@@ -356,7 +472,7 @@ function hasExecutionError(execution: any) {
   const extracted = extractExecutionError(execution);
   const status = cleanString(execution?.status).toLowerCase();
 
-  return Boolean(extracted.message && extracted.message !== "{}") ||
+  return Boolean(extracted.message || extracted.display_message) ||
     status === "error" ||
     status === "failed" ||
     status === "crashed";
@@ -370,9 +486,10 @@ function executionStatusOf(execution: any) {
       execution?.data?.status,
   ).toLowerCase();
 
-  if (status === "true") return "success";
-  if (status === "false") return "running";
   if (hasExecutionError(execution)) return "error";
+  if (status === "true") return "success";
+  if (status === "false" && execution?.stoppedAt) return "error";
+  if (status === "false") return "running";
   if (execution?.stoppedAt && !hasExecutionError(execution)) return "success";
 
   return status || "unknown";
@@ -381,7 +498,8 @@ function executionStatusOf(execution: any) {
 function classifyExecution(execution: any) {
   const status = executionStatusOf(execution);
   const extractedError = extractExecutionError(execution);
-  const message = extractedError.message || "";
+  const rawMessage = extractedError.message || "";
+  const message = extractedError.display_message || rawMessage || "";
   const lower = message.toLowerCase();
 
   /*
@@ -394,6 +512,19 @@ function classifyExecution(execution: any) {
     lower.includes("customer_automation") ||
     lower.includes("runtime-submit-output");
 
+  if (lower.includes("missing authorization header") || lower.includes("unauthorized_no_auth_header")) {
+    return {
+      ok: false,
+      status: "failed",
+      message:
+        "Nexus output callback was blocked by Supabase before runtime-submit-output could run. Deploy runtime-submit-output with verify_jwt=false.",
+      error_node: extractedError.node || "Nexus Submit Output",
+      error_node_type: extractedError.node_type,
+      error_message: rawMessage || message || "Missing authorization header.",
+      raw_error: extractedError.raw_error,
+    };
+  }
+
   if (reachedNexusCallback) {
     return {
       ok: true,
@@ -401,7 +532,8 @@ function classifyExecution(execution: any) {
       message:
         "Workflow reached the Nexus output callback. The callback rejected the fake test customer automation ID, which is expected in a technical test.",
       error_node: extractedError.node,
-      error_message: message,
+      error_node_type: extractedError.node_type,
+      error_message: rawMessage || message,
       raw_error: extractedError.raw_error,
     };
   }
@@ -412,6 +544,7 @@ function classifyExecution(execution: any) {
       status: "failed",
       message: message || "n8n execution failed.",
       error_node: extractedError.node,
+      error_node_type: extractedError.node_type,
       error_message: message || "n8n execution failed.",
       raw_error: extractedError.raw_error,
     };
@@ -566,12 +699,18 @@ async function findExecutionForTestRun(testRun: any) {
 }
 
 async function updateAutomationTestResult(adminClient: any, automationId: string, result: any) {
+  const storedResult = {
+    ...result,
+    raw_execution: undefined,
+    webhook_response: undefined,
+  };
+
   const { error } = await adminClient
     .from("automations")
     .update({
       n8n_last_test_status: result.status,
       n8n_last_test_error: result.ok ? null : result.error_message || result.message,
-      n8n_last_test_result: result,
+      n8n_last_test_result: storedResult,
       n8n_last_tested_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -594,7 +733,26 @@ async function updateTestRun(adminClient: any, testRunId: string, updates: Recor
     .single();
 
   if (error) {
-    throw new Error(`Could not update automation test run: ${error.message}`);
+    /*
+      Older MVP databases may have an automation_test_runs table that is missing
+      newer audit columns or stricter status constraints. Do not let that break
+      the dashboard poll after n8n already finished. Return a synthetic merged row
+      so the caller can still update automations.n8n_last_test_status and respond.
+    */
+    console.warn("Could not update automation test run:", error.message);
+
+    const { data: existing } = await adminClient
+      .from("automation_test_runs")
+      .select("*")
+      .eq("id", testRunId)
+      .maybeSingle();
+
+    return {
+      ...(existing || { id: testRunId }),
+      ...updates,
+      updated_at: new Date().toISOString(),
+      _update_warning: error.message,
+    };
   }
 
   return data;
@@ -669,9 +827,10 @@ function publicRunPayload(testRun: any, extra: Record<string, unknown> = {}) {
   };
 }
 
-async function startTestRun(adminClient: any, automation: any, userId: string) {
+async function startTestRun(adminClient: any, automation: any, userId: string, options: Record<string, unknown> = {}) {
   const workflowId = cleanString(automation.n8n_workflow_id);
   const webhookUrl = pickFirstString(automation.runtime_webhook_url, automation.n8n_webhook_url);
+  const forceNew = Boolean(options.force_new || options.forceNew);
 
   if (!workflowId) {
     throw new Error("This automation has no n8n_workflow_id. Import the workflow first.");
@@ -681,24 +840,26 @@ async function startTestRun(adminClient: any, automation: any, userId: string) {
     throw new Error("This automation has no runtime webhook URL. Import the workflow first.");
   }
 
-  /*
-    If a test is already running, return it instead of starting another.
-    This is what prevents reruns after tab close/reopen.
-  */
-  const { data: existingRunning } = await adminClient
-    .from("automation_test_runs")
-    .select("*")
-    .eq("automation_id", automation.id)
-    .eq("status", "running")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  if (!forceNew) {
+    /*
+      If a test is already running, return it instead of starting another.
+      Credential updates pass force_new so every key change gets its own run.
+    */
+    const { data: existingRunning } = await adminClient
+      .from("automation_test_runs")
+      .select("*")
+      .eq("automation_id", automation.id)
+      .eq("status", "running")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (existingRunning) {
-    return publicRunPayload(existingRunning, {
-      reused_existing_run: true,
-      message: "A technical test is already running. Nexus resumed the existing run instead of starting a new one.",
-    });
+    if (existingRunning) {
+      return publicRunPayload(existingRunning, {
+        reused_existing_run: true,
+        message: "A technical test is already running. Nexus resumed the existing run instead of starting a new one.",
+      });
+    }
   }
 
   const now = new Date().toISOString();
@@ -876,6 +1037,7 @@ async function checkTestRun(adminClient: any, testRun: any) {
     status: classified.status,
     message: classified.message,
     error_node: classified.error_node,
+    error_node_type: classified.error_node_type,
     error_message: classified.error_message,
   });
 
@@ -944,7 +1106,7 @@ Deno.serve(async (req) => {
       if (!canAccessAutomation(operator, automation)) {
         return errorResponse("Developer can only test their own products.", 403);
       }
-      const result = await startTestRun(adminClient, automation, user.id);
+      const result = await startTestRun(adminClient, automation, user.id, body);
       return jsonResponse(result, 200);
     }
 

@@ -10251,7 +10251,7 @@ body[data-page="developer-dashboard"] {
 
 .developer-overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: .85rem;
   margin: 1rem 0;
 }
@@ -10292,6 +10292,16 @@ body[data-page="developer-dashboard"] {
   margin: 0;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.developer-console-stat-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.developer-console-stat-action .btn {
+  margin-top: auto;
 }
 
 .developer-panel[hidden] {
@@ -10874,6 +10884,542 @@ body.developer-modal-open::before {
   line-height: 1.55;
 }
 
+.credential-console-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, .42fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.credential-panel {
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1.1rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.credential-panel h3 {
+  margin: 0 0 .35rem;
+  color: var(--ink);
+}
+
+.credential-panel p {
+  color: var(--muted);
+  margin: 0 0 .9rem;
+}
+
+.credential-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.credential-form-grid .full {
+  grid-column: 1 / -1;
+}
+
+.credential-list {
+  display: grid;
+  gap: .8rem;
+}
+
+.credential-workflow-panel {
+  display: grid;
+  gap: .9rem;
+}
+
+.credential-workflow-list {
+  display: grid;
+  gap: .75rem;
+}
+
+.credential-workflow-card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, .24fr);
+  gap: .9rem;
+  align-items: stretch;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: .95rem;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .045);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.credential-workflow-card:hover,
+.credential-workflow-card.active {
+  border-color: rgba(37, 99, 255, .45);
+  box-shadow: 0 14px 34px rgba(37, 99, 255, .1);
+  transform: translateY(-1px);
+}
+
+.credential-workflow-card.active {
+  background: linear-gradient(180deg, #f8fbff, #fff);
+}
+
+.credential-workflow-main {
+  min-width: 0;
+}
+
+.credential-workflow-main strong {
+  display: block;
+  margin: .45rem 0 .25rem;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.credential-workflow-main p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.workflow-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: .32rem .6rem;
+  font-size: .78rem;
+  font-weight: 950;
+}
+
+.workflow-status.success {
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+}
+
+.workflow-status.warning {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.workflow-status.danger {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.credential-workflow-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-top: .65rem;
+}
+
+.credential-workflow-meta span {
+  border: 1px solid var(--line);
+  background: #f8fbff;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: .28rem .5rem;
+  font-size: .76rem;
+  font-weight: 850;
+}
+
+.credential-workflow-run {
+  border-left: 1px solid rgba(15, 23, 42, .08);
+  padding-left: .85rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: .25rem;
+}
+
+.credential-workflow-run small {
+  color: var(--muted);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.credential-workflow-run strong {
+  color: var(--ink);
+  font-size: .95rem;
+}
+
+.credential-workflow-run span {
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.35;
+}
+
+.credential-selected-tools {
+  display: grid;
+  gap: .65rem;
+  border: 1px solid var(--line);
+  background: #f8fbff;
+  border-radius: 8px;
+  padding: .75rem;
+}
+
+.credential-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .75rem;
+  align-items: start;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: .85rem;
+}
+
+.credential-card strong {
+  display: block;
+  color: var(--ink);
+  line-height: 1.35;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.credential-card p {
+  color: var(--muted);
+  margin: .3rem 0 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.credential-usage-line {
+  margin-top: .75rem;
+  padding-top: .7rem;
+  border-top: 1px solid rgba(15, 23, 42, .08);
+  color: var(--muted);
+  font-size: .86rem;
+  font-weight: 750;
+}
+
+.credential-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-top: .55rem;
+}
+
+.credential-meta span,
+.credential-slot-list span {
+  border: 1px solid var(--line);
+  background: var(--soft);
+  border-radius: 999px;
+  padding: .28rem .55rem;
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 800;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.credential-slot-list {
+  display: grid;
+  gap: .65rem;
+}
+
+.credential-scan-summary {
+  border: 1px solid var(--line);
+  background: #f8fbff;
+  border-radius: 8px;
+  padding: .85rem;
+  color: var(--muted);
+  font-weight: 750;
+  margin-bottom: .75rem;
+}
+
+.credential-gate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .85rem;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .9rem;
+  margin-bottom: .75rem;
+  background: #f8fbff;
+}
+
+.credential-gate strong {
+  display: block;
+  color: var(--ink);
+  font-size: 1.02rem;
+}
+
+.credential-gate p {
+  margin: .3rem 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.credential-gate.success {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.credential-gate.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.credential-gate.danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.credential-gate.danger strong {
+  color: #991b1b;
+}
+
+.credential-gate.success strong {
+  color: #047857;
+}
+
+.credential-gate.warning strong {
+  color: #92400e;
+}
+
+.credential-gate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .45rem;
+}
+
+.credential-gate-meta span {
+  border: 1px solid rgba(15, 23, 42, .1);
+  background: rgba(255, 255, 255, .72);
+  border-radius: 999px;
+  padding: .32rem .58rem;
+  color: var(--ink);
+  font-size: .78rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.flow-credential-map {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: .95rem;
+  margin-bottom: .85rem;
+}
+
+.flow-credential-map-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .85rem;
+  align-items: start;
+  margin-bottom: .85rem;
+}
+
+.flow-credential-map-head span:first-child {
+  display: block;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.flow-credential-map-head h4,
+.flow-credential-map-title {
+  margin: .15rem 0 0;
+  color: var(--ink);
+}
+
+.flow-credential-map-head p {
+  margin: .25rem 0 0;
+  color: var(--muted);
+}
+
+.flow-run-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .7rem;
+  margin-bottom: .9rem;
+}
+
+.flow-run-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: .75rem;
+}
+
+.flow-run-grid strong {
+  display: block;
+  color: var(--ink);
+  font-size: .86rem;
+}
+
+.flow-run-grid p {
+  margin: .25rem 0;
+  color: var(--ink);
+  font-weight: 850;
+  word-break: break-word;
+}
+
+.flow-run-grid small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.flow-credential-map-title {
+  font-size: .98rem;
+  margin-bottom: .65rem;
+}
+
+.flow-credential-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: .65rem;
+}
+
+.flow-credential-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: .8rem;
+}
+
+.flow-credential-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: .65rem;
+}
+
+.flow-credential-card strong {
+  color: var(--ink);
+}
+
+.flow-credential-card p {
+  color: var(--muted);
+  margin: .25rem 0 0;
+}
+
+.flow-credential-card dl {
+  margin: .65rem 0 0;
+  display: grid;
+  gap: .45rem;
+}
+
+.flow-credential-card dl div {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: .5rem;
+}
+
+.flow-credential-card dt {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.flow-credential-card dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 800;
+  word-break: break-word;
+}
+
+.flow-credential-nodes {
+  border-top: 1px solid rgba(15, 23, 42, .08);
+  padding-top: .55rem;
+  margin-top: .65rem !important;
+  font-size: .84rem;
+}
+
+.credential-scan-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.credential-scan-group + .credential-scan-group {
+  margin-top: .8rem;
+}
+
+.credential-scan-group-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .85rem;
+  align-items: start;
+  padding: .9rem;
+  background: linear-gradient(180deg, #f8fbff, #fff);
+  border-bottom: 1px solid var(--line);
+}
+
+.credential-scan-group-head h4 {
+  margin: 0;
+  color: var(--ink);
+}
+
+.credential-scan-group-head p {
+  margin: .25rem 0 0;
+  color: var(--muted);
+}
+
+.credential-node-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: .65rem;
+  padding: .8rem;
+}
+
+.credential-slot {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .85rem;
+  background: #fff;
+}
+
+.credential-scan-group .credential-slot {
+  box-shadow: none;
+}
+
+.credential-slot strong {
+  color: var(--ink);
+}
+
+.credential-slot p {
+  margin: .3rem 0 .55rem;
+}
+
+.credential-node-detail {
+  color: var(--muted);
+  font-size: .86rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.credential-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .7rem;
+  align-items: center;
+}
+
+.credential-card .credential-action-row {
+  justify-content: flex-start;
+}
+
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  color: var(--muted);
+  font-weight: 850;
+  font-size: .9rem;
+}
+
+.checkbox-inline input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--blue);
+}
+
 .code-textarea {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: .86rem;
@@ -10906,7 +11452,32 @@ body.developer-modal-open::before {
   }
 
   .developer-product-workspace,
-  .developer-wallet-layout {
+  .developer-wallet-layout,
+  .credential-console-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .credential-workflow-card {
+    grid-template-columns: 1fr;
+  }
+
+  .credential-workflow-run {
+    border-left: 0;
+    border-top: 1px solid rgba(15, 23, 42, .08);
+    padding-left: 0;
+    padding-top: .75rem;
+  }
+
+  .credential-gate {
+    grid-template-columns: 1fr;
+  }
+
+  .credential-gate-meta {
+    justify-content: flex-start;
+  }
+
+  .flow-credential-map-head,
+  .flow-run-grid {
     grid-template-columns: 1fr;
   }
 
@@ -10928,7 +11499,8 @@ body.developer-modal-open::before {
   }
 
   .developer-overview-grid,
-  .developer-wallet-section-grid {
+  .developer-wallet-section-grid,
+  .credential-form-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -10960,7 +11532,8 @@ body.developer-modal-open::before {
 
   .developer-overview-grid,
   .developer-field-grid,
-  .developer-wallet-section-grid {
+  .developer-wallet-section-grid,
+  .credential-form-grid {
     grid-template-columns: 1fr;
   }
 
@@ -10974,6 +11547,22 @@ body.developer-modal-open::before {
 
   .developer-product-row {
     grid-template-columns: 1fr;
+  }
+
+  .credential-card {
+    grid-template-columns: 1fr;
+  }
+
+  .credential-card .credential-action-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .45rem;
+  }
+
+  .credential-card .credential-action-row .btn {
+    width: 100%;
+    padding-left: .55rem;
+    padding-right: .55rem;
   }
 
   .developer-product-actions,

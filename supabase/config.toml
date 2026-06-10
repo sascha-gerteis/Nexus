@@ -15,3 +15,9 @@ verify_jwt = false
 
 [functions.developer-stripe-account]
 verify_jwt = false
+
+[functions.developer-credentials]
+verify_jwt = false
+
+[functions.runtime-submit-output]
+verify_jwt = false

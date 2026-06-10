@@ -1227,6 +1227,66 @@ async function removeDeveloperProduct(id) {
   });
 }
 
+async function callDeveloperCredentials(payload = {}) {
+  return callNexusFunction("developer-credentials", payload);
+}
+
+async function listDeveloperCredentials(payload = {}) {
+  return callDeveloperCredentials({
+    action: "list",
+    ...payload
+  });
+}
+
+async function saveDeveloperCredential(payload = {}) {
+  return callDeveloperCredentials({
+    action: "save",
+    ...payload
+  });
+}
+
+async function revokeDeveloperCredential(id) {
+  return callDeveloperCredentials({
+    action: "revoke",
+    id
+  });
+}
+
+async function deleteDeveloperCredential(id) {
+  return callDeveloperCredentials({
+    action: "delete",
+    id
+  });
+}
+
+async function revealDeveloperCredential(id, password = "") {
+  return callDeveloperCredentials({
+    action: "reveal",
+    id,
+    password
+  });
+}
+
+async function scanAutomationCredentials(automationId) {
+  return callDeveloperCredentials({
+    action: "scan_automation",
+    automation_id: automationId
+  });
+}
+
+async function applyAutomationCredentials(automationId) {
+  return callDeveloperCredentials({
+    action: "apply_to_automation",
+    automation_id: automationId
+  });
+}
+
+async function listCredentialProviders() {
+  return callDeveloperCredentials({
+    action: "providers"
+  });
+}
+
 async function callMessages(payload = {}) {
   return callNexusFunction("messages", payload);
 }
@@ -1554,10 +1614,11 @@ async function importN8nWorkflow(automationId) {
   });
 }
 
-async function startN8nWorkflowTest(automationId) {
+async function startN8nWorkflowTest(automationId, options = {}) {
   return callNexusFunction("test-n8n-workflow", {
     mode: "start",
-    automation_id: automationId
+    automation_id: automationId,
+    ...options
   });
 }
 
@@ -1937,6 +1998,14 @@ async function updateAdminInstallRequest(payload) {
     saveDeveloperProduct,
     submitDeveloperProduct,
     removeDeveloperProduct,
+    listDeveloperCredentials,
+    saveDeveloperCredential,
+    revokeDeveloperCredential,
+    deleteDeveloperCredential,
+    revealDeveloperCredential,
+    scanAutomationCredentials,
+    applyAutomationCredentials,
+    listCredentialProviders,
     getDeveloperStripeStatus,
     refreshDeveloperStripeAccount,
     createDeveloperStripeOnboardingLink,

@@ -407,6 +407,9 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     placeholder_validation_errors: placeholderValidationErrors,
     n8n_workflow_json: workflowJson,
 
+    admin_run_instructions: cleanString(body.admin_run_instructions),
+    internal_notes: cleanString(body.internal_notes),
+
     updated_at: nowIso(),
   };
 }
