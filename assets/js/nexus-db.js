@@ -725,6 +725,16 @@ const NexusDB = (() => {
     );
   }
 
+  async function listAllDevelopers() {
+    return cachedQuery("developers:all", () => supabase
+        .from("developers")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      10 * 1000
+    );
+  }
+
   async function getDeveloper(id) {
     return cachedQuery(`developer:${id}`, () => supabase
         .from("developers")
@@ -737,12 +747,22 @@ const NexusDB = (() => {
   }
 
   async function updateDeveloper(id, payload) {
-    return supabase
+    const result = await supabase
       .from("developers")
       .update(payload)
       .eq("id", id)
       .select()
       .single();
+
+    clearQueryCache();
+    return result;
+  }
+
+  async function updateDeveloperStatus(id, status) {
+    return updateDeveloper(id, {
+      status,
+      updated_at: new Date().toISOString()
+    });
   }
 
   async function listDeveloperAutomations(developerId) {
@@ -2038,8 +2058,10 @@ async function updateAdminInstallRequest(payload) {
     deleteAutomation,
 
     listDevelopers,
+    listAllDevelopers,
     getDeveloper,
     updateDeveloper,
+    updateDeveloperStatus,
     listDeveloperAutomations,
 
     listReviews,

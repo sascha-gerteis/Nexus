@@ -142,6 +142,20 @@ async function loadDeveloperContext(adminClient: any, user: any) {
   return { profile, developer };
 }
 
+async function createDeveloperApprovalNotification(adminClient: any, developer: any) {
+  try {
+    await adminClient.from("admin_notifications").insert({
+      notification_type: "developer_account_review",
+      title: "New developer account approval",
+      message: `${developer.display_name || "A developer"} created a developer account and needs approval before going public.`,
+      status: "unread",
+      created_at: nowIso(),
+    });
+  } catch (error) {
+    console.warn("Could not create developer account notification:", error);
+  }
+}
+
 async function ensureDeveloperProfile(adminClient: any, user: any, body: Record<string, unknown>) {
   const { profile, developer } = await loadDeveloperContext(adminClient, user);
   const developerIntent = hasDeveloperIntent(user, body);
@@ -207,7 +221,7 @@ async function ensureDeveloperProfile(adminClient: any, user: any, body: Record<
         verified: false,
         rating: 0,
         review_count: 0,
-        status: "active",
+        status: "pending",
         created_at: nowIso(),
         updated_at: nowIso(),
       })
@@ -216,6 +230,7 @@ async function ensureDeveloperProfile(adminClient: any, user: any, body: Record<
 
     if (error) throw new Error(error.message);
     savedDeveloper = data;
+    await createDeveloperApprovalNotification(adminClient, savedDeveloper);
   }
 
   return {

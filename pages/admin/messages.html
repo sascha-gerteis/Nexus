@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -40,7 +40,7 @@
       <a href="/pages/admin/developer-profile.html">Developer Profile</a>
       <a href="/pages/admin/reviews.html">Reviews</a>
       <a class="active" href="/pages/admin/messages.html">Inquiries</a>
-      <a href="/pages/admin/waitlist.html">Developer Waitlist</a>
+      <a href="/pages/admin/waitlist.html">Developer Intake</a>
       <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
       <a href="/pages/admin/notifications.html">Notifications</a>
       <a href="/pages/marketplace/index.html">View Marketplace</a>
@@ -141,7 +141,7 @@
     <div class="nexus-modal-lite-backdrop" onclick="closeMessageModal()"></div>
 
     <div class="nexus-modal-lite-card message-modal-card">
-      <button class="nexus-modal-lite-close" type="button" onclick="closeMessageModal()">Ã—</button>
+      <button class="nexus-modal-lite-close" type="button" onclick="closeMessageModal()">Ãƒâ€”</button>
 
       <span class="eyebrow" id="messageModalStatus">Inquiry</span>
       <h2 id="messageModalSubject">Message</h2>
@@ -282,7 +282,7 @@
               ${
                 message.company
                   ? `<small>${escapeHtml(message.company)}</small>`
-                  : `<small>â€”</small>`
+                  : `<small>Ã¢â‚¬â€</small>`
               }
             </div>
 
@@ -331,9 +331,9 @@
 
       document.getElementById("messageModalMeta").innerHTML = `
         <strong>${escapeHtml(currentMessage.name || "Unknown sender")}</strong>
-        ${currentMessage.email ? ` Â· ${escapeHtml(currentMessage.email)}` : ""}
-        ${currentMessage.company ? ` Â· ${escapeHtml(currentMessage.company)}` : ""}
-        ${currentMessage.phone ? ` Â· ${escapeHtml(currentMessage.phone)}` : ""}
+        ${currentMessage.email ? ` Ã‚Â· ${escapeHtml(currentMessage.email)}` : ""}
+        ${currentMessage.company ? ` Ã‚Â· ${escapeHtml(currentMessage.company)}` : ""}
+        ${currentMessage.phone ? ` Ã‚Â· ${escapeHtml(currentMessage.phone)}` : ""}
         <br>
         <span>${escapeHtml(dateLabel(currentMessage.created_at))}</span>
       `;

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -41,7 +41,7 @@
       <a href="/pages/admin/messages.html">Inquiries</a>
       <a href="/pages/admin/notifications.html">Notifications</a>
       <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
-      <a href="/pages/admin/waitlist.html">Developer Waitlist</a>
+      <a href="/pages/admin/waitlist.html">Developer Intake</a>
       <a href="/pages/admin/reviews.html">Reviews</a>
       <a href="/pages/admin/developer-profile.html">Developer Profile</a>
       <a href="/pages/marketplace/index.html">View Marketplace</a>
@@ -117,7 +117,7 @@
     <div class="nexus-modal-lite-backdrop" onclick="closeReviewModal()"></div>
 
     <div class="nexus-modal-lite-card admin-cancel-review-modal-card">
-      <button class="nexus-modal-lite-close" type="button" onclick="closeReviewModal()">Ã—</button>
+      <button class="nexus-modal-lite-close" type="button" onclick="closeReviewModal()">Ãƒâ€”</button>
 
       <span class="eyebrow" id="reviewModalEyebrow">Review request</span>
 
@@ -169,7 +169,7 @@
     }
 
     function dateLabel(value) {
-      if (!value) return "â€”";
+      if (!value) return "Ã¢â‚¬â€";
 
       try {
         return new Date(value).toLocaleString();
@@ -312,7 +312,7 @@
 
               <div>
                 <span>Decision notes</span>
-                <strong>${escapeHtml(request.admin_notes || "â€”")}</strong>
+                <strong>${escapeHtml(request.admin_notes || "Ã¢â‚¬â€")}</strong>
               </div>
             </div>
           </article>

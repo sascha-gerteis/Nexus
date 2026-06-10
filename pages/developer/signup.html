@@ -22,7 +22,7 @@
     <div class="buyer-auth-card buyer-auth-card-wide">
       <a class="logo" href="/index.html"><span>Nexus&nbsp;</span></a>
       <h1>Create developer account.</h1>
-      <p>This page is hidden for launch partners. Your profile goes live immediately after signup.</p>
+      <p>Apply for developer access. Nexus reviews every developer before their profile becomes public or products can be submitted for review.</p>
 
       <form id="developerSignupForm">
         <div class="form-grid">
@@ -35,7 +35,7 @@
           <div class="full"><label>Short profile intro</label><textarea class="textarea" name="short_description" required></textarea></div>
           <div class="full"><label>Skills</label><textarea class="textarea" name="skills" placeholder="n8n, Make, Python, OpenAI, APIs"></textarea></div>
         </div>
-        <button class="btn btn-primary btn-full" style="margin-top:1rem">Create developer account</button>
+        <button class="btn btn-primary btn-full" style="margin-top:1rem">Apply for developer access</button>
       </form>
 
       <div class="buyer-auth-links">
@@ -93,11 +93,14 @@
             return;
           }
 
-          location.href = NexusDB.safeNextPath(next, "/pages/developer/dashboard.html");
+          NexusUI.toast("Developer account created. Nexus will review your profile before it goes public.");
+          setTimeout(() => {
+            location.href = NexusDB.safeNextPath(next, "/pages/developer/dashboard.html");
+          }, 500);
           return;
         }
 
-        status.innerHTML = `<div class="success"><strong>Account created.</strong><br>Confirm your email, then login.</div>`;
+        status.innerHTML = `<div class="success"><strong>Application created.</strong><br>Confirm your email, then login. Nexus will review your developer profile before it goes public.</div>`;
       });
     });
   </script>

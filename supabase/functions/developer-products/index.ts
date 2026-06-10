@@ -284,7 +284,7 @@ async function requireDeveloper(req: Request) {
 
   const { data: developer, error: developerError } = await adminClient
     .from("developers")
-    .select("id, profile_id, display_name, handle")
+    .select("id, profile_id, display_name, handle, status")
     .eq("profile_id", userData.user.id)
     .maybeSingle();
 
@@ -293,6 +293,10 @@ async function requireDeveloper(req: Request) {
   }
 
   return { user: userData.user, profile, developer, error: null };
+}
+
+function developerCanSubmitProducts(developer: any) {
+  return cleanString(developer?.status).toLowerCase() === "active";
 }
 
 async function findAvailableSlug(adminClient: any, requestedSlug: string, productId = "") {
@@ -722,6 +726,9 @@ Deno.serve(async (req) => {
     } else if (action === "save_draft") {
       result = await saveProduct(adminClient, developer, body, false);
     } else if (action === "submit_for_review") {
+      if (!developerCanSubmitProducts(developer)) {
+        return errorResponse("Nexus must approve your developer account before you can submit products for review.", 403);
+      }
       result = await saveProduct(adminClient, developer, body, true);
     } else if (action === "remove") {
       result = await removeProduct(adminClient, developer, cleanString(body.id));

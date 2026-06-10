@@ -33,10 +33,6 @@
       </form>
 
       <div class="buyer-auth-links">
-        <span>No developer account?</span>
-        <a href="/pages/developer/signup.html" id="signupLink">Create one</a>
-      </div>
-      <div class="buyer-auth-links">
         <span>Forgot your password?</span>
         <a href="#" id="forgotPasswordLink">Send reset link</a>
       </div>
@@ -49,7 +45,6 @@
     document.addEventListener("DOMContentLoaded", function () {
       const params = new URLSearchParams(location.search);
       const next = params.get("next") || "/pages/developer/dashboard.html";
-      document.getElementById("signupLink").href = "/pages/developer/signup.html?next=" + encodeURIComponent(next);
 
       document.getElementById("forgotPasswordLink").addEventListener("click", async function (event) {
         event.preventDefault();

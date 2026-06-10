@@ -12,7 +12,7 @@
     modal.innerHTML = `
       <div class="nexus-modal-lite-backdrop" data-nexus-notice-close></div>
 
-      <div class="nexus-modal-lite-card nexus-global-notice-card">
+      <div class="nexus-modal-lite-card nexus-global-notice-card" role="dialog" aria-modal="true" aria-labelledby="nexusGlobalNoticeTitle">
         <button class="nexus-modal-lite-close" type="button" data-nexus-notice-close>×</button>
 
         <span class="eyebrow" id="nexusGlobalNoticeEyebrow">Update</span>
@@ -34,6 +34,11 @@
     `;
 
     document.body.appendChild(modal);
+    const closeButton = modal.querySelector(".nexus-modal-lite-close");
+    if (closeButton) {
+      closeButton.setAttribute("aria-label", "Close notification");
+      closeButton.innerHTML = "&times;";
+    }
 
     modal.querySelectorAll("[data-nexus-notice-close]").forEach((button) => {
       button.addEventListener("click", close);
@@ -79,6 +84,7 @@
     modal.classList.add(type);
     modal.classList.add("open");
     modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("nexus-notice-open");
   }
 
   function close() {
@@ -87,6 +93,7 @@
 
     modal.classList.remove("open");
     modal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("nexus-notice-open");
   }
 
   function success(title, message, extra) {

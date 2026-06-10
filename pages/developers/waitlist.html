@@ -83,18 +83,7 @@
   }
   </script>
 </head>
-<body data-page="developer-waitlist"><header class="site-header"><div class="container nav"><a class="logo" href="/index.html"><span>Nexus&nbsp;</span></a><nav class="nav-links">
-  <a class="nav-link" href="/index.html">Home</a>
-  <a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a>
-  <a class="nav-link" href="/pages/developers/index.html">Developers</a>
-  <a class="nav-link" href="/pages/about/index.html">About</a>
-  <a class="nav-link" href="/pages/contact/index.html">Contact</a>
-  <a class="btn btn-secondary btn-small" href="/pages/developers/waitlist.html">Developer Waitlist</a>
-
-  <span class="buyer-nav-slot" id="buyerNavSlot">
-    <a class="btn btn-primary btn-small" href="/pages/buyer/login.html">Login</a>
-  </span>
-</nav></div></header>
+<body data-page="developer-waitlist"><header class="site-header" id="globalNav" data-active="developer-waitlist"></header>
 <main>
 <section class="section alt">
   <div class="container">
@@ -103,6 +92,10 @@
         <span class="eyebrow">Developer waitlist</span>
         <h1 style="font-size:clamp(3rem,5vw,5rem);line-height:.95;letter-spacing:-.07em;color:var(--navy);margin:1rem 0">Build once. Prepare to sell through Nexus.</h1>
         <p style="color:var(--muted);font-size:1.1rem;line-height:1.8">Nexus reviews developer access carefully. Join the waitlist if you build useful n8n, Make, Python, Node.js, or AI automations that businesses could buy as packaged outcomes.</p>
+        <div class="button-row" style="margin-top:1rem">
+          <a class="btn btn-primary" href="/pages/developer/signup.html">Apply as developer</a>
+          <a class="btn btn-secondary" href="/pages/developer/login.html">Developer login</a>
+        </div>
         <div class="grid-2" style="margin-top:1rem">
           <div class="card"><h3>What Nexus reviews</h3><p>Outcome clarity, setup requirements, preview quality, reliability, and whether the product can be understood by non-technical buyers.</p></div>
           <div class="card"><h3>Future seller flow</h3><p>Developers will submit automations, upload files, add previews, set customization options, and get reviewed before going live.</p></div>
@@ -275,7 +268,7 @@
   </div>
 </section>
 </main>
-<footer class="footer"><div class="container footer-row"><div><strong>Nexus</strong><br><span>The trusted marketplace layer for business automation.</span></div><div class="footer-links"><a href="/pages/marketplace/index.html">Marketplace</a><a href="/pages/developers/index.html">Developers</a><a href="/pages/developers/waitlist.html">Developer Waitlist</a><a href="/pages/about/index.html">About</a><a href="/pages/contact/index.html">Contact</a><a href="/pages/legal/privacy.html">Privacy</a></div></div></footer><div class="modal-backdrop" id="productModal"><div class="modal"><div class="modal-side" id="modalSide"></div><div class="modal-main" id="modalMain"></div></div></div><div class="toast" id="toast"></div><script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
+<footer class="footer"><div class="container footer-row"><div><strong>Nexus</strong><br><span>The trusted marketplace layer for business automation.</span></div><div class="footer-links"><a href="/pages/marketplace/index.html">Marketplace</a><a href="/pages/developers/index.html">Developers</a><a href="/pages/developer/signup.html">Apply as developer</a><a href="/pages/about/index.html">About</a><a href="/pages/contact/index.html">Contact</a><a href="/pages/legal/privacy.html">Privacy</a></div></div></footer><div class="modal-backdrop" id="productModal"><div class="modal"><div class="modal-side" id="modalSide"></div><div class="modal-main" id="modalMain"></div></div></div><div class="toast" id="toast"></div><script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
 <script src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
 <script src="/assets/js/nexus-buyer-nav.js"></script>
 <script src="/assets/js/nexus-app.js?v=20260608-devfix"></script></body></html>

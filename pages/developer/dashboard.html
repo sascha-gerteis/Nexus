@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260610-credentials6">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260610-product-workspace">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
   <title>Developer Dashboard | Nexus AI</title>
@@ -42,12 +42,8 @@
           <span>03</span>
           <strong>Messages</strong>
         </a>
-        <a href="#credentials" data-dev-tab="credentials">
-          <span>04</span>
-          <strong>Credentials</strong>
-        </a>
         <a href="#wallet" data-dev-tab="wallet">
-          <span>05</span>
+          <span>04</span>
           <strong>Wallet</strong>
         </a>
       </nav>
@@ -65,7 +61,7 @@
 
         <div class="developer-console-hero-actions">
           <a class="btn btn-primary" id="developerPublicProfileLink" href="/pages/developers/index.html" target="_blank">View public profile</a>
-          <button class="btn btn-secondary" type="button" onclick="activeTab('credentials')">Manage credentials</button>
+          <button class="btn btn-secondary" type="button" onclick="activeTab('products')">Manage products</button>
           <button class="btn btn-secondary" type="button" onclick="openProductEditor()">Add product</button>
         </div>
       </section>
@@ -157,21 +153,27 @@
         </div>
 
         <div class="developer-product-workspace">
-          <form class="developer-form-surface developer-product-editor developer-editor-modal wide" id="developerProductForm" aria-hidden="true">
+          <form class="developer-form-surface developer-product-editor" id="developerProductForm" aria-hidden="false">
             <div class="developer-editor-head">
               <div>
                 <h3>Product editor</h3>
                 <p>Use clear business outcomes, realistic setup requirements, and an import-ready workflow.</p>
               </div>
               <input type="hidden" name="id">
-              <button class="btn btn-secondary btn-small" type="button" onclick="closeProductEditor()">Close</button>
+              <button class="btn btn-secondary btn-small" type="button" onclick="openProductEditor()">New product</button>
             </div>
 
-            <section class="developer-form-section compact">
-              <div>
-                <h3>Basics</h3>
-                <p>How the product appears in marketplace cards and search.</p>
-              </div>
+            <div class="developer-selected-product-summary" id="developerSelectedProductSummary">
+              Select a product from the list, or create a new draft.
+            </div>
+
+            <details class="developer-form-section developer-details-section developer-editor-section compact" open>
+              <summary>
+                <span>
+                  <strong>Basics</strong>
+                  <small>Marketplace card, price, category, and listing type.</small>
+                </span>
+              </summary>
               <div class="developer-field-grid">
                 <div><label>Title</label><input class="input" name="title" required></div>
                 <div><label>Slug</label><input class="input" name="slug"></div>
@@ -185,13 +187,15 @@
                 <div><label>Icon letters</label><input class="input" name="icon" maxlength="3" placeholder="AI"></div>
                 <div><label>Color</label><select class="select" name="color"><option value="blue">Blue</option><option value="green">Green</option><option value="purple">Purple</option><option value="orange">Orange</option><option value="red">Red</option></select></div>
               </div>
-            </section>
+            </details>
 
-            <section class="developer-form-section compact">
-              <div>
-                <h3>Positioning</h3>
-                <p>Explain the manual work removed and the result the buyer receives.</p>
-              </div>
+            <details class="developer-form-section developer-details-section developer-editor-section compact">
+              <summary>
+                <span>
+                  <strong>Positioning</strong>
+                  <small>Buyer-facing copy, problem, outcome, and delivery details.</small>
+                </span>
+              </summary>
               <div class="developer-field-grid">
                 <div class="full"><label>Short description</label><textarea class="textarea" name="short_description" rows="3"></textarea></div>
                 <div class="full"><label>Long description</label><textarea class="textarea" name="long_description" rows="5"></textarea></div>
@@ -201,7 +205,7 @@
                 <div><label>Delivery time</label><input class="input" name="delivery_time" placeholder="Instant setup, 1-2 days..."></div>
                 <div class="full"><label>Setup type</label><input class="input" name="setup_type" placeholder="Self-serve, Nexus Guided Install, developer guided..."></div>
               </div>
-            </section>
+            </details>
 
             <details class="developer-form-section developer-details-section">
               <summary>
@@ -236,7 +240,7 @@
               </div>
             </details>
 
-            <details class="developer-form-section developer-details-section" open>
+            <details class="developer-form-section developer-details-section">
               <summary>
                 <span>
                   <strong>Workflow import and test</strong>
@@ -287,6 +291,90 @@
               </div>
             </details>
 
+            <details class="developer-form-section developer-details-section product-credentials-section" id="developerProductCredentialsSection">
+              <summary>
+                <span>
+                  <strong>Credentials and run check</strong>
+                  <small>See this product's provider keys, apply them to n8n, and run the required technical check.</small>
+                </span>
+              </summary>
+
+              <div class="credential-console-grid product-credential-console">
+                <section class="credential-panel credential-workflow-panel">
+                  <h3>Selected product credential check</h3>
+                  <p>This panel follows the product selected on the left.</p>
+
+                  <div class="credential-selected-tools">
+                    <select class="select" id="developerCredentialProductSelect"></select>
+                    <div class="credential-action-row">
+                      <button class="btn btn-secondary btn-small" type="button" onclick="scanCurrentProductCredentials()">Refresh credentials</button>
+                      <button class="btn btn-primary btn-small" type="button" onclick="applyCurrentProductCredentials()">Apply credentials & run check</button>
+                    </div>
+                  </div>
+
+                  <div id="developerCredentialScanResult" class="runtime-import-result">Select or save a product to view its credentials and last run.</div>
+                </section>
+
+                <aside class="credential-panel">
+                  <h3>Credential vault</h3>
+                  <p>Add or update developer-owned keys, then apply them to the selected product workflow.</p>
+
+                  <div id="developerCredentialForm" class="credential-form-grid">
+                    <input type="hidden" data-credential-name="id">
+                    <div>
+                      <label>Provider</label>
+                      <select class="select" data-credential-name="provider" id="developerCredentialProvider">
+                        <option value="google_gemini">Google Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic</option>
+                        <option value="apify">Apify</option>
+                        <option value="serpapi">SerpAPI</option>
+                        <option value="perplexity">Perplexity</option>
+                        <option value="airtable">Airtable</option>
+                        <option value="hubspot">HubSpot</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Label</label>
+                      <input class="input" data-credential-name="label" placeholder="Gemini production key">
+                    </div>
+                    <div>
+                      <label>n8n credential type override</label>
+                      <input class="input" data-credential-name="n8n_credential_type" placeholder="Usually detected from the workflow">
+                    </div>
+                    <input type="hidden" data-credential-name="n8n_credential_id">
+                    <input type="hidden" data-credential-name="n8n_credential_name">
+                    <div class="full">
+                      <label>API key / token</label>
+                      <input class="input" data-credential-name="api_key" type="password" autocomplete="off" placeholder="Paste key. It will not be shown again after saving.">
+                    </div>
+                    <details class="full">
+                      <summary><strong>Advanced secret fields JSON</strong></summary>
+                      <textarea class="textarea code-textarea" data-credential-name="secret_fields" rows="5" placeholder='{"api_key":"..."}'></textarea>
+                    </details>
+                    <div class="full credential-action-row">
+                      <button class="btn btn-primary btn-small" type="button" id="saveDeveloperCredentialButton">Save credential</button>
+                      <button class="btn btn-secondary btn-small" type="button" onclick="resetCredentialForm()">Clear</button>
+                    </div>
+                  </div>
+
+                  <hr style="border:0;border-top:1px solid var(--line);margin:1rem 0;">
+
+                  <h3>Saved credentials</h3>
+                  <p>Safe metadata only. Raw secrets stay hidden unless you use the existing password reveal flow.</p>
+                  <div class="credential-action-row" style="margin-bottom:1rem">
+                    <label class="checkbox-inline">
+                      <input type="checkbox" id="developerShowRevokedCredentials">
+                      Show revoked
+                    </label>
+                    <button class="btn btn-secondary btn-small" type="button" onclick="loadCredentials()">Refresh</button>
+                  </div>
+                  <div class="credential-list" id="developerCredentialList">Loading credentials...</div>
+                </aside>
+              </div>
+            </details>
+
             <div class="developer-form-actions split">
               <button class="btn btn-secondary" type="button" id="saveProductDraft">Save draft</button>
               <button class="btn btn-primary" type="submit">Submit for review</button>
@@ -314,92 +402,6 @@
           </div>
         </div>
         <div class="developer-message-shell" id="developerMessages">Loading messages...</div>
-      </section>
-
-      <section class="developer-panel" data-dev-panel="credentials" hidden>
-        <div class="developer-panel-head">
-          <div>
-            <span class="eyebrow">Credentials</span>
-            <h2>Workflow keys and provider credentials</h2>
-            <p>Save developer-owned API keys used by your workflows. Nexus stores the secret server-side and only shows safe metadata here.</p>
-          </div>
-        </div>
-
-        <div class="credential-console-grid">
-          <section class="credential-panel credential-workflow-panel">
-            <h3>Workflow credential checks</h3>
-            <p>Start here. Click a workflow to see every credential it uses and the latest run result.</p>
-            <div class="credential-workflow-list" id="developerCredentialWorkflowList">Loading workflows...</div>
-
-            <div class="credential-selected-tools">
-              <select class="select" id="developerCredentialProductSelect"></select>
-              <div class="credential-action-row">
-                <button class="btn btn-secondary btn-small" type="button" onclick="scanCurrentProductCredentials()">Refresh selected workflow</button>
-                <button class="btn btn-primary btn-small" type="button" onclick="applyCurrentProductCredentials()">Apply credentials & run check</button>
-              </div>
-            </div>
-
-            <div id="developerCredentialScanResult" class="runtime-import-result">Click a workflow to view its credentials and last run.</div>
-          </section>
-
-          <aside class="credential-panel">
-            <h3>Add or update credential</h3>
-            <p>Nexus stores the key now and syncs it to the exact n8n credential type when you apply it to a product workflow.</p>
-
-            <form id="developerCredentialForm" class="credential-form-grid">
-              <input type="hidden" name="id">
-              <div>
-                <label>Provider</label>
-                <select class="select" name="provider" id="developerCredentialProvider">
-                  <option value="google_gemini">Google Gemini</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="apify">Apify</option>
-                  <option value="serpapi">SerpAPI</option>
-                  <option value="perplexity">Perplexity</option>
-                  <option value="airtable">Airtable</option>
-                  <option value="hubspot">HubSpot</option>
-                  <option value="custom">Custom</option>
-                </select>
-              </div>
-              <div>
-                <label>Label</label>
-                <input class="input" name="label" placeholder="Gemini production key">
-              </div>
-              <div>
-                <label>n8n credential type override</label>
-                <input class="input" name="n8n_credential_type" placeholder="Usually detected from the workflow">
-              </div>
-              <input type="hidden" name="n8n_credential_id">
-              <input type="hidden" name="n8n_credential_name">
-              <div class="full">
-                <label>API key / token</label>
-                <input class="input" name="api_key" type="password" autocomplete="off" placeholder="Paste key. It will not be shown again after saving.">
-              </div>
-              <details class="full">
-                <summary><strong>Advanced secret fields JSON</strong></summary>
-                <textarea class="textarea code-textarea" name="secret_fields" rows="5" placeholder='{"api_key":"..."}'></textarea>
-              </details>
-              <div class="full credential-action-row">
-                <button class="btn btn-primary btn-small" type="submit">Save credential</button>
-                <button class="btn btn-secondary btn-small" type="button" onclick="resetCredentialForm()">Clear</button>
-              </div>
-            </form>
-
-            <hr style="border:0;border-top:1px solid var(--line);margin:1rem 0;">
-
-            <h3>Saved credentials</h3>
-            <p>Use these for nodes like Google Gemini, OpenAI, Anthropic, Apify, and other provider-owned services.</p>
-            <div class="credential-action-row" style="margin-bottom:1rem">
-              <label class="checkbox-inline">
-                <input type="checkbox" id="developerShowRevokedCredentials">
-                Show revoked
-              </label>
-              <button class="btn btn-secondary btn-small" type="button" onclick="loadCredentials()">Refresh</button>
-            </div>
-            <div class="credential-list" id="developerCredentialList">Loading credentials...</div>
-          </aside>
-        </div>
       </section>
 
       <section class="developer-panel" data-dev-panel="wallet" hidden>
@@ -477,7 +479,7 @@
   <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
   <script src="/assets/js/nexus-db.js?v=20260610-credentials5"></script>
   <script>
-    const state = { account: null, products: [], wallet: null, credentials: [] };
+    const state = { account: null, products: [], wallet: null, credentials: [], selectedProductId: "" };
 
     const credentialProviderGroups = [
       ["AI models", [
@@ -583,7 +585,10 @@
     }
 
     function activeTab(tab) {
-      if (["profile", "products", "messages", "credentials", "wallet"].includes(tab) && location.hash !== `#${tab}`) {
+      const shouldFocusCredentials = tab === "credentials";
+      if (shouldFocusCredentials) tab = "products";
+
+      if (["profile", "products", "messages", "wallet"].includes(tab) && location.hash !== `#${tab}`) {
         history.replaceState(null, "", `${location.pathname}${location.search}#${tab}`);
       }
       document.querySelectorAll("[data-dev-tab]").forEach((link) => {
@@ -592,11 +597,12 @@
         link.setAttribute("aria-current", isActive ? "page" : "false");
       });
       document.querySelectorAll("[data-dev-panel]").forEach((panel) => panel.hidden = panel.dataset.devPanel !== tab);
-      if (tab === "credentials") {
+      if (shouldFocusCredentials) {
         setTimeout(() => {
-          const root = document.getElementById("developerCredentialScanResult");
-          const select = document.getElementById("developerCredentialProductSelect");
-          if (root && select?.value && root.textContent.includes("Select a product")) {
+          const credentialSection = document.getElementById("developerProductCredentialsSection");
+          if (credentialSection) credentialSection.open = true;
+          credentialSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+          if (state.selectedProductId) {
             scanCurrentProductCredentials();
           }
         }, 0);
@@ -662,16 +668,68 @@
       updateDeveloperImportResult(null);
     }
 
+    function selectedProduct() {
+      return state.products.find((product) => String(product.id || "") === String(state.selectedProductId || "")) || null;
+    }
+
+    function setSelectedProductId(id = "") {
+      state.selectedProductId = String(id || "");
+      const select = document.getElementById("developerCredentialProductSelect");
+      if (select) select.value = state.selectedProductId;
+    }
+
+    function renderSelectedProductSummary(product = selectedProduct()) {
+      const root = document.getElementById("developerSelectedProductSummary");
+      if (!root) return;
+
+      if (!product) {
+        root.innerHTML = `
+          <div>
+            <strong>New product draft</strong>
+            <p>Fill the fields below, save the draft, then attach workflow credentials and run the technical check.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const readiness = productReadiness(product);
+      root.innerHTML = `
+        <div>
+          <strong>${NexusUI.escapeHtml(product.title || "Untitled product")}</strong>
+          <p>${NexusUI.escapeHtml(readiness.detail)}</p>
+        </div>
+        <div class="developer-product-meta">
+          <span class="${statusClass(product.status)}">${NexusUI.escapeHtml(productStatusText(product.status || "draft"))}</span>
+          <span class="${readiness.className}">${NexusUI.escapeHtml(readiness.label)}</span>
+          <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
+          <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
+        </div>
+      `;
+    }
+
+    function clearCredentialWorkspace(message = "Save or select a product to view its credentials and last run.") {
+      const root = document.getElementById("developerCredentialScanResult");
+      if (root) root.innerHTML = `<div class="developer-empty-state"><p>${NexusUI.escapeHtml(message)}</p></div>`;
+    }
+
     function openProductEditor(product = null) {
       activeTab("products");
-      if (!product) resetProductForm();
-      updateDeveloperImportResult(product);
-      openModalElement(document.getElementById("developerProductForm"));
+      if (product) {
+        fillProduct(product);
+        return;
+      }
+
+      setSelectedProductId("");
+      resetProductForm();
+      renderSelectedProductSummary(null);
+      clearCredentialWorkspace();
+      renderProducts();
+      if ((state.credentials || []).length) renderCredentialList();
       setTimeout(() => document.querySelector("#developerProductForm [name='title']")?.focus(), 80);
     }
 
     function closeProductEditor() {
-      closeModalElement(document.getElementById("developerProductForm"));
+      activeTab("products");
     }
 
     function openPayoutSettings() {
@@ -701,8 +759,28 @@
     }
 
     function productStatusText(status) {
-      const value = String(status || "draft").replace(/_/g, " ");
+      const raw = String(status || "draft").toLowerCase();
+      const labels = {
+        active: "Approved",
+        pending: "Pending approval",
+        hidden: "Hidden",
+        draft: "Draft",
+        pending_review: "Pending review"
+      };
+      if (labels[raw]) return labels[raw];
+      const value = raw.replace(/_/g, " ");
       return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    function developerStatusMessage(developer) {
+      const status = String(developer?.status || "active").toLowerCase();
+      if (status === "pending") {
+        return "Nexus is reviewing your developer account. You can prepare drafts, but cannot submit products yet.";
+      }
+      if (status === "hidden") {
+        return "This developer account is not currently public. Contact Nexus if this looks wrong.";
+      }
+      return developer?.verified ? "Verified by Nexus." : "Approved. Public profile is live; verification pending.";
     }
 
     function statusClass(status) {
@@ -825,7 +903,7 @@
         <article class="developer-console-stat">
           <span>Profile status</span>
           <strong>${NexusUI.escapeHtml(productStatusText(developer.status || "active"))}</strong>
-          <p>${developer.verified ? "Verified by Nexus." : "Live profile, verification pending."}</p>
+          <p>${NexusUI.escapeHtml(developerStatusMessage(developer))}</p>
         </article>
         <article class="developer-console-stat">
           <span>Products</span>
@@ -846,7 +924,7 @@
           <span>Credentials</span>
           <strong>${(state.credentials || []).length}</strong>
           <p>${incompleteRuns ? `${incompleteRuns} workflow run${incompleteRuns === 1 ? "" : "s"} incomplete.` : "Workflow credential checks are clear."}</p>
-          <button class="btn btn-secondary btn-small" type="button" onclick="activeTab('credentials')">Open credentials</button>
+          <button class="btn btn-secondary btn-small" type="button" onclick="activeTab('credentials')">Open product workspace</button>
         </article>
       `;
     }
@@ -868,10 +946,11 @@
     function resetCredentialForm() {
       const form = document.getElementById("developerCredentialForm");
       if (!form) return;
-      form.reset();
-      form.elements.id.value = "";
-      form.elements.provider.value = "google_gemini";
-      form.elements.n8n_credential_type.value = credentialProviderDefaults.google_gemini;
+      form.querySelectorAll("[data-credential-name]").forEach((field) => {
+        field.value = "";
+      });
+      form.querySelector("[data-credential-name='provider']").value = "google_gemini";
+      form.querySelector("[data-credential-name='n8n_credential_type']").value = credentialProviderDefaults.google_gemini;
     }
 
     function credentialStatusClass(status) {
@@ -1034,6 +1113,8 @@
 
     function renderCredentialUsage(credential) {
       const products = credentialUsageFor(credential);
+      const selectedId = String(state.selectedProductId || "");
+      const usedBySelected = selectedId && products.some((product) => String(product.id || "") === selectedId);
 
       if (!products.length) {
         return `
@@ -1043,7 +1124,7 @@
 
       return `
         <p class="credential-usage-line">
-          Used in ${products.length} workflow${products.length === 1 ? "" : "s"}.
+          ${usedBySelected ? "Used by this selected product." : `Used in ${products.length} workflow${products.length === 1 ? "" : "s"}.`}
         </p>
       `;
     }
@@ -1058,14 +1139,27 @@
           ${NexusUI.escapeHtml(product.title || "Untitled product")}
         </option>
       `).join("") || `<option value="">No workflow products yet</option>`;
+      if (state.selectedProductId) select.value = state.selectedProductId;
       renderCredentialWorkflowList();
     }
 
     function renderCredentialList() {
       const root = document.getElementById("developerCredentialList");
       if (!root) return;
+      const selectedId = String(state.selectedProductId || "");
+      const credentials = [...(state.credentials || [])].sort((a, b) => {
+        const aSelected = selectedId && credentialUsageFor(a).some((product) => String(product.id || "") === selectedId);
+        const bSelected = selectedId && credentialUsageFor(b).some((product) => String(product.id || "") === selectedId);
+        if (aSelected !== bSelected) return aSelected ? -1 : 1;
 
-      root.innerHTML = (state.credentials || []).map((credential) => `
+        const aActive = String(a.status || "active") !== "revoked";
+        const bActive = String(b.status || "active") !== "revoked";
+        if (aActive !== bActive) return aActive ? -1 : 1;
+
+        return String(a.label || "").localeCompare(String(b.label || ""));
+      });
+
+      root.innerHTML = credentials.map((credential) => `
         <article class="credential-card">
           <div>
             <strong>${NexusUI.escapeHtml(credential.label || credential.provider_label || "Credential")}</strong>
@@ -1101,14 +1195,14 @@
           const credential = state.credentials.find((item) => String(item.id || "") === button.dataset.editCredential);
           if (!credential) return;
           const form = document.getElementById("developerCredentialForm");
-          form.elements.id.value = credential.id || "";
-          form.elements.provider.value = credential.provider || "custom";
-          form.elements.label.value = credential.label || "";
-          form.elements.n8n_credential_type.value = credential.n8n_credential_type || "";
-          form.elements.n8n_credential_id.value = credential.n8n_credential_id || "";
-          form.elements.n8n_credential_name.value = credential.n8n_credential_name || "";
-          form.elements.api_key.value = "";
-          form.elements.secret_fields.value = "";
+          form.querySelector("[data-credential-name='id']").value = credential.id || "";
+          form.querySelector("[data-credential-name='provider']").value = credential.provider || "custom";
+          form.querySelector("[data-credential-name='label']").value = credential.label || "";
+          form.querySelector("[data-credential-name='n8n_credential_type']").value = credential.n8n_credential_type || "";
+          form.querySelector("[data-credential-name='n8n_credential_id']").value = credential.n8n_credential_id || "";
+          form.querySelector("[data-credential-name='n8n_credential_name']").value = credential.n8n_credential_name || "";
+          form.querySelector("[data-credential-name='api_key']").value = "";
+          form.querySelector("[data-credential-name='secret_fields']").value = "";
         });
       });
 
@@ -1175,8 +1269,10 @@
 
     function credentialPayload() {
       const form = document.getElementById("developerCredentialForm");
-      const formData = new FormData(form);
-      const payload = Object.fromEntries(formData.entries());
+      const payload = {};
+      form.querySelectorAll("[data-credential-name]").forEach((field) => {
+        payload[field.dataset.credentialName] = field.value;
+      });
       payload.sync_n8n = false;
       return payload;
     }
@@ -1430,11 +1526,13 @@
     }
 
     async function scanCurrentProductCredentials() {
-      const automationId = document.getElementById("developerCredentialProductSelect")?.value || "";
+      const automationId = document.getElementById("developerCredentialProductSelect")?.value || state.selectedProductId || "";
       if (!automationId) {
         NexusUI.toast("Select a product first.");
         return;
       }
+
+      setSelectedProductId(automationId);
 
       const root = document.getElementById("developerCredentialScanResult");
       if (root) root.innerHTML = "Scanning workflow credentials...";
@@ -1491,11 +1589,13 @@
     }
 
     async function applyCurrentProductCredentials() {
-      const automationId = document.getElementById("developerCredentialProductSelect")?.value || "";
+      const automationId = document.getElementById("developerCredentialProductSelect")?.value || state.selectedProductId || "";
       if (!automationId) {
         NexusUI.toast("Select a product first.");
         return;
       }
+
+      setSelectedProductId(automationId);
 
       const root = document.getElementById("developerCredentialScanResult");
       if (root) root.innerHTML = "Checking saved credentials and binding them to the workflow...";
@@ -1639,6 +1739,7 @@
     function fillProduct(product) {
       const form = document.getElementById("developerProductForm");
       resetProductForm();
+      setSelectedProductId(product?.id || "");
       const listFields = new Set([
         "who_it_is_for",
         "outputs",
@@ -1658,7 +1759,20 @@
 
         field.value = typeof value === "object" && value !== null ? JSON.stringify(value, null, 2) : value || "";
       });
-      openProductEditor(product);
+      updateDeveloperImportResult(product);
+      renderSelectedProductSummary(product);
+      renderProducts();
+      renderCredentialProductSelect();
+      if ((state.credentials || []).length) renderCredentialList();
+
+      if (product?.id && product.listing_type !== "custom_request") {
+        clearCredentialWorkspace("Loading credentials for this product...");
+        setTimeout(() => scanCurrentProductCredentials(), 0);
+      } else {
+        clearCredentialWorkspace(product?.listing_type === "custom_request"
+          ? "Custom request products do not need workflow credentials."
+          : "Save this product before checking workflow credentials.");
+      }
     }
 
     function renderProducts() {
@@ -1667,29 +1781,30 @@
         ${(() => {
           const readiness = productReadiness(product);
           return `
-            <article class="developer-product-row">
+            <article class="developer-product-row ${String(product.id || "") === String(state.selectedProductId || "") ? "active" : ""}" data-select-product="${NexusUI.escapeAttribute(product.id || "")}">
               <div class="developer-product-main">
-                <div class="developer-product-title-line">
-                  <strong>${NexusUI.escapeHtml(product.title || "Untitled product")}</strong>
+                <div class="developer-product-status-row">
                   <span class="${statusClass(product.status)}">${NexusUI.escapeHtml(productStatusText(product.status || "draft"))}</span>
                   <span class="${readiness.className}">${NexusUI.escapeHtml(readiness.label)}</span>
+                </div>
+                <div class="developer-product-title-line">
+                  <strong>${NexusUI.escapeHtml(product.title || "Untitled product")}</strong>
                 </div>
                 <p>${NexusUI.escapeHtml(product.short_description || "Add a short buyer-facing description before submitting.")}</p>
                 <p class="developer-product-readiness">${NexusUI.escapeHtml(readiness.detail)}</p>
                 <div class="developer-product-meta">
                   <span>${NexusUI.escapeHtml(product.category || "Uncategorized")}</span>
                   <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
-                  <span>${NexusUI.escapeHtml(product.listing_type === "custom_request" ? "Request flow" : "Checkout flow")}</span>
                   <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
                 </div>
               </div>
               <div class="developer-product-actions">
+                <button class="btn btn-secondary btn-small" type="button" data-edit-product="${NexusUI.escapeAttribute(product.id || "")}">Open</button>
                 ${
                   product.listing_type !== "custom_request"
-                    ? `<button class="btn btn-secondary btn-small" type="button" data-test-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id && product.n8n_workflow_json ? "" : "disabled"}>Import & test</button>`
+                    ? `<button class="btn btn-secondary btn-small" type="button" data-test-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id && product.n8n_workflow_json ? "" : "disabled"}>Test</button>`
                     : ""
                 }
-                <button class="btn btn-secondary btn-small" type="button" data-edit-product="${NexusUI.escapeAttribute(product.id || "")}">Edit</button>
                 <button class="btn btn-danger btn-small" type="button" data-remove-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id ? "" : "disabled"}>Remove</button>
               </div>
             </article>
@@ -1706,6 +1821,14 @@
       root.querySelectorAll("[data-edit-product]").forEach((button) => {
         button.addEventListener("click", () => {
           const product = state.products.find((item) => String(item.id || "") === button.dataset.editProduct);
+          if (product) fillProduct(product);
+        });
+      });
+
+      root.querySelectorAll("[data-select-product]").forEach((row) => {
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("button")) return;
+          const product = state.products.find((item) => String(item.id || "") === row.dataset.selectProduct);
           if (product) fillProduct(product);
         });
       });
@@ -1730,11 +1853,28 @@
       if (pausedCount > 0) {
         NexusUI.toast(`${pausedCount} live product${pausedCount === 1 ? " was" : "s were"} paused because workflow runtime is not ready.`);
       }
+
+      if (state.selectedProductId && !state.products.some((product) => String(product.id || "") === String(state.selectedProductId))) {
+        state.selectedProductId = "";
+      }
+
+      if (!state.selectedProductId && state.products.length) {
+        state.selectedProductId = state.products[0].id || "";
+      }
+
       renderProducts();
       renderCredentialProductSelect();
       renderOverview();
       if ((state.credentials || []).length) {
         renderCredentialList();
+      }
+
+      const product = selectedProduct();
+      if (product) {
+        fillProduct(product);
+      } else {
+        renderSelectedProductSummary(null);
+        clearCredentialWorkspace();
       }
     }
 
@@ -1757,8 +1897,12 @@
       const product = data?.product || null;
       if (product?.id) {
         document.getElementById("developerProductForm").elements.id.value = product.id;
+        setSelectedProductId(product.id);
         upsertStateProduct(product);
         updateDeveloperImportResult(product, silent ? "Draft saved before import." : "Draft saved.");
+        renderSelectedProductSummary(product);
+        renderProducts();
+        renderCredentialProductSelect();
       }
 
       if (!silent) NexusUI.toast(data?.message || "Draft saved.");
@@ -2178,7 +2322,19 @@
       }
 
       if (publicProfileLink && developer.id) {
-        publicProfileLink.href = `/pages/developers/profile.html?id=${encodeURIComponent(developer.id)}`;
+        if (String(developer.status || "active").toLowerCase() === "active") {
+          publicProfileLink.href = `/pages/developers/profile.html?id=${encodeURIComponent(developer.id)}`;
+          publicProfileLink.textContent = "View public profile";
+          publicProfileLink.removeAttribute("aria-disabled");
+        } else {
+          publicProfileLink.href = "#";
+          publicProfileLink.textContent = "Profile pending approval";
+          publicProfileLink.setAttribute("aria-disabled", "true");
+          publicProfileLink.addEventListener("click", function (event) {
+            event.preventDefault();
+            NexusUI.toast("Your public profile will be available after Nexus approves your developer account.");
+          });
+        }
       }
 
       renderOverview();
@@ -2232,17 +2388,17 @@
       document.getElementById("developerCredentialProvider").addEventListener("change", function () {
         const form = document.getElementById("developerCredentialForm");
         if (!form) return;
-        if (!form.elements.n8n_credential_type.value || credentialProviderDefaults[this.value]) {
-          form.elements.n8n_credential_type.value = credentialProviderDefaults[this.value] || "";
+        const typeField = form.querySelector("[data-credential-name='n8n_credential_type']");
+        if (!typeField.value || credentialProviderDefaults[this.value]) {
+          typeField.value = credentialProviderDefaults[this.value] || "";
         }
       });
 
       document.getElementById("developerShowRevokedCredentials")?.addEventListener("change", loadCredentials);
       document.getElementById("developerCredentialProductSelect")?.addEventListener("change", scanCurrentProductCredentials);
 
-      document.getElementById("developerCredentialForm").addEventListener("submit", async function (event) {
-        event.preventDefault();
-        const button = event.submitter;
+      document.getElementById("saveDeveloperCredentialButton").addEventListener("click", async function () {
+        const button = this;
         const originalText = button?.textContent || "";
         if (button) {
           button.disabled = true;
@@ -2268,6 +2424,10 @@
       document.getElementById("developerProductForm").addEventListener("submit", async function (event) {
         event.preventDefault();
         try {
+          const developerStatus = String(getDeveloper().status || "active").toLowerCase();
+          if (developerStatus !== "active") {
+            throw new Error("Nexus must approve your developer account before you can submit products for review.");
+          }
           const { error } = await NexusDB.submitDeveloperProduct(productPayload());
           if (error) throw new Error(error.message);
           NexusUI.toast("Submitted for review.");

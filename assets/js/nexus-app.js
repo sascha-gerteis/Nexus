@@ -2943,6 +2943,13 @@ if (shouldImportN8n) {
   }
 
   async function renderWaitlist() {
+    await Promise.all([
+      renderDeveloperWaitlistRows(),
+      renderDeveloperAccounts()
+    ]);
+  }
+
+  async function renderDeveloperWaitlistRows() {
     const { data, error } = await NexusDB.listWaitlist();
     const body = document.getElementById("waitlistRows");
 
@@ -2986,6 +2993,104 @@ if (shouldImportN8n) {
           `;
         })
         .join("") || `<tr><td colspan="6">No waitlist signups yet.</td></tr>`;
+  }
+
+  function developerApprovalLabel(status) {
+    const value = String(status || "").toLowerCase();
+    if (value === "active") return "Approved";
+    if (value === "pending") return "Pending approval";
+    if (value === "hidden") return "Hidden";
+    return value ? value.replace(/_/g, " ") : "Unknown";
+  }
+
+  function developerApprovalClass(status) {
+    const value = String(status || "").toLowerCase();
+    if (value === "active") return "pill green";
+    if (value === "hidden") return "pill red";
+    return "pill orange";
+  }
+
+  async function renderDeveloperAccounts() {
+    const body = document.getElementById("developerAccountRows");
+    if (!body) return;
+
+    if (!NexusDB.listAllDevelopers) {
+      body.innerHTML = `<tr><td colspan="5">Developer approval tools are not available.</td></tr>`;
+      return;
+    }
+
+    const { data, error } = await NexusDB.listAllDevelopers();
+
+    if (error) {
+      body.innerHTML = `<tr><td colspan="5">${NexusUI.escapeHtml(error.message)}</td></tr>`;
+      return;
+    }
+
+    const developers = (data || []).slice().sort((a, b) => {
+      const priority = { pending: 0, active: 1, hidden: 2 };
+      const aStatus = priority[String(a.status || "").toLowerCase()] ?? 3;
+      const bStatus = priority[String(b.status || "").toLowerCase()] ?? 3;
+      if (aStatus !== bStatus) return aStatus - bStatus;
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+
+    body.innerHTML = developers.map((developer) => {
+      const status = String(developer.status || "pending").toLowerCase();
+      const canApprove = status !== "active";
+      const canHide = status !== "hidden";
+      const skills = Array.isArray(developer.skills) ? developer.skills : String(developer.skills || "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+
+      return `
+        <tr>
+          <td>
+            <strong>${NexusUI.escapeHtml(developer.display_name || "Unnamed developer")}</strong><br>
+            <span style="color:var(--muted);font-size:.85rem">${NexusUI.escapeHtml(developer.handle ? `@${developer.handle}` : developer.website || "")}</span>
+          </td>
+          <td>
+            <strong>${NexusUI.escapeHtml(developer.type || "Automation builder")}</strong><br>
+            <span style="color:var(--muted);font-size:.85rem">${NexusUI.escapeHtml(developer.short_description || skills.slice(0, 4).join(", ") || "No positioning added yet.")}</span>
+          </td>
+          <td><span class="${developerApprovalClass(status)}">${NexusUI.escapeHtml(developerApprovalLabel(status))}</span></td>
+          <td>${developer.created_at ? new Date(developer.created_at).toLocaleString() : ""}</td>
+          <td>
+            <div class="button-row">
+              ${
+                canApprove
+                  ? `<button class="btn btn-primary btn-small" type="button" onclick="NexusApp.updateDeveloperApproval('${NexusUI.escapeAttribute(developer.id)}','active')">Approve</button>`
+                  : `<a class="btn btn-secondary btn-small" href="/pages/developers/profile.html?id=${encodeURIComponent(developer.id)}" target="_blank">View profile</a>`
+              }
+              ${
+                canHide
+                  ? `<button class="btn btn-secondary btn-small" type="button" onclick="NexusApp.updateDeveloperApproval('${NexusUI.escapeAttribute(developer.id)}','hidden')">Hide</button>`
+                  : ""
+              }
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="5">No developer accounts yet.</td></tr>`;
+  }
+
+  async function updateDeveloperApproval(id, status) {
+    if (!id || !status || !NexusDB.updateDeveloperStatus) return;
+
+    const labels = {
+      active: "approve this developer account",
+      hidden: "hide this developer account"
+    };
+
+    const confirmed = window.confirm(`Are you sure you want to ${labels[status] || "update this developer account"}?`);
+    if (!confirmed) return;
+
+    const { error } = await NexusDB.updateDeveloperStatus(id, status);
+
+    if (error) {
+      NexusUI.toast(error.message || "Could not update developer account.");
+      return;
+    }
+
+    NexusUI.toast(status === "active" ? "Developer approved." : "Developer hidden.");
+    await renderDeveloperAccounts();
   }
 
   async function renderMessages() {
@@ -3147,6 +3252,7 @@ if (shouldImportN8n) {
   resetDemoMarketplace,
   updateReviewStatus,
   updatePayoutRequest,
+  updateDeveloperApproval,
   deleteReview,
   
 };

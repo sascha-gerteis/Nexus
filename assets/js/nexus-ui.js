@@ -43,22 +43,132 @@ const FX_CACHE_TTL_MS = 15 * 60 * 1000;
       .replace(/(^-|-$)/g, "");
   }
 
-  function toast(message) {
-    let el = document.getElementById("toast");
+  function inferNoticeType(message = "") {
+    const text = String(message || "").toLowerCase();
 
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "toast";
-      el.className = "toast";
-      document.body.appendChild(el);
+    if (/(error|failed|could not|missing|required|invalid|not found|denied|unauthorized|blocked|too short|too large|cannot|can't|no |wrong|problem)/.test(text)) {
+      return "error";
     }
 
-    el.textContent = message;
-    el.classList.add("show");
+    if (/(select|choose|enter|please|wait|running|important|soon|already|warning|check again)/.test(text)) {
+      return "warning";
+    }
 
-    setTimeout(() => {
-      el.classList.remove("show");
-    }, 2800);
+    if (/(saved|submitted|sent|created|updated|approved|deleted|removed|revoked|checked|passed|complete|completed|success|requested|loaded|joined|reset|on\.|off\.)/.test(text)) {
+      return "success";
+    }
+
+    return "info";
+  }
+
+  function noticeTitle(type = "info") {
+    if (type === "error") return "Action needed";
+    if (type === "success") return "Done";
+    if (type === "warning") return "Check this";
+    return "Update";
+  }
+
+  function ensureToastModal() {
+    let modal = document.getElementById("nexusGlobalNoticeModal");
+
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.className = "nexus-modal-lite";
+    modal.id = "nexusGlobalNoticeModal";
+    modal.setAttribute("aria-hidden", "true");
+
+    modal.innerHTML = `
+      <div class="nexus-modal-lite-backdrop" data-nexus-toast-close></div>
+
+      <div class="nexus-modal-lite-card nexus-global-notice-card" role="dialog" aria-modal="true" aria-labelledby="nexusGlobalNoticeTitle">
+        <button class="nexus-modal-lite-close" type="button" aria-label="Close notification" data-nexus-toast-close>&times;</button>
+
+        <span class="eyebrow" id="nexusGlobalNoticeEyebrow">Update</span>
+
+        <h2 id="nexusGlobalNoticeTitle">Update</h2>
+
+        <p id="nexusGlobalNoticeMessage">Something happened.</p>
+
+        <div class="nexus-global-notice-extra" id="nexusGlobalNoticeExtra" style="display:none"></div>
+
+        <div class="modal-lite-actions">
+          <button class="btn btn-primary" type="button" data-nexus-toast-close>Done</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll("[data-nexus-toast-close]").forEach((button) => {
+      button.addEventListener("click", closeToast);
+    });
+
+    if (!document.documentElement.dataset.nexusToastEscBound) {
+      document.documentElement.dataset.nexusToastEscBound = "true";
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeToast();
+      });
+    }
+
+    return modal;
+  }
+
+  function closeToast() {
+    const modal = document.getElementById("nexusGlobalNoticeModal");
+    if (!modal) return;
+
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("nexus-notice-open");
+  }
+
+  function toast(message, options = {}) {
+    const normalizedMessage = String(message || "Update").trim() || "Update";
+    const type = options.type || inferNoticeType(normalizedMessage);
+    const title = options.title || noticeTitle(type);
+
+    if (window.NexusNotice?.open) {
+      window.NexusNotice.open({
+        type,
+        title,
+        message: normalizedMessage,
+        extra: options.extra || ""
+      });
+      return;
+    }
+
+    const modal = ensureToastModal();
+    const eyebrow = document.getElementById("nexusGlobalNoticeEyebrow");
+    const titleEl = document.getElementById("nexusGlobalNoticeTitle");
+    const messageEl = document.getElementById("nexusGlobalNoticeMessage");
+    const extraEl = document.getElementById("nexusGlobalNoticeExtra");
+
+    if (eyebrow) {
+      if (type === "error") eyebrow.textContent = "Action needed";
+      else if (type === "success") eyebrow.textContent = "Success";
+      else if (type === "warning") eyebrow.textContent = "Important";
+      else eyebrow.textContent = "Update";
+    }
+
+    if (titleEl) titleEl.textContent = title;
+    if (messageEl) messageEl.textContent = normalizedMessage;
+
+    if (extraEl) {
+      if (options.extra) {
+        extraEl.style.display = "";
+        extraEl.textContent = options.extra;
+      } else {
+        extraEl.style.display = "none";
+        extraEl.textContent = "";
+      }
+    }
+
+    modal.classList.remove("success", "error", "warning", "info");
+    modal.classList.add(type);
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("nexus-notice-open");
   }
 
   function getCurrency() {
@@ -1294,6 +1404,8 @@ const originalAttributeValues = new WeakMap();
 Object.assign(I18N.en, {
   nav_browse_developers: "Browse developers",
   nav_join_waitlist: "Join waitlist",
+  nav_developer_apply: "Apply as developer",
+  nav_developer_login: "Developer login",
   nav_toggle: "Toggle navigation",
   common_explore_marketplace: "Explore marketplace",
   common_request_custom_automation: "Request custom automation",
@@ -1309,6 +1421,8 @@ Object.assign(I18N.th, {
   nav_developers: "à¸”à¸µà¹€à¸§à¸¥à¸¥à¸­à¸›à¹€à¸›à¸­à¸£à¹Œ",
   nav_browse_developers: "à¸”à¸¹à¸”à¸µà¹€à¸§à¸¥à¸¥à¸­à¸›à¹€à¸›à¸­à¸£à¹Œ",
   nav_join_waitlist: "à¹€à¸‚à¹‰à¸²à¸£à¹ˆà¸§à¸¡à¹€à¸§à¸•à¸¥à¸´à¸ªà¸•à¹Œ",
+  nav_developer_apply: "Apply as developer",
+  nav_developer_login: "Developer login",
   nav_about: "à¹€à¸à¸µà¹ˆà¸¢à¸§à¸à¸±à¸šà¹€à¸£à¸²",
   nav_contact: "à¸•à¸´à¸”à¸•à¹ˆà¸­",
   nav_dashboard: "à¹à¸”à¸Šà¸šà¸­à¸£à¹Œà¸”",
@@ -1629,6 +1743,8 @@ const EXTRA_I18N = {
     nav_developers: "นักพัฒนา",
     nav_browse_developers: "ดูนักพัฒนา",
     nav_join_waitlist: "เข้าร่วมเวตลิสต์",
+    nav_developer_apply: "สมัครเป็นนักพัฒนา",
+    nav_developer_login: "ล็อกอินนักพัฒนา",
     nav_about: "เกี่ยวกับเรา",
     nav_contact: "ติดต่อ",
     nav_dashboard: "แดชบอร์ด",
@@ -1666,6 +1782,8 @@ const EXTRA_I18N = {
     nav_developers: "开发者",
     nav_browse_developers: "浏览开发者",
     nav_join_waitlist: "加入候补名单",
+    nav_developer_apply: "申请成为开发者",
+    nav_developer_login: "开发者登录",
     nav_about: "关于我们",
     nav_contact: "联系",
     nav_dashboard: "仪表盘",
@@ -1688,6 +1806,8 @@ const EXTRA_I18N = {
     nav_developers: "Desarrolladores",
     nav_browse_developers: "Ver desarrolladores",
     nav_join_waitlist: "Unirse a la lista",
+    nav_developer_apply: "Aplicar como desarrollador",
+    nav_developer_login: "Login de desarrollador",
     nav_about: "Acerca de",
     nav_contact: "Contacto",
     nav_dashboard: "Panel",
@@ -1710,6 +1830,8 @@ const EXTRA_I18N = {
     nav_developers: "डेवलपर",
     nav_browse_developers: "डेवलपर देखें",
     nav_join_waitlist: "वेटलिस्ट में जुड़ें",
+    nav_developer_apply: "डेवलपर आवेदन",
+    nav_developer_login: "डेवलपर लॉगिन",
     nav_about: "हमारे बारे में",
     nav_contact: "संपर्क",
     nav_dashboard: "डैशबोर्ड",
@@ -1732,6 +1854,8 @@ const EXTRA_I18N = {
     nav_developers: "المطورون",
     nav_browse_developers: "تصفح المطورين",
     nav_join_waitlist: "انضم إلى قائمة الانتظار",
+    nav_developer_apply: "طلب الانضمام كمطور",
+    nav_developer_login: "دخول المطور",
     nav_about: "من نحن",
     nav_contact: "تواصل",
     nav_dashboard: "لوحة التحكم",
@@ -1754,6 +1878,8 @@ const EXTRA_I18N = {
     nav_developers: "Développeurs",
     nav_browse_developers: "Voir les développeurs",
     nav_join_waitlist: "Rejoindre la liste",
+    nav_developer_apply: "Candidature développeur",
+    nav_developer_login: "Connexion développeur",
     nav_about: "À propos",
     nav_contact: "Contact",
     nav_dashboard: "Tableau de bord",
@@ -3065,7 +3191,7 @@ function globalNav(active = "") {
         </a>
       `
     : `
-        <div class="nav-dropdown ${active === "developers" || active === "developer-waitlist" ? "active" : ""}">
+        <div class="nav-dropdown ${active === "developers" ? "active" : ""}">
           <button class="nav-link nav-dropdown-trigger" type="button" aria-haspopup="true">
             <span data-i18n="nav_developers">${t("nav_developers")}</span>
             <span class="nav-dropdown-caret" aria-hidden="true">&#9662;</span>
@@ -3075,8 +3201,11 @@ function globalNav(active = "") {
             <a href="/pages/developers/index.html" role="menuitem" data-i18n="nav_browse_developers">
               ${t("nav_browse_developers")}
             </a>
-            <a href="/pages/developers/waitlist.html" role="menuitem" data-i18n="nav_join_waitlist">
-              ${t("nav_join_waitlist")}
+            <a href="/pages/developer/signup.html" role="menuitem" data-i18n="nav_developer_apply">
+              ${t("nav_developer_apply")}
+            </a>
+            <a href="/pages/developer/login.html" role="menuitem" data-i18n="nav_developer_login">
+              ${t("nav_developer_login")}
             </a>
           </div>
         </div>
@@ -3663,7 +3792,7 @@ function adminSidebarSections(active = "") {
     {
       label: "Developers",
       items: [
-        { id: "waitlist", label: "Developer Waitlist", href: "/pages/admin/waitlist.html" },
+        { id: "waitlist", label: "Developer Intake", href: "/pages/admin/waitlist.html" },
         { id: "developer-profile", label: "Nexus Profile", href: "/pages/admin/developer-profile.html" }
       ]
     },
