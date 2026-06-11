@@ -3201,7 +3201,7 @@ function globalNav(active = "") {
             <a href="/pages/developers/index.html" role="menuitem" data-i18n="nav_browse_developers">
               ${t("nav_browse_developers")}
             </a>
-            <a href="/pages/developer/signup.html" role="menuitem" data-i18n="nav_developer_apply">
+            <a href="/pages/developers/waitlist.html" role="menuitem" data-i18n="nav_developer_apply">
               ${t("nav_developer_apply")}
             </a>
             <a href="/pages/developer/login.html" role="menuitem" data-i18n="nav_developer_login">
