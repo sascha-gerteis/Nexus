@@ -974,9 +974,11 @@ async function updateInstallStatus(status) {
   }
 
   if (status === "completed") {
-    const confirmed = confirm(
-      "Mark this Nexus Guided Install as completed?\n\nThis will update the order and customer automation status."
-    );
+    const confirmed = await NexusUI.confirmDialog({
+      title: "Mark install complete?",
+      message: "This will update the order and customer automation status.",
+      confirmText: "Mark complete"
+    });
 
     if (!confirmed) return;
   }

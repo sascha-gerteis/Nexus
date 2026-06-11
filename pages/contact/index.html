@@ -451,7 +451,15 @@
     const messageEl = document.getElementById("contactNoticeMessage");
 
     if (!modal) {
-      alert(message || title || "Update");
+      if (window.NexusNotice?.open) {
+        window.NexusNotice.open({
+          type,
+          title: title || "Update",
+          message: message || ""
+        });
+      } else if (window.NexusUI?.toast) {
+        window.NexusUI.toast(message || title || "Update");
+      }
       return;
     }
 

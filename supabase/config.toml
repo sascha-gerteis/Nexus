@@ -21,3 +21,6 @@ verify_jwt = false
 
 [functions.runtime-submit-output]
 verify_jwt = false
+
+[functions.system-health]
+verify_jwt = false

@@ -171,6 +171,163 @@ const FX_CACHE_TTL_MS = 15 * 60 * 1000;
     document.body.classList.add("nexus-notice-open");
   }
 
+  function ensureDialogModal() {
+    let modal = document.getElementById("nexusGlobalDialogModal");
+
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.className = "nexus-modal-lite";
+    modal.id = "nexusGlobalDialogModal";
+    modal.setAttribute("aria-hidden", "true");
+
+    modal.innerHTML = `
+      <div class="nexus-modal-lite-backdrop" data-nexus-dialog-action="cancel"></div>
+
+      <div class="nexus-modal-lite-card nexus-global-notice-card" role="dialog" aria-modal="true" aria-labelledby="nexusGlobalDialogTitle">
+        <button class="nexus-modal-lite-close" type="button" aria-label="Close dialog" data-nexus-dialog-action="cancel">&times;</button>
+
+        <span class="eyebrow" id="nexusGlobalDialogEyebrow">Confirm</span>
+
+        <h2 id="nexusGlobalDialogTitle">Confirm action</h2>
+
+        <p id="nexusGlobalDialogMessage">Are you sure?</p>
+
+        <div id="nexusGlobalDialogInputWrap" style="display:none">
+          <label id="nexusGlobalDialogInputLabel" for="nexusGlobalDialogTextInput">Details</label>
+          <input class="input" id="nexusGlobalDialogTextInput">
+          <textarea class="textarea" id="nexusGlobalDialogInput" rows="4" style="display:none"></textarea>
+        </div>
+
+        <div class="modal-lite-actions">
+          <button class="btn btn-secondary" type="button" data-nexus-dialog-action="cancel" id="nexusGlobalDialogCancel">Cancel</button>
+          <button class="btn btn-primary" type="button" data-nexus-dialog-action="confirm" id="nexusGlobalDialogConfirm">Continue</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll("[data-nexus-dialog-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.getAttribute("data-nexus-dialog-action");
+        closeDialog(action === "confirm");
+      });
+    });
+
+    return modal;
+  }
+
+  function closeDialog(confirmed) {
+    const modal = document.getElementById("nexusGlobalDialogModal");
+    if (!modal) return;
+
+    const mode = modal.dataset.mode || "confirm";
+    const textarea = document.getElementById("nexusGlobalDialogInput");
+    const textInput = document.getElementById("nexusGlobalDialogTextInput");
+    const input = modal.dataset.inputControl === "textarea" ? textarea : textInput;
+    const resolve = modal._nexusResolve;
+
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("nexus-notice-open");
+    modal._nexusResolve = null;
+
+    if (typeof resolve === "function") {
+      if (!confirmed) {
+        resolve(mode === "prompt" ? null : false);
+      } else {
+        resolve(mode === "prompt" ? (input?.value || "") : true);
+      }
+    }
+  }
+
+  function openDialog(options = {}) {
+    const modal = ensureDialogModal();
+    const mode = options.mode || "confirm";
+    const eyebrow = document.getElementById("nexusGlobalDialogEyebrow");
+    const title = document.getElementById("nexusGlobalDialogTitle");
+    const message = document.getElementById("nexusGlobalDialogMessage");
+    const inputWrap = document.getElementById("nexusGlobalDialogInputWrap");
+    const inputLabel = document.getElementById("nexusGlobalDialogInputLabel");
+    const input = document.getElementById("nexusGlobalDialogInput");
+    const textInput = document.getElementById("nexusGlobalDialogTextInput");
+    const cancel = document.getElementById("nexusGlobalDialogCancel");
+    const confirm = document.getElementById("nexusGlobalDialogConfirm");
+
+    modal.dataset.mode = mode;
+
+    if (eyebrow) eyebrow.textContent = options.eyebrow || (mode === "prompt" ? "Input needed" : "Confirm");
+    if (title) title.textContent = options.title || (mode === "prompt" ? "Add details" : "Confirm action");
+    if (message) message.textContent = options.message || "";
+    if (cancel) cancel.textContent = options.cancelText || "Cancel";
+    if (confirm) confirm.textContent = options.confirmText || "Continue";
+
+    if (inputWrap && input && textInput) {
+      const useTextarea = mode === "prompt" && options.inputType !== "password" && Number(options.rows || 4) > 1;
+      modal.dataset.inputControl = useTextarea ? "textarea" : "input";
+      inputWrap.style.display = mode === "prompt" ? "" : "none";
+      textInput.style.display = useTextarea ? "none" : "";
+      input.style.display = useTextarea ? "" : "none";
+      textInput.type = options.inputType || "text";
+      textInput.value = options.defaultValue || "";
+      textInput.placeholder = options.placeholder || "";
+      input.value = options.defaultValue || "";
+      input.placeholder = options.placeholder || "";
+      input.rows = Number(options.rows || 4);
+    }
+
+    if (inputLabel) {
+      inputLabel.textContent = options.inputLabel || "Details";
+      inputLabel.setAttribute("for", modal.dataset.inputControl === "textarea" ? "nexusGlobalDialogInput" : "nexusGlobalDialogTextInput");
+    }
+
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("nexus-notice-open");
+
+    setTimeout(() => {
+      if (mode === "prompt") {
+        const target = modal.dataset.inputControl === "textarea" ? input : textInput;
+        target?.focus();
+      }
+      else confirm?.focus();
+    }, 50);
+
+    return new Promise((resolve) => {
+      modal._nexusResolve = resolve;
+    });
+  }
+
+  function confirmDialog(options = {}) {
+    const normalized = typeof options === "string" ? { message: options } : options;
+    return openDialog({
+      mode: "confirm",
+      title: normalized.title,
+      message: normalized.message,
+      eyebrow: normalized.eyebrow,
+      confirmText: normalized.confirmText || "Confirm",
+      cancelText: normalized.cancelText || "Cancel"
+    });
+  }
+
+  function promptDialog(options = {}) {
+    const normalized = typeof options === "string" ? { message: options } : options;
+    return openDialog({
+      mode: "prompt",
+      title: normalized.title,
+      message: normalized.message,
+      eyebrow: normalized.eyebrow,
+      inputLabel: normalized.inputLabel,
+      placeholder: normalized.placeholder,
+      defaultValue: normalized.defaultValue,
+      inputType: normalized.inputType,
+      rows: normalized.rows,
+      confirmText: normalized.confirmText || "Save",
+      cancelText: normalized.cancelText || "Cancel"
+    });
+  }
+
   function getCurrency() {
     const stored = String(localStorage.getItem("nexus_currency") || "THB").toUpperCase();
     return SUPPORTED_CURRENCIES.includes(stored) ? stored : "THB";
@@ -3775,7 +3932,8 @@ function adminSidebarSections(active = "") {
       items: [
         { id: "dashboard", label: "Overview", href: "/pages/admin/dashboard.html" },
         { id: "orders", label: "Orders", href: "/pages/admin/orders.html" },
-        { id: "finance", label: "Finance", href: "/pages/admin/finance.html" }
+        { id: "finance", label: "Finance", href: "/pages/admin/finance.html" },
+        { id: "health", label: "System Health", href: "/pages/admin/health.html" }
       ]
     },
     {
@@ -3862,6 +4020,8 @@ function mountAdminSidebar(options = {}) {
   q,
   slugify,
   toast,
+  confirmDialog,
+  promptDialog,
   getCurrency,
   setCurrency,
   currencySwitch,

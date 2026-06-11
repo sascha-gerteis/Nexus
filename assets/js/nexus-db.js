@@ -273,7 +273,9 @@ const NexusDB = (() => {
     const { data: profile, error: profileError } = await getProfile(user.id);
 
     if (profileError || !profile || profile.role !== "admin") {
-      alert("Admin access required.");
+      if (window.NexusUI?.toast) {
+        window.NexusUI.toast("Admin access required.");
+      }
       location.href = "/index.html";
       return null;
     }
@@ -1744,13 +1746,60 @@ async function listBuyerAutomationOutputs() {
         status,
         setup_status,
         runtime_status,
-        health_status
+        health_status,
+        developers(
+          id,
+          display_name,
+          handle,
+          avatar_letter
+        )
       )
     `)
     .eq("buyer_id", user.id)
     .eq("status", "published")
     .order("created_at", { ascending: false })
     .limit(100);
+}
+
+async function listBuyerAutomationRuns(userId) {
+  let buyerId = userId || "";
+
+  if (!buyerId) {
+    const { data: user } = await getUser();
+
+    if (!user) {
+      return {
+        data: [],
+        error: { message: "Login required." }
+      };
+    }
+
+    buyerId = user.id;
+  }
+
+  return supabase
+    .from("automation_runs")
+    .select(`
+      id,
+      customer_automation_id,
+      automation_id,
+      order_id,
+      runtime_type,
+      trigger_type,
+      trigger_source,
+      status,
+      run_key,
+      scheduled_for,
+      n8n_execution_id,
+      error_message,
+      started_at,
+      finished_at,
+      created_at,
+      updated_at
+    `)
+    .eq("buyer_id", buyerId)
+    .order("created_at", { ascending: false })
+    .limit(200);
 }
 
 async function getBuyerAutomationOutput(outputId) {
@@ -1781,7 +1830,13 @@ async function getBuyerAutomationOutput(outputId) {
         status,
         setup_status,
         runtime_status,
-        health_status
+        health_status,
+        developers(
+          id,
+          display_name,
+          handle,
+          avatar_letter
+        )
       )
     `)
     .eq("id", outputId)
@@ -1801,6 +1856,12 @@ async function provisionCustomerWorkflow(customerAutomationId) {
 
 async function runScheduledAutomation(payload = {}) {
   return callNexusFunction("run-scheduled-automations", payload);
+}
+
+async function getSystemHealth() {
+  return callNexusFunction("system-health", {
+    action: "check"
+  });
 }
 
 async function manageAutomationLifecycle(payload) {
@@ -2107,10 +2168,12 @@ startN8nWorkflowTest,
 checkN8nWorkflowTest,
 listBuyerCustomerAutomations,
 listBuyerAutomationOutputs,
+listBuyerAutomationRuns,
 getBuyerAutomationOutput,
 submitAutomationSetup,
 provisionCustomerWorkflow,
 runScheduledAutomation,
+getSystemHealth,
 manageAutomationLifecycle,
 safeDeleteAutomation,
 pauseAutomation,

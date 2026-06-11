@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260609-buyergrid">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260611-monthly-history">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -78,6 +78,7 @@
           <div class="buyer-tabs">
             <button class="buyer-tab active" type="button" data-tab="overview">Overview</button>
             <button class="buyer-tab" type="button" data-tab="automations">My Automations</button>
+            <button class="buyer-tab buyer-tab-contextual" type="button" data-tab="automation-detail" id="buyerAutomationDetailTab" hidden>Automation detail</button>
             <button class="buyer-tab" type="button" data-tab="outputs">Outputs</button>
             <button class="buyer-tab" type="button" data-tab="activity">Activity</button>
             <button class="buyer-tab" type="button" data-tab="orders">Orders</button>
@@ -109,6 +110,20 @@
 
             <div id="buyerAutomationsList" class="buyer-clean-list">
               Loading automations...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="automation-detail">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Automation detail</span>
+                <h2 id="buyerAutomationDetailHeading">Automation history</h2>
+                <p>See the next monthly run, latest result, and previous outputs for this automation.</p>
+              </div>
+            </div>
+
+            <div id="buyerAutomationDetail" class="buyer-clean-list">
+              Select an automation to view its history.
             </div>
           </section>
 
@@ -296,7 +311,7 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
 <script src="/assets/js/nexus-notice.js"></script>
-<script src="/assets/js/nexus-db.js?v=20260609-buyergrid"></script>
+<script src="/assets/js/nexus-db.js?v=20260611-monthly-history"></script>
 <script src="/assets/js/nexus-app.js?v=20260609-buyergrid"></script>
 
   <script>
@@ -305,10 +320,12 @@
       orders: [],
       automations: [],
       events: [],
-      outputs: []
+      outputs: [],
+      runs: []
     };
     let buyerMessagesLoaded = false;
     let dashboardEnsureInFlight = null;
+    let selectedAutomationId = null;
 
     function escapeHtml(value) {
       return String(value || "")
@@ -689,6 +706,79 @@ function productTitleFromAutomation(item) {
   return item?.name || item?.automations?.title || item?.orders?.automation_title || "Automation";
 }
 
+function isMonthlyAutomation(item) {
+  const frequency = String(item?.run_frequency || "").toLowerCase();
+  const order = item?.orders || {};
+
+  return (
+    frequency === "monthly" ||
+    String(order?.stripe_mode || "").toLowerCase() === "subscription" ||
+    Boolean(order?.stripe_subscription_id) ||
+    String(order?.price_display || "").toLowerCase().includes("/mo") ||
+    String(order?.price_display || "").toLowerCase().includes("month")
+  );
+}
+
+function cadenceLabel(item) {
+  return isMonthlyAutomation(item) ? "Monthly" : "One-time";
+}
+
+function nextRunLabel(item) {
+  if (!isMonthlyAutomation(item)) return "Not scheduled";
+
+  const status = String(item?.schedule_status || "").toLowerCase();
+
+  if (status === "paused") return "Paused";
+  if (status === "inactive") return "After setup is complete";
+  if (status === "error") return "Needs attention";
+
+  if (!item?.next_run_at) {
+    return status === "active" ? "Waiting for schedule" : humanizeStatus(status || "not scheduled");
+  }
+
+  const next = new Date(item.next_run_at);
+  if (Number.isNaN(next.getTime())) return "Waiting for schedule";
+
+  if (next <= new Date()) return "Due now";
+
+  return next.toLocaleString();
+}
+
+function lastRunLabel(item) {
+  return item?.last_run_at ? dateLabel(item.last_run_at) : "Not yet";
+}
+
+function scheduleStatusLabel(item) {
+  if (!isMonthlyAutomation(item)) return "Manual";
+  return humanizeStatus(item?.schedule_status || "inactive");
+}
+
+function runStatusTone(status) {
+  const value = String(status || "").toLowerCase();
+  if (value.includes("success")) return "green";
+  if (value.includes("error") || value.includes("failed")) return "red";
+  if (value.includes("running") || value.includes("queued")) return "orange";
+  return "blue";
+}
+
+function outputsForAutomation(customerAutomationId) {
+  return (dashboardData.outputs || [])
+    .filter(output => output.customer_automation_id === customerAutomationId)
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+}
+
+function runsForAutomation(customerAutomationId) {
+  return (dashboardData.runs || [])
+    .filter(run => run.customer_automation_id === customerAutomationId)
+    .sort((a, b) => new Date(b.created_at || b.started_at || 0) - new Date(a.created_at || a.started_at || 0));
+}
+
+function openAutomationDetail(customerAutomationId) {
+  selectedAutomationId = customerAutomationId;
+  renderAutomationDetail();
+  activateTab("automation-detail");
+}
+
     function activateTab(tabName) {
       document.querySelectorAll(".buyer-tab").forEach(button => {
         button.classList.toggle("active", button.dataset.tab === tabName);
@@ -698,7 +788,9 @@ function productTitleFromAutomation(item) {
         panel.classList.toggle("active", panel.dataset.tabPanel === tabName);
       });
 
-      localStorage.setItem("nexus_buyer_dashboard_tab", tabName);
+      if (tabName !== "automation-detail") {
+        localStorage.setItem("nexus_buyer_dashboard_tab", tabName);
+      }
 
       if (tabName === "messages") {
         loadBuyerMessages();
@@ -744,7 +836,8 @@ function productTitleFromAutomation(item) {
         { data: orders },
         { data: automations },
         { data: events },
-        { data: outputs }
+        { data: outputs },
+        { data: runs }
       ] = await Promise.all([
         NexusDB.getBuyerProfile(user.id),
         NexusDB.listBuyerOrders(user.id),
@@ -752,6 +845,9 @@ function productTitleFromAutomation(item) {
         NexusDB.listBuyerAutomationEvents(user.id),
         NexusDB.listBuyerAutomationOutputs
           ? NexusDB.listBuyerAutomationOutputs()
+          : Promise.resolve({ data: [] }),
+        NexusDB.listBuyerAutomationRuns
+          ? NexusDB.listBuyerAutomationRuns(user.id)
           : Promise.resolve({ data: [] })
       ]);
 
@@ -760,7 +856,8 @@ function productTitleFromAutomation(item) {
         orders: orders || [],
         automations: automations || [],
         events: events || [],
-        outputs: outputs || []
+        outputs: outputs || [],
+        runs: runs || []
       };
 
       renderDashboard();
@@ -839,6 +936,7 @@ function productTitleFromAutomation(item) {
 
       renderOverview(automations, outputs, events, orders);
       renderAutomations(automations, outputs);
+      renderAutomationDetail();
       renderOutputs(outputs, automations);
       renderEvents(events);
       renderOrders(orders);
@@ -1106,6 +1204,9 @@ function productTitleFromAutomation(item) {
       const setupLabel = getBuyerSetupActionLabel(item);
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
       const primaryButton = getAutomationActionButton(item, latestOutput, state);
+      const automationOutputs = outputsForAutomation(item.id);
+      const automationRuns = runsForAutomation(item.id);
+      const monthly = isMonthlyAutomation(item);
 
       return `
         <article class="buyer-automation-board-card">
@@ -1124,6 +1225,14 @@ function productTitleFromAutomation(item) {
           </div>
 
           <div class="buyer-automation-board-meta">
+            <div class="${monthly ? "monthly" : ""}">
+              <span>Cadence</span>
+              <strong>${escapeHtml(cadenceLabel(item))}</strong>
+            </div>
+            <div>
+              <span>Next run</span>
+              <strong>${escapeHtml(nextRunLabel(item))}</strong>
+            </div>
             <div>
               <span>Next step</span>
               <strong>${escapeHtml(state.primaryAction || setupLabel)}</strong>
@@ -1136,6 +1245,12 @@ function productTitleFromAutomation(item) {
               <span>Latest output</span>
               <strong>${escapeHtml(latestOutput ? dateLabel(latestOutput.created_at) : "Not yet")}</strong>
             </div>
+          </div>
+
+          <div class="buyer-automation-history-strip">
+            <span>${automationOutputs.length} output${automationOutputs.length === 1 ? "" : "s"}</span>
+            <span>${automationRuns.length} run${automationRuns.length === 1 ? "" : "s"} recorded</span>
+            <span>${escapeHtml(scheduleStatusLabel(item))}</span>
           </div>
 
           ${
@@ -1163,6 +1278,9 @@ function productTitleFromAutomation(item) {
 
           <div class="buyer-automation-card-actions">
             ${primaryButton}
+            <button class="btn btn-secondary btn-small" type="button" onclick="openAutomationDetail('${escapeJsString(item.id)}')">
+              Schedule & history
+            </button>
             <a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>
             ${latestOutput ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View latest output</a>` : ""}
             ${
@@ -1188,6 +1306,159 @@ function productTitleFromAutomation(item) {
             </button>
           </div>
         </article>
+      `;
+    }
+
+    function renderAutomationDetail() {
+      const root = document.getElementById("buyerAutomationDetail");
+      const tab = document.getElementById("buyerAutomationDetailTab");
+      const heading = document.getElementById("buyerAutomationDetailHeading");
+
+      if (!root) return;
+
+      const automations = dashboardData.automations || [];
+      const item = automations.find(row => row.id === selectedAutomationId);
+
+      if (!item) {
+        if (tab) {
+          tab.hidden = true;
+          tab.textContent = "Automation detail";
+        }
+
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>Select an automation</h3>
+            <p>Open one automation from the My Automations tab to see its schedule and output history.</p>
+            <button class="btn btn-primary btn-small" type="button" onclick="activateTab('automations')">View automations</button>
+          </div>
+        `;
+        return;
+      }
+
+      const product = item.automations || {};
+      const productTitle = productTitleFromAutomation(item);
+      const developerName = developerDisplayName(item);
+      const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id);
+      const outputs = outputsForAutomation(item.id);
+      const runs = runsForAutomation(item.id);
+      const state = automationState(item, latestOutput);
+      const setupUrl = getBuyerSetupUrl(item);
+      const setupLabel = getBuyerSetupActionLabel(item);
+      const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+
+      if (tab) {
+        tab.hidden = false;
+        tab.textContent = productTitle.length > 18 ? `${productTitle.slice(0, 18)}...` : productTitle;
+      }
+
+      if (heading) {
+        heading.textContent = productTitle;
+      }
+
+      root.innerHTML = `
+        <div class="buyer-automation-detail-shell">
+          <article class="buyer-automation-detail-hero">
+            <div class="buyer-automation-board-main">
+              <div class="automation-icon ${escapeHtml(product.color || "")}">
+                ${escapeHtml(product.icon || "AI")}
+              </div>
+              <div>
+                <div class="buyer-automation-title-row">
+                  <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
+                  <span class="${isMonthlyAutomation(item) ? "pill blue" : "pill"}">${escapeHtml(cadenceLabel(item))}</span>
+                  <span class="buyer-builder-inline">Built by ${escapeHtml(developerName)}</span>
+                </div>
+                <h3>${escapeHtml(productTitle)}</h3>
+                <p>${escapeHtml(product.short_description || state.description)}</p>
+              </div>
+            </div>
+
+            <div class="buyer-automation-card-actions">
+              ${getAutomationActionButton(item, latestOutput, state)}
+              <a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>
+              ${latestOutput ? `<a class="btn btn-secondary btn-small" href="${outputLink}">Open latest output</a>` : ""}
+            </div>
+          </article>
+
+          <div class="buyer-automation-detail-grid">
+            <article>
+              <span>Next monthly run</span>
+              <strong>${escapeHtml(nextRunLabel(item))}</strong>
+              <p>${isMonthlyAutomation(item) ? "Nexus runs this automation once each paid month after setup is complete." : "This automation is not scheduled monthly."}</p>
+            </article>
+            <article>
+              <span>Schedule status</span>
+              <strong>${escapeHtml(scheduleStatusLabel(item))}</strong>
+              <p>Last run: ${escapeHtml(lastRunLabel(item))}</p>
+            </article>
+            <article>
+              <span>Outputs</span>
+              <strong>${outputs.length}</strong>
+              <p>${outputs.length ? "Previous results are listed below." : "No outputs have been published yet."}</p>
+            </article>
+            <article>
+              <span>Runtime history</span>
+              <strong>${runs.length}</strong>
+              <p>${runs[0]?.status ? `Latest run: ${humanizeStatus(runs[0].status)}` : "No run records yet."}</p>
+            </article>
+          </div>
+
+          <div class="buyer-automation-history-grid">
+            <section class="buyer-automation-history-panel">
+              <div class="buyer-output-group-head">
+                <div>
+                  <span>Output history</span>
+                  <h3>Past results</h3>
+                  <p>Every published output for ${escapeHtml(productTitle)}.</p>
+                </div>
+              </div>
+
+              <div class="buyer-output-row-list">
+                ${
+                  outputs.length
+                    ? outputs.map(output => `
+                      <a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
+                        <div>
+                          <strong>${escapeHtml(output.title || "Automation output")}</strong>
+                          <small>${escapeHtml(output.output_type || product.category || "Output")} by ${escapeHtml(developerName)}</small>
+                          <p>${escapeHtml(output.summary || "Open the output to view details.")}</p>
+                        </div>
+                        <span>${escapeHtml(dateLabel(output.created_at))}</span>
+                      </a>
+                    `).join("")
+                    : `<div class="buyer-lane-empty">No outputs for this automation yet.</div>`
+                }
+              </div>
+            </section>
+
+            <section class="buyer-automation-history-panel">
+              <div class="buyer-output-group-head">
+                <div>
+                  <span>Run history</span>
+                  <h3>Monthly runs</h3>
+                  <p>Scheduled and manual runtime attempts for this automation.</p>
+                </div>
+              </div>
+
+              <div class="buyer-run-history-list">
+                ${
+                  runs.length
+                    ? runs.map(run => `
+                      <article class="buyer-run-history-row ${escapeHtml(runStatusTone(run.status))}">
+                        <div>
+                          <span class="${pillClassFromTone(runStatusTone(run.status))}">${escapeHtml(humanizeStatus(run.status || "recorded"))}</span>
+                          <strong>${escapeHtml(humanizeStatus(run.trigger_type || "automation run"))}</strong>
+                          <p>${escapeHtml(run.error_message || `Scheduled for ${run.scheduled_for ? dateLabel(run.scheduled_for) : dateLabel(run.created_at)}`)}</p>
+                        </div>
+                        <small>${escapeHtml(run.finished_at ? dateLabel(run.finished_at) : dateLabel(run.started_at || run.created_at))}</small>
+                      </article>
+                    `).join("")
+                    : `<div class="buyer-lane-empty">No run records for this automation yet.</div>`
+                }
+              </div>
+            </section>
+          </div>
+        </div>
       `;
     }
 

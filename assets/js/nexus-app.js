@@ -1492,7 +1492,11 @@ async function submitCheckoutIntent(event) {
   }
 
   async function disableDemoMarketplace() {
-    const confirmed = confirm("Turn off demo marketplace mode?\n\nSynthetic demo developers, products, and reviews will be hidden. Real marketplace data will not be changed.");
+    const confirmed = await NexusUI.confirmDialog({
+      title: "Turn off demo mode?",
+      message: "Synthetic demo developers, products, and reviews will be hidden. Real marketplace data will not be changed.",
+      confirmText: "Turn off"
+    });
     if (!confirmed) return;
 
     if (typeof NexusDB.disableDemoMarketplace !== "function") {
@@ -1518,7 +1522,11 @@ async function submitCheckoutIntent(event) {
   }
 
   async function resetDemoMarketplace() {
-    const confirmed = confirm("Reset demo marketplace content?\n\nThis restores the synthetic demo developers, products, and reviews. The current on/off status will be preserved.");
+    const confirmed = await NexusUI.confirmDialog({
+      title: "Reset demo content?",
+      message: "This restores the synthetic demo developers, products, and reviews. The current on/off status will be preserved.",
+      confirmText: "Reset content"
+    });
     if (!confirmed) return;
 
     if (typeof NexusDB.resetDemoMarketplace !== "function") {
@@ -1744,13 +1752,37 @@ async function submitCheckoutIntent(event) {
     let adminNote = "";
 
     if (status === "paid") {
-      paymentReference = prompt("Payment reference, bank transfer note, or receipt ID:") || "";
-      if (confirm("Attach a receipt file now?")) {
+      paymentReference = await NexusUI.promptDialog({
+        title: "Mark payout paid",
+        message: "Add the payment reference, bank transfer note, or receipt ID.",
+        inputLabel: "Payment reference",
+        rows: 1,
+        confirmText: "Continue"
+      }) || "";
+      const attachReceipt = await NexusUI.confirmDialog({
+        title: "Attach receipt?",
+        message: "Attach a receipt file from this device now?",
+        confirmText: "Attach file",
+        cancelText: "Skip"
+      });
+      if (attachReceipt) {
         paymentReceiptFile = await pickPayoutReceiptFile();
       }
-      paymentReceiptUrl = prompt("Receipt URL or file link (optional):") || "";
+      paymentReceiptUrl = await NexusUI.promptDialog({
+        title: "Receipt link",
+        message: "Add a receipt URL or file link if you have one.",
+        inputLabel: "Receipt URL",
+        placeholder: "Optional",
+        rows: 1,
+        confirmText: "Save"
+      }) || "";
     } else if (status === "rejected") {
-      adminNote = prompt("Reason for rejecting this payout request:") || "";
+      adminNote = await NexusUI.promptDialog({
+        title: "Reject payout request",
+        message: "Write the reason for rejecting this payout request.",
+        inputLabel: "Admin note",
+        confirmText: "Reject request"
+      }) || "";
     }
 
     const { error } = await NexusDB.updateDeveloperPayoutRequest({
@@ -1964,9 +1996,11 @@ async function submitCheckoutIntent(event) {
         .join("") || `<tr><td colspan="5">${emptyLabel}</td></tr>`;
   }
 async function pauseAutomation(id) {
-  const confirmed = confirm(
-    "Pause this product?\n\nNew buyers will not be able to purchase it, but existing buyers will keep access."
-  );
+  const confirmed = await NexusUI.confirmDialog({
+    title: "Pause this product?",
+    message: "New buyers will not be able to purchase it, but existing buyers will keep access.",
+    confirmText: "Pause product"
+  });
 
   if (!confirmed) return;
 
@@ -1988,7 +2022,11 @@ async function pauseAutomation(id) {
 }
 
 async function approveDeveloperProduct(id) {
-  const confirmed = confirm("Approve this product and publish it live?");
+  const confirmed = await NexusUI.confirmDialog({
+    title: "Approve product?",
+    message: "This will publish the developer product live after the workflow checks pass.",
+    confirmText: "Approve product"
+  });
   if (!confirmed) return;
 
   let { data: product, error: productError } = await NexusDB.getAutomationById(id);
@@ -2039,7 +2077,11 @@ async function approveDeveloperProduct(id) {
 }
 
 async function rejectDeveloperProduct(id) {
-  const confirmed = confirm("Reject this product? It will be removed from the review queue.");
+  const confirmed = await NexusUI.confirmDialog({
+    title: "Reject product?",
+    message: "This product will be removed from the review queue.",
+    confirmText: "Reject product"
+  });
   if (!confirmed) return;
 
   const { error } = await NexusDB.deleteAutomation(id);
@@ -2054,9 +2096,11 @@ async function rejectDeveloperProduct(id) {
 }
 
  async function deleteAutomation(id) {
-  const confirmed = confirm(
-    "Delete this product?\n\nIf no buyers purchased it, Nexus will also delete the linked n8n workflow. If buyers exist, deletion will be blocked."
-  );
+  const confirmed = await NexusUI.confirmDialog({
+    title: "Delete product?",
+    message: "If no buyers purchased it, Nexus will also delete the linked n8n workflow. If buyers exist, deletion will be blocked.",
+    confirmText: "Delete product"
+  });
 
   if (!confirmed) return;
 
@@ -2071,9 +2115,11 @@ async function rejectDeveloperProduct(id) {
     const details = error.details || {};
 
     if (details.recommended_action === "pause") {
-      const pauseInstead = confirm(
-        `${error.message}\n\nDo you want to pause this product instead? Existing buyers will keep access, but new buyers cannot purchase it.`
-      );
+      const pauseInstead = await NexusUI.confirmDialog({
+        title: "Pause instead?",
+        message: `${error.message} Do you want to pause this product instead? Existing buyers will keep access, but new buyers cannot purchase it.`,
+        confirmText: "Pause product"
+      });
 
       if (pauseInstead) {
         await pauseAutomation(id);
@@ -2800,7 +2846,12 @@ if (shouldImportN8n) {
   }
 
   async function deleteReview(id) {
-    if (!confirm("Delete review?")) return;
+    const confirmed = await NexusUI.confirmDialog({
+      title: "Delete review?",
+      message: "This permanently removes the review from Nexus.",
+      confirmText: "Delete review"
+    });
+    if (!confirmed) return;
 
     const { error } = await NexusDB.deleteReview(id);
 
@@ -3079,7 +3130,11 @@ if (shouldImportN8n) {
       hidden: "hide this developer account"
     };
 
-    const confirmed = window.confirm(`Are you sure you want to ${labels[status] || "update this developer account"}?`);
+    const confirmed = await NexusUI.confirmDialog({
+      title: "Update developer account?",
+      message: `Are you sure you want to ${labels[status] || "update this developer account"}?`,
+      confirmText: status === "active" ? "Approve developer" : "Update developer"
+    });
     if (!confirmed) return;
 
     const { error } = await NexusDB.updateDeveloperStatus(id, status);

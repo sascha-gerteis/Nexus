@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260608-devfix">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260611-output-reader">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -53,7 +53,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
-  <script src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
+  <script src="/assets/js/nexus-db.js?v=20260611-output-reader"></script>
 
   <script>
     function getParam(name) {
@@ -67,6 +67,72 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+    }
+
+    function dateLabel(value) {
+      if (!value) return "Not recorded";
+      return new Date(value).toLocaleString();
+    }
+
+    function outputTypeLabel(value) {
+      const raw = String(value || "report").trim();
+      return raw
+        .replaceAll("_", " ")
+        .replaceAll("-", " ")
+        .replace(/\b\w/g, char => char.toUpperCase());
+    }
+
+    function developerName(output) {
+      const nested = output?.customer_automations?.developers || {};
+      const direct = output?.developers || {};
+      return nested.display_name || direct.display_name || "Nexus";
+    }
+
+    function outputFormatLabel(output) {
+      if (output.file_url) return "File";
+      if (output.content_html) return "HTML report";
+      if (output.content_text) return "Text report";
+      return "Structured data";
+    }
+
+    function renderOutputBody(output) {
+      if (output.content_html) {
+        return `
+          <div class="output-frame-shell">
+            <iframe
+              id="outputHtmlFrame"
+              class="output-html-frame"
+              title="Automation output report"
+              sandbox=""
+            ></iframe>
+          </div>
+        `;
+      }
+
+      if (output.content_text) {
+        return `<pre class="output-text output-reader-text">${escapeHtml(output.content_text)}</pre>`;
+      }
+
+      return `<pre class="output-text output-reader-text">${escapeHtml(JSON.stringify(output.content_json || {}, null, 2))}</pre>`;
+    }
+
+    function outputHistoryRows(outputs, currentId) {
+      const history = (outputs || [])
+        .filter(item => item.id !== currentId)
+        .slice(0, 8);
+
+      if (!history.length) {
+        return `<div class="buyer-output-history-empty">No previous outputs for this automation yet.</div>`;
+      }
+
+      return history.map(item => `
+        <a class="buyer-output-history-link" href="/pages/buyer/output.html?id=${encodeURIComponent(item.id)}">
+          <div>
+            <strong>${escapeHtml(item.title || "Automation output")}</strong>
+            <span>${escapeHtml(dateLabel(item.created_at))}</span>
+          </div>
+        </a>
+      `).join("");
     }
 
     async function initOutputPage() {
@@ -101,63 +167,107 @@
       }
 
       const product = output.automations || {};
-      const createdDate = output.created_at
-        ? new Date(output.created_at).toLocaleString()
-        : "";
+      const customerAutomation = output.customer_automations || {};
+      const builder = developerName(output);
+      const createdDate = dateLabel(output.created_at);
+      const { data: outputHistory } = output.customer_automation_id
+        ? await NexusDB.listOutputsForCustomerAutomation(output.customer_automation_id)
+        : { data: [] };
 
       root.innerHTML = `
-        <div class="buyer-output-layout">
-          <aside class="buyer-output-summary">
-            <span class="${NexusUI.pillClass(product.color || "blue")}">
-              ${escapeHtml(product.category || output.output_type || "Output")}
-            </span>
+        <div class="buyer-output-reader">
+          <div class="buyer-output-reader-toolbar">
+            <a class="btn btn-secondary btn-small" href="/pages/buyer/dashboard.html?tab=outputs">
+              Back to outputs
+            </a>
 
-            <h1>${escapeHtml(output.title || "Automation output")}</h1>
+            <div>
+              <a class="btn btn-secondary btn-small" href="/pages/buyer/dashboard.html?tab=automations">
+                My automations
+              </a>
+              ${
+                output.file_url
+                  ? `<a class="btn btn-primary btn-small" href="${escapeHtml(output.file_url)}" target="_blank" rel="noopener">Open file</a>`
+                  : ""
+              }
+            </div>
+          </div>
 
-            <p>${escapeHtml(output.summary || "Your automation completed and produced this output.")}</p>
-
-            <div class="setup-meta-list">
-              <div>
-                <span>Product</span>
-                <strong>${escapeHtml(product.title || "Automation")}</strong>
-              </div>
-
-              <div>
-                <span>Type</span>
-                <strong>${escapeHtml(output.output_type || "report")}</strong>
-              </div>
-
-              <div>
-                <span>Created</span>
-                <strong>${escapeHtml(createdDate)}</strong>
-              </div>
+          <section class="buyer-output-reader-hero">
+            <div class="automation-icon ${escapeHtml(product.color || "")}">
+              ${escapeHtml(product.icon || "AI")}
             </div>
 
-            <a class="btn btn-secondary btn-full" href="/pages/buyer/dashboard.html">
-              Back to dashboard
-            </a>
-          </aside>
+            <div>
+              <span class="${NexusUI.pillClass(product.color || "blue")}">
+                ${escapeHtml(product.category || outputTypeLabel(output.output_type))}
+              </span>
+              <h1>${escapeHtml(output.title || "Automation output")}</h1>
+              <p>${escapeHtml(output.summary || "Your automation completed and produced this output.")}</p>
 
-          <section class="buyer-output-card">
-            <span class="eyebrow">Automation result</span>
-            <h2>${escapeHtml(output.title || "Output")}</h2>
-
-            ${
-              output.file_url
-                ? `<a class="btn btn-primary" href="${escapeHtml(output.file_url)}" target="_blank" rel="noopener">Open file</a>`
-                : ""
-            }
-
-            ${
-              output.content_html
-                ? `<div class="output-html">${output.content_html}</div>`
-                : output.content_text
-                  ? `<pre class="output-text">${escapeHtml(output.content_text)}</pre>`
-                  : `<pre class="output-text">${escapeHtml(JSON.stringify(output.content_json || {}, null, 2))}</pre>`
-            }
+              <div class="buyer-output-reader-meta">
+                <span>${escapeHtml(product.title || customerAutomation.name || "Automation")}</span>
+                <span>Built by ${escapeHtml(builder)}</span>
+                <span>${escapeHtml(createdDate)}</span>
+              </div>
+            </div>
           </section>
+
+          <div class="buyer-output-reader-grid">
+            <aside class="buyer-output-context-panel">
+              <section>
+                <span class="eyebrow">Output details</span>
+                <div class="buyer-output-detail-list">
+                  <div>
+                    <span>Automation</span>
+                    <strong>${escapeHtml(product.title || customerAutomation.name || "Automation")}</strong>
+                  </div>
+                  <div>
+                    <span>Builder</span>
+                    <strong>${escapeHtml(builder)}</strong>
+                  </div>
+                  <div>
+                    <span>Output type</span>
+                    <strong>${escapeHtml(outputTypeLabel(output.output_type))}</strong>
+                  </div>
+                  <div>
+                    <span>Format</span>
+                    <strong>${escapeHtml(outputFormatLabel(output))}</strong>
+                  </div>
+                  <div>
+                    <span>Created</span>
+                    <strong>${escapeHtml(createdDate)}</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <span class="eyebrow">Previous outputs</span>
+                <div class="buyer-output-history-list">
+                  ${outputHistoryRows(outputHistory || [], output.id)}
+                </div>
+              </section>
+            </aside>
+
+            <section class="buyer-output-report-panel">
+              <div class="buyer-output-report-head">
+                <div>
+                  <span class="eyebrow">Automation result</span>
+                  <h2>${escapeHtml(output.title || "Output")}</h2>
+                </div>
+                <span>${escapeHtml(outputFormatLabel(output))}</span>
+              </div>
+
+              ${renderOutputBody(output)}
+            </section>
+          </div>
         </div>
       `;
+
+      const frame = document.getElementById("outputHtmlFrame");
+      if (frame && output.content_html) {
+        frame.srcdoc = output.content_html;
+      }
     }
 
     document.addEventListener("DOMContentLoaded", initOutputPage);

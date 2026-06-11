@@ -1208,7 +1208,12 @@
 
       root.querySelectorAll("[data-revoke-credential]").forEach((button) => {
         button.addEventListener("click", async () => {
-          if (!confirm("Revoke this credential? Workflows using it may need a replacement key.")) return;
+          const confirmed = await NexusUI.confirmDialog({
+            title: "Revoke credential?",
+            message: "Workflows using it may need a replacement key before they can pass checks.",
+            confirmText: "Revoke credential"
+          });
+          if (!confirmed) return;
           const { error } = await NexusDB.revokeDeveloperCredential(button.dataset.revokeCredential);
           NexusUI.toast(error ? error.message : "Credential revoked.");
           await loadCredentials();
@@ -1217,7 +1222,14 @@
 
       root.querySelectorAll("[data-view-credential]").forEach((button) => {
         button.addEventListener("click", async () => {
-          const password = prompt("Enter your developer account password to view this credential.");
+          const password = await NexusUI.promptDialog({
+            title: "View credential",
+            message: "Enter your developer account password to reveal this credential.",
+            inputLabel: "Password",
+            inputType: "password",
+            rows: 1,
+            confirmText: "Reveal credential"
+          });
           if (!password) return;
 
           const target = root.querySelector(`[data-dev-reveal-result="${CSS.escape(button.dataset.viewCredential)}"]`);
@@ -1242,7 +1254,12 @@
 
       root.querySelectorAll("[data-delete-credential]").forEach((button) => {
         button.addEventListener("click", async () => {
-          if (!confirm("Permanently remove this revoked credential from Nexus?")) return;
+          const confirmed = await NexusUI.confirmDialog({
+            title: "Remove credential?",
+            message: "This permanently removes the revoked credential from Nexus.",
+            confirmText: "Remove credential"
+          });
+          if (!confirmed) return;
           const { error } = await NexusDB.deleteDeveloperCredential(button.dataset.deleteCredential);
           NexusUI.toast(error ? error.message : "Credential removed.");
           await loadCredentials();
@@ -1911,7 +1928,12 @@
     }
 
     async function removeProduct(id) {
-      if (!confirm("Remove this product?")) return;
+      const confirmed = await NexusUI.confirmDialog({
+        title: "Remove product?",
+        message: "This removes the product from your developer dashboard.",
+        confirmText: "Remove product"
+      });
+      if (!confirmed) return;
       const { error } = await NexusDB.removeDeveloperProduct(id);
       if (error) {
         NexusUI.toast(error.message);

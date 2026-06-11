@@ -16,6 +16,23 @@ alter table if exists public.customer_automations
   add column if not exists last_run_at timestamptz,
   add column if not exists last_run_requested_at timestamptz;
 
+create table if not exists public.automation_runs (
+  id uuid primary key default gen_random_uuid(),
+  customer_automation_id uuid references public.customer_automations(id) on delete cascade,
+  buyer_id uuid references auth.users(id) on delete cascade,
+  automation_id uuid references public.automations(id) on delete set null,
+  order_id uuid references public.orders(id) on delete set null,
+  runtime_type text,
+  trigger_type text,
+  status text default 'queued',
+  started_at timestamptz,
+  finished_at timestamptz,
+  n8n_execution_id text,
+  error_message text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 alter table if exists public.automation_runs
   add column if not exists run_key text,
   add column if not exists scheduled_for timestamptz,
@@ -51,15 +68,28 @@ begin
   end if;
 end $$;
 
+alter table if exists public.automation_runs enable row level security;
+
+grant select on public.automation_runs to authenticated;
+
+drop policy if exists "Buyers read own automation runs" on public.automation_runs;
+create policy "Buyers read own automation runs"
+on public.automation_runs
+for select
+to authenticated
+using (buyer_id = auth.uid() or public.is_admin());
+
+select pg_notify('pgrst', 'reload schema');
+
 -- Optional Supabase Cron setup after deploying run-scheduled-automations:
 -- 1. Enable pg_cron + pg_net in Supabase if they are not already enabled.
--- 2. Replace <project-ref> and <service-role-key> in the private SQL session only.
+-- 2. Replace <runtime-secret> in the private SQL session only.
 -- 3. Run the cron.schedule block below.
 --
 -- Example body:
 --   {"action":"run_due","limit":25}
 --
--- Keep the Authorization header server-side only. Never expose the service role key in frontend code.
+-- Keep the runtime secret server-side only. Never expose it in frontend code.
 --
 -- create extension if not exists pg_cron with schema extensions;
 -- create extension if not exists pg_net with schema extensions;
@@ -74,10 +104,10 @@ end $$;
 --   '10 2 * * *',
 --   $$
 --   select net.http_post(
---     url := 'https://<project-ref>.supabase.co/functions/v1/run-scheduled-automations',
+--     url := 'https://vzgblkghicyozoxkljga.supabase.co/functions/v1/run-scheduled-automations',
 --     headers := jsonb_build_object(
 --       'Content-Type', 'application/json',
---       'Authorization', 'Bearer <service-role-key>'
+--       'x-nexus-runtime-secret', '<runtime-secret>'
 --     ),
 --     body := '{"action":"run_due","limit":25}'::jsonb
 --   ) as request_id;
