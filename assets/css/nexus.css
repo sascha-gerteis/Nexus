@@ -11285,6 +11285,15 @@ body.developer-modal-open::before {
   padding: .35rem 0 1rem;
 }
 
+.developer-head-actions,
+.developer-import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+
 .developer-products-panel {
   order: 1;
   position: sticky;
@@ -11412,6 +11421,168 @@ body.developer-modal-open::before {
 
 .product-credential-console {
   margin-top: .5rem;
+}
+
+body.developer-guide-open {
+  overflow: hidden;
+}
+
+.developer-guide-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.developer-guide-modal.open {
+  display: flex;
+}
+
+.developer-guide-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 16, 34, .52);
+  backdrop-filter: blur(10px);
+}
+
+.developer-guide-card {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, 100%);
+  max-height: min(88vh, 920px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #dbeafe;
+  border-radius: 28px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, .24);
+}
+
+.developer-guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-bottom: 1px solid rgba(15, 23, 42, .08);
+  background: linear-gradient(135deg, #f8fbff, #ffffff);
+}
+
+.developer-guide-head h2 {
+  margin: .25rem 0 .35rem;
+  color: var(--navy);
+  font-size: clamp(1.35rem, 2.6vw, 2.2rem);
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.developer-guide-head p,
+.developer-guide-section p,
+.developer-guide-section li {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.developer-guide-head p {
+  max-width: 760px;
+  margin: 0;
+}
+
+.developer-guide-body {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  overflow: auto;
+}
+
+.developer-guide-section {
+  padding: 1rem;
+  border: 1px solid rgba(37, 99, 255, .12);
+  border-radius: 20px;
+  background: #fff;
+}
+
+.developer-guide-section h3 {
+  margin: 0 0 .75rem;
+  color: var(--navy);
+  font-size: 1.05rem;
+}
+
+.developer-guide-section ol,
+.developer-guide-section ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.developer-guide-section li + li {
+  margin-top: .45rem;
+}
+
+.developer-guide-grid,
+.developer-guide-code-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: .75rem;
+}
+
+.developer-guide-grid > div,
+.developer-guide-code-grid > div {
+  min-width: 0;
+  padding: .85rem;
+  border: 1px solid #e5edf8;
+  border-radius: 16px;
+  background: #f8fbff;
+}
+
+.developer-guide-grid strong,
+.developer-guide-code-head strong {
+  color: var(--navy);
+}
+
+.developer-guide-note {
+  margin: .8rem 0 0;
+  padding: .75rem;
+  border-radius: 14px;
+  background: #eff6ff;
+}
+
+.developer-guide-note code {
+  color: var(--navy);
+  font-weight: 900;
+}
+
+.developer-guide-code-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .65rem;
+  margin-bottom: .65rem;
+}
+
+.developer-guide-code-head > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .4rem;
+}
+
+.developer-guide-code-grid pre {
+  margin: 0;
+  max-height: 300px;
+  overflow: auto;
+  padding: .8rem;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 14px;
+  background: #061022;
+  color: #eaf3ff;
+  font-size: .78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .developer-empty-state {
@@ -11904,7 +12075,7 @@ body.developer-modal-open::before {
 
 .flow-run-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: .7rem;
   margin-bottom: .9rem;
 }
@@ -11930,8 +12101,10 @@ body.developer-modal-open::before {
 }
 
 .flow-run-grid small {
+  display: block;
   color: var(--muted);
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .flow-credential-map-title {
@@ -11941,7 +12114,7 @@ body.developer-modal-open::before {
 
 .flow-credential-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: .65rem;
 }
 
@@ -12179,6 +12352,14 @@ body.developer-modal-open::before {
   .developer-form-section.compact {
     grid-template-columns: 1fr;
   }
+
+  .developer-guide-head {
+    display: grid;
+  }
+
+  .developer-guide-code-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -12244,9 +12425,41 @@ body.developer-modal-open::before {
   .developer-product-actions,
   .developer-form-actions,
   .developer-form-actions.split,
-  .developer-console-hero-actions {
+  .developer-console-hero-actions,
+  .developer-head-actions,
+  .developer-import-actions {
     display: grid;
     grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .developer-guide-modal {
+    align-items: stretch;
+    padding: .65rem;
+  }
+
+  .developer-guide-card {
+    max-height: calc(100vh - 1.3rem);
+    border-radius: 20px;
+  }
+
+  .developer-guide-head,
+  .developer-guide-body {
+    padding: .9rem;
+  }
+
+  .developer-guide-section {
+    padding: .85rem;
+    border-radius: 16px;
+  }
+
+  .developer-guide-code-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .developer-guide-code-head > div,
+  .developer-guide-code-head .btn {
     width: 100%;
   }
 

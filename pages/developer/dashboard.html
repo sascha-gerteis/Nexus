@@ -149,7 +149,10 @@
             <h2>Submit automation products</h2>
             <p>Save drafts while you prepare the product. Submit when Nexus should review and publish it.</p>
           </div>
-          <button class="btn btn-primary btn-small" type="button" onclick="openProductEditor()">Add product</button>
+          <div class="developer-head-actions">
+            <button class="btn btn-secondary btn-small" type="button" onclick="openDeveloperWorkflowGuide()">Import guide</button>
+            <button class="btn btn-primary btn-small" type="button" onclick="openProductEditor()">Add product</button>
+          </div>
         </div>
 
         <div class="developer-product-workspace">
@@ -279,9 +282,14 @@
                       <h3>Save, import, and test</h3>
                       <p>Save this draft first, import or update the hosted n8n workflow, then run the Nexus technical test. Passing this is required before admin approval.</p>
                     </div>
-                    <button class="btn btn-primary btn-small" type="button" id="importDeveloperWorkflowButton">
-                      Save, import & test
-                    </button>
+                    <div class="developer-import-actions">
+                      <button class="btn btn-secondary btn-small" type="button" onclick="openDeveloperWorkflowGuide()">
+                        Read import guide
+                      </button>
+                      <button class="btn btn-primary btn-small" type="button" id="importDeveloperWorkflowButton">
+                        Save, import & test
+                      </button>
+                    </div>
                     <div id="developerN8nImportResult" class="runtime-import-result">
                       Upload/paste a workflow JSON, then save, import, and test before submitting for review.
                     </div>
@@ -475,11 +483,214 @@
     </section>
   </main>
 
+  <section class="developer-guide-modal" id="developerWorkflowGuide" aria-hidden="true">
+    <div class="developer-guide-backdrop" onclick="closeDeveloperWorkflowGuide()"></div>
+    <article class="developer-guide-card" role="dialog" aria-modal="true" aria-labelledby="developerWorkflowGuideTitle">
+      <div class="developer-guide-head">
+        <div>
+          <span class="eyebrow">Workflow import guide</span>
+          <h2 id="developerWorkflowGuideTitle">How Nexus imports and tests products</h2>
+          <p>Use this before submitting a paid automation product. The importer adds the Nexus runtime parts, then your full workflow must pass a technical run.</p>
+        </div>
+        <button class="btn btn-secondary btn-small" type="button" onclick="closeDeveloperWorkflowGuide()">Close</button>
+      </div>
+
+      <div class="developer-guide-body">
+        <section class="developer-guide-section">
+          <h3>Product flow</h3>
+          <ol>
+            <li>Create or select a product draft.</li>
+            <li>Paste the exported n8n workflow JSON. For Nexus testing, the workflow can start with a Manual Trigger.</li>
+            <li>Add the buyer setup schema so Nexus knows what fields the customer must fill out.</li>
+            <li>Save, import, and test. Nexus replaces/adds the webhook trigger, runtime context, and output callback.</li>
+            <li>Add developer-owned provider keys in the credential vault, apply credentials, and run the check again.</li>
+            <li>Submit for review only when the workflow is imported, credentials are bound, and the last run passed.</li>
+          </ol>
+        </section>
+
+        <section class="developer-guide-section">
+          <h3>What Nexus adds during import</h3>
+          <div class="developer-guide-grid">
+            <div>
+              <strong>Nexus Webhook Trigger</strong>
+              <p>Receives setup, buyer, order, schedule, and secure runtime data from Nexus.</p>
+            </div>
+            <div>
+              <strong>Nexus Runtime Context</strong>
+              <p>Makes buyer setup values available to Code nodes and expressions.</p>
+            </div>
+            <div>
+              <strong>Nexus Submit Output</strong>
+              <p>Sends the final report/output back to the buyer dashboard.</p>
+            </div>
+          </div>
+          <p class="developer-guide-note">Name the final output node <code>NEXUS_FINAL_OUTPUT</code> when you want Nexus to attach the callback to a specific node.</p>
+        </section>
+
+        <section class="developer-guide-section">
+          <h3>Dynamic values you can use</h3>
+          <div class="developer-guide-code-grid">
+            <div>
+              <div class="developer-guide-code-head">
+                <strong>Code node helpers</strong>
+                <button class="btn btn-secondary btn-small" type="button" onclick="copyDeveloperGuideSnippet('codeHelpers')">Copy</button>
+              </div>
+              <pre><code id="developerGuideCodeHelpers">NEXUS_CODE_SETUP("company_url")
+NEXUS_CODE_SETUP("competitor_urls")
+NEXUS_CODE_CUSTOMER("company")
+NEXUS_CODE_CUSTOMER("name")
+NEXUS_CODE_ORDER("id")
+NEXUS_CODE_SYSTEM("customer_automation_id")</code></pre>
+            </div>
+            <div>
+              <div class="developer-guide-code-head">
+                <strong>Expression placeholders</strong>
+                <button class="btn btn-secondary btn-small" type="button" onclick="copyDeveloperGuideSnippet('expressionPlaceholders')">Copy</button>
+              </div>
+              <pre><code id="developerGuideExpressionPlaceholders">{{NEXUS_SETUP.company_url}}
+{{NEXUS_SETUP.competitor_urls}}
+{{NEXUS_CUSTOMER.company}}
+{{NEXUS_CUSTOMER.name}}
+{{NEXUS_ORDER.id}}
+{{NEXUS_SYSTEM.customer_automation_id}}</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="developer-guide-section">
+          <h3>Test workflow schemas</h3>
+          <p>Use these with the Monthly Competitor Website Brief workflow.</p>
+          <div class="developer-guide-code-grid">
+            <div>
+              <div class="developer-guide-code-head">
+                <strong>Buyer setup schema JSON</strong>
+                <div>
+                  <button class="btn btn-secondary btn-small" type="button" onclick="copyDeveloperGuideSnippet('setupSchema')">Copy</button>
+                  <button class="btn btn-primary btn-small" type="button" onclick="insertDeveloperGuideSchema('setup_schema', 'setupSchema')">Insert</button>
+                </div>
+              </div>
+              <pre><code id="developerGuideSetupSchema"></code></pre>
+            </div>
+            <div>
+              <div class="developer-guide-code-head">
+                <strong>Credential schema JSON</strong>
+                <div>
+                  <button class="btn btn-secondary btn-small" type="button" onclick="copyDeveloperGuideSnippet('credentialSchema')">Copy</button>
+                  <button class="btn btn-primary btn-small" type="button" onclick="insertDeveloperGuideSchema('credential_schema', 'credentialSchema')">Insert</button>
+                </div>
+              </div>
+              <pre><code id="developerGuideCredentialSchema"></code></pre>
+            </div>
+            <div>
+              <div class="developer-guide-code-head">
+                <strong>Placeholder mappings JSON</strong>
+                <div>
+                  <button class="btn btn-secondary btn-small" type="button" onclick="copyDeveloperGuideSnippet('placeholderMappings')">Copy</button>
+                  <button class="btn btn-primary btn-small" type="button" onclick="insertDeveloperGuideSchema('workflow_placeholder_mappings', 'placeholderMappings')">Insert</button>
+                </div>
+              </div>
+              <pre><code id="developerGuidePlaceholderMappings"></code></pre>
+            </div>
+            <div>
+              <div class="developer-guide-code-head">
+                <strong>Developer credential to add</strong>
+                <button class="btn btn-secondary btn-small" type="button" onclick="copyDeveloperGuideSnippet('developerCredential')">Copy</button>
+              </div>
+              <pre><code id="developerGuideDeveloperCredential">Provider: OpenAI
+n8n credential type: httpBearerAuth
+Used by node: Generate Competitor Brief
+Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="developer-guide-section">
+          <h3>Approval rules</h3>
+          <ul>
+            <li>Standard paid products need workflow JSON, successful import, bound credentials, and a passed technical run.</li>
+            <li>Custom request products can be submitted without an automated runtime because they lead to an inquiry form.</li>
+            <li>If credentials change, run the full check again before the product can safely go live.</li>
+            <li>Nexus admin reviews product quality, buyer copy, setup clarity, and runtime readiness before publishing.</li>
+          </ul>
+        </section>
+      </div>
+    </article>
+  </section>
+
   <div class="toast" id="toast"></div>
   <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
   <script src="/assets/js/nexus-db.js?v=20260610-credentials5"></script>
   <script>
     const state = { account: null, products: [], wallet: null, credentials: [], selectedProductId: "" };
+
+    const developerGuideSnippets = {
+      setupSchema: JSON.stringify([
+        {
+          name: "company_url",
+          label: "Your company website",
+          type: "url",
+          required: true,
+          placeholder: "https://example.com",
+          description: "The buyer's main website to compare against competitors."
+        },
+        {
+          name: "competitor_urls",
+          label: "Competitor websites",
+          type: "textarea",
+          required: true,
+          placeholder: "One URL per line, up to 3 competitors",
+          description: "Competitor websites the workflow should review."
+        },
+        {
+          name: "focus_areas",
+          label: "Focus areas",
+          type: "textarea",
+          required: false,
+          placeholder: "Pricing, offers, messaging, services, SEO, product changes...",
+          description: "What the buyer wants the report to pay special attention to."
+        },
+        {
+          name: "market_region",
+          label: "Market or region",
+          type: "text",
+          required: false,
+          placeholder: "Thailand, US, Europe, local market...",
+          description: "The market context for the competitor brief."
+        },
+        {
+          name: "report_title",
+          label: "Report title",
+          type: "text",
+          required: false,
+          placeholder: "Monthly Competitor Website Brief",
+          description: "Optional title shown on the buyer dashboard output."
+        }
+      ], null, 2),
+      credentialSchema: JSON.stringify([], null, 2),
+      placeholderMappings: JSON.stringify([], null, 2),
+      developerCredential: [
+        "Provider: OpenAI",
+        "n8n credential type: httpBearerAuth",
+        "Used by node: Generate Competitor Brief",
+        "Where to enter it: Credential vault, not inside the workflow JSON"
+      ].join("\n"),
+      codeHelpers: [
+        'NEXUS_CODE_SETUP("company_url")',
+        'NEXUS_CODE_SETUP("competitor_urls")',
+        'NEXUS_CODE_CUSTOMER("company")',
+        'NEXUS_CODE_CUSTOMER("name")',
+        'NEXUS_CODE_ORDER("id")',
+        'NEXUS_CODE_SYSTEM("customer_automation_id")'
+      ].join("\n"),
+      expressionPlaceholders: [
+        "{{NEXUS_SETUP.company_url}}",
+        "{{NEXUS_SETUP.competitor_urls}}",
+        "{{NEXUS_CUSTOMER.company}}",
+        "{{NEXUS_CUSTOMER.name}}",
+        "{{NEXUS_ORDER.id}}",
+        "{{NEXUS_SYSTEM.customer_automation_id}}"
+      ].join("\n")
+    };
 
     const credentialProviderGroups = [
       ["AI models", [
@@ -582,6 +793,69 @@
           `).join("")}
         </optgroup>
       `).join("");
+    }
+
+    function populateDeveloperWorkflowGuide() {
+      const nodes = {
+        developerGuideSetupSchema: developerGuideSnippets.setupSchema,
+        developerGuideCredentialSchema: developerGuideSnippets.credentialSchema,
+        developerGuidePlaceholderMappings: developerGuideSnippets.placeholderMappings,
+        developerGuideDeveloperCredential: developerGuideSnippets.developerCredential,
+        developerGuideCodeHelpers: developerGuideSnippets.codeHelpers,
+        developerGuideExpressionPlaceholders: developerGuideSnippets.expressionPlaceholders
+      };
+
+      Object.entries(nodes).forEach(([id, value]) => {
+        const target = document.getElementById(id);
+        if (target) target.textContent = value;
+      });
+    }
+
+    function openDeveloperWorkflowGuide() {
+      populateDeveloperWorkflowGuide();
+      const modal = document.getElementById("developerWorkflowGuide");
+      if (!modal) return;
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("developer-guide-open");
+    }
+
+    function closeDeveloperWorkflowGuide() {
+      const modal = document.getElementById("developerWorkflowGuide");
+      if (!modal) return;
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("developer-guide-open");
+    }
+
+    async function copyDeveloperGuideSnippet(key) {
+      const value = developerGuideSnippets[key] || "";
+      if (!value) return;
+
+      try {
+        await navigator.clipboard.writeText(value);
+        NexusUI.toast("Copied.");
+      } catch (_error) {
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+        NexusUI.toast("Copied.");
+      }
+    }
+
+    function insertDeveloperGuideSchema(fieldName, key) {
+      const form = document.getElementById("developerProductForm");
+      const field = form?.elements?.[fieldName];
+      const value = developerGuideSnippets[key] || "";
+      if (!field || !value) return;
+      field.value = value;
+      NexusUI.toast("Inserted into product editor.");
     }
 
     function activeTab(tab) {
@@ -1370,20 +1644,21 @@
       }
 
       if (errors.length) {
+        const nextCredential = requirements.join(", ") || "developer credential";
         return {
           className: "credential-gate danger",
-          label: "Run incomplete",
-          detail: firstError || "Add the missing credentials, then apply again. Nexus will not run this product while credentials are missing.",
-          meta: [`Credentials needed: ${requirements.join(", ")}`, "Live gate: blocked"]
+          label: "Next: add credentials",
+          detail: firstError || `Add the missing ${nextCredential} credential, then press Apply credentials & run check. Nexus will not run this product while credentials are missing.`,
+          meta: [`Credentials needed: ${requirements.join(", ")}`, "Run gate: waiting for credentials"]
         };
       }
 
       if (!bindings.length) {
         return {
           className: "credential-gate danger",
-          label: "Run incomplete",
+          label: "Next: apply credentials",
           detail: "Credentials were detected but have not been applied to the hosted n8n workflow yet. Press Apply credentials & run check.",
-          meta: [`Credentials detected: ${requirements.join(", ")}`, "Live gate: blocked"]
+          meta: [`Credentials detected: ${requirements.join(", ")}`, "Run gate: waiting for apply"]
         };
       }
 
@@ -1446,6 +1721,22 @@
       return "pill red";
     }
 
+    function workflowRunGuidance(message, slots, bindings) {
+      const text = String(message || "");
+      if (!text) return "";
+      const lowerText = text.toLowerCase();
+      const providers = credentialRequirementNames(slots);
+      const boundProviders = Array.from(new Set((bindings || []).map((binding) => binding.provider_label || binding.provider || binding.n8n_credential_type).filter(Boolean)));
+
+      if (lowerText.includes("incorrect api key") || lowerText.includes("authorization failed") || lowerText.includes("unauthorized")) {
+        const providerText = providers.length ? providers.join(", ") : "the detected provider";
+        const boundText = boundProviders.length ? ` Current binding: ${boundProviders.join(", ")}.` : "";
+        return `Credential check failed. Verify the saved key belongs to ${providerText}, then press Apply credentials & run check again.${boundText}`;
+      }
+
+      return "";
+    }
+
     function flowCredentialRows(slots, errors, bindings) {
       return groupCredentialSlots(slots, errors, bindings).map((group) => {
         const missing = group.errors.length > 0;
@@ -1482,6 +1773,7 @@
       const status = testResult.status || result?.run_status || product.n8n_last_test_status || "not tested";
       const lastRunAt = testResult.finished_at || testResult.last_checked_at || product.n8n_last_tested_at || "";
       const lastError = errors[0]?.message || testResult.error_message || testResult.message || product.n8n_last_test_error || "";
+      const lastGuidance = workflowRunGuidance(lastError, slots, bindings);
       const credentialCount = credentialRequirementNames(slots).length;
       const boundCount = bindings.length;
 
@@ -1500,6 +1792,7 @@
               <strong>Last run</strong>
               <p>${NexusUI.escapeHtml(formatRunDate(lastRunAt))}</p>
               ${lastError ? `<small>${NexusUI.escapeHtml(lastError)}</small>` : `<small>No run error recorded.</small>`}
+              ${lastGuidance ? `<small class="error">${NexusUI.escapeHtml(lastGuidance)}</small>` : ""}
             </div>
             <div>
               <strong>Credential coverage</strong>
@@ -1624,7 +1917,8 @@
       }
 
       if (data?.errors?.length) {
-        NexusUI.toast(data?.message || "Some credentials are still missing.");
+        const firstError = data.errors.map((item) => item?.message).find(Boolean);
+        NexusUI.toast(firstError || data?.message || "Add or sync the missing credentials, then press Apply credentials & run check.");
         updateLocalProductSummary(data?.product);
         renderCredentialWorkflowList();
         renderCredentialSlots(data);
@@ -1689,8 +1983,16 @@
 
       const imported = product.n8n_import_status === "imported";
       const tested = isPassingTestStatus(product.n8n_last_test_status);
+      const credentialStatus = String(product.credential_binding_status || "").toLowerCase();
+      const waitingForCredentials = imported && ["needs_credentials", "needs_attention"].includes(credentialStatus);
       const importClass = imported ? "success" : "error";
-      const testClass = tested ? "success" : "error";
+      const testClass = tested ? "success" : waitingForCredentials ? "runtime-import-result" : "error";
+      const testStatus = waitingForCredentials
+        ? "Waiting for developer credentials"
+        : product.n8n_last_test_status || "Not tested";
+      const testDetail = waitingForCredentials
+        ? "Next: add the required developer credentials, then press Apply credentials & run check."
+        : product.n8n_last_test_error || "";
 
       root.innerHTML = `
         ${message ? `<div class="success">${NexusUI.escapeHtml(message)}</div>` : ""}
@@ -1701,8 +2003,8 @@
         </div>
         <div class="${testClass}" style="margin-top:.55rem">
           <strong>Technical test:</strong>
-          ${NexusUI.escapeHtml(product.n8n_last_test_status || "Not tested")}
-          ${product.n8n_last_test_error ? `<br><small>${NexusUI.escapeHtml(product.n8n_last_test_error)}</small>` : ""}
+          ${NexusUI.escapeHtml(testStatus)}
+          ${testDetail ? `<br><small>${NexusUI.escapeHtml(testDetail)}</small>` : ""}
         </div>
       `;
     }
@@ -1987,9 +2289,37 @@
       try {
         updateDeveloperImportResult(product, "Importing workflow into hosted n8n...");
 
-        if (product.n8n_import_status !== "imported") {
-          const { error: importError } = await NexusDB.importN8nWorkflow(product.id);
+        let importData = null;
+        const credentialStatus = String(product.credential_binding_status || "").toLowerCase();
+        const shouldImport =
+          product.n8n_import_status !== "imported" ||
+          credentialStatus === "needs_credentials" ||
+          credentialStatus === "needs_attention";
+
+        if (shouldImport) {
+          const { data, error: importError } = await NexusDB.importN8nWorkflow(product.id);
           if (importError) throw new Error(importError.message || "Workflow import failed.");
+          importData = data || null;
+        }
+
+        const latestCredentialStatus = String(
+          importData?.credential_binding_status ||
+          product.credential_binding_status ||
+          ""
+        ).toLowerCase();
+
+        if (latestCredentialStatus === "needs_credentials" || latestCredentialStatus === "needs_attention") {
+          const message = "Workflow imported. Add the required developer credentials, then press Apply credentials & run check.";
+          NexusUI.toast(message);
+          updateDeveloperImportResult(product, message);
+          const credentialSection = document.getElementById("developerProductCredentialsSection");
+          if (credentialSection) credentialSection.open = true;
+          setSelectedProductId(product.id);
+          setTimeout(() => {
+            credentialSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+            scanCurrentProductCredentials();
+          }, 150);
+          return;
         }
 
         if (button) button.textContent = "Testing...";
@@ -2382,6 +2712,14 @@
           event.preventDefault();
           activeTab(link.dataset.devTab);
         });
+      });
+
+      populateDeveloperWorkflowGuide();
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          closeDeveloperWorkflowGuide();
+        }
       });
 
       document.getElementById("workflowUpload").addEventListener("change", async function () {

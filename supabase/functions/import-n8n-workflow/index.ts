@@ -1748,6 +1748,56 @@ function normalizeWorkflowForN8nApi(workflow: any) {
   };
 }
 
+function removeUnboundCredentialReferences(workflow: any, errors: any[] = []) {
+  if (!errors.length || !workflow || typeof workflow !== "object") {
+    return workflow;
+  }
+
+  const missingByNode = new Map<string, Set<string>>();
+
+  for (const error of errors || []) {
+    const nodeName = cleanString(error?.node_name);
+    const credentialKey = cleanString(error?.credential_key);
+    if (!nodeName || !credentialKey) continue;
+
+    if (!missingByNode.has(nodeName)) {
+      missingByNode.set(nodeName, new Set());
+    }
+    missingByNode.get(nodeName)?.add(credentialKey);
+  }
+
+  if (!missingByNode.size) {
+    return workflow;
+  }
+
+  const output = deepClone(workflow);
+  output.nodes = Array.isArray(output.nodes)
+    ? output.nodes.map((node: any) => {
+      const keys = missingByNode.get(cleanString(node?.name));
+      if (!keys?.size || !node?.credentials || typeof node.credentials !== "object") {
+        return node;
+      }
+
+      const credentials = { ...node.credentials };
+      for (const key of keys) {
+        delete credentials[key];
+      }
+
+      if (Object.keys(credentials).length) {
+        return {
+          ...node,
+          credentials,
+        };
+      }
+
+      const { credentials: _removedCredentials, ...withoutCredentials } = node;
+      return withoutCredentials;
+    })
+    : [];
+
+  return output;
+}
+
 async function findExistingN8nWorkflowByName(n8nBaseUrl: string, n8nApiKey: string, workflowName: string) {
   const response = await n8nRequest(n8nBaseUrl, n8nApiKey, "/api/v1/workflows?limit=100", {
     method: "GET",
@@ -2005,30 +2055,9 @@ Deno.serve(async (req) => {
       syncMissingN8nCredentials: true,
     });
 
-    if (!credentialBinding.ok) {
-      await adminClient
-        .from("automations")
-        .update({
-          setup_schema: productForImport.setup_schema,
-          credential_schema: productForImport.credential_schema,
-          n8n_import_status: "failed",
-          n8n_import_error: "Developer credentials required before this workflow can be imported.",
-          n8n_last_import_result: {
-            errors: credentialBinding.errors,
-            credential_slots: credentialBinding.slots,
-            credential_bindings: credentialBinding.bindings,
-          },
-        })
-        .eq("id", automationId);
-
-      return errorResponse("Developer credentials required before this workflow can be imported.", 400, {
-        errors: credentialBinding.errors,
-        credential_slots: credentialBinding.slots,
-        credential_bindings: credentialBinding.bindings,
-      });
-    }
-
-    productForImport.n8n_workflow_json = credentialBinding.workflow;
+    productForImport.n8n_workflow_json = credentialBinding.ok
+      ? credentialBinding.workflow
+      : removeUnboundCredentialReferences(credentialBinding.workflow, credentialBinding.errors);
 
     const mappingValidation = validateWorkflowPlaceholderMappings(
       productForImport,

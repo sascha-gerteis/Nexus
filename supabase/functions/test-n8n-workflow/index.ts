@@ -366,9 +366,19 @@ function extractKnownN8nErrorText(value: unknown) {
   const raw = stringifySafe(value)
     .replace(/\\"/g, '"')
     .replace(/\\n/g, "\n");
+  const forbidden = raw.match(/Forbidden\s+-\s+perhaps check your credentials\??/i);
+  const modelAccess = raw.match(/Project\s+[A-Za-z0-9_-]+\s+does not have access to model\s+[A-Za-z0-9_.:-]+/i);
+  const incorrectKey = raw.match(/Incorrect API key provided:\s*[^.\n\r"]+/i);
+
+  if (forbidden && modelAccess) return `${forbidden[0]} ${modelAccess[0]}`;
+  if (modelAccess) return modelAccess[0];
+  if (incorrectKey) return incorrectKey[0];
 
   const patterns = [
     /Credential with ID\s+"[^"]+"\s+does not exist for type\s+"[^"]+"/i,
+    /Project\s+[A-Za-z0-9_-]+\s+does not have access to model\s+[A-Za-z0-9_.:-]+/i,
+    /Incorrect API key provided:\s*[^.\n\r"]+/i,
+    /Forbidden\s+-\s+perhaps check your credentials\??/i,
     /Authorization failed\s+-\s+please check your credentials[^"\n\r]*(?:Missing authorization header)?/i,
     /Missing authorization header/i,
     /UNAUTHORIZED_NO_AUTH_HEADER/i,
@@ -451,13 +461,18 @@ function extractExecutionError(execution: any) {
     asObject(error).nodeType,
     runDataError?.node_type,
   );
-
-  const message = pickFirstUsefulString(
+  const knownMessage = shouldScanRawErrorText ? pickFirstUsefulString(
+    extractKnownN8nErrorText(resultData),
+    extractKnownN8nErrorText(execution),
+  ) : "";
+  const objectMessage = pickFirstUsefulString(
     errorMessageFromObject(error),
     runDataError?.message,
-    shouldScanRawErrorText ? extractKnownN8nErrorText(resultData) : "",
-    shouldScanRawErrorText ? extractKnownN8nErrorText(execution) : "",
   );
+  const message =
+    knownMessage && (!objectMessage || knownMessage.length > objectMessage.length)
+      ? knownMessage
+      : pickFirstUsefulString(objectMessage, knownMessage);
 
   return {
     message,
@@ -838,6 +853,25 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
 
   if (!webhookUrl) {
     throw new Error("This automation has no runtime webhook URL. Import the workflow first.");
+  }
+
+  const credentialStatus = cleanString(automation.credential_binding_status).toLowerCase();
+  const credentialErrors = Array.isArray(automation.credential_binding_errors)
+    ? automation.credential_binding_errors
+    : [];
+
+  if (
+    credentialStatus === "needs_credentials" ||
+    credentialStatus === "needs_attention" ||
+    credentialErrors.length > 0
+  ) {
+    const firstError = credentialErrors
+      .map((error: any) => cleanString(error?.message))
+      .find(Boolean);
+    throw new Error(
+      firstError ||
+        "Add the required developer credentials, then press Apply credentials & run check. Nexus has not started the technical test yet.",
+    );
   }
 
   if (!forceNew) {

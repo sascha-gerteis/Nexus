@@ -61,6 +61,17 @@ function n8nTypeFor(provider: string, explicitType = "") {
   return explicit || providerPreset(provider)?.n8nCredentialType || "";
 }
 
+function isGenericHttpCredentialType(value: unknown) {
+  return [
+    "httpBasicAuth",
+    "httpBearerAuth",
+    "httpDigestAuth",
+    "httpHeaderAuth",
+    "httpQueryAuth",
+    "httpCustomAuth",
+  ].some((type) => type.toLowerCase() === cleanString(value).toLowerCase());
+}
+
 function normalizeSecretFields(body: any) {
   const secretFields = jsonObject(body.secret_fields);
   const apiKey = cleanString(body.api_key || body.token || body.secret);
@@ -202,6 +213,15 @@ async function saveCredential(adminClient: any, operator: any, body: any) {
   let encryptedPayload = existing?.encrypted_payload || null;
   let fingerprint = existing?.fingerprint || null;
   let lastFour = existing?.last_four || null;
+  const providerChanged = Boolean(existing) && cleanString(existing?.provider).toLowerCase() !== provider.toLowerCase();
+  const typeChanged = Boolean(existing) && cleanString(existing?.n8n_credential_type).toLowerCase() !== n8nCredentialType.toLowerCase();
+  const hasNewSecretFields = Object.keys(secretFields).length > 0;
+  const canKeepExistingN8nCredential = Boolean(existing) &&
+    !providerChanged &&
+    !typeChanged &&
+    !(hasNewSecretFields && isGenericHttpCredentialType(n8nCredentialType));
+  const suppliedN8nCredentialId = cleanString(body.n8n_credential_id);
+  const suppliedN8nCredentialName = cleanString(body.n8n_credential_name);
 
   if (Object.keys(secretFields).length) {
     if (!credentialSecret) {
@@ -222,8 +242,12 @@ async function saveCredential(adminClient: any, operator: any, body: any) {
     credential_type: cleanString(body.credential_type || "api_key"),
     label,
     n8n_credential_type: n8nCredentialType,
-    n8n_credential_id: cleanString(body.n8n_credential_id) || existing?.n8n_credential_id || null,
-    n8n_credential_name: n8nCredentialName,
+    n8n_credential_id: canKeepExistingN8nCredential
+      ? suppliedN8nCredentialId || existing?.n8n_credential_id || null
+      : null,
+    n8n_credential_name: canKeepExistingN8nCredential
+      ? suppliedN8nCredentialName || n8nCredentialName
+      : label,
     status: "active",
     test_status: existing?.test_status || "untested",
     last_four: lastFour,
@@ -385,11 +409,22 @@ async function getAutomation(adminClient: any, operator: any, automationId: stri
 async function scanAutomation(adminClient: any, operator: any, body: any) {
   const product = await getAutomation(adminClient, operator, cleanString(body.automation_id));
   const slots = detectWorkflowCredentialSlots(product.n8n_workflow_json);
+  const slotKeys = new Set(
+    slots.map((slot: any) => {
+      const nodeName = cleanString(slot.node_name);
+      const credentialKey = cleanString(slot.credential_key || slot.n8n_credential_type);
+      return `${nodeName}:${credentialKey}`;
+    }),
+  );
   const bindings = Array.isArray(product.n8n_credential_bindings)
     ? product.n8n_credential_bindings.filter((binding: any) => binding?.developer_credential_id)
     : [];
   const errors = Array.isArray(product.credential_binding_errors)
-    ? product.credential_binding_errors.filter((error: any) => !cleanString(error?.message).toLowerCase().startsWith("scan only"))
+    ? product.credential_binding_errors.filter((error: any) => {
+      if (cleanString(error?.message).toLowerCase().startsWith("scan only")) return false;
+      const errorKey = `${cleanString(error?.node_name)}:${cleanString(error?.credential_key || error?.n8n_credential_type)}`;
+      return slotKeys.has(errorKey);
+    })
     : [];
 
   try {
