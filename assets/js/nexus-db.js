@@ -73,6 +73,7 @@ const NexusDB = (() => {
     color,
     icon,
     listing_type,
+    guided_install_enabled,
     runtime_webhook_url,
     n8n_webhook_url,
     n8n_workflow_id,
@@ -1059,15 +1060,6 @@ const NexusDB = (() => {
       .single();
   }
 
-  async function listBuyerCustomerAutomations(userId) {
-    return supabase
-      .from("customer_automations")
-      .select("*, automations(title, slug, category, icon, color), developers(display_name, avatar_letter)")
-      .eq("buyer_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(100);
-  }
-
   async function listAllCustomerAutomations() {
     return supabase
       .from("customer_automations")
@@ -1985,12 +1977,17 @@ async function submitNexusInstallRequest(payload) {
   });
 }
 
-async function listAdminOrders() {
+async function listDeveloperInstallRequests() {
   const { data, error } = await callNexusFunction("nexus-install-request", {
-    action: "admin_list"
+    action: "developer_list"
   });
 
-  if (error) return { data: null, error };
+  if (error) {
+    return {
+      data: [],
+      error
+    };
+  }
 
   return {
     data: data?.rows || [],
@@ -1998,9 +1995,9 @@ async function listAdminOrders() {
   };
 }
 
-async function updateAdminInstallRequest(payload) {
+async function updateDeveloperInstallRequest(payload) {
   return callNexusFunction("nexus-install-request", {
-    action: "admin_update",
+    action: "developer_update",
     ...payload
   });
 }
@@ -2181,8 +2178,6 @@ requestAutomationCancellation,
 reviewAutomationCancellation,
 listCancellationRequests,
 createContactMessage,
-listContactMessages,
-createContactMessage,
 submitContactMessage,
 sendContactMessage,
 listContactMessages,
@@ -2191,9 +2186,9 @@ getNexusInstallRequest,
 submitNexusInstallRequest,
 listAdminOrders,
 updateAdminInstallRequest,
+listDeveloperInstallRequests,
+updateDeveloperInstallRequest,
 ensureCustomerAutomations,
-listAdminOrders,
-updateAdminInstallRequest,
   };
 })();
 window.NexusDB = NexusDB;

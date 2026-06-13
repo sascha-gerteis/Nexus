@@ -38,12 +38,16 @@
           <span>02</span>
           <strong>Products</strong>
         </a>
-        <a href="#messages" data-dev-tab="messages">
+        <a href="#installs" data-dev-tab="installs">
           <span>03</span>
+          <strong>Installs</strong>
+        </a>
+        <a href="#messages" data-dev-tab="messages">
+          <span>04</span>
           <strong>Messages</strong>
         </a>
         <a href="#wallet" data-dev-tab="wallet">
-          <span>04</span>
+          <span>05</span>
           <strong>Wallet</strong>
         </a>
       </nav>
@@ -189,6 +193,13 @@
                 <div><label>Badge</label><input class="input" name="badge"></div>
                 <div><label>Icon letters</label><input class="input" name="icon" maxlength="3" placeholder="AI"></div>
                 <div><label>Color</label><select class="select" name="color"><option value="blue">Blue</option><option value="green">Green</option><option value="purple">Purple</option><option value="orange">Orange</option><option value="red">Red</option></select></div>
+                <div class="full">
+                  <label class="checkbox-inline">
+                    <input type="checkbox" name="guided_install_enabled">
+                    Offer developer guided install at checkout
+                  </label>
+                  <p class="developer-muted">Only enable this when you can complete buyer setup after purchase. Nexus products include guided install automatically.</p>
+                </div>
               </div>
             </details>
 
@@ -398,6 +409,21 @@
             </div>
             <div class="developer-product-list" id="developerProductList">Loading products...</div>
           </section>
+        </div>
+      </section>
+
+      <section class="developer-panel" data-dev-panel="installs" hidden>
+        <div class="developer-panel-head">
+          <div>
+            <span class="eyebrow">Guided installs</span>
+            <h2>Buyer install requests</h2>
+            <p>Requests appear here only for your products where guided install is enabled and selected at checkout.</p>
+          </div>
+          <button class="btn btn-secondary btn-small" type="button" onclick="loadDeveloperInstalls()">Refresh</button>
+        </div>
+
+        <div class="developer-install-list" id="developerInstallList">
+          Loading install requests...
         </div>
       </section>
 
@@ -621,7 +647,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
   <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
   <script src="/assets/js/nexus-db.js?v=20260610-credentials5"></script>
   <script>
-    const state = { account: null, products: [], wallet: null, credentials: [], selectedProductId: "" };
+    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], selectedProductId: "" };
 
     const developerGuideSnippets = {
       setupSchema: JSON.stringify([
@@ -862,7 +888,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const shouldFocusCredentials = tab === "credentials";
       if (shouldFocusCredentials) tab = "products";
 
-      if (["profile", "products", "messages", "wallet"].includes(tab) && location.hash !== `#${tab}`) {
+      if (["profile", "products", "installs", "messages", "wallet"].includes(tab) && location.hash !== `#${tab}`) {
         history.replaceState(null, "", `${location.pathname}${location.search}#${tab}`);
       }
       document.querySelectorAll("[data-dev-tab]").forEach((link) => {
@@ -880,6 +906,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
             scanCurrentProductCredentials();
           }
         }, 0);
+      }
+      if (tab === "installs") {
+        loadDeveloperInstalls();
       }
     }
 
@@ -939,6 +968,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       form.elements.detected_placeholders.value = "{}";
       form.elements.placeholder_validation_status.value = "not_checked";
       form.elements.placeholder_validation_errors.value = "[]";
+      if (form.elements.guided_install_enabled) {
+        form.elements.guided_install_enabled.checked = false;
+      }
       updateDeveloperImportResult(null);
     }
 
@@ -976,6 +1008,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           <span class="${statusClass(product.status)}">${NexusUI.escapeHtml(productStatusText(product.status || "draft"))}</span>
           <span class="${readiness.className}">${NexusUI.escapeHtml(readiness.label)}</span>
           <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
+          ${product.guided_install_enabled ? `<span>Guided install enabled</span>` : ""}
           <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
         </div>
       `;
@@ -2025,6 +2058,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         badge: String(formData.get("badge") || ""),
         icon: String(formData.get("icon") || "AI"),
         color: String(formData.get("color") || "blue"),
+        guided_install_enabled: formData.get("guided_install_enabled") === "on",
         delivery_time: String(formData.get("delivery_time") || ""),
         setup_type: String(formData.get("setup_type") || ""),
         best_for: String(formData.get("best_for") || ""),
@@ -2071,6 +2105,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       Object.entries(product || {}).forEach(([key, value]) => {
         const field = form.elements[key];
         if (!field) return;
+        if (field.type === "checkbox") {
+          field.checked = value === true || String(value || "").toLowerCase() === "true";
+          return;
+        }
         if (Array.isArray(value) && listFields.has(key)) {
           field.value = value.join("\n");
           return;
@@ -2114,6 +2152,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
                 <div class="developer-product-meta">
                   <span>${NexusUI.escapeHtml(product.category || "Uncategorized")}</span>
                   <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
+                  ${product.guided_install_enabled ? `<span>Guided install</span>` : ""}
                   <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
                 </div>
               </div>
@@ -2159,6 +2198,366 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       root.querySelectorAll("[data-test-product]").forEach((button) => {
         button.addEventListener("click", () => importAndTestProduct(button.dataset.testProduct, button));
       });
+    }
+
+    function installStatusLabel(status) {
+      const raw = String(status || "pending").toLowerCase();
+      const labels = {
+        pending: "Needs review",
+        contacted: "Contacted",
+        in_progress: "In progress",
+        blocked: "Blocked",
+        completed: "Completed",
+        cancelled: "Cancelled"
+      };
+      return labels[raw] || productStatusText(raw);
+    }
+
+    function installStatusClass(status) {
+      const raw = String(status || "pending").toLowerCase();
+      if (raw === "completed") return "pill green";
+      if (raw === "blocked" || raw === "cancelled") return "pill red";
+      if (raw === "in_progress" || raw === "contacted") return "pill orange";
+      return "pill blue";
+    }
+
+    function schemaArray(value) {
+      if (Array.isArray(value)) return value;
+      if (typeof value === "string" && value.trim()) {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+
+    function latestSetupAnswers(row) {
+      const submission = row?.latest_setup_submission || {};
+      return submission.setup_answers || submission.answers || {};
+    }
+
+    function renderSetupField(field, value = "", secret = false) {
+      const name = String(field?.name || "").trim();
+      if (!name) return "";
+
+      const label = field.label || field.name;
+      const required = field.required ? "required" : "";
+      const placeholder = secret
+        ? "Leave blank unless updating"
+        : field.placeholder || "";
+      const description = field.description
+        ? `<small>${NexusUI.escapeHtml(field.description)}</small>`
+        : "";
+      const type = String(field.type || "text").toLowerCase();
+      const common = `
+        data-setup-name="${NexusUI.escapeAttribute(name)}"
+        ${required}
+      `;
+
+      let control = "";
+      if (type === "textarea" || type === "long_text") {
+        control = `<textarea class="textarea" rows="3" ${common} placeholder="${NexusUI.escapeAttribute(placeholder)}">${NexusUI.escapeHtml(secret ? "" : value)}</textarea>`;
+      } else if (type === "select" && Array.isArray(field.options)) {
+        const options = field.options.map((option) => {
+          const optionValue = typeof option === "string" ? option : option.value || option.label || "";
+          const optionLabel = typeof option === "string" ? option : option.label || option.value || "";
+          return `<option value="${NexusUI.escapeAttribute(optionValue)}" ${String(optionValue) === String(value) ? "selected" : ""}>${NexusUI.escapeHtml(optionLabel)}</option>`;
+        }).join("");
+        control = `<select class="select" ${common}><option value="">Select...</option>${options}</select>`;
+      } else {
+        const inputType = secret
+          ? "password"
+          : type === "url"
+            ? "url"
+            : type === "email"
+              ? "email"
+              : type === "number"
+                ? "number"
+                : "text";
+        control = `<input class="input" type="${inputType}" value="${NexusUI.escapeAttribute(secret ? "" : value)}" ${common} placeholder="${NexusUI.escapeAttribute(placeholder)}">`;
+      }
+
+      return `
+        <label>
+          <span>${NexusUI.escapeHtml(label)}${field.required ? " *" : ""}</span>
+          ${control}
+          ${description}
+        </label>
+      `;
+    }
+
+    function renderInstallSetupForm(row, index) {
+      const automation = row.automation || {};
+      const setupSchema = schemaArray(automation.setup_schema);
+      const credentialSchema = schemaArray(automation.credential_schema);
+      const answers = latestSetupAnswers(row);
+
+      if (!setupSchema.length && !credentialSchema.length) {
+        return `
+          <details class="developer-install-setup">
+            <summary>Setup fields</summary>
+            <p class="developer-muted">This product has no setup schema fields.</p>
+          </details>
+        `;
+      }
+
+      return `
+        <details class="developer-install-setup">
+          <summary>Setup fields</summary>
+          <form data-install-setup="${index}">
+            <div class="developer-install-setup-grid">
+              ${setupSchema.map((field) => renderSetupField(field, answers[field.name] || "", false)).join("")}
+              ${credentialSchema.map((field) => renderSetupField(field, "", true)).join("")}
+            </div>
+            <div class="developer-install-form-actions">
+              <button class="btn btn-secondary btn-small" type="submit">Save setup fields</button>
+            </div>
+          </form>
+        </details>
+      `;
+    }
+
+    function renderDeveloperInstalls() {
+      const root = document.getElementById("developerInstallList");
+      if (!root) return;
+
+      const rows = state.installs || [];
+
+      if (!rows.length) {
+        root.innerHTML = `
+          <div class="developer-empty-state">
+            <h3>No guided installs yet</h3>
+            <p>Enable guided install on a product, then requests will appear here when buyers choose it at checkout.</p>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = rows.map((row, index) => {
+        const order = row.order || {};
+        const automation = row.automation || {};
+        const customerAutomation = row.customer_automation || {};
+        const request = row.install_request || {};
+        const status = request.status || customerAutomation.setup_status || order.order_status || "pending";
+        const buyerName = order.buyer_name || "Buyer";
+        const buyerContact = [order.buyer_email, order.buyer_company].filter(Boolean).join(" · ");
+        const setupStatus = customerAutomation.setup_status || "guided install needed";
+        const workflowStatus = customerAutomation.n8n_workflow_id
+          ? `Customer workflow ${customerAutomation.n8n_workflow_name || customerAutomation.n8n_workflow_id}`
+          : "Customer workflow not provisioned yet";
+
+        return `
+          <article class="developer-install-card">
+            <div class="developer-install-card-main">
+              <div class="developer-product-status-row">
+                <span class="${installStatusClass(status)}">${NexusUI.escapeHtml(installStatusLabel(status))}</span>
+                <span>${NexusUI.escapeHtml(order.price_display || order.currency || "Paid order")}</span>
+                <span>${NexusUI.escapeHtml(formatRunDate(order.created_at))}</span>
+              </div>
+              <h3>${NexusUI.escapeHtml(automation.title || order.automation_title || "Guided install")}</h3>
+              <p>${NexusUI.escapeHtml(buyerName)}${buyerContact ? ` · ${NexusUI.escapeHtml(buyerContact)}` : ""}</p>
+              <div class="developer-install-meta">
+                <span><strong>Setup</strong>${NexusUI.escapeHtml(productStatusText(setupStatus))}</span>
+                <span><strong>Workflow</strong>${NexusUI.escapeHtml(workflowStatus)}</span>
+                <span><strong>Request</strong>${request.install_notes ? NexusUI.escapeHtml(request.install_notes) : "No detailed buyer note yet"}</span>
+              </div>
+              ${renderInstallSetupForm(row, index)}
+            </div>
+            <div class="developer-install-actions">
+              <button class="btn btn-secondary btn-small" type="button" data-install-provision="${index}" ${customerAutomation.id ? "" : "disabled"}>Provision workflow</button>
+              <button class="btn btn-secondary btn-small" type="button" data-install-run="${index}" ${customerAutomation.id ? "" : "disabled"}>Run output check</button>
+              <button class="btn btn-secondary btn-small" type="button" data-install-status="${index}:contacted">Mark contacted</button>
+              <button class="btn btn-secondary btn-small" type="button" data-install-status="${index}:in_progress">Start install</button>
+              <button class="btn btn-danger btn-small" type="button" data-install-status="${index}:blocked">Blocked</button>
+              <button class="btn btn-primary btn-small" type="button" data-install-status="${index}:completed">Complete</button>
+            </div>
+          </article>
+        `;
+      }).join("");
+
+      root.querySelectorAll("[data-install-status]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const [index, status] = String(button.dataset.installStatus || "").split(":");
+          updateDeveloperInstallStatus(Number(index), status, button);
+        });
+      });
+
+      root.querySelectorAll("[data-install-provision]").forEach((button) => {
+        button.addEventListener("click", () => provisionDeveloperInstall(Number(button.dataset.installProvision), button));
+      });
+
+      root.querySelectorAll("[data-install-run]").forEach((button) => {
+        button.addEventListener("click", () => runDeveloperInstallCheck(Number(button.dataset.installRun), button));
+      });
+
+      root.querySelectorAll("[data-install-setup]").forEach((form) => {
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          saveDeveloperInstallSetup(Number(form.dataset.installSetup), form);
+        });
+      });
+    }
+
+    async function loadDeveloperInstalls() {
+      const root = document.getElementById("developerInstallList");
+      if (root && !state.installs.length) {
+        root.innerHTML = "Loading install requests...";
+      }
+
+      const { data, error } = await NexusDB.listDeveloperInstallRequests();
+      if (error) {
+        if (root) root.innerHTML = `<div class="error">${NexusUI.escapeHtml(error.message || "Could not load guided installs.")}</div>`;
+        return;
+      }
+
+      state.installs = Array.isArray(data) ? data : [];
+      renderDeveloperInstalls();
+    }
+
+    async function updateDeveloperInstallStatus(index, status, button = null) {
+      const row = state.installs[index];
+      if (!row) return;
+
+      if (status === "completed") {
+        const confirmed = await NexusUI.confirmDialog({
+          title: "Complete guided install?",
+          message: "Only complete this after the customer workflow has been provisioned and checked for the buyer.",
+          confirmText: "Mark completed"
+        });
+        if (!confirmed) return;
+      }
+
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Updating...";
+      }
+
+      const { error } = await NexusDB.updateDeveloperInstallRequest({
+        install_request_id: row.install_request?.id || "",
+        customer_automation_id: row.customer_automation?.id || "",
+        order_id: row.order?.id || "",
+        status,
+        admin_notes: `Developer marked guided install as ${installStatusLabel(status)}.`
+      });
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+
+      if (error) {
+        NexusUI.toast(error.message || "Could not update guided install.");
+        return;
+      }
+
+      NexusUI.toast(`Guided install marked as ${installStatusLabel(status)}.`);
+      await loadDeveloperInstalls();
+    }
+
+    async function saveDeveloperInstallSetup(index, form) {
+      const row = state.installs[index];
+      const customerAutomationId = row?.customer_automation?.id || "";
+      if (!customerAutomationId || !form) return;
+
+      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+        return;
+      }
+
+      const answers = {};
+      form.querySelectorAll("[data-setup-name]").forEach((field) => {
+        const key = field.dataset.setupName;
+        if (!key) return;
+        answers[key] = field.value || "";
+      });
+
+      const button = form.querySelector("button[type='submit']");
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Saving...";
+      }
+
+      try {
+        const { error } = await NexusDB.submitAutomationSetup({
+          customer_automation_id: customerAutomationId,
+          answers,
+          skip_runtime_trigger: true
+        });
+        if (error) throw new Error(error.message || "Could not save setup fields.");
+        NexusUI.toast("Setup fields saved. Provision the workflow when ready.");
+        await loadDeveloperInstalls();
+      } catch (error) {
+        NexusUI.toast(error.message || "Could not save setup fields.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "Save setup fields";
+        }
+      }
+    }
+
+    async function provisionDeveloperInstall(index, button = null) {
+      const row = state.installs[index];
+      const customerAutomationId = row?.customer_automation?.id || "";
+      if (!customerAutomationId) return;
+
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Provisioning...";
+      }
+
+      try {
+        const { error } = await NexusDB.provisionCustomerWorkflow(customerAutomationId);
+        if (error) throw new Error(error.message || "Could not provision workflow.");
+        NexusUI.toast("Customer workflow provisioned. Run the output check before completing.");
+        await loadDeveloperInstalls();
+      } catch (error) {
+        NexusUI.toast(error.message || "Could not provision workflow.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "Provision workflow";
+        }
+      }
+    }
+
+    async function runDeveloperInstallCheck(index, button = null) {
+      const row = state.installs[index];
+      const customerAutomationId = row?.customer_automation?.id || "";
+      if (!customerAutomationId) return;
+
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Running...";
+      }
+
+      try {
+        const { data, error } = await NexusDB.runScheduledAutomation({
+          action: "run_one",
+          customer_automation_id: customerAutomationId,
+          advance_schedule: false
+        });
+        if (error) throw new Error(error.message || "Could not run output check.");
+        const first = data?.results?.[0] || {};
+        if (String(first.status || "").toLowerCase() === "error") {
+          throw new Error(first.error || first.reason || "Output check failed.");
+        }
+        NexusUI.toast("Output check started. Refresh this page in a moment to confirm the latest output.");
+        await loadDeveloperInstalls();
+      } catch (error) {
+        NexusUI.toast(error.message || "Could not run output check.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "Run output check";
+        }
+      }
     }
 
     async function loadProducts() {
@@ -2802,9 +3201,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       document.getElementById("savePayoutSettings").addEventListener("click", savePayoutSettings);
 
       const requestedTab = new URLSearchParams(location.search).get("tab") || location.hash.replace("#", "");
-      const initialTab = ["profile", "products", "messages", "credentials", "wallet"].includes(requestedTab) ? requestedTab : "profile";
-      await loadProducts();
-      await loadCredentials();
+      const initialTab = ["profile", "products", "installs", "messages", "credentials", "wallet"].includes(requestedTab) ? requestedTab : "profile";
+      await Promise.all([
+        loadProducts(),
+        loadCredentials()
+      ]);
       activeTab(initialTab);
       loadMessages();
       loadWallet();

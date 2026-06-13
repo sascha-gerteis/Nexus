@@ -361,6 +361,7 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     color: cleanString(body.color) || "blue",
     status,
     listing_type: listingType,
+    guided_install_enabled: listingType === "standard" ? boolValue(body.guided_install_enabled) : false,
     featured: false,
 
     pricing_type: pricingType,

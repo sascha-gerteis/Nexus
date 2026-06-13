@@ -960,7 +960,24 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const isAdmin = profile?.role === "admin";
-    const skipRuntimeTrigger = isAdmin && Boolean(body.skip_runtime_trigger);
+    const isDeveloper = profile?.role === "developer";
+    let developerProfile: any = null;
+
+    if (isDeveloper) {
+      const { data: developerData, error: developerError } = await adminClient
+        .from("developers")
+        .select("id, profile_id, status")
+        .eq("profile_id", user.id)
+        .maybeSingle();
+
+      if (developerError) {
+        return errorResponse(developerError.message, 500);
+      }
+
+      developerProfile = developerData || null;
+    }
+
+    const skipRuntimeTrigger = (isAdmin || isDeveloper) && Boolean(body.skip_runtime_trigger);
 
     const customerAutomationId = cleanString(
       body.customer_automation_id ||
@@ -986,8 +1003,15 @@ Deno.serve(async (req) => {
     const customerAutomation = loaded.data;
     const automation = loaded.automation || {};
     const order = loaded.order || {};
+    const developerOwnsAutomation = Boolean(
+      developerProfile?.id &&
+        (
+          cleanString(automation.developer_id) === cleanString(developerProfile.id) ||
+          cleanString(order.developer_id) === cleanString(developerProfile.id)
+        )
+    );
 
-    if (customerAutomation.buyer_id && customerAutomation.buyer_id !== user.id && !isAdmin) {
+    if (customerAutomation.buyer_id && customerAutomation.buyer_id !== user.id && !isAdmin && !developerOwnsAutomation) {
       return errorResponse("You do not have access to this automation.", 403);
     }
 
@@ -1104,7 +1128,7 @@ Deno.serve(async (req) => {
         setup_keys: Object.keys(setupAnswers),
         credential_keys_available: Object.keys(savedSecrets),
       }),
-      created_by: isAdmin ? "admin" : "buyer",
+      created_by: isAdmin ? "admin" : isDeveloper ? "developer" : "buyer",
     });
 
     if (skipRuntimeTrigger) {
@@ -1155,7 +1179,7 @@ Deno.serve(async (req) => {
         customerAutomation,
         automation,
         order,
-        user: isAdmin ? null : user,
+        user: isAdmin || isDeveloper ? null : user,
         setupAnswers,
         secrets: savedSecrets,
         savedCredentialKeys,
@@ -1198,7 +1222,7 @@ Deno.serve(async (req) => {
       order_id: customerAutomation.order_id,
       runtime_type: runtimeType || "n8n_managed",
       trigger_type: "buyer_setup_submit",
-      trigger_source: isAdmin ? "admin_setup_submit" : "buyer_setup_submit",
+      trigger_source: isAdmin ? "admin_setup_submit" : isDeveloper ? "developer_setup_submit" : "buyer_setup_submit",
       status: "running",
       n8n_execution_id: executionId || null,
       started_at: new Date().toISOString(),

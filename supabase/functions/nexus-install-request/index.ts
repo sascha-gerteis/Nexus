@@ -115,6 +115,58 @@ async function requireAdmin(req: Request) {
   return { user, profile, error: null };
 }
 
+async function requireDeveloper(req: Request, adminClient: any) {
+  const { user, profile, error } = await requireUser(req);
+
+  if (error || !user) {
+    return { user: null, profile: null, developer: null, error: error || "Login required." };
+  }
+
+  if (!profile || profile.role !== "developer") {
+    return { user, profile, developer: null, error: "Developer access required." };
+  }
+
+  const { data: developer, error: developerError } = await adminClient
+    .from("developers")
+    .select("*")
+    .eq("profile_id", user.id)
+    .maybeSingle();
+
+  if (developerError) {
+    return { user, profile, developer: null, error: developerError.message };
+  }
+
+  if (!developer) {
+    return { user, profile, developer: null, error: "Developer profile not found." };
+  }
+
+  return { user, profile, developer, error: null };
+}
+
+function isGuidedInstallRow(row: any) {
+  const installText = [
+    row?.order?.install_type,
+    row?.customer_automation?.install_type,
+    row?.order?.order_status,
+    row?.customer_automation?.status,
+    row?.customer_automation?.setup_status,
+  ].map((item) => cleanString(item).toLowerCase()).join(" ");
+
+  return Boolean(
+    row?.install_request ||
+      installText.includes("guided") ||
+      installText.includes("nexus_install")
+  );
+}
+
+function developerOwnsInstallRow(row: any, developerId: string) {
+  const id = cleanString(developerId);
+  if (!id) return false;
+
+  return cleanString(row?.order?.developer_id) === id ||
+    cleanString(row?.automation?.developer_id) === id;
+}
+
 async function getBuyerInstallRequest(adminClient: any, userId: string, customerAutomationId: string) {
   let query = adminClient
     .from("customer_automations")
@@ -328,6 +380,7 @@ async function listAdminOrders(adminClient: any) {
       slug,
       icon,
       color,
+      developer_id,
       status,
       setup_schema,
       credential_schema,
@@ -384,12 +437,23 @@ async function listAdminOrders(adminClient: any) {
   return rows;
 }
 
-async function updateAdminInstallRequest(adminClient: any, userId: string, body: any) {
+async function listDeveloperOrders(adminClient: any, developer: any) {
+  const rows = await listAdminOrders(adminClient);
+  const developerId = cleanString(developer?.id);
+
+  return rows.filter((row: any) =>
+    developerOwnsInstallRow(row, developerId) &&
+    isGuidedInstallRow(row)
+  );
+}
+
+async function updateAdminInstallRequest(adminClient: any, userId: string, body: any, actor = "admin") {
   const installRequestId = cleanString(body.install_request_id);
   const customerAutomationId = cleanString(body.customer_automation_id);
   const orderId = cleanString(body.order_id);
   const status = cleanString(body.status);
   const adminNotes = cleanString(body.admin_notes);
+  const actorLabel = actor === "developer" ? "Developer" : "Admin";
 
   if (!installRequestId && !customerAutomationId && !orderId) {
     return errorResponse("install_request_id, customer_automation_id, or order_id is required.", 400);
@@ -517,7 +581,7 @@ async function updateAdminInstallRequest(adminClient: any, userId: string, body:
         buyer_id: customerAutomation.buyer_id,
 
         status: "pending",
-        admin_notes: adminNotes || "Created by admin from Orders page.",
+        admin_notes: adminNotes || `Created by ${actorLabel.toLowerCase()} from guided installs page.`,
         created_at: now,
         updated_at: now,
       })
@@ -656,8 +720,8 @@ async function updateAdminInstallRequest(adminClient: any, userId: string, body:
     order_id: customerAutomation.order_id,
     event_type: `guided_install_${status}`,
     title: `Guided install ${status}`,
-    message: adminNotes || `Admin marked guided install as ${status}.`,
-    created_by: "admin",
+    message: adminNotes || `${actorLabel} marked guided install as ${status}.`,
+    created_by: actor === "developer" ? "developer" : "admin",
     created_at: now,
   });
 
@@ -666,6 +730,44 @@ async function updateAdminInstallRequest(adminClient: any, userId: string, body:
     request: updatedRequest,
     message: `Guided install marked as ${status}.`,
   });
+}
+
+async function updateDeveloperInstallRequest(adminClient: any, userId: string, developer: any, body: any) {
+  const rows = await listDeveloperOrders(adminClient, developer);
+  const installRequestId = cleanString(body.install_request_id);
+  const customerAutomationId = cleanString(body.customer_automation_id);
+  const orderId = cleanString(body.order_id);
+
+  const row = rows.find((item: any) =>
+    (installRequestId && cleanString(item.install_request?.id) === installRequestId) ||
+    (customerAutomationId && cleanString(item.customer_automation?.id) === customerAutomationId) ||
+    (orderId && cleanString(item.order?.id) === orderId)
+  );
+
+  if (!row) {
+    return errorResponse("Guided install request not found for this developer.", 404);
+  }
+
+  if (cleanString(body.status) === "completed") {
+    const customerAutomation = row.customer_automation || {};
+    const hasCustomerWorkflow = Boolean(
+      cleanString(customerAutomation.n8n_workflow_id) ||
+        cleanString(customerAutomation.runtime_webhook_url || customerAutomation.n8n_webhook_url)
+    );
+    const hasRunCheck = Boolean(
+      cleanString(customerAutomation.last_run_requested_at) ||
+        cleanString(customerAutomation.last_run_at)
+    );
+
+    if (!hasCustomerWorkflow || !hasRunCheck) {
+      return errorResponse(
+        "Provision the customer workflow and run the output check before marking this guided install complete.",
+        400,
+      );
+    }
+  }
+
+  return await updateAdminInstallRequest(adminClient, userId, body, "developer");
 }
 
 Deno.serve(async (req) => {
@@ -745,6 +847,31 @@ Deno.serve(async (req) => {
       }
 
       return await updateAdminInstallRequest(adminClient, user.id, body);
+    }
+
+    if (action === "developer_list") {
+      const { user, developer, error } = await requireDeveloper(req, adminClient);
+
+      if (error || !user || !developer) {
+        return errorResponse(error || "Developer access required.", 401);
+      }
+
+      const rows = await listDeveloperOrders(adminClient, developer);
+
+      return jsonResponse({
+        ok: true,
+        rows,
+      });
+    }
+
+    if (action === "developer_update") {
+      const { user, developer, error } = await requireDeveloper(req, adminClient);
+
+      if (error || !user || !developer) {
+        return errorResponse(error || "Developer access required.", 401);
+      }
+
+      return await updateDeveloperInstallRequest(adminClient, user.id, developer, body);
     }
 
     return errorResponse("Unknown action.", 400);

@@ -604,6 +604,14 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     });
   }
 
+  function productAllowsGuidedInstall(product) {
+    if (!product) return false;
+    const developerId = product.developer_id || product.developers?.id || "";
+    if (!developerId) return true;
+    return product.guided_install_enabled === true ||
+      String(product.guided_install_enabled || "").toLowerCase() === "true";
+  }
+
   function selectCustomization(index, target = "modal") {
     if (!activeProduct) return;
 
@@ -688,6 +696,31 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 }
 
 function renderSetupChoicePage(root, product) {
+  const guidedInstallEnabled = productAllowsGuidedInstall(product);
+  const setupIntro = guidedInstallEnabled
+    ? "Choose how you want this automation set up. After selecting a setup path, you will continue directly to secure Stripe checkout. The setup form comes after payment."
+    : "This product uses self-serve setup after payment. You will continue directly to secure Stripe checkout, then submit the required setup details from your buyer dashboard.";
+  const guidedInstallChoice = guidedInstallEnabled
+    ? `
+              <div
+                class="choice-card"
+                data-install-choice="nexus_guided"
+                onclick="NexusApp.chooseInstall('nexus_guided')"
+              >
+                <h3>Nexus Guided Install</h3>
+                <p>
+                  Best when Nexus or the product developer should help collect access, configure the workflow, and prepare the automation.
+                </p>
+
+                <div class="tags">
+                  <span class="tag">Managed setup</span>
+                  <span class="tag">Best for complex cases</span>
+                  <span class="tag">Guided support</span>
+                </div>
+              </div>
+    `
+    : "";
+
   root.innerHTML = `
     <div class="checkout-setup-page">
       <div class="section-head">
@@ -696,8 +729,7 @@ function renderSetupChoicePage(root, product) {
         <h2>${product.title}</h2>
 
         <p>
-          Choose how you want this automation set up. After selecting a setup path,
-          you will continue directly to secure Stripe checkout. The setup form comes after payment.
+          ${setupIntro}
         </p>
       </div>
 
@@ -756,22 +788,7 @@ function renderSetupChoicePage(root, product) {
                 </div>
               </div>
 
-              <div
-                class="choice-card"
-                data-install-choice="nexus_guided"
-                onclick="NexusApp.chooseInstall('nexus_guided')"
-              >
-                <h3>Nexus Guided Install</h3>
-                <p>
-                  Best when Nexus should help collect access, configure the workflow, and prepare the automation.
-                </p>
-
-                <div class="tags">
-                  <span class="tag">Managed setup</span>
-                  <span class="tag">Best for complex cases</span>
-                  <span class="tag">Nexus support</span>
-                </div>
-              </div>
+              ${guidedInstallChoice}
             </div>
 
             <button type="submit" class="btn btn-primary btn-full" style="margin-top:1rem">
@@ -808,7 +825,10 @@ function renderSetupChoicePage(root, product) {
       button.textContent = "Opening secure checkout...";
     }
 
-    const installType = document.getElementById("chosenInstallType").value || "self_serve";
+    let installType = document.getElementById("chosenInstallType").value || "self_serve";
+    if (installType === "nexus_guided" && !productAllowsGuidedInstall(product)) {
+      installType = "self_serve";
+    }
     const customization =
       document.getElementById("chosenCustomization").value ||
       selectedCustomizationName ||

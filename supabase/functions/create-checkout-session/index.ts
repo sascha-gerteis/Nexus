@@ -91,6 +91,32 @@ function normalizePricingType(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeInstallType(value: unknown) {
+  const raw = cleanString(value).toLowerCase();
+
+  if (
+    raw === "nexus_guided" ||
+    raw === "nexus_install" ||
+    raw === "guided" ||
+    raw === "guided_install" ||
+    raw === "managed" ||
+    raw === "managed_install"
+  ) {
+    return "nexus_guided";
+  }
+
+  return "self_serve";
+}
+
+function productAllowsGuidedInstall(product: any) {
+  const developerId = cleanString(product?.developer_id || product?.developers?.id);
+
+  if (!developerId) return true;
+
+  return product?.guided_install_enabled === true ||
+    cleanString(product?.guided_install_enabled).toLowerCase() === "true";
+}
+
 function roundMoney(amount: number, currency: SupportedCheckoutCurrency) {
   if (currency === "thb" || currency === "jpy") {
     return Math.round(amount);
@@ -669,7 +695,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     const automationId = body.automation_id;
-    const installType = String(body.install_type || "self_serve");
+    const installType = normalizeInstallType(body.install_type || "self_serve");
     const selectedCustomization = String(body.selected_customization || "");
     const currency = normalizeCurrency(body.currency || "THB");
 
@@ -697,6 +723,10 @@ Deno.serve(async (req) => {
 
     if (product.status !== "live") {
       return errorResponse("This product is not live.", 400);
+    }
+
+    if (installType === "nexus_guided" && !productAllowsGuidedInstall(product)) {
+      return errorResponse("Guided install is not available for this product.", 400);
     }
 
     if (!hasAttachedCheckoutFlow(product)) {

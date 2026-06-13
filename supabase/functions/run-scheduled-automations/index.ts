@@ -190,11 +190,40 @@ async function requireOperator(req: Request, body: any, adminClient: any) {
     .eq("id", data.user.id)
     .maybeSingle();
 
-  if (profile?.role !== "admin") {
-    return { ok: false, error: "Admin access required." };
+  if (profile?.role === "admin") {
+    return { ok: true, internal: false, user: data.user, role: "admin", developer: null };
   }
 
-  return { ok: true, internal: false, user: data.user };
+  if (profile?.role === "developer") {
+    const { data: developer, error: developerError } = await adminClient
+      .from("developers")
+      .select("id, profile_id, status")
+      .eq("profile_id", data.user.id)
+      .maybeSingle();
+
+    if (developerError) {
+      return { ok: false, error: developerError.message };
+    }
+
+    if (!developer) {
+      return { ok: false, error: "Developer profile not found." };
+    }
+
+    return { ok: true, internal: false, user: data.user, role: "developer", developer };
+  }
+
+  return { ok: false, error: "Admin or developer access required." };
+}
+
+function developerOwnsCandidate(row: any, developerId: string) {
+  const id = cleanString(developerId);
+  if (!id) return false;
+
+  const automation = one(row?.automations) || {};
+  const order = one(row?.orders) || {};
+
+  return cleanString(automation?.developer_id) === id ||
+    cleanString(order?.developer_id) === id;
 }
 
 async function loadLatestSetupValues(adminClient: any, customerAutomationId: string) {
@@ -731,7 +760,7 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const auth = await requireOperator(req, body, adminClient);
+    const auth: any = await requireOperator(req, body, adminClient);
 
     if (!auth.ok) {
       return errorResponse(auth.error || "Unauthorized.", 401);
@@ -747,11 +776,24 @@ Deno.serve(async (req) => {
       return errorResponse("customer_automation_id is required for run_one.", 400);
     }
 
-    const rows = await loadCandidates(adminClient, {
+    let rows = await loadCandidates(adminClient, {
       action,
       id: customerAutomationId,
       limit,
     });
+
+    if (auth.role === "developer") {
+      if (action !== "run_one") {
+        return errorResponse("Developers can only run one owned customer automation at a time.", 403);
+      }
+
+      const developerId = cleanString(auth.developer?.id);
+      rows = rows.filter((row: any) => developerOwnsCandidate(row, developerId));
+
+      if (!rows.length) {
+        return errorResponse("Customer automation not found for this developer.", 404);
+      }
+    }
 
     const results = [];
 

@@ -778,6 +778,26 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const isAdmin = profile?.role === "admin";
+    const isDeveloper = profile?.role === "developer";
+    let developerProfile: any = null;
+
+    if (isDeveloper) {
+      const { data: developerData, error: developerError } = await adminClient
+        .from("developers")
+        .select("id, profile_id, status")
+        .eq("profile_id", user.id)
+        .maybeSingle();
+
+      if (developerError) {
+        return errorResponse(developerError.message, 500);
+      }
+
+      if (!developerData) {
+        return errorResponse("Developer profile not found.", 403);
+      }
+
+      developerProfile = developerData;
+    }
 
     let customerAutomationQuery = adminClient
       .from("customer_automations")
@@ -787,6 +807,7 @@ Deno.serve(async (req) => {
   id,
   title,
   slug,
+  developer_id,
   setup_schema,
   credential_schema,
   workflow_placeholder_mappings,
@@ -803,6 +824,7 @@ Deno.serve(async (req) => {
           payment_status,
           order_status,
           price_display,
+          developer_id,
           stripe_mode,
           stripe_subscription_id,
           stripe_subscription_status,
@@ -811,7 +833,7 @@ Deno.serve(async (req) => {
       `)
       .eq("id", customerAutomationId);
 
-    if (!isAdmin) {
+    if (!isAdmin && !isDeveloper) {
       customerAutomationQuery = customerAutomationQuery.eq("buyer_id", user.id);
     }
 
@@ -835,6 +857,16 @@ Deno.serve(async (req) => {
 
     if (!product) {
       return errorResponse("Product template not found.", 404);
+    }
+
+    if (isDeveloper) {
+      const developerId = cleanString(developerProfile?.id);
+      const ownsProduct = cleanString(product.developer_id) === developerId;
+      const ownsOrder = cleanString(order?.developer_id) === developerId;
+
+      if (!developerId || (!ownsProduct && !ownsOrder)) {
+        return errorResponse("You do not have access to provision this customer workflow.", 403);
+      }
     }
 
     const masterWorkflowId = cleanString(product.n8n_workflow_id);

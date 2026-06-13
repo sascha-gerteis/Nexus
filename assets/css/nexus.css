@@ -11415,6 +11415,122 @@ body.developer-modal-open::before {
   white-space: nowrap;
 }
 
+.developer-install-list {
+  display: grid;
+  gap: .85rem;
+}
+
+.developer-install-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 16px 44px rgba(15, 23, 42, .06);
+}
+
+.developer-install-card-main {
+  min-width: 0;
+}
+
+.developer-install-card h3 {
+  margin: .25rem 0 .35rem;
+  color: var(--navy);
+  font-size: 1.2rem;
+  line-height: 1.15;
+}
+
+.developer-install-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.developer-install-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .6rem;
+  margin-top: .85rem;
+}
+
+.developer-install-meta span {
+  display: grid;
+  gap: .25rem;
+  min-height: 74px;
+  padding: .7rem;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  color: #475569;
+  background: #f8fbff;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.developer-install-meta strong {
+  display: block;
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.developer-install-setup {
+  margin-top: .85rem;
+  padding: .8rem;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.developer-install-setup summary {
+  cursor: pointer;
+  color: var(--navy);
+  font-weight: 950;
+}
+
+.developer-install-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .7rem;
+  margin-top: .8rem;
+}
+
+.developer-install-setup-grid label {
+  display: grid;
+  gap: .35rem;
+  color: #475569;
+  font-size: .82rem;
+  font-weight: 900;
+}
+
+.developer-install-setup-grid small {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.developer-install-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: .75rem;
+}
+
+.developer-install-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .5rem;
+  width: 210px;
+}
+
+.developer-install-actions .btn {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 14px;
+}
+
 .product-credentials-section {
   border-top: 1px solid rgba(15, 23, 42, .08);
 }
@@ -12329,6 +12445,17 @@ body.developer-guide-open {
   .developer-payout-panel {
     position: static;
   }
+
+  .developer-install-card,
+  .developer-install-meta,
+  .developer-install-setup-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-install-actions {
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
 }
 
 @media (max-width: 860px) {
@@ -12423,6 +12550,7 @@ body.developer-guide-open {
   }
 
   .developer-product-actions,
+  .developer-install-actions,
   .developer-form-actions,
   .developer-form-actions.split,
   .developer-console-hero-actions,
