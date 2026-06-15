@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260608-devfix">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260615-guidedinstall">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -175,6 +175,16 @@
               <div>
                 <label>Setup type label</label>
                 <input class="input" name="setup_type" placeholder="Self-serve or guided">
+              </div>
+
+              <div class="full">
+                <label class="clean-checkbox">
+                  <input type="checkbox" name="guided_install_enabled">
+                  <span>Offer guided install at checkout</span>
+                </label>
+                <small>
+                  Nexus-owned products can offer guided install automatically. Enable this for operator/developer products when setup help is available. The optional setup fee below is charged only when the buyer chooses guided install.
+                </small>
               </div>
 
               <div>
@@ -990,9 +1000,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260615-guidedinstall"></script>
   <script src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
-  <script src="/assets/js/nexus-app.js?v=20260608-devfix"></script>
+  <script src="/assets/js/nexus-app.js?v=20260615-guidedinstall"></script>
   <script src="/assets/js/nexus-notice.js"></script>
 
  <script>
@@ -1438,6 +1448,9 @@
 
         pricing_type: String(formData.get("pricing_type") || "custom_quote"),
         currency: String(formData.get("currency") || "THB"),
+        guided_install_enabled:
+          String(formData.get("listing_type") || "standard") === "standard" &&
+          formData.get("guided_install_enabled") === "on",
 
         price: Number(formData.get("price") || 0),
         price_usd: Number(formData.get("price_usd") || 0),

@@ -461,6 +461,39 @@ function getProductBaseAmount(product) {
   };
 }
 
+function getProductSetupFeeBaseAmount(product) {
+  const productCurrency = String(product?.currency || "USD").toUpperCase();
+  const usdValue = Number(product?.setup_fee_usd || 0);
+  const thbValue = Number(product?.setup_fee_thb || 0);
+  const genericValue = Number(product?.setup_fee || 0);
+
+  if (usdValue > 0) {
+    return {
+      amount: usdValue,
+      currency: "USD"
+    };
+  }
+
+  if (thbValue > 0) {
+    return {
+      amount: thbValue,
+      currency: "THB"
+    };
+  }
+
+  if (genericValue > 0) {
+    return {
+      amount: genericValue,
+      currency: SUPPORTED_CURRENCIES.includes(productCurrency) ? productCurrency : "USD"
+    };
+  }
+
+  return {
+    amount: 0,
+    currency: "USD"
+  };
+}
+
 function convertAmount(amount, fromCurrency, toCurrency) {
   const from = String(fromCurrency || "USD").toUpperCase();
   const to = String(toCurrency || "USD").toUpperCase();
@@ -496,6 +529,27 @@ function priceAmount(product) {
   const base = getProductBaseAmount(product);
 
   return convertAmount(base.amount, base.currency, displayCurrency);
+}
+
+function guidedInstallFeeAmount(product) {
+  if (!product) return 0;
+
+  if (String(product.pricing_type || "").toLowerCase() === "setup_fee") {
+    return 0;
+  }
+
+  const displayCurrency = getCurrency();
+  const base = getProductSetupFeeBaseAmount(product);
+
+  return convertAmount(base.amount, base.currency, displayCurrency);
+}
+
+function guidedInstallFeeMoney(product) {
+  const amount = guidedInstallFeeAmount(product);
+
+  if (!amount || amount <= 0) return "";
+
+  return formatMoney(amount, getCurrency());
 }
 
 function money(product) {
@@ -989,6 +1043,13 @@ function productColorTheme(color) {
             <span>${escapeHtml(l("Price"))}</span>
             <strong>${money(product)}</strong>
           </div>
+
+          ${guidedInstallFeeMoney(product) ? `
+            <div class="meta">
+              <span>${escapeHtml(l("Guided install"))}</span>
+              <strong>+ ${guidedInstallFeeMoney(product)}</strong>
+            </div>
+          ` : ""}
 
           <div class="meta">
             <span>${escapeHtml(l("Setup"))}</span>
@@ -4026,6 +4087,8 @@ function mountAdminSidebar(options = {}) {
   setCurrency,
   currencySwitch,
   priceAmount,
+  guidedInstallFeeAmount,
+  guidedInstallFeeMoney,
   money,
   productCard,
   infoBlock,

@@ -594,6 +594,7 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
 .price-box{background:linear-gradient(135deg,#eff6ff,#f5f3ff);border:1px solid #dbeafe;border-radius:18px;padding:1rem;margin:1rem 0}
 .price-box span{color:var(--muted);font-weight:850;font-size:.88rem}
 .price-box strong{display:block;color:var(--navy);font-size:1.65rem}
+.price-box small{display:block;margin-top:.35rem;color:var(--muted);font-weight:800}
 .customization-grid{display:grid;gap:.8rem}
 .customization-card{border:1px solid #dbeafe;border-radius:18px;background:#fff;padding:1rem;cursor:pointer}
 .customization-card.active{border-color:var(--blue);box-shadow:0 0 0 4px rgba(37,99,255,.08)}
@@ -609,6 +610,9 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
 .choice-card{border:1px solid #dbeafe;border-radius:22px;background:white;padding:1rem;cursor:pointer;transition:.18s ease}
 .choice-card:hover{transform:translateY(-2px);box-shadow:var(--shadow2)}
 .choice-card.active{border-color:var(--blue);box-shadow:0 0 0 4px rgba(37,99,255,.08)}
+.install-price-note{margin-top:.85rem;padding:.8rem;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff}
+.install-price-note span{display:block;color:var(--muted);font-size:.82rem;font-weight:850;text-transform:uppercase}
+.install-price-note strong{display:block;color:var(--navy);font-size:1.15rem;margin-top:.15rem}
 
 /* Admin */
 .table{width:100%;border-collapse:separate;border-spacing:0 .55rem}

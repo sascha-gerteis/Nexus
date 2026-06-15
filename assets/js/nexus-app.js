@@ -422,7 +422,17 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
     if (setup !== "all") {
       items = items.filter((product) => {
-        return String(product.setup_type || "").toLowerCase().includes(setup);
+        const setupText = String(product.setup_type || "").toLowerCase();
+
+        if (setup === "guided") {
+          return setupText.includes("guided") || productAllowsGuidedInstall(product);
+        }
+
+        if (setup === "self") {
+          return setupText.includes("self") || !productAllowsGuidedInstall(product);
+        }
+
+        return setupText.includes(setup);
       });
     }
 
@@ -504,6 +514,9 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       <div class="price-box">
         <span>Price</span>
         <strong>${NexusUI.money(product)}</strong>
+        ${NexusUI.guidedInstallFeeMoney?.(product) ? `
+          <small>Guided install: + ${NexusUI.guidedInstallFeeMoney(product)}</small>
+        ` : ""}
       </div>
 
       ${NexusUI.infoBlock("Problem it solves", [NexusUI.localizeRecord(product, "problem")])}
@@ -607,7 +620,19 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   function productAllowsGuidedInstall(product) {
     if (!product) return false;
     const developerId = product.developer_id || product.developers?.id || "";
-    if (!developerId) return true;
+    const developerHandle = String(product.developers?.handle || "").toLowerCase();
+    const developerName = String(product.developers?.display_name || "").toLowerCase();
+
+    if (
+      !developerId ||
+      developerHandle === "nexus-internal" ||
+      developerHandle === "nexus" ||
+      developerName === "nexus internal" ||
+      developerName === "nexus"
+    ) {
+      return true;
+    }
+
     return product.guided_install_enabled === true ||
       String(product.guided_install_enabled || "").toLowerCase() === "true";
   }
@@ -697,6 +722,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
 function renderSetupChoicePage(root, product) {
   const guidedInstallEnabled = productAllowsGuidedInstall(product);
+  const guidedInstallFee = NexusUI.guidedInstallFeeMoney?.(product) || "";
+  const guidedInstallFeeLabel = guidedInstallFee ? `+ ${guidedInstallFee}` : "Included";
   const setupIntro = guidedInstallEnabled
     ? "Choose how you want this automation set up. After selecting a setup path, you will continue directly to secure Stripe checkout. The setup form comes after payment."
     : "This product uses self-serve setup after payment. You will continue directly to secure Stripe checkout, then submit the required setup details from your buyer dashboard.";
@@ -716,6 +743,11 @@ function renderSetupChoicePage(root, product) {
                   <span class="tag">Managed setup</span>
                   <span class="tag">Best for complex cases</span>
                   <span class="tag">Guided support</span>
+                </div>
+
+                <div class="install-price-note">
+                  <span>Guided install fee</span>
+                  <strong>${guidedInstallFeeLabel}</strong>
                 </div>
               </div>
     `
@@ -2311,7 +2343,10 @@ placeholderValidationErrors = parseJsonField("placeholder_validation_errors", []
       featured: formData.get("featured") === "on",
 
       pricing_type: String(formData.get("pricing_type") || "custom_quote"),
-      currency: String(formData.get("currency") || "THB"),
+        currency: String(formData.get("currency") || "THB"),
+        guided_install_enabled:
+          String(formData.get("listing_type") || "standard") === "standard" &&
+          formData.get("guided_install_enabled") === "on",
 
       price: Number(formData.get("price") || 0),
       price_usd: Number(formData.get("price_usd") || 0),

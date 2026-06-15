@@ -110,8 +110,18 @@ function normalizeInstallType(value: unknown) {
 
 function productAllowsGuidedInstall(product: any) {
   const developerId = cleanString(product?.developer_id || product?.developers?.id);
+  const developerHandle = cleanString(product?.developers?.handle).toLowerCase();
+  const developerName = cleanString(product?.developers?.display_name).toLowerCase();
 
-  if (!developerId) return true;
+  if (
+    !developerId ||
+    developerHandle === "nexus-internal" ||
+    developerHandle === "nexus" ||
+    developerName === "nexus internal" ||
+    developerName === "nexus"
+  ) {
+    return true;
+  }
 
   return product?.guided_install_enabled === true ||
     cleanString(product?.guided_install_enabled).toLowerCase() === "true";
@@ -181,6 +191,16 @@ function getConfiguredPriceValues(product: any) {
       : Number(product.price || 0),
 
     isSetupFee,
+  };
+}
+
+function getConfiguredSetupFeeValues(product: any) {
+  return {
+    values: SUPPORTED_CHECKOUT_CURRENCIES.reduce((acc, currency) => {
+      acc[currency] = Number(product[`setup_fee_${currency}`] || 0);
+      return acc;
+    }, {} as Record<SupportedCheckoutCurrency, number>),
+    genericValue: Number(product.setup_fee || 0),
   };
 }
 
@@ -526,6 +546,66 @@ async function resolveCheckoutAmountForCurrency(product: any, currency: Supporte
   };
 }
 
+async function resolveGuidedSetupFeeForCurrency(product: any, currency: SupportedCheckoutCurrency) {
+  const productBaseCurrency = normalizeCurrency(product.currency || "USD");
+  const { values, genericValue } = getConfiguredSetupFeeValues(product);
+  const exactValue = Number(values[currency] || 0);
+
+  if (exactValue > 0) {
+    return {
+      amount: roundMoney(exactValue, currency),
+      source: `exact_${currency}`,
+      derived: false,
+      fxRate: null as number | null,
+      fxSource: null as string | null,
+      fxDate: null as string | null,
+    };
+  }
+
+  const sourceCurrency = SUPPORTED_CHECKOUT_CURRENCIES.find((candidate) => {
+    return Number(values[candidate] || 0) > 0;
+  });
+
+  if (!sourceCurrency && !genericValue) {
+    return {
+      amount: 0,
+      source: "not_configured",
+      derived: false,
+      fxRate: null as number | null,
+      fxSource: null as string | null,
+      fxDate: null as string | null,
+    };
+  }
+
+  const fx = await getLiveFxRates();
+
+  if (sourceCurrency) {
+    const sourceAmount = Number(values[sourceCurrency] || 0);
+    const convertedAmount = convertCurrencyAmount(sourceAmount, sourceCurrency, currency, fx.rates);
+
+    return {
+      amount: roundMoney(convertedAmount, currency),
+      source: `converted_from_${sourceCurrency}`,
+      derived: true,
+      fxRate: fx.rates[currency],
+      fxSource: fx.source,
+      fxDate: fx.date,
+    };
+  }
+
+  const convertedAmount = convertCurrencyAmount(genericValue, productBaseCurrency, currency, fx.rates);
+  const isGenericExact = productBaseCurrency === currency;
+
+  return {
+    amount: roundMoney(convertedAmount, currency),
+    source: isGenericExact ? `generic_${currency}` : `converted_from_generic_${productBaseCurrency}`,
+    derived: !isGenericExact,
+    fxRate: isGenericExact ? null : fx.rates[currency],
+    fxSource: isGenericExact ? null : fx.source,
+    fxDate: isGenericExact ? null : fx.date,
+  };
+}
+
 async function requireBuyer(req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
 
@@ -753,6 +833,20 @@ Deno.serve(async (req) => {
       fxDate,
     } = await ensureStripePrice(adminClient, product, currency);
 
+    const guidedSetupFee = installType === "nexus_guided" && normalizePricingType(product.pricing_type) !== "setup_fee"
+      ? await resolveGuidedSetupFeeForCurrency(product, currency)
+      : {
+          amount: 0,
+          source: "not_selected",
+          derived: false,
+          fxRate: null as number | null,
+          fxSource: null as string | null,
+          fxDate: null as string | null,
+        };
+
+    const guidedSetupFeeAmount = Number(guidedSetupFee.amount || 0);
+    const checkoutTotalAmount = roundMoney(Number(amount || 0) + guidedSetupFeeAmount, currency);
+
     const { data: existingProfile, error: existingProfileError } = await adminClient
       .from("profiles")
       .select("id, full_name, role")
@@ -784,7 +878,13 @@ Deno.serve(async (req) => {
       { onConflict: "user_id" },
     );
 
-    const priceDisplay = formatCheckoutPriceDisplay(amount, currency, mode);
+    const basePriceDisplay = formatCheckoutPriceDisplay(amount, currency, mode);
+    const guidedSetupFeeDisplay = guidedSetupFeeAmount > 0
+      ? formatCheckoutPriceDisplay(guidedSetupFeeAmount, currency, "payment")
+      : "";
+    const priceDisplay = guidedSetupFeeDisplay
+      ? `${basePriceDisplay} + ${guidedSetupFeeDisplay} guided install`
+      : basePriceDisplay;
 
     const { data: order, error: orderError } = await adminClient
       .from("orders")
@@ -811,7 +911,7 @@ Deno.serve(async (req) => {
 
         stripe_mode: mode,
 stripe_currency: currency,
-stripe_amount_total: amount,
+stripe_amount_total: checkoutTotalAmount,
 stripe_unit_amount: unitAmount,
 
 price_source: priceSource,
@@ -838,7 +938,14 @@ updated_at: nowIso(),
       install_type: installType,
       selected_customization: selectedCustomization,
       currency,
-      amount: String(amount),
+      amount: String(checkoutTotalAmount),
+      base_amount: String(amount),
+      guided_setup_fee_amount: String(guidedSetupFeeAmount),
+      guided_setup_fee_source: guidedSetupFee.source,
+      guided_setup_fee_derived: String(guidedSetupFee.derived),
+      guided_setup_fee_fx_rate: guidedSetupFee.fxRate ? String(guidedSetupFee.fxRate) : "",
+      guided_setup_fee_fx_source: guidedSetupFee.fxSource || "",
+      guided_setup_fee_fx_date: guidedSetupFee.fxDate || "",
       price_source: priceSource,
       derived_price: String(derivedPrice),
       fx_rate: fxRate ? String(fxRate) : "",
@@ -847,15 +954,41 @@ updated_at: nowIso(),
       source: "nexus",
     };
 
+    const lineItems: any[] = [
+      {
+        price: priceId,
+        quantity: 1,
+      },
+    ];
+
+    if (guidedSetupFeeAmount > 0) {
+      lineItems.push({
+        price_data: {
+          currency,
+          unit_amount: toStripeUnitAmount(guidedSetupFeeAmount, currency),
+          product_data: {
+            name: `${product.title || "Nexus Automation"} - Guided install`,
+            metadata: {
+              automation_id: product.id,
+              slug: product.slug || "",
+              source: "nexus_guided_install",
+            },
+          },
+          metadata: {
+            automation_id: product.id,
+            slug: product.slug || "",
+            install_type: installType,
+            source: "nexus_guided_install",
+          },
+        },
+        quantity: 1,
+      });
+    }
+
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode,
       customer_email: buyerEmail || undefined,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items: lineItems,
       success_url: `${SITE_URL}/pages/checkout/success.html?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/pages/checkout/index.html?slug=${encodeURIComponent(product.slug || "")}&step=setup&checkout=cancelled&order_id=${order.id}`,
       metadata,
@@ -890,7 +1023,9 @@ updated_at: nowIso(),
       session_id: session.id,
       order_id: order.id,
       currency: currency.toUpperCase(),
-      amount,
+      amount: checkoutTotalAmount,
+      base_amount: amount,
+      guided_setup_fee_amount: guidedSetupFeeAmount,
       unit_amount: unitAmount,
       price_display: priceDisplay,
       price_source: priceSource,
