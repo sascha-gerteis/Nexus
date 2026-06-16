@@ -110,7 +110,7 @@
     <div class="nexus-modal-lite-backdrop" onclick="closeOrderModal()"></div>
 
     <div class="nexus-modal-lite-card admin-order-modal-card">
-      <button class="nexus-modal-lite-close" type="button" onclick="closeOrderModal()">Ãƒâ€”</button>
+      <button class="nexus-modal-lite-close" type="button" onclick="closeOrderModal()">&times;</button>
 
       <span class="eyebrow">Order details</span>
       <h2 id="orderModalTitle">Order</h2>
@@ -168,7 +168,7 @@
     }
 
     function dateLabel(value) {
-      if (!value) return "Ã¢â‚¬â€";
+      if (!value) return "-";
 
       try {
         return new Date(value).toLocaleString();

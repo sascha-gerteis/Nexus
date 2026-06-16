@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260611-monthly-history">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260616-dashboard-clean">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -191,7 +191,7 @@
     <div class="nexus-modal-lite-backdrop" onclick="closeCancellationModal()"></div>
 
     <div class="nexus-modal-lite-card">
-      <button class="nexus-modal-lite-close" type="button" onclick="closeCancellationModal()">×</button>
+      <button class="nexus-modal-lite-close" type="button" onclick="closeCancellationModal()">&times;</button>
 
       <span class="eyebrow">Cancellation request</span>
 
@@ -230,7 +230,7 @@
     <div class="nexus-modal-lite-backdrop" onclick="closeBuyerNoticeModal()"></div>
 
     <div class="nexus-modal-lite-card">
-      <button class="nexus-modal-lite-close" type="button" onclick="closeBuyerNoticeModal()">×</button>
+      <button class="nexus-modal-lite-close" type="button" onclick="closeBuyerNoticeModal()">&times;</button>
 
       <span class="eyebrow" id="buyerNoticeEyebrow">Update</span>
 
@@ -311,7 +311,7 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
 <script src="/assets/js/nexus-notice.js"></script>
-<script src="/assets/js/nexus-db.js?v=20260611-monthly-history"></script>
+<script src="/assets/js/nexus-db.js?v=20260616-dashboard-clean"></script>
 <script src="/assets/js/nexus-app.js?v=20260609-buyergrid"></script>
 
   <script>
@@ -486,24 +486,31 @@ function humanizeSetupStatus(item) {
       return "Complete setup";
     }
 
-   function getSetupDisplayLabel(item) {
-  return humanizeSetupStatus(item);
-}
+    function getSetupDisplayLabel(item) {
+      return humanizeSetupStatus(item);
+    }
     function getAutomationActionButton(item, latestOutput, state) {
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
       const supportLink = "/pages/contact/index.html";
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+      const actionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
 
-      if (state.label === "Ready" && latestOutput) {
+      if (actionKind === "output") {
         return `<a class="btn btn-primary btn-small" href="${outputLink}">View latest output</a>`;
       }
 
-      if (state.label === "Issue detected") {
+      if (actionKind === "support") {
         return `<a class="btn btn-primary btn-small" href="${supportLink}">Contact support</a>`;
       }
 
       return `<a class="btn btn-primary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>`;
+    }
+
+    function getAutomationPrimaryActionKind(item, latestOutput, state) {
+      if (state?.label === "Ready" && latestOutput) return "output";
+      if (state?.label === "Issue detected") return "support";
+      return "setup";
     }
 
     function openBuyerNoticeModal(type, title, message) {
@@ -1198,12 +1205,13 @@ function openAutomationDetail(customerAutomationId) {
     }
 
     function renderAutomationBoardCard(row) {
-      const { item, product, order, developerName, latestOutput, state } = row;
+      const { item, product, developerName, latestOutput, state } = row;
       const productTitle = productTitleFromAutomation(item);
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
       const primaryButton = getAutomationActionButton(item, latestOutput, state);
+      const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
       const automationOutputs = outputsForAutomation(item.id);
       const automationRuns = runsForAutomation(item.id);
       const monthly = isMonthlyAutomation(item);
@@ -1281,8 +1289,8 @@ function openAutomationDetail(customerAutomationId) {
             <button class="btn btn-secondary btn-small" type="button" onclick="openAutomationDetail('${escapeJsString(item.id)}')">
               Schedule & history
             </button>
-            <a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>
-            ${latestOutput ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View latest output</a>` : ""}
+            ${primaryActionKind !== "setup" ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
+            ${latestOutput && primaryActionKind !== "output" ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View latest output</a>` : ""}
             ${
               product.id
                 ? `
@@ -1345,6 +1353,7 @@ function openAutomationDetail(customerAutomationId) {
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+      const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
 
       if (tab) {
         tab.hidden = false;
@@ -1375,8 +1384,8 @@ function openAutomationDetail(customerAutomationId) {
 
             <div class="buyer-automation-card-actions">
               ${getAutomationActionButton(item, latestOutput, state)}
-              <a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>
-              ${latestOutput ? `<a class="btn btn-secondary btn-small" href="${outputLink}">Open latest output</a>` : ""}
+              ${primaryActionKind !== "setup" ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
+              ${latestOutput && primaryActionKind !== "output" ? `<a class="btn btn-secondary btn-small" href="${outputLink}">Open latest output</a>` : ""}
             </div>
           </article>
 

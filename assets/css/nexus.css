@@ -6259,7 +6259,7 @@ body[data-page="checkout"] .site-header {
 
 .buyer-automation-lane-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: .55rem;
 }
 
@@ -6288,6 +6288,10 @@ body[data-page="checkout"] .site-header {
   grid-template-columns: auto minmax(0, 1fr);
   gap: .6rem;
   align-items: flex-start;
+}
+
+.buyer-automation-board-main > div {
+  min-width: 0;
 }
 
 .buyer-automation-board-card .automation-icon {
@@ -6339,7 +6343,7 @@ body[data-page="checkout"] .site-header {
 
 .buyer-automation-board-meta {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: .38rem;
 }
 
@@ -6432,7 +6436,7 @@ body[data-page="checkout"] .site-header {
 
 .buyer-output-library {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: .75rem;
 }
 
