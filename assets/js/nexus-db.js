@@ -1658,9 +1658,45 @@ async function listBuyerCustomerAutomations(userId) {
     buyerId = authUser.id;
   }
 
-  const { data, error } = await supabase
-    .from("customer_automations")
-    .select(`
+  const monthlyScheduleSelect = `
+      *,
+      automations(
+        id,
+        title,
+        slug,
+        icon,
+        color,
+        short_description,
+        category,
+        status
+      ),
+      developers(
+        id,
+        display_name,
+        handle,
+        avatar_letter
+      ),
+      orders(
+        id,
+        automation_title,
+        buyer_name,
+        buyer_email,
+        buyer_company,
+        price_display,
+        payment_status,
+        order_status,
+        install_type,
+        stripe_mode,
+        stripe_subscription_id,
+        stripe_subscription_status,
+        stripe_current_period_start,
+        stripe_current_period_end,
+        stripe_cancel_at_period_end,
+        created_at
+      )
+    `;
+
+  const compatibleSelect = `
       *,
       automations(
         id,
@@ -1690,10 +1726,25 @@ async function listBuyerCustomerAutomations(userId) {
         install_type,
         created_at
       )
-    `)
+    `;
+
+  let result = await supabase
+    .from("customer_automations")
+    .select(monthlyScheduleSelect)
     .eq("buyer_id", buyerId)
     .order("created_at", { ascending: false })
     .limit(100);
+
+  if (result.error && isSchemaError(result.error)) {
+    result = await supabase
+      .from("customer_automations")
+      .select(compatibleSelect)
+      .eq("buyer_id", buyerId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+  }
+
+  const { data, error } = result;
 
   if (error) {
     console.error("listBuyerCustomerAutomations error:", error);

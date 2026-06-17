@@ -118,7 +118,7 @@
               <div>
                 <span class="eyebrow">Automation detail</span>
                 <h2 id="buyerAutomationDetailHeading">Automation history</h2>
-                <p>See the next monthly run, latest result, and previous outputs for this automation.</p>
+                <p>See the next output date, latest result, and previous outputs for this automation.</p>
               </div>
             </div>
 
@@ -730,25 +730,102 @@ function cadenceLabel(item) {
   return isMonthlyAutomation(item) ? "Monthly" : "One-time";
 }
 
-function nextRunLabel(item) {
-  if (!isMonthlyAutomation(item)) return "Not scheduled";
+function isSetupReadyForScheduling(item) {
+  const setupStatus = String(item?.setup_status || "").toLowerCase();
 
-  const status = String(item?.schedule_status || "").toLowerCase();
+  return [
+    "submitted",
+    "complete",
+    "completed"
+  ].includes(setupStatus);
+}
 
-  if (status === "paused") return "Paused";
-  if (status === "inactive") return "After setup is complete";
-  if (status === "error") return "Needs attention";
+function formatOutputDueDate(value) {
+  if (!value) return "";
 
-  if (!item?.next_run_at) {
-    return status === "active" ? "Waiting for schedule" : humanizeStatus(status || "not scheduled");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function nextOutputInfo(item) {
+  if (!isMonthlyAutomation(item)) {
+    return {
+      label: "One-time output",
+      help: "This purchase is delivered once after setup or guided install is complete."
+    };
   }
 
-  const next = new Date(item.next_run_at);
-  if (Number.isNaN(next.getTime())) return "Waiting for schedule";
+  const status = String(item?.schedule_status || "").toLowerCase();
+  const order = item?.orders || {};
+  const setupReady = isSetupReadyForScheduling(item);
 
-  if (next <= new Date()) return "Due now";
+  if (status === "paused" || String(order?.stripe_subscription_status || "").toLowerCase() === "past_due") {
+    return {
+      label: "Paused",
+      help: "Monthly outputs pause until the subscription or schedule is active again."
+    };
+  }
 
-  return next.toLocaleString();
+  if (status === "error") {
+    return {
+      label: "Needs attention",
+      help: "Nexus needs to fix the workflow before the next monthly output can run."
+    };
+  }
+
+  if (!setupReady && status !== "active") {
+    return {
+      label: isGuidedInstall(item) ? "After guided install" : "After setup is complete",
+      help: isGuidedInstall(item)
+        ? "Monthly outputs start once Nexus completes the guided install."
+        : "Monthly outputs start after the setup form is submitted and the workflow is ready."
+    };
+  }
+
+  if (item?.next_run_at) {
+    const next = new Date(item.next_run_at);
+    if (!Number.isNaN(next.getTime())) {
+      return {
+        label: next <= new Date() ? "Due now" : formatOutputDueDate(item.next_run_at),
+        help: "Estimated from the monthly automation schedule."
+      };
+    }
+  }
+
+  const billingPeriodEnd = order?.stripe_current_period_end;
+  const formattedBillingDate = formatOutputDueDate(billingPeriodEnd);
+
+  if (formattedBillingDate && status === "active") {
+    return {
+      label: formattedBillingDate,
+      help: "Estimated from the current paid monthly billing period."
+    };
+  }
+
+  return {
+    label: status === "active" ? "Waiting for schedule" : humanizeStatus(status || "not scheduled"),
+    help: "Nexus will show a date here once the monthly schedule is ready."
+  };
+}
+
+function nextOutputLabel(item) {
+  return nextOutputInfo(item).label;
+}
+
+function nextOutputHelpText(item) {
+  return nextOutputInfo(item).help;
+}
+
+function nextRunLabel(item) {
+  return nextOutputLabel(item);
 }
 
 function lastRunLabel(item) {
@@ -1238,8 +1315,8 @@ function openAutomationDetail(customerAutomationId) {
               <strong>${escapeHtml(cadenceLabel(item))}</strong>
             </div>
             <div>
-              <span>Next run</span>
-              <strong>${escapeHtml(nextRunLabel(item))}</strong>
+              <span>Next output</span>
+              <strong>${escapeHtml(nextOutputLabel(item))}</strong>
             </div>
             <div>
               <span>Next step</span>
@@ -1391,9 +1468,9 @@ function openAutomationDetail(customerAutomationId) {
 
           <div class="buyer-automation-detail-grid">
             <article>
-              <span>Next monthly run</span>
-              <strong>${escapeHtml(nextRunLabel(item))}</strong>
-              <p>${isMonthlyAutomation(item) ? "Nexus runs this automation once each paid month after setup is complete." : "This automation is not scheduled monthly."}</p>
+              <span>Next output</span>
+              <strong>${escapeHtml(nextOutputLabel(item))}</strong>
+              <p>${escapeHtml(nextOutputHelpText(item))}</p>
             </article>
             <article>
               <span>Schedule status</span>
@@ -1443,8 +1520,8 @@ function openAutomationDetail(customerAutomationId) {
             <section class="buyer-automation-history-panel">
               <div class="buyer-output-group-head">
                 <div>
-                  <span>Run history</span>
-                  <h3>Monthly runs</h3>
+                  <span>Runtime</span>
+                  <h3>Run history</h3>
                   <p>Scheduled and manual runtime attempts for this automation.</p>
                 </div>
               </div>
@@ -1492,7 +1569,7 @@ function openAutomationDetail(customerAutomationId) {
                     ${waitingAutomations.map(item => `
                       <article>
                         <strong>${escapeHtml(productTitleFromAutomation(item))}</strong>
-                        <span>${escapeHtml(getSetupDisplayLabel(item))}</span>
+                        <span>${escapeHtml(isMonthlyAutomation(item) ? `Next output: ${nextOutputLabel(item)}` : getSetupDisplayLabel(item))}</span>
                       </article>
                     `).join("")}
                   </div>
