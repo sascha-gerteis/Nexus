@@ -24,3 +24,6 @@ verify_jwt = false
 
 [functions.system-health]
 verify_jwt = false
+
+[functions.make-import-assistant]
+verify_jwt = false

@@ -2085,6 +2085,59 @@ async function updateAdminInstallRequest(payload) {
   });
 }
 
+async function callMakeImportAssistant(payload = {}) {
+  return callNexusFunction("make-import-assistant", payload);
+}
+
+async function scanMakeImport(payload = {}) {
+  return callMakeImportAssistant({
+    action: "scan",
+    ...payload
+  });
+}
+
+async function getMakeImportSession(payload = {}) {
+  return callMakeImportAssistant({
+    action: "get_session",
+    ...payload
+  });
+}
+
+async function saveMakeHttpSubstitute(payload = {}) {
+  return callMakeImportAssistant({
+    action: "save_http_substitute",
+    ...payload
+  });
+}
+
+async function requestMakeImportSupport(payload = {}) {
+  return callMakeImportAssistant({
+    action: "request_support",
+    ...payload
+  });
+}
+
+async function validateMakeImportMappings(automationId) {
+  return callMakeImportAssistant({
+    action: "validate_successful_mappings",
+    automation_id: automationId
+  });
+}
+
+async function listMakeImportSupportRequests(payload = {}) {
+  return callMakeImportAssistant({
+    action: "list_support_requests",
+    ...payload
+  });
+}
+
+async function listMakeImportMappings(payload = {}) {
+  return callMakeImportAssistant({
+    action: "list_mappings",
+    ...payload
+  });
+}
+
 
   return {
     supabase,
@@ -2148,6 +2201,13 @@ async function updateAdminInstallRequest(payload) {
     enableDemoMarketplace,
     disableDemoMarketplace,
     resetDemoMarketplace,
+    scanMakeImport,
+    getMakeImportSession,
+    saveMakeHttpSubstitute,
+    requestMakeImportSupport,
+    validateMakeImportMappings,
+    listMakeImportSupportRequests,
+    listMakeImportMappings,
 
     upsertBuyerProfile,
     getBuyerProfile,

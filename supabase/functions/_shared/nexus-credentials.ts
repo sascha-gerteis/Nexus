@@ -666,9 +666,16 @@ function pickFirstString(...values: unknown[]) {
 
 function nodeSummary(node: any) {
   const parameters = asObject(node?.parameters);
+  const nexusCredential = asObject(parameters.nexusCredential);
   const type = compactNodeType(node?.type);
   const method = pickFirstString(parameters.method, parameters.requestMethod).toUpperCase();
-  const url = urlParts(pickFirstString(parameters.url, parameters.endpoint, parameters.webhookUrl));
+  const url = urlParts(pickFirstString(
+    parameters.url,
+    parameters.endpoint,
+    parameters.webhookUrl,
+    nexusCredential.url,
+    nexusCredential.allowed_host,
+  ));
   const operation = pickFirstString(parameters.operation, parameters.resource, parameters.action);
   const model = pickFirstString(
     parameters.model,
@@ -728,6 +735,15 @@ function isHttpRequestNode(node: any) {
 function servicePresetForNode(node: any) {
   if (isNonCredentialUtilityNode(node)) return null;
 
+  const nexusCredential = asObject(asObject(node?.parameters).nexusCredential);
+  const explicitProvider = pickFirstString(
+    nexusCredential.provider,
+    nexusCredential.provider_label,
+    nexusCredential.service,
+  );
+  const explicitPreset = providerPreset(explicitProvider);
+  if (explicitPreset) return explicitPreset;
+
   const summary = nodeSummary(node);
   const urlText = [
     summary.url,
@@ -751,6 +767,36 @@ function inferSlotFromNode(node: any) {
     not developer credentials, so never infer provider credentials
     from Code-node source text.
   */
+  const nexusCredential = asObject(asObject(node?.parameters).nexusCredential);
+  if (Object.keys(nexusCredential).length) {
+    const explicitPreset = providerPreset(
+      nexusCredential.provider ||
+      nexusCredential.provider_label ||
+      nexusCredential.credential_key ||
+      nexusCredential.n8n_credential_type,
+    );
+    const credentialType = cleanString(
+      nexusCredential.credential_key ||
+      nexusCredential.n8n_credential_type ||
+      explicitPreset?.n8nCredentialType ||
+      "httpBearerAuth",
+    );
+
+    return {
+      provider: cleanString(nexusCredential.provider || explicitPreset?.provider || "custom"),
+      provider_label: cleanString(nexusCredential.provider_label || explicitPreset?.label || "API credential"),
+      credential_type: "api_key",
+      credential_key: credentialType,
+      n8n_credential_type: credentialType,
+      current_id: "",
+      current_name: "",
+      inferred: true,
+      uses_nexus_proxy: Boolean(nexusCredential.uses_nexus_proxy),
+      allowed_host: cleanString(nexusCredential.allowed_host),
+      summary: nodeSummary(node),
+    };
+  }
+
   if (isCodeLikeNode(node) || isNonCredentialUtilityNode(node)) return null;
 
   const parameters = asObject(node?.parameters);
@@ -770,18 +816,20 @@ function inferSlotFromNode(node: any) {
 
   if (!credentialType) return null;
 
-  return {
-    provider: preset.provider,
-    provider_label: preset.label,
+    return {
+      provider: preset.provider,
+      provider_label: preset.label,
     credential_type: "api_key",
     credential_key: credentialType,
     n8n_credential_type: credentialType,
-    current_id: "",
-    current_name: "",
-    inferred: true,
-    summary,
-  };
-}
+      current_id: "",
+      current_name: "",
+      inferred: true,
+      uses_nexus_proxy: false,
+      allowed_host: "",
+      summary,
+    };
+  }
 
 function normalizeWorkflowObject(workflow: any) {
   if (!workflow || typeof workflow !== "object") return { nodes: [], connections: {} };
@@ -1316,6 +1364,8 @@ function requirementRows(product: any, slots: any[], bindings: any[], errors: an
       last_error: error?.message || null,
       metadata: {
         inferred: Boolean(slot.inferred),
+        uses_nexus_proxy: Boolean(slot.uses_nexus_proxy),
+        allowed_host: slot.allowed_host || null,
         had_existing_n8n_credential: Boolean(slot.current_id || slot.current_name),
         imported_n8n_credential_id: slot.current_id || null,
         imported_n8n_credential_name: slot.current_name || null,
@@ -1404,8 +1454,9 @@ export async function bindAutomationCredentials(options: {
 
   for (const slot of slots) {
     let credential = bestCredentialForSlot(credentials, slot, previousBindings);
+    const usesNexusProxy = Boolean(slot.uses_nexus_proxy);
 
-    if (credential && syncMissingN8nCredentials) {
+    if (credential && syncMissingN8nCredentials && !usesNexusProxy) {
       try {
         credential = await syncCredentialToN8n({
           adminClient,
@@ -1437,6 +1488,23 @@ export async function bindAutomationCredentials(options: {
         });
         continue;
       }
+    }
+
+    if (credential && usesNexusProxy) {
+      bindings.push({
+        node_name: slot.node_name,
+        node_type: slot.node_type,
+        provider: slot.provider || credential.provider || null,
+        provider_label: slot.provider_label || credential.provider_label || null,
+        credential_key: slot.credential_key,
+        n8n_credential_type: credential.n8n_credential_type || slot.n8n_credential_type,
+        n8n_credential_id: null,
+        n8n_credential_name: credential.label,
+        developer_credential_id: credential.id,
+        uses_nexus_proxy: true,
+        allowed_host: slot.allowed_host || null,
+      });
+      continue;
     }
 
     if (credential?.n8n_credential_id) {

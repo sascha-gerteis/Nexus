@@ -380,6 +380,7 @@ function extractKnownN8nErrorText(value: unknown) {
     /Incorrect API key provided:\s*[^.\n\r"]+/i,
     /Forbidden\s+-\s+perhaps check your credentials\??/i,
     /Authorization failed\s+-\s+please check your credentials[^"\n\r]*(?:Missing authorization header)?/i,
+    /config\.headers\.setContentType is not a function/i,
     /Missing authorization header/i,
     /UNAUTHORIZED_NO_AUTH_HEADER/i,
     /NodeOperationError:\s*([^\n\r]+)/i,

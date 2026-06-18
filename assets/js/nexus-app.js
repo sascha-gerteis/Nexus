@@ -2073,6 +2073,76 @@ async function pauseAutomation(id) {
   await renderAdminAutomations();
 }
 
+function normalizeSetupSchemaName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function extractRuntimeSetupKeysFromText(text) {
+  const source = String(text || "");
+  const patterns = [
+    /NEXUS_SETUP\.([a-zA-Z0-9_.-]+)/g,
+    /NEXUS_SETUP[_:-]([a-zA-Z0-9_.-]+)/gi,
+    /\bsetup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\bbody\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g
+  ];
+  const keys = new Set();
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+      const key = normalizeSetupSchemaName(match[1]);
+      if (key) keys.add(key);
+    }
+  }
+
+  return [...keys].sort();
+}
+
+function inferMakeSetupKeysFromText(text) {
+  const source = String(text || "").toLowerCase();
+  const keys = new Set();
+  const rules = [
+    ["company_website", /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/],
+    ["competitor_websites", /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/],
+    ["focus_areas", /\bfocus\s+areas?\b|\bfocus\s+topics?\b|\bpricing,\s*offers,\s*messaging\b|\bpricing\s+offers\s+messaging\b/],
+    ["market_or_region", /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/],
+    ["report_title", /\breport\s+title\b|\btitle\s+for\s+(?:the\s+)?report\b/]
+  ];
+
+  for (const [key, pattern] of rules) {
+    if (pattern.test(source)) keys.add(key);
+  }
+
+  return [...keys].sort();
+}
+
+function missingSetupSchemaFieldsForProduct(product) {
+  const workflowText = JSON.stringify(product?.n8n_workflow_json || product?.n8n_normalized_workflow_json || {});
+  const mappingText = JSON.stringify(product?.workflow_placeholder_mappings || []);
+  const blueprintText = JSON.stringify(product?.make_blueprint || {});
+  const required = new Set(extractRuntimeSetupKeysFromText(`${workflowText}\n${mappingText}`));
+
+  if (String(product?.workflow_source_platform || "").toLowerCase() === "make" || product?.make_blueprint) {
+    inferMakeSetupKeysFromText(`${blueprintText}\n${workflowText}\n${mappingText}`).forEach((key) => required.add(key));
+  }
+
+  if (!required.size) return [];
+
+  const setupSchema = Array.isArray(product?.setup_schema) ? product.setup_schema : [];
+  const existing = new Set(setupSchema.map((field) => normalizeSetupSchemaName(field?.name)).filter(Boolean));
+
+  return [...required].filter((key) => !existing.has(key));
+}
+
 async function approveDeveloperProduct(id) {
   const confirmed = await NexusUI.confirmDialog({
     title: "Approve product?",
@@ -2111,6 +2181,14 @@ async function approveDeveloperProduct(id) {
     !["passed", "passed_with_expected_test_callback_error"].includes(String(product.n8n_last_test_status || "").toLowerCase())
   ) {
     NexusUI.toast("Run a successful technical test before approving this developer product.");
+    return;
+  }
+
+  const missingSetupFields = product.listing_type !== "custom_request"
+    ? missingSetupSchemaFieldsForProduct(product)
+    : [];
+  if (missingSetupFields.length) {
+    NexusUI.toast(`Add buyer setup schema before approval. Missing: ${missingSetupFields.join(", ")}.`);
     return;
   }
 

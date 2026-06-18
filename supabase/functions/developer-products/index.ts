@@ -194,6 +194,128 @@ function isPassingWorkflowTest(status: unknown) {
   return ["passed", "passed_with_expected_test_callback_error"].includes(cleanString(status).toLowerCase());
 }
 
+function inferFieldLabel(name: string) {
+  return cleanString(name)
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+    .trim() || "Field";
+}
+
+function inferSetupFieldType(name: string) {
+  const key = cleanString(name).toLowerCase();
+  if (key.includes("email")) return "email";
+  if (key.includes("url") || key.includes("website") || key.includes("link")) return "url";
+  if (key.includes("notes") || key.includes("description") || key.includes("instructions") || key.includes("competitor") || key.includes("areas")) return "textarea";
+  return "text";
+}
+
+function makeInferredSetupField(name: string) {
+  return {
+    name,
+    label: inferFieldLabel(name),
+    type: inferSetupFieldType(name),
+    required: true,
+    placeholder: "",
+    description: "Required because Nexus detected this buyer setup value in the workflow.",
+    options: [],
+  };
+}
+
+function normalizeSetupKey(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function extractRuntimeSetupKeys(text: string) {
+  const setupNames = new Set<string>();
+  const source = String(text || "");
+  const patterns = [
+    /NEXUS_SETUP\.([a-zA-Z0-9_.-]+)/g,
+    /NEXUS_SETUP[_:-]([a-zA-Z0-9_.-]+)/gi,
+    /\bsetup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\bbody\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+      const key = normalizeSetupKey(match[1]);
+      if (key) setupNames.add(key);
+    }
+  }
+
+  return [...setupNames].sort();
+}
+
+function inferMakeSetupKeysFromText(text: string) {
+  const setupNames = new Set<string>();
+  const source = String(text || "").toLowerCase();
+  const rules = [
+    {
+      key: "company_website",
+      pattern: /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/,
+    },
+    {
+      key: "competitor_websites",
+      pattern: /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/,
+    },
+    {
+      key: "focus_areas",
+      pattern: /\bfocus\s+areas?\b|\bfocus\s+topics?\b|\bpricing,\s*offers,\s*messaging\b|\bpricing\s+offers\s+messaging\b/,
+    },
+    {
+      key: "market_or_region",
+      pattern: /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/,
+    },
+    {
+      key: "report_title",
+      pattern: /\breport\s+title\b|\btitle\s+for\s+(?:the\s+)?report\b/,
+    },
+  ];
+
+  for (const rule of rules) {
+    if (rule.pattern.test(source)) setupNames.add(rule.key);
+  }
+
+  return [...setupNames].sort();
+}
+
+function requiredSetupFieldsForProduct(product: any) {
+  const workflowText = JSON.stringify(product?.n8n_workflow_json || product?.n8n_normalized_workflow_json || {});
+  const mappingText = JSON.stringify(product?.workflow_placeholder_mappings || []);
+  const blueprintText = JSON.stringify(product?.make_blueprint || {});
+  const names = new Set<string>([
+    ...extractRuntimeSetupKeys(`${workflowText}\n${mappingText}`),
+  ]);
+
+  if (cleanString(product?.workflow_source_platform).toLowerCase() === "make" || product?.make_blueprint) {
+    for (const key of inferMakeSetupKeysFromText(`${blueprintText}\n${workflowText}\n${mappingText}`)) {
+      names.add(key);
+    }
+  }
+
+  return [...names].sort().map(makeInferredSetupField);
+}
+
+function setupSchemaReadiness(product: any) {
+  const requiredFields = requiredSetupFieldsForProduct(product);
+  const setupSchema = cleanSchema(product?.setup_schema);
+  const existingNames = new Set(setupSchema.map((field: any) => normalizeSetupKey(field.name)).filter(Boolean));
+  const missingFields = requiredFields.filter((field) => !existingNames.has(normalizeSetupKey(field.name)));
+
+  return {
+    requiredFields,
+    missingFields,
+  };
+}
+
 function hasAttachedWorkflowFlow(product: any) {
   if (cleanString(product?.listing_type) === "custom_request") return true;
 
@@ -336,6 +458,9 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     ? null
     : cleanWorkflowJson(body.n8n_workflow_json);
   const requestedRuntimeType = cleanString(body.runtime_type);
+  const workflowSourcePlatform = ["make", "zapier", "manual"].includes(cleanString(body.workflow_source_platform))
+    ? cleanString(body.workflow_source_platform)
+    : "n8n";
   const runtimeType = listingType === "custom_request"
     ? "manual"
     : workflowJson
@@ -403,6 +528,7 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     customizations: cleanCustomizations(body.customizations),
 
     runtime_type: runtimeType,
+    workflow_source_platform: listingType === "custom_request" ? "manual" : workflowSourcePlatform,
     runtime_output_mode: "standard",
     setup_schema: cleanSchema(body.setup_schema),
     credential_schema: cleanSchema(body.credential_schema),
@@ -554,6 +680,22 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
     if (!isPassingWorkflowTest(existingProduct.n8n_last_test_status)) {
       return {
         error: "Run a successful technical test before submitting this workflow product for review.",
+        status: 400,
+      };
+    }
+
+    if (!payload.setup_schema.length && cleanSchema(existingProduct.setup_schema).length) {
+      payload.setup_schema = cleanSchema(existingProduct.setup_schema);
+    }
+
+    const schemaCheck = setupSchemaReadiness({
+      ...existingProduct,
+      ...payload,
+    });
+
+    if (schemaCheck.missingFields.length) {
+      return {
+        error: `Add buyer setup schema fields before submitting. Required by this workflow: ${schemaCheck.missingFields.map((field) => field.name).join(", ")}.`,
         status: 400,
       };
     }

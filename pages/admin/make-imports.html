@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260617-make-import">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <title>Make Import Assistant | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+</head>
+<body data-admin="true" data-admin-page="make-imports">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+      <a href="/pages/admin/dashboard.html">Overview</a>
+      <a href="/pages/admin/orders.html">Orders</a>
+      <a href="/pages/admin/finance.html">Finance</a>
+      <a href="/pages/admin/health.html">System Health</a>
+      <a href="/pages/admin/automations.html">Products</a>
+      <a href="/pages/admin/product-reviews.html">Review Queue</a>
+      <a href="/pages/admin/product-form.html">Create Product</a>
+      <a href="/pages/admin/credentials.html">Credentials</a>
+      <a class="active" href="/pages/admin/make-imports.html">Make Imports</a>
+      <a href="/pages/admin/messages.html">Inquiries</a>
+      <a href="/pages/admin/waitlist.html">Developer Intake</a>
+      <a href="/pages/marketplace/index.html">View Marketplace</a>
+      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+    </aside>
+
+    <main class="main">
+      <section class="section-head left">
+        <span class="eyebrow">Make import assistant</span>
+        <h2>Unsupported modules and reusable HTTP substitutes.</h2>
+        <p>Handle developer support requests and watch the reusable Make mapping library grow during beta.</p>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Support queue</span>
+            <h2>Open Make import requests</h2>
+            <p>Requests appear here when a developer cannot create an HTTP substitute for an unsupported Make module.</p>
+          </div>
+          <button class="btn btn-secondary btn-small" type="button" onclick="loadMakeImports()">Refresh</button>
+        </div>
+        <div id="makeSupportRequests" class="admin-clean-list">Loading requests...</div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Mapping library</span>
+            <h2>Reusable mappings</h2>
+            <p>Validated HTTP substitutes are reused for future uploads with the same Make module key.</p>
+          </div>
+        </div>
+        <div id="makeMappingLibrary" class="admin-clean-list">Loading mappings...</div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
+  <script src="/assets/js/nexus-notice.js"></script>
+  <script src="/assets/js/nexus-db.js?v=20260617-make-import"></script>
+  <script src="/assets/js/nexus-app.js?v=20260609-buyergrid"></script>
+  <script>
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function dateLabel(value) {
+      return value ? new Date(value).toLocaleString() : "";
+    }
+
+    function renderRequests(rows) {
+      const root = document.getElementById("makeSupportRequests");
+      if (!root) return;
+
+      if (!rows.length) {
+        root.innerHTML = `<div class="empty-state">No Make import support requests yet.</div>`;
+        return;
+      }
+
+      root.innerHTML = rows.map((row) => `
+        <article class="admin-list-card">
+          <div>
+            <span class="pill orange">${escapeHtml(row.status || "open")}</span>
+            <h3>${escapeHtml(row.source_module_label || row.source_module || "Unsupported Make module")}</h3>
+            <p>${escapeHtml(row.automations?.title || "Product")} by ${escapeHtml(row.developers?.display_name || "Developer")} | used ${escapeHtml(row.usage_count || 1)} time${Number(row.usage_count || 1) === 1 ? "" : "s"}</p>
+            ${row.dev_notes ? `<p>${escapeHtml(row.dev_notes)}</p>` : ""}
+            <small>${escapeHtml(row.source_module_key || "")}</small>
+          </div>
+          <div class="admin-list-actions">
+            ${row.automation_id ? `<a class="btn btn-secondary btn-small" href="/pages/admin/product-form.html?id=${encodeURIComponent(row.automation_id)}">Open product</a>` : ""}
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function renderMappings(rows) {
+      const root = document.getElementById("makeMappingLibrary");
+      if (!root) return;
+
+      if (!rows.length) {
+        root.innerHTML = `<div class="empty-state">No reusable mappings yet. Validated substitutes appear here after a converted workflow passes its test.</div>`;
+        return;
+      }
+
+      root.innerHTML = rows.map((row) => `
+        <article class="admin-list-card">
+          <div>
+            <span class="${row.status === "validated" || row.status === "global" ? "pill green" : "pill orange"}">${escapeHtml(row.status || "draft")}</span>
+            <h3>${escapeHtml(row.source_module || row.source_module_key)}</h3>
+            <p>${escapeHtml(row.target_strategy || "mapping")} | ${escapeHtml(row.confidence || "low")} confidence | scope ${escapeHtml(row.scope || "global")}</p>
+            <small>${escapeHtml(row.source_module_key || "")}</small>
+          </div>
+          <div class="admin-list-actions">
+            <span>${escapeHtml(row.last_validated_at ? `Validated ${dateLabel(row.last_validated_at)}` : `Updated ${dateLabel(row.updated_at)}`)}</span>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    async function loadMakeImports() {
+      const [requestsResult, mappingsResult] = await Promise.all([
+        NexusDB.listMakeImportSupportRequests({}),
+        NexusDB.listMakeImportMappings({})
+      ]);
+
+      if (requestsResult.error) {
+        document.getElementById("makeSupportRequests").innerHTML = `<div class="error">${escapeHtml(requestsResult.error.message)}</div>`;
+      } else {
+        renderRequests(requestsResult.data?.requests || []);
+      }
+
+      if (mappingsResult.error) {
+        document.getElementById("makeMappingLibrary").innerHTML = `<div class="error">${escapeHtml(mappingsResult.error.message)}</div>`;
+      } else {
+        renderMappings(mappingsResult.data?.mappings || []);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      await NexusUI.mountGlobalNav?.();
+      const admin = await NexusDB.requireAdmin();
+      if (!admin) return;
+      loadMakeImports();
+    });
+  </script>
+</body>
+</html>

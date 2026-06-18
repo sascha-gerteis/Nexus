@@ -5728,6 +5728,153 @@ body[data-page="checkout"] .site-header {
   }
 }
 
+.make-import-assistant {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .72);
+  padding: 1rem;
+  display: grid;
+  gap: .9rem;
+}
+
+.make-import-head,
+.make-module-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.make-import-head h3,
+.make-module-card-head strong {
+  margin: 0;
+}
+
+.make-import-head p,
+.make-module-card-head p,
+.make-module-list article span {
+  color: var(--muted);
+  margin: .25rem 0 0;
+}
+
+.make-import-summary-grid {
+  display: grid;
+  gap: .65rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin: .85rem 0;
+}
+
+.make-import-summary-grid article {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(248, 251, 255, .9);
+  padding: .85rem;
+}
+
+.make-import-summary-grid article.attention {
+  border-color: rgba(255, 139, 45, .45);
+  background: rgba(255, 247, 237, .9);
+}
+
+.make-import-summary-grid span {
+  color: var(--muted);
+  display: block;
+  font-size: .78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.make-import-summary-grid strong {
+  color: var(--ink);
+  display: block;
+  font-size: 1.35rem;
+  margin-top: .2rem;
+}
+
+.make-module-list {
+  display: grid;
+  gap: .8rem;
+  margin-top: .85rem;
+}
+
+.make-module-list.compact {
+  gap: .5rem;
+}
+
+.make-module-list.compact article,
+.make-module-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  padding: .9rem;
+}
+
+.make-module-card details {
+  margin-top: .8rem;
+}
+
+.make-http-grid {
+  display: grid;
+  gap: .75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: .75rem;
+}
+
+.make-http-grid .full {
+  grid-column: 1 / -1;
+}
+
+.admin-clean-list {
+  display: grid;
+  gap: .85rem;
+}
+
+.admin-list-card {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 1rem;
+}
+
+.admin-list-card h3 {
+  margin: .45rem 0 .3rem;
+}
+
+.admin-list-card p,
+.admin-list-card small {
+  color: var(--muted);
+  margin: .2rem 0;
+}
+
+.admin-list-actions {
+  align-items: flex-end;
+  color: var(--muted);
+  display: grid;
+  gap: .5rem;
+  justify-items: end;
+}
+
+@media (max-width: 640px) {
+  .make-import-head,
+  .make-module-card-head,
+  .admin-list-card {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .make-http-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-list-actions {
+    justify-items: start;
+  }
+}
+
 @media (max-width: 640px) {
   .buyer-output-page {
     padding-top: 6.4rem;

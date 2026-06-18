@@ -14,6 +14,12 @@ function cleanString(value: unknown) {
   return String(value || "").trim();
 }
 
+function asObject(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, any>
+    : {};
+}
+
 function slugify(value: string) {
   return String(value || "")
     .toLowerCase()
@@ -184,10 +190,12 @@ function forceN8nExpressionModeIfNeeded(value: string, childKey = "") {
 
   /*
     Do not turn actual code blocks into n8n expression fields.
-    Code node jsCode must remain plain JavaScript.
+    Code node jsCode must remain plain JavaScript, and HTTP JSON bodies
+    should keep {{ ... }} interpolation inside valid JSON.
   */
   if (
     key === "jscode" ||
+    key === "jsonbody" ||
     key === "code" ||
     key === "functioncode" ||
     key === "script"
@@ -641,7 +649,14 @@ function inferSetupFieldType(name: string) {
 
   if (key.includes("email")) return "email";
   if (key.includes("url") || key.includes("website") || key.includes("link")) return "url";
-  if (key.includes("notes") || key.includes("description") || key.includes("instructions")) return "textarea";
+  if (
+    key.includes("notes") ||
+    key.includes("description") ||
+    key.includes("instructions") ||
+    key.includes("competitor") ||
+    key.includes("areas") ||
+    key.includes("requirements")
+  ) return "textarea";
 
   return "text";
 }
@@ -651,7 +666,7 @@ function makeSetupField(name: string) {
     name,
     label: inferFieldLabel(name),
     type: inferSetupFieldType(name),
-    required: false,
+    required: true,
     description: "Auto-added by Nexus because the uploaded workflow uses this setup placeholder.",
   };
 }
@@ -674,6 +689,97 @@ function isSecretSource(source: string) {
     cleanSource === "credential" ||
     cleanSource === "credentials"
   );
+}
+
+function normalizedSetupKey(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function addSetupName(target: Set<string>, value: unknown) {
+  const key = normalizedSetupKey(value);
+  if (key) target.add(key);
+}
+
+function extractRuntimeSetupKeys(text: string) {
+  const setupNames = new Set<string>();
+  const source = String(text || "");
+  const patterns = [
+    /NEXUS_SETUP\.([a-zA-Z0-9_.-]+)/g,
+    /NEXUS_SETUP[_:-]([a-zA-Z0-9_.-]+)/gi,
+    /\bsetup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\bbody\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+      addSetupName(setupNames, match[1]);
+    }
+  }
+
+  return [...setupNames].sort();
+}
+
+function inferMakeSetupKeysFromText(text: string) {
+  const setupNames = new Set<string>();
+  const source = String(text || "").toLowerCase();
+
+  const rules = [
+    {
+      key: "company_website",
+      pattern: /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/,
+    },
+    {
+      key: "competitor_websites",
+      pattern: /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/,
+    },
+    {
+      key: "focus_areas",
+      pattern: /\bfocus\s+areas?\b|\bfocus\s+topics?\b|\bpricing,\s*offers,\s*messaging\b|\bpricing\s+offers\s+messaging\b/,
+    },
+    {
+      key: "market_or_region",
+      pattern: /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/,
+    },
+    {
+      key: "report_title",
+      pattern: /\breport\s+title\b|\btitle\s+for\s+(?:the\s+)?report\b/,
+    },
+  ];
+
+  for (const rule of rules) {
+    if (rule.pattern.test(source)) setupNames.add(rule.key);
+  }
+
+  return [...setupNames].sort();
+}
+
+function addGeneratedSetupFields(
+  setupSchema: any[],
+  setupNames: Set<string>,
+  detectedNames: string[],
+  warnings: string[],
+  addedSetupFields: any[],
+  reason: string,
+) {
+  for (const name of detectedNames || []) {
+    const key = normalizedSetupKey(name);
+    if (!key || setupNames.has(key)) continue;
+
+    const field = makeSetupField(key);
+    setupSchema.push(field);
+    setupNames.add(key);
+    addedSetupFields.push(field);
+    warnings.push(`Auto-added setup field ${key} ${reason}.`);
+  }
 }
 
 function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mappings: any[]) {
@@ -751,6 +857,26 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
       }
       continue;
     }
+  }
+
+  addGeneratedSetupFields(
+    setupSchema,
+    setupNames,
+    extractRuntimeSetupKeys(workflowText),
+    warnings,
+    addedSetupFields,
+    "from runtime setup references",
+  );
+
+  if (cleanString(product.workflow_source_platform).toLowerCase() === "make" || product.make_blueprint) {
+    addGeneratedSetupFields(
+      setupSchema,
+      setupNames,
+      inferMakeSetupKeysFromText(JSON.stringify(product.make_blueprint || {}) + "\n" + workflowText),
+      warnings,
+      addedSetupFields,
+      "from Make blueprint buyer input hints",
+    );
   }
 
   return {
@@ -1180,9 +1306,9 @@ function buildNexusOutputNode(callbackUrl: string, position = [1100, 0], existin
         ],
       },
       sendBody: true,
-      bodyContentType: "json",
-      specifyBody: "json",
-      jsonBody:
+      contentType: "raw",
+      rawContentType: "application/json",
+      body:
         `={{ JSON.stringify({
           customer_automation_id: $("Nexus Runtime Context").first().json.system.customer_automation_id,
           status: "success",
@@ -1200,9 +1326,452 @@ function buildNexusOutputNode(callbackUrl: string, position = [1100, 0], existin
     id: existingNode?.id || crypto.randomUUID(),
     name: "Nexus Submit Output",
     type: "n8n-nodes-base.httpRequest",
-    typeVersion: 4.2,
+    typeVersion: 3,
     position: existingNode?.position || position,
   };
+}
+
+function providerFromUrlOrName(value: string) {
+  const text = cleanString(value).toLowerCase();
+  if (text.includes("generativelanguage") || text.includes("gemini") || text.includes("googleapis")) {
+    return { provider: "google_gemini", label: "Google Gemini" };
+  }
+  if (text.includes("openai")) return { provider: "openai", label: "OpenAI" };
+  if (text.includes("apify")) return { provider: "apify", label: "Apify" };
+  if (text.includes("serper")) return { provider: "serper", label: "Serper" };
+  if (text.includes("firecrawl")) return { provider: "firecrawl", label: "Firecrawl" };
+  return { provider: "webhook_api", label: "Generic API / Webhook" };
+}
+
+function keyValueCollectionToObject(value: any) {
+  const input = asObject(value);
+  const rows = Array.isArray(input.parameters)
+    ? input.parameters
+    : Array.isArray(input.parameter)
+      ? input.parameter
+      : [];
+
+  return rows.reduce((accumulator: Record<string, any>, item: any) => {
+    const name = cleanString(item?.name || item?.key);
+    if (name) accumulator[name] = item?.value ?? "";
+    return accumulator;
+  }, {});
+}
+
+function parseJsonObjectString(value: any) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function makeRuntimeProxyCode(nodeName: string, proxyUrl: string, anonKey: string, template: any) {
+  return [
+    "const context = $('Nexus Runtime Context').first().json || {};",
+    `const template = ${JSON.stringify(template, null, 2)};`,
+    "function valueAt(path) {",
+    "  const parts = String(path || '').split('.').filter(Boolean);",
+    "  let value = context;",
+    "  for (const part of parts) value = value == null ? undefined : value[part];",
+    "  return value == null ? '' : value;",
+    "}",
+    "function renderString(value) {",
+    "  return String(value ?? '')",
+    "    .replace(/\\{\\{\\s*NEXUS_SETUP\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`setup.${key}`)))",
+    "    .replace(/\\{\\{\\s*NEXUS_SECRET\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`secrets.${key}`)))",
+    "    .replace(/\\{\\{\\s*NEXUS_CUSTOMER\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`customer.${key}`)))",
+    "    .replace(/\\{\\{\\s*NEXUS_ORDER\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`order.${key}`)))",
+    "    .replace(/\\{\\{\\s*NEXUS_SYSTEM\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`system.${key}`)));",
+    "}",
+    "function renderValue(value) {",
+    "  if (Array.isArray(value)) return value.map(renderValue);",
+    "  if (value && typeof value === 'object') {",
+    "    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, renderValue(inner)]));",
+    "  }",
+    "  if (typeof value === 'string') return renderString(value);",
+    "  return value;",
+    "}",
+    "function appendQuery(rawUrl, query) {",
+    "  const entries = Object.entries(query || {}).filter(([, value]) => value !== '' && value !== null && value !== undefined);",
+    "  if (!entries.length) return rawUrl;",
+    "  const joiner = rawUrl.includes('?') ? '&' : '?';",
+    "  return rawUrl + joiner + entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join('&');",
+    "}",
+    "const nexusHelpers = typeof this !== 'undefined' && this ? this.helpers : null;",
+    "async function callNexusProxy(payload) {",
+    "  const headers = {",
+    "    'content-type': 'application/json',",
+    `    'authorization': 'Bearer ${anonKey}',`,
+    `    'apikey': '${anonKey}',`,
+    "    'x-nexus-runtime-secret': context.system?.runtime_secret || ''",
+    "  };",
+    "  if (typeof fetch === 'function') {",
+    `    const response = await fetch(${JSON.stringify(proxyUrl)}, { method: 'POST', headers, body: JSON.stringify(payload) });`,
+    "    const text = await response.text();",
+    "    let data;",
+    "    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }",
+    "    if (!response.ok) throw new Error(data.message || data.error || data.raw || `Nexus proxy request failed with status ${response.status}`);",
+    "    return data;",
+    "  }",
+    "  if (nexusHelpers?.request) {",
+    `    return await nexusHelpers.request({ method: 'POST', uri: ${JSON.stringify(proxyUrl)}, headers, body: payload, json: true });`,
+    "  }",
+    "  if (nexusHelpers?.httpRequest) {",
+    `    return await nexusHelpers.httpRequest({ method: 'POST', url: ${JSON.stringify(proxyUrl)}, headers, body: payload, json: true });`,
+    "  }",
+    "  throw new Error('This n8n Code node cannot make HTTP requests because fetch and n8n HTTP helpers are unavailable. Update n8n or run this product through the Nexus Make proxy runner.');",
+    "}",
+    "const query = renderValue(template.query || {});",
+    "const url = appendQuery(renderString(template.url), query);",
+    "const data = await callNexusProxy({",
+    "    automation_id: context.automation_id || context.system?.automation_id || '',",
+    `    node_name: ${JSON.stringify(nodeName)},`,
+    "    credential_key: template.credential_key,",
+    "    provider: template.provider,",
+    "    provider_label: template.provider_label,",
+    "    method: template.method,",
+    "    url,",
+    "    headers: renderValue(template.headers || {}),",
+    "    body: renderValue(template.body || {}),",
+    "    auth_type: template.auth_type",
+    "});",
+    "return [{ json: data.result ?? data }];",
+  ].join("\n");
+}
+
+function runtimeContextExpressionForHttpTemplate(source: string, key: string) {
+  const sourceKey = cleanString(source).toLowerCase();
+  const bucket =
+    ["secret", "secrets", "credential", "credentials"].includes(sourceKey)
+      ? "secrets"
+      : sourceKey === "customer"
+        ? "customer"
+        : sourceKey === "order"
+          ? "order"
+          : sourceKey === "system"
+            ? "system"
+            : "setup";
+
+  return `{{ $('Nexus Runtime Context').first().json.${bucket}.${cleanString(key)} }}`;
+}
+
+function renderNexusRuntimeTemplatesForHttp(value: any, prefixExpression = true): any {
+  if (Array.isArray(value)) return value.map((item) => renderNexusRuntimeTemplatesForHttp(item, prefixExpression));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, renderNexusRuntimeTemplatesForHttp(inner, prefixExpression)]));
+  }
+  if (typeof value !== "string") return value;
+
+  const rendered = value.replace(
+    /\{\{\s*NEXUS_(SETUP|SECRET|SECRETS|CUSTOMER|ORDER|SYSTEM)\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    (_match, source, key) => runtimeContextExpressionForHttpTemplate(source, key),
+  );
+
+  return prefixExpression && rendered.includes("$('Nexus Runtime Context').first().json") && !rendered.trim().startsWith("=")
+    ? `=${rendered}`
+    : rendered;
+}
+
+function objectToHttpParameterRows(value: Record<string, any>) {
+  return Object.entries(value || {})
+    .filter(([key]) => cleanString(key))
+    .map(([name, inner]) => ({
+      name,
+      value: renderNexusRuntimeTemplatesForHttp(inner),
+    }));
+}
+
+function hasHttpPayload(value: any) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return value !== undefined && value !== null && value !== "";
+}
+
+function stripContentTypeHeaderForHttp(headers: Record<string, any>) {
+  return Object.entries(headers || {}).reduce((accumulator: Record<string, any>, [key, value]) => {
+    if (cleanString(key).toLowerCase() === "content-type") return accumulator;
+    accumulator[key] = value;
+    return accumulator;
+  }, {});
+}
+
+function httpTemplateBody(template: Record<string, any>) {
+  if (template.body_json !== undefined && template.body_json !== null) return template.body_json;
+  if (template.body !== undefined && template.body !== null) return template.body;
+  if (template.jsonBody !== undefined && template.jsonBody !== null) return parseJsonObjectString(template.jsonBody);
+  if (template.bodyParametersJson !== undefined && template.bodyParametersJson !== null) {
+    return parseJsonObjectString(template.bodyParametersJson);
+  }
+  return {};
+}
+
+function makeLegacyHttpParametersFromTemplate(input: {
+  method: string;
+  url: string;
+  credentialKey: string;
+  headers: Record<string, any>;
+  query: Record<string, any>;
+  body: any;
+}) {
+  const body = renderNexusRuntimeTemplatesForHttp(input.body || {}, false);
+  const methodFromInput = cleanString(input.method || "GET").toUpperCase();
+  const method = methodFromInput === "GET" && hasHttpPayload(body) ? "POST" : methodFromInput;
+  const parameters: Record<string, any> = {
+    authentication: input.credentialKey ? "genericCredentialType" : "none",
+    requestMethod: method,
+    url: renderNexusRuntimeTemplatesForHttp(input.url),
+    responseFormat: "json",
+    jsonParameters: true,
+    options: {},
+  };
+
+  if (input.credentialKey) {
+    parameters.genericAuthType = input.credentialKey;
+  }
+
+  const headers = stripContentTypeHeaderForHttp(renderNexusRuntimeTemplatesForHttp(input.headers || {}, false));
+  if (Object.keys(headers).length) {
+    parameters.headerParametersJson = JSON.stringify(headers, null, 2);
+  }
+
+  const query = renderNexusRuntimeTemplatesForHttp(input.query || {}, false);
+  if (Object.keys(query).length) {
+    parameters.queryParametersJson = JSON.stringify(query, null, 2);
+  }
+
+  if (method !== "GET" && hasHttpPayload(body)) {
+    parameters.bodyParametersJson = JSON.stringify(body, null, 2);
+    parameters.options.bodyContentType = "raw";
+    parameters.options.bodyContentCustomMimeType = "application/json";
+  }
+
+  return parameters;
+}
+
+function httpRequestNodeFromTemplate(node: any, template: any, credentialMetadata: any) {
+  const credentialKey = cleanString(
+    template.credential_key ||
+    credentialMetadata.credential_key ||
+    credentialMetadata.n8n_credential_type,
+  ) || (cleanString(template.auth_type).toLowerCase() === "none" ? "" : "httpBearerAuth");
+  const url = cleanString(template.url || credentialMetadata.url);
+  const providerInfo = providerFromUrlOrName(
+    `${url} ${credentialMetadata.provider_label || credentialMetadata.provider || node?.name || ""}`,
+  );
+  const provider = cleanString(template.provider || credentialMetadata.provider || providerInfo.provider);
+  const providerLabel = cleanString(template.provider_label || credentialMetadata.provider_label || providerInfo.label);
+  const body = httpTemplateBody(template);
+  const methodFromTemplate = cleanString(template.method || "GET").toUpperCase();
+  const method = methodFromTemplate === "GET" && hasHttpPayload(body) ? "POST" : methodFromTemplate;
+  const allowedHost = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return cleanString(credentialMetadata.allowed_host);
+    }
+  })();
+
+  return {
+    ...node,
+    credentials: undefined,
+    type: "n8n-nodes-base.httpRequest",
+    typeVersion: 2,
+    parameters: {
+      ...makeLegacyHttpParametersFromTemplate({
+        method,
+        url,
+        credentialKey,
+        headers: asObject(template.headers),
+        query: asObject(template.query),
+        body,
+      }),
+      nexusProxyTemplate: {
+        method,
+        url,
+        headers: asObject(template.headers),
+        query: asObject(template.query),
+        body,
+        body_json: body,
+        auth_type: cleanString(template.auth_type || (credentialKey ? "bearer" : "none")),
+        provider,
+        provider_label: providerLabel,
+        credential_key: credentialKey,
+      },
+      ...(credentialKey
+        ? {
+            nexusCredential: {
+              uses_nexus_proxy: false,
+              provider,
+              provider_label: providerLabel,
+              credential_key: credentialKey,
+              n8n_credential_type: credentialKey,
+              url,
+              allowed_host: allowedHost,
+            },
+          }
+        : {}),
+    },
+  };
+}
+
+function httpRequestNodeToProxyCodeNode(node: any, supabaseUrl: string) {
+  const parameters = asObject(node.parameters);
+  const method = cleanString(parameters.requestMethod || parameters.method || "GET").toUpperCase();
+  const url = cleanString(parameters.url);
+  const existingCredentialKey = cleanString(
+    parameters.genericAuthType ||
+    Object.keys(asObject(node.credentials))[0] ||
+    "httpBearerAuth",
+  );
+  const headers = {
+    ...parseJsonObjectString(parameters.headerParametersJson),
+    ...keyValueCollectionToObject(parameters.headerParameters),
+    ...keyValueCollectionToObject(parameters.headerParametersUi),
+  };
+  const query = {
+    ...parseJsonObjectString(parameters.queryParametersJson),
+    ...keyValueCollectionToObject(parameters.queryParameters),
+    ...keyValueCollectionToObject(parameters.queryParametersUi),
+  };
+  const body = parameters.bodyParametersJson
+    ? parseJsonObjectString(parameters.bodyParametersJson)
+    : parameters.jsonBody
+      ? parseJsonObjectString(parameters.jsonBody)
+      : parameters.body || {};
+  const providerInfo = providerFromUrlOrName(`${url} ${node.name}`);
+  const allowedHost = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  const proxyTemplate = {
+    method,
+    url,
+    headers,
+    query,
+    body,
+    auth_type: existingCredentialKey ? "bearer" : "none",
+    provider: providerInfo.provider,
+    provider_label: providerInfo.label,
+    credential_key: existingCredentialKey,
+  };
+
+  return httpRequestNodeFromTemplate(node, proxyTemplate, {
+    provider: providerInfo.provider,
+    provider_label: providerInfo.label,
+    credential_key: existingCredentialKey,
+    n8n_credential_type: existingCredentialKey,
+    url,
+    allowed_host: allowedHost,
+  });
+}
+
+function isNexusProxyCodeNode(node: any) {
+  const parameters = asObject(node?.parameters);
+  const credential = asObject(parameters.nexusCredential);
+  return (
+    String(node?.type || "").toLowerCase().includes("n8n-nodes-base.code") &&
+    credential.uses_nexus_proxy
+  );
+}
+
+function extractNexusProxyTemplateFromCode(node: any) {
+  const explicitTemplate = asObject(asObject(node?.parameters).nexusProxyTemplate);
+  if (Object.keys(explicitTemplate).length) return explicitTemplate;
+
+  const jsCode = cleanString(asObject(node?.parameters).jsCode);
+  const marker = "const template = ";
+  const start = jsCode.indexOf(marker);
+  if (start < 0) return {};
+
+  const afterMarker = jsCode.slice(start + marker.length);
+  const end = afterMarker.indexOf(";\nfunction valueAt");
+  if (end < 0) return {};
+
+  return parseJsonObjectString(afterMarker.slice(0, end).trim());
+}
+
+function refreshNexusProxyCodeNode(node: any, supabaseUrl: string) {
+  if (!isNexusProxyCodeNode(node)) return node;
+
+  const parameters = asObject(node.parameters);
+  const credential = asObject(parameters.nexusCredential);
+  const template = extractNexusProxyTemplateFromCode(node);
+  const templateUrl = cleanString(template.url || credential.url);
+
+  if (!templateUrl) return node;
+
+  const providerInfo = providerFromUrlOrName(
+    `${templateUrl} ${credential.provider_label || credential.provider || node.name}`,
+  );
+  const credentialKey = cleanString(
+    template.credential_key ||
+    credential.credential_key ||
+    credential.n8n_credential_type,
+  ) || (cleanString(template.auth_type).toLowerCase() === "none" ? "" : "httpBearerAuth");
+  const allowedHost = (() => {
+    try {
+      return new URL(templateUrl).hostname;
+    } catch {
+      return cleanString(credential.allowed_host);
+    }
+  })();
+  const proxyTemplate = {
+    method: cleanString(template.method || "GET").toUpperCase(),
+    url: templateUrl,
+    headers: asObject(template.headers),
+    query: asObject(template.query),
+    body: httpTemplateBody(template),
+    body_json: httpTemplateBody(template),
+    auth_type: cleanString(template.auth_type || (credentialKey ? "bearer" : "none")),
+    provider: cleanString(template.provider || credential.provider || providerInfo.provider),
+    provider_label: cleanString(template.provider_label || credential.provider_label || providerInfo.label),
+    credential_key: credentialKey,
+  };
+
+  return httpRequestNodeFromTemplate(
+    {
+      ...node,
+      parameters,
+    },
+    proxyTemplate,
+    {
+      ...credential,
+      uses_nexus_proxy: false,
+      provider: proxyTemplate.provider,
+      provider_label: proxyTemplate.provider_label,
+      credential_key: proxyTemplate.credential_key,
+      n8n_credential_type: proxyTemplate.credential_key,
+      url: templateUrl,
+      allowed_host: allowedHost,
+    },
+  );
+}
+
+function convertMakeHttpRequestNodesToProxy(workflowInput: any, product: any, supabaseUrl: string) {
+  const workflow = deepClone(workflowInput);
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const looksLikeMake =
+    cleanString(product?.workflow_source_platform).toLowerCase() === "make" ||
+    Boolean(product?.make_import_session_id || product?.make_blueprint) ||
+    nodes.some((node: any) => ["NEXUS_INPUT", "NEXUS_FINAL_OUTPUT"].includes(cleanString(node?.name)));
+
+  if (!looksLikeMake) return workflow;
+
+  workflow.nodes = nodes.map((node: any) => {
+    if (isNexusProxyCodeNode(node)) return refreshNexusProxyCodeNode(node, supabaseUrl);
+    if (!isHttpRequestNode(node) || cleanString(node?.name) === "Nexus Submit Output") return node;
+    return httpRequestNodeToProxyCodeNode(node, supabaseUrl);
+  });
+
+  return workflow;
 }
 
 function ensureMainConnection(
@@ -1312,6 +1881,228 @@ function isIgnoredTerminalNode(node: any) {
 function isHttpRequestNode(node: any) {
   const type = String(node?.type || "").toLowerCase();
   return type.includes("n8n-nodes-base.httprequest");
+}
+
+function keyValueParametersToObject(value: any) {
+  const input = asObject(value);
+  const rows = Array.isArray(input.parameters)
+    ? input.parameters
+    : Array.isArray(input.parameter)
+      ? input.parameter
+      : [];
+
+  return rows.reduce((accumulator: Record<string, any>, item: any) => {
+    const name = cleanString(item?.name || item?.key);
+    if (!name) return accumulator;
+    accumulator[name] = item?.value ?? "";
+    return accumulator;
+  }, {});
+}
+
+function jsonStringOrEmpty(value: any) {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function stripContentTypeHeaderJson(value: any) {
+  const parsed = parseJsonObjectString(value);
+  const stripped = stripContentTypeHeaderForHttp(parsed);
+  return Object.keys(stripped).length ? JSON.stringify(stripped, null, 2) : "";
+}
+
+function normalizeLegacyHttpRequestNodeForN8n(node: any) {
+  if (!isHttpRequestNode(node) || !node || typeof node !== "object") return node;
+
+  const parameters = {
+    ...(node.parameters || {}),
+  };
+
+  const method = cleanString(parameters.requestMethod || parameters.method || "GET").toUpperCase();
+  const legacyOptions = {
+    ...asObject(parameters.options),
+  };
+
+  const legacyParameters: Record<string, any> = {
+    authentication: parameters.authentication || "none",
+    requestMethod: method || "GET",
+    url: cleanString(parameters.url),
+    allowUnauthorizedCerts: Boolean(parameters.allowUnauthorizedCerts),
+    responseFormat: parameters.responseFormat || "json",
+    jsonParameters: true,
+    options: legacyOptions,
+  };
+
+  if (parameters.genericAuthType) {
+    legacyParameters.genericAuthType = parameters.genericAuthType;
+  }
+
+  if (parameters.nodeCredentialType) {
+    legacyParameters.nodeCredentialType = parameters.nodeCredentialType;
+  }
+
+  const headerJson = stripContentTypeHeaderJson(
+    parameters.headerParametersJson ||
+    jsonStringOrEmpty(keyValueParametersToObject(parameters.headerParameters)) ||
+    jsonStringOrEmpty(keyValueParametersToObject(parameters.headerParametersUi)),
+  );
+
+  if (headerJson && headerJson !== "{}") {
+    legacyParameters.headerParametersJson = headerJson;
+  }
+
+  const queryJson =
+    parameters.queryParametersJson ||
+    jsonStringOrEmpty(keyValueParametersToObject(parameters.queryParameters)) ||
+    jsonStringOrEmpty(keyValueParametersToObject(parameters.queryParametersUi));
+
+  if (queryJson && queryJson !== "{}") {
+    legacyParameters.queryParametersJson = queryJson;
+  }
+
+  const rawBody =
+    parameters.bodyParametersJson ||
+    parameters.jsonBody ||
+    parameters.body ||
+    "";
+
+  if (rawBody !== "" && rawBody !== null && rawBody !== undefined && method !== "GET") {
+    legacyParameters.bodyParametersJson = jsonStringOrEmpty(rawBody);
+
+    legacyOptions.bodyContentType = "raw";
+    legacyOptions.bodyContentCustomMimeType = parameters.rawContentType || "application/json";
+  }
+
+  return {
+    ...node,
+    typeVersion: 2,
+    parameters: legacyParameters,
+  };
+}
+
+function normalizeModernHttpRequestNodeForN8n(node: any) {
+  if (!isHttpRequestNode(node) || !node || typeof node !== "object") return node;
+
+  const parameters = {
+    ...(node.parameters || {}),
+  };
+
+  /*
+    n8n HTTP Request v4 expects `contentType`, not the older/wrong
+    `bodyContentType` key. Leaving the old key can make n8n skip JSON bodies
+    or fail internally with `config.headers.setContentType is not a function`.
+  */
+  if (parameters.bodyContentType && !parameters.contentType) {
+    parameters.contentType = parameters.bodyContentType;
+  }
+
+  delete parameters.bodyContentType;
+
+  if (parameters.sendBody && parameters.jsonBody) {
+    parameters.contentType = "json";
+    parameters.specifyBody = "json";
+    delete parameters.body;
+    delete parameters.rawContentType;
+  }
+
+  if (parameters.sendBody && parameters.body && !parameters.contentType) {
+    parameters.contentType = "raw";
+    parameters.rawContentType = parameters.rawContentType || "application/json";
+  }
+
+  if (parameters.contentType === "raw") {
+    delete parameters.jsonBody;
+    delete parameters.specifyBody;
+    delete parameters.bodyParameters;
+  }
+
+  return {
+    ...node,
+    typeVersion: Number(node.typeVersion || 0) >= 3 ? node.typeVersion : 4.2,
+    parameters,
+  };
+}
+
+function normalizeHttpRequestNodeForN8n(node: any, options: { useLegacyHttpRequest?: boolean } = {}) {
+  if (options.useLegacyHttpRequest) {
+    return normalizeLegacyHttpRequestNodeForN8n(node);
+  }
+
+  return normalizeModernHttpRequestNodeForN8n(node);
+}
+
+function normalizeHttpRequestNodesForN8n(nodes: any[], product: any) {
+  const workflowLooksMakeConverted = nodes.some((node: any) => {
+    const name = cleanString(node?.name);
+    return name === "NEXUS_INPUT" || name === "NEXUS_FINAL_OUTPUT";
+  });
+
+  const forceLegacyForMake =
+    cleanString(product?.workflow_source_platform).toLowerCase() === "make" ||
+    Boolean(product?.make_import_session_id || product?.make_blueprint || workflowLooksMakeConverted);
+
+  return nodes.map((node: any) => {
+    const nonNexusHttpRequest =
+      isHttpRequestNode(node) &&
+      cleanString(node?.name) !== "Nexus Submit Output";
+    const useLegacyHttpRequest =
+      nonNexusHttpRequest &&
+      (
+        forceLegacyForMake ||
+        (Number(node?.typeVersion || 0) > 0 && Number(node?.typeVersion || 0) < 3)
+      );
+
+    return normalizeHttpRequestNodeForN8n(node, { useLegacyHttpRequest });
+  });
+}
+
+function httpNodeDiagnostics(workflow: any) {
+  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+
+  return nodes
+    .filter((node: any) => isHttpRequestNode(node))
+    .map((node: any) => {
+      const parameters = asObject(node.parameters);
+      return {
+        name: cleanString(node.name),
+        type_version: node.typeVersion,
+        method: parameters.method || parameters.requestMethod || "",
+        url: parameters.url || "",
+        send_body: Boolean(parameters.sendBody || parameters.body || parameters.jsonBody || parameters.bodyParametersJson),
+        content_type: parameters.contentType || null,
+        raw_content_type: parameters.rawContentType || null,
+        legacy_body_content_type: asObject(parameters.options).bodyContentType || null,
+        legacy_body_mime_type: asObject(parameters.options).bodyContentCustomMimeType || null,
+        has_body: Object.prototype.hasOwnProperty.call(parameters, "body") ||
+          Object.prototype.hasOwnProperty.call(parameters, "bodyParametersJson"),
+        has_json_body: Object.prototype.hasOwnProperty.call(parameters, "jsonBody"),
+        has_body_content_type: Object.prototype.hasOwnProperty.call(parameters, "bodyContentType"),
+        has_body_parameters_json: Object.prototype.hasOwnProperty.call(parameters, "bodyParametersJson"),
+        specify_body: parameters.specifyBody || null,
+        auth: parameters.authentication || "none",
+        generic_auth_type: parameters.genericAuthType || "",
+      };
+    });
+}
+
+function proxyNodeDiagnostics(workflow: any) {
+  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+
+  return nodes
+    .filter((node: any) => asObject(asObject(node?.parameters).nexusCredential).uses_nexus_proxy)
+    .map((node: any) => {
+      const nexusCredential = asObject(asObject(node?.parameters).nexusCredential);
+      return {
+        name: cleanString(node.name),
+        type: cleanString(node.type),
+        type_version: node.typeVersion,
+        provider: nexusCredential.provider || "",
+        provider_label: nexusCredential.provider_label || "",
+        credential_key: nexusCredential.credential_key || nexusCredential.n8n_credential_type || "",
+        url: nexusCredential.url || "",
+        allowed_host: nexusCredential.allowed_host || "",
+      };
+    });
 }
 
 function applyRetrySettingsToWorkflowNodes(nodes: any[]) {
@@ -1685,6 +2476,7 @@ function normalizeWorkflow(product: any, rawWorkflow: any, supabaseUrl: string, 
     This protects customer-triggered runs from transient API failures,
     especially Facebook Graph OAuthException code 2 / temporary 500 errors.
   */
+  nodes = normalizeHttpRequestNodesForN8n(nodes, product);
   nodes = applyRetrySettingsToWorkflowNodes(nodes);
 
   return {
@@ -1798,48 +2590,160 @@ function removeUnboundCredentialReferences(workflow: any, errors: any[] = []) {
   return output;
 }
 
-async function findExistingN8nWorkflowByName(n8nBaseUrl: string, n8nApiKey: string, workflowName: string) {
+async function listN8nWorkflows(n8nBaseUrl: string, n8nApiKey: string) {
   const response = await n8nRequest(n8nBaseUrl, n8nApiKey, "/api/v1/workflows?limit=100", {
     method: "GET",
   });
 
-  const workflows =
+  return (
     Array.isArray(response?.data)
       ? response.data
       : Array.isArray(response)
         ? response
-        : [];
+        : []
+  );
+}
+
+async function findExistingN8nWorkflowByName(n8nBaseUrl: string, n8nApiKey: string, workflowName: string) {
+  const workflows = await listN8nWorkflows(n8nBaseUrl, n8nApiKey);
 
   return workflows.find((workflow: any) => workflow.name === workflowName) || null;
+}
+
+function workflowWebhookPaths(workflow: any) {
+  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+  return nodes
+    .filter((node: any) => isWebhookNode(node))
+    .map((node: any) => cleanString(node?.parameters?.path))
+    .filter(Boolean);
+}
+
+async function getN8nWorkflowById(n8nBaseUrl: string, n8nApiKey: string, workflowId: string) {
+  return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
+    method: "GET",
+  });
+}
+
+async function deactivateDuplicateWorkflows(
+  n8nBaseUrl: string,
+  n8nApiKey: string,
+  workflowName: string,
+  webhookPath = "",
+  keepWorkflowId = "",
+) {
+  const workflows = await listN8nWorkflows(n8nBaseUrl, n8nApiKey);
+  const duplicates = [];
+
+  for (const workflow of workflows) {
+    const id = cleanString(workflow?.id);
+    if (!id || id === keepWorkflowId) continue;
+
+    if (workflow?.name === workflowName) {
+      duplicates.push(workflow);
+      continue;
+    }
+
+    if (webhookPath) {
+      try {
+        const fullWorkflow = await getN8nWorkflowById(n8nBaseUrl, n8nApiKey, id);
+        if (workflowWebhookPaths(fullWorkflow).includes(webhookPath)) {
+          duplicates.push(workflow);
+        }
+      } catch {
+        /*
+          Best-effort cleanup only. If one old workflow cannot be inspected,
+          do not block the current product import.
+        */
+      }
+    }
+  }
+
+  const results = [];
+  for (const workflow of duplicates) {
+    results.push({
+      id: workflow.id,
+      name: workflow.name,
+      result: await deactivateWorkflow(n8nBaseUrl, n8nApiKey, workflow.id),
+    });
+  }
+
+  return results;
 }
 
 async function updateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowId: string, workflow: any) {
   const cleanWorkflow = normalizeWorkflowForN8nApi(workflow);
 
+  /*
+    Use full PUT replacement only. PATCH can merge nested node parameters in n8n.
+    For HTTP Request nodes, stale fields like jsonBody/bodyContentType can survive
+    a PATCH and keep throwing setContentType errors at runtime.
+  */
+  return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
+    method: "PUT",
+    body: JSON.stringify(cleanWorkflow),
+  });
+}
+
+async function deactivateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowId: string) {
   try {
-    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
-      method: "PATCH",
-      body: JSON.stringify(cleanWorkflow),
+    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}/deactivate`, {
+      method: "POST",
+      body: JSON.stringify({}),
     });
-  } catch (patchError) {
-    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
-      method: "PUT",
-      body: JSON.stringify(cleanWorkflow),
-    });
+  } catch (error) {
+    return {
+      deactivate_warning: error instanceof Error ? error.message : String(error),
+    };
   }
+}
+
+async function replaceExistingWorkflow(
+  n8nBaseUrl: string,
+  n8nApiKey: string,
+  workflowId: string,
+  workflow: any,
+) {
+  /*
+    n8n keeps active webhook executions in memory. Updating an already-active
+    workflow can leave the webhook using the old node version until the workflow
+    is deactivated/reactivated. That is exactly how a Make import can still run
+    HTTP Request V3 after Nexus saved a V2-safe workflow.
+  */
+  const deactivation = await deactivateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
+  const updated = await updateWorkflow(n8nBaseUrl, n8nApiKey, workflowId, workflow);
+
+  return {
+    ...updated,
+    deactivation,
+  };
 }
 
 async function importWorkflowToN8n(n8nBaseUrl: string, n8nApiKey: string, product: any, normalizedWorkflow: any) {
   const cleanWorkflow = normalizeWorkflowForN8nApi(normalizedWorkflow);
+  const webhookPath = workflowWebhookPaths(cleanWorkflow)[0] || "";
+  let duplicateDeactivations: any[] = [];
 
   if (product.n8n_workflow_id) {
     try {
-      const updated = await updateWorkflow(n8nBaseUrl, n8nApiKey, product.n8n_workflow_id, cleanWorkflow);
+      duplicateDeactivations = await deactivateDuplicateWorkflows(
+        n8nBaseUrl,
+        n8nApiKey,
+        cleanWorkflow.name,
+        webhookPath,
+        product.n8n_workflow_id,
+      );
+      const updated = await replaceExistingWorkflow(
+        n8nBaseUrl,
+        n8nApiKey,
+        product.n8n_workflow_id,
+        cleanWorkflow,
+      );
 
       return {
         ...updated,
         id: product.n8n_workflow_id,
         updated_existing_workflow: true,
+        duplicate_deactivations: duplicateDeactivations,
       };
     } catch {
       /*
@@ -1856,21 +2760,44 @@ async function importWorkflowToN8n(n8nBaseUrl: string, n8nApiKey: string, produc
   );
 
   if (existingWorkflow?.id) {
-    const updated = await updateWorkflow(n8nBaseUrl, n8nApiKey, existingWorkflow.id, cleanWorkflow);
+    duplicateDeactivations = await deactivateDuplicateWorkflows(
+      n8nBaseUrl,
+      n8nApiKey,
+      cleanWorkflow.name,
+      webhookPath,
+      existingWorkflow.id,
+    );
+    const updated = await replaceExistingWorkflow(
+      n8nBaseUrl,
+      n8nApiKey,
+      existingWorkflow.id,
+      cleanWorkflow,
+    );
 
     return {
       ...updated,
       id: existingWorkflow.id,
       reused_existing_workflow: true,
+      duplicate_deactivations: duplicateDeactivations,
     };
   }
 
+  duplicateDeactivations = await deactivateDuplicateWorkflows(
+    n8nBaseUrl,
+    n8nApiKey,
+    cleanWorkflow.name,
+    webhookPath,
+    "",
+  );
   const created = await n8nRequest(n8nBaseUrl, n8nApiKey, "/api/v1/workflows", {
     method: "POST",
     body: JSON.stringify(cleanWorkflow),
   });
 
-  return created;
+  return {
+    ...created,
+    duplicate_deactivations: duplicateDeactivations,
+  };
 }
 
 async function activateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowId: string) {
@@ -2045,6 +2972,11 @@ Deno.serve(async (req) => {
     );
 
     const productForImport = autoSchema.product;
+    productForImport.n8n_workflow_json = convertMakeHttpRequestNodesToProxy(
+      productForImport.n8n_workflow_json,
+      productForImport,
+      supabaseUrl,
+    );
 
     const credentialBinding = await bindAutomationCredentials({
       adminClient,
@@ -2136,6 +3068,8 @@ Deno.serve(async (req) => {
       productForImport,
       normalized.workflow,
     );
+    const httpDiagnostics = httpNodeDiagnostics(normalized.workflow);
+    const proxyDiagnostics = proxyNodeDiagnostics(normalized.workflow);
 
     const workflowId = imported.id || imported.data?.id || product.n8n_workflow_id;
 
@@ -2161,6 +3095,7 @@ Deno.serve(async (req) => {
         n8n_last_synced_at: new Date().toISOString(),
         setup_schema: productForImport.setup_schema,
         credential_schema: productForImport.credential_schema,
+        n8n_workflow_json: productForImport.n8n_workflow_json,
         detected_placeholders: validation.detected,
         placeholder_validation_status: "valid",
         placeholder_validation_errors: [],
@@ -2173,8 +3108,12 @@ Deno.serve(async (req) => {
           workflow_id: workflowId,
           webhook_url: normalized.webhookUrl,
           callback_url: normalized.callbackUrl,
+          http_nodes: httpDiagnostics,
+          proxy_nodes: proxyDiagnostics,
           credential_binding_status: credentialBinding.status,
           credential_bindings: credentialBinding.bindings,
+          deactivation: imported.deactivation || null,
+          duplicate_deactivations: imported.duplicate_deactivations || [],
           custom_mapping_warnings: [
             ...autoSchema.warnings,
             ...mappingValidation.warnings,
@@ -2199,6 +3138,8 @@ Deno.serve(async (req) => {
       workflow_id: workflowId,
       webhook_url: normalized.webhookUrl,
       callback_url: normalized.callbackUrl,
+      http_nodes: httpDiagnostics,
+      proxy_nodes: proxyDiagnostics,
       credential_binding_status: credentialBinding.status,
       credential_bindings: credentialBinding.bindings,
       custom_mapping_warnings: [
