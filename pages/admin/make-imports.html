@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/assets/css/nexus.css?v=20260617-make-import">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
-  <title>Make Import Assistant | Nexus Admin</title>
+  <title>Import Assistant | Nexus Admin</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
 </head>
 <body data-admin="true" data-admin-page="make-imports">
@@ -26,7 +26,7 @@
       <a href="/pages/admin/product-reviews.html">Review Queue</a>
       <a href="/pages/admin/product-form.html">Create Product</a>
       <a href="/pages/admin/credentials.html">Credentials</a>
-      <a class="active" href="/pages/admin/make-imports.html">Make Imports</a>
+      <a class="active" href="/pages/admin/make-imports.html">Import Assistant</a>
       <a href="/pages/admin/messages.html">Inquiries</a>
       <a href="/pages/admin/waitlist.html">Developer Intake</a>
       <a href="/pages/marketplace/index.html">View Marketplace</a>
@@ -35,17 +35,17 @@
 
     <main class="main">
       <section class="section-head left">
-        <span class="eyebrow">Make import assistant</span>
-        <h2>Unsupported modules and reusable HTTP substitutes.</h2>
-        <p>Handle developer support requests and watch the reusable Make mapping library grow during beta.</p>
+        <span class="eyebrow">Import assistant</span>
+        <h2>Unsupported steps and reusable HTTP substitutes.</h2>
+        <p>Handle developer support requests and watch the reusable Make/Zapier mapping library grow during beta.</p>
       </section>
 
       <section class="admin-dashboard-section">
         <div class="admin-dashboard-section-head">
           <div>
             <span class="eyebrow">Support queue</span>
-            <h2>Open Make import requests</h2>
-            <p>Requests appear here when a developer cannot create an HTTP substitute for an unsupported Make module.</p>
+            <h2>Open import requests</h2>
+            <p>Requests appear here when a developer cannot create an HTTP substitute for an unsupported Make or Zapier step.</p>
           </div>
           <button class="btn btn-secondary btn-small" type="button" onclick="loadMakeImports()">Refresh</button>
         </div>
@@ -57,7 +57,7 @@
           <div>
             <span class="eyebrow">Mapping library</span>
             <h2>Reusable mappings</h2>
-            <p>Validated HTTP substitutes are reused for future uploads with the same Make module key.</p>
+            <p>Validated HTTP substitutes are reused for future uploads with the same source platform and step key.</p>
           </div>
         </div>
         <div id="makeMappingLibrary" class="admin-clean-list">Loading mappings...</div>
@@ -90,7 +90,7 @@
       if (!root) return;
 
       if (!rows.length) {
-        root.innerHTML = `<div class="empty-state">No Make import support requests yet.</div>`;
+        root.innerHTML = `<div class="empty-state">No import support requests yet.</div>`;
         return;
       }
 
@@ -98,8 +98,8 @@
         <article class="admin-list-card">
           <div>
             <span class="pill orange">${escapeHtml(row.status || "open")}</span>
-            <h3>${escapeHtml(row.source_module_label || row.source_module || "Unsupported Make module")}</h3>
-            <p>${escapeHtml(row.automations?.title || "Product")} by ${escapeHtml(row.developers?.display_name || "Developer")} | used ${escapeHtml(row.usage_count || 1)} time${Number(row.usage_count || 1) === 1 ? "" : "s"}</p>
+            <h3>${escapeHtml(row.source_module_label || row.source_module || "Unsupported step")}</h3>
+            <p>${escapeHtml(row.source_platform || "source")} | ${escapeHtml(row.automations?.title || "Product")} by ${escapeHtml(row.developers?.display_name || "Developer")} | used ${escapeHtml(row.usage_count || 1)} time${Number(row.usage_count || 1) === 1 ? "" : "s"}</p>
             ${row.dev_notes ? `<p>${escapeHtml(row.dev_notes)}</p>` : ""}
             <small>${escapeHtml(row.source_module_key || "")}</small>
           </div>
@@ -124,7 +124,7 @@
           <div>
             <span class="${row.status === "validated" || row.status === "global" ? "pill green" : "pill orange"}">${escapeHtml(row.status || "draft")}</span>
             <h3>${escapeHtml(row.source_module || row.source_module_key)}</h3>
-            <p>${escapeHtml(row.target_strategy || "mapping")} | ${escapeHtml(row.confidence || "low")} confidence | scope ${escapeHtml(row.scope || "global")}</p>
+            <p>${escapeHtml(row.source_platform || "source")} | ${escapeHtml(row.target_strategy || "mapping")} | ${escapeHtml(row.confidence || "low")} confidence | scope ${escapeHtml(row.scope || "global")}</p>
             <small>${escapeHtml(row.source_module_key || "")}</small>
           </div>
           <div class="admin-list-actions">

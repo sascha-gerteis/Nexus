@@ -74,7 +74,7 @@ function inferSetupFieldType(name: string) {
   return "text";
 }
 
-function makeSetupField(name: string, description = "Auto-generated from the uploaded Make blueprint.") {
+function makeSetupField(name: string, description = "Auto-generated from the uploaded workflow source.") {
   const key = normalizeName(name, "");
   return {
     name: key,
@@ -103,6 +103,679 @@ function splitModule(rawModule: string) {
     source_action: action,
     source_module: raw,
     source_module_key: normalizeModuleKey(raw),
+  };
+}
+
+const MAKE_COMMON_EXTERNAL_APPS = [
+  "airtable",
+  "asana",
+  "activecampaign",
+  "apollo",
+  "apify",
+  "aws",
+  "brevo",
+  "calendly",
+  "clickup",
+  "discord",
+  "dropbox",
+  "facebook",
+  "facebook-ads",
+  "facebook-pages",
+  "figma",
+  "freshdesk",
+  "github",
+  "gitlab",
+  "gmail",
+  "google-analytics",
+  "google-calendar",
+  "google-docs",
+  "google-drive",
+  "google-forms",
+  "google-sheets",
+  "google-slides",
+  "google-tasks",
+  "hubspot",
+  "instagram",
+  "intercom",
+  "jira",
+  "klaviyo",
+  "linear",
+  "linkedin",
+  "mailchimp",
+  "mailgun",
+  "microsoft-365",
+  "microsoft-excel",
+  "microsoft-outlook",
+  "microsoft-teams",
+  "monday",
+  "mongodb",
+  "mysql",
+  "notion",
+  "openai",
+  "openai-gpt-3",
+  "pipedrive",
+  "postgres",
+  "quickbooks",
+  "reddit",
+  "salesforce",
+  "sendgrid",
+  "shopify",
+  "slack",
+  "stripe",
+  "supabase",
+  "telegram",
+  "trello",
+  "twilio",
+  "typeform",
+  "webflow",
+  "woocommerce",
+  "wordpress",
+  "x",
+  "xero",
+  "youtube",
+  "zendesk",
+  "zoho-crm",
+];
+
+const MAKE_COMMON_EXTERNAL_ACTIONS = [
+  "watch-records",
+  "search-records",
+  "list-records",
+  "get-record",
+  "create-record",
+  "update-record",
+  "delete-record",
+  "upsert-record",
+  "create-row",
+  "add-row",
+  "update-row",
+  "delete-row",
+  "get-row",
+  "search-rows",
+  "create-item",
+  "update-item",
+  "delete-item",
+  "get-item",
+  "list-items",
+  "create-message",
+  "send-message",
+  "post-message",
+  "create-email",
+  "send-email",
+  "upload-file",
+  "download-file",
+  "make-an-api-call",
+  "custom-api-call",
+  "create-task",
+  "update-task",
+  "create-contact",
+  "update-contact",
+  "create-lead",
+  "update-lead",
+  "create-deal",
+  "update-deal",
+];
+
+const ZAPIER_CORE_APP_MAPPINGS = [
+  "code by zapier",
+  "delay by zapier",
+  "filter by zapier",
+  "formatter by zapier",
+  "looping by zapier",
+  "paths by zapier",
+  "schedule by zapier",
+  "storage by zapier",
+  "webhooks by zapier",
+  "zapier tables",
+];
+
+const ZAPIER_COMMON_EXTERNAL_APPS = [
+  "activecampaign",
+  "airtable",
+  "asana",
+  "calendly",
+  "clickup",
+  "discord",
+  "dropbox",
+  "facebook lead ads",
+  "facebook pages",
+  "github",
+  "gmail",
+  "google analytics",
+  "google calendar",
+  "google docs",
+  "google drive",
+  "google forms",
+  "google sheets",
+  "google slides",
+  "hubspot",
+  "instagram for business",
+  "intercom",
+  "jira software cloud",
+  "klaviyo",
+  "linear",
+  "linkedin ads",
+  "mailchimp",
+  "microsoft excel",
+  "microsoft outlook",
+  "microsoft teams",
+  "monday.com",
+  "notion",
+  "openai",
+  "pipedrive",
+  "quickbooks online",
+  "salesforce",
+  "sendgrid",
+  "shopify",
+  "slack",
+  "stripe",
+  "trello",
+  "twilio",
+  "typeform",
+  "webflow",
+  "woocommerce",
+  "wordpress",
+  "xero",
+  "youtube",
+  "zendesk",
+  "zoho crm",
+];
+
+const ZAPIER_COMMON_EXTERNAL_ACTIONS = [
+  "new record",
+  "updated record",
+  "find record",
+  "create record",
+  "update record",
+  "new row",
+  "updated row",
+  "find row",
+  "create row",
+  "update row",
+  "new contact",
+  "find contact",
+  "create contact",
+  "update contact",
+  "new lead",
+  "create lead",
+  "update lead",
+  "new deal",
+  "create deal",
+  "update deal",
+  "send email",
+  "send message",
+  "send channel message",
+  "create task",
+  "update task",
+  "upload file",
+  "create event",
+  "update event",
+  "custom request",
+  "api request",
+  "create chat completion",
+  "create completion",
+  "conversation",
+  "analyze sentiment",
+];
+
+function sourcePlatform(value: unknown) {
+  const platform = lower(value || "make");
+  return platform === "zapier" ? "zapier" : "make";
+}
+
+function platformLabel(value: unknown) {
+  return sourcePlatform(value) === "zapier" ? "Zapier" : "Make";
+}
+
+const MAKE_INTERNAL_LOGIC_MODULE_KEYS = [
+  "builtin:basicfeeder",
+  "builtin:break",
+  "builtin:composeastring",
+  "builtin:continue",
+  "builtin:incrementfunction",
+  "builtin:setvariable",
+  "flowcontrol:aggregator",
+  "flowcontrol:break",
+  "flowcontrol:filter",
+  "flowcontrol:iterator",
+  "flowcontrol:repeater",
+  "flowcontrol:router",
+  "gateway:customwebhook",
+  "json:aggregatejson",
+  "json:createjson",
+  "json:parsejson",
+  "math:average",
+  "math:ceil",
+  "math:floor",
+  "math:max",
+  "math:min",
+  "math:round",
+  "text:composeastring",
+  "text:matchpattern",
+  "text:parsehtml",
+  "text:replace",
+  "text:split",
+  "tools:composeastring",
+  "tools:getmultiplevariables",
+  "tools:getvariable",
+  "tools:incrementfunction",
+  "tools:setmultiplevariables",
+  "tools:setvariable",
+  "util:arrayaggregator",
+  "util:iterator",
+  "util:setvariable",
+];
+
+const MAKE_KNOWN_CONVERTER_LOCATIONS = [
+  ...MAKE_INTERNAL_LOGIC_MODULE_KEYS.map((module) => ({
+    source_module_key: normalizeModuleKey(module),
+    strategy: "code_node",
+    confidence: "medium",
+  })),
+  ...MAKE_COMMON_EXTERNAL_APPS.flatMap((app) =>
+    MAKE_COMMON_EXTERNAL_ACTIONS.map((action) => ({
+      source_module_key: normalizeModuleKey(`${app}:${action}`),
+      app,
+      action,
+      strategy: "http_request",
+      confidence: "low",
+    }))
+  ),
+];
+
+const MAKE_COMMON_EXTERNAL_APP_SET = new Set(
+  MAKE_COMMON_EXTERNAL_APPS.map((app) => normalizeModuleKey(app)),
+);
+
+const MAKE_KNOWN_CONVERTER_LOCATION_MAP = new Map(
+  MAKE_KNOWN_CONVERTER_LOCATIONS.map((location) => [location.source_module_key, location]),
+);
+
+const ZAPIER_KNOWN_CONVERTER_LOCATIONS = [
+  ...ZAPIER_CORE_APP_MAPPINGS.flatMap((app) => {
+    const appKey = normalizeModuleKey(app);
+    const strategies: Record<string, { strategy: string; confidence: string }> = {
+      "webhooks by zapier": { strategy: "code_node", confidence: "high" },
+      "schedule by zapier": { strategy: "code_node", confidence: "high" },
+      "filter by zapier": { strategy: "code_node", confidence: "medium" },
+      "formatter by zapier": { strategy: "code_node", confidence: "medium" },
+      "paths by zapier": { strategy: "code_node", confidence: "medium" },
+      "delay by zapier": { strategy: "code_node", confidence: "medium" },
+      "looping by zapier": { strategy: "code_node", confidence: "medium" },
+      "code by zapier": { strategy: "code_node", confidence: "medium" },
+      "storage by zapier": { strategy: "http_request", confidence: "low" },
+      "zapier tables": { strategy: "http_request", confidence: "low" },
+    };
+    const strategy = strategies[app] || { strategy: "code_node", confidence: "medium" };
+    return [
+      {
+        source_module_key: appKey,
+        app,
+        action: "",
+        ...strategy,
+      },
+      {
+        source_module_key: normalizeModuleKey(`${app}:*`),
+        app,
+        action: "*",
+        ...strategy,
+      },
+    ];
+  }),
+  ...ZAPIER_COMMON_EXTERNAL_APPS.flatMap((app) =>
+    ZAPIER_COMMON_EXTERNAL_ACTIONS.map((action) => ({
+      source_module_key: normalizeModuleKey(`${app}:${action}`),
+      app,
+      action,
+      strategy: "http_request",
+      confidence: "low",
+    }))
+  ),
+];
+
+const ZAPIER_COMMON_EXTERNAL_APP_SET = new Set(
+  ZAPIER_COMMON_EXTERNAL_APPS.map((app) => normalizeModuleKey(app)),
+);
+
+const ZAPIER_KNOWN_CONVERTER_LOCATION_MAP = new Map(
+  ZAPIER_KNOWN_CONVERTER_LOCATIONS.map((location) => [location.source_module_key, location]),
+);
+
+function moduleActionText(group: any) {
+  return `${group.source_module || ""} ${group.source_app || ""} ${group.source_action || ""} ${group.source_module_label || ""}`.toLowerCase();
+}
+
+function sampleMapper(group: any) {
+  const sample = asObject(group.sample);
+  return {
+    sample,
+    mapper: asObject(sample.mapper),
+    parameters: asObject(sample.parameters),
+  };
+}
+
+function firstTextValue(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      const text = cleanString(value);
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
+function firstNumberValue(...values: unknown[]) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function promptFromMapper(mapper: Record<string, any>, fallback = "{{NEXUS_SETUP.prompt}}") {
+  return firstTextValue(
+    mapper.prompt,
+    mapper.Prompt,
+    mapper.message,
+    mapper.text,
+    mapper.input,
+    mapper.content,
+    mapper.user_prompt,
+    mapper.userPrompt,
+    mapper.instructions,
+    mapper.query,
+  ) || fallback;
+}
+
+function systemPromptFromMapper(mapper: Record<string, any>) {
+  return firstTextValue(
+    mapper.system,
+    mapper.system_prompt,
+    mapper.systemPrompt,
+    mapper.developer_message,
+    mapper.instructions,
+  ) || "You are a helpful business automation assistant. Return concise, useful output.";
+}
+
+function chatMessagesFromMapper(mapper: Record<string, any>) {
+  const rawMessages = Array.isArray(mapper.messages)
+    ? mapper.messages
+    : Array.isArray(mapper.Messages)
+      ? mapper.Messages
+      : null;
+
+  if (rawMessages?.length) {
+    return rawMessages
+      .map((item) => asObject(item))
+      .map((item) => ({
+        role: cleanString(item.role || item.Role || "user") || "user",
+        content: cleanString(item.content || item.Content || item.text || item.Text),
+      }))
+      .filter((item) => item.content)
+      .slice(0, 20);
+  }
+
+  return [
+    {
+      role: "system",
+      content: systemPromptFromMapper(mapper),
+    },
+    {
+      role: "user",
+      content: promptFromMapper(mapper),
+    },
+  ];
+}
+
+function httpMapping(
+  group: any,
+  httpTemplate: Record<string, any>,
+  confidence = "high",
+  operation = "request",
+) {
+  return {
+    id: `builtin:${group.source_module_key}`,
+    source_platform: sourcePlatform(group.source_platform),
+    source_module_key: group.source_module_key,
+    target_strategy: "http_request",
+    target_n8n_node_type: "n8n-nodes-base.httpRequest",
+    target_operation: operation,
+    confidence,
+    status: "global",
+    scope: "global",
+    http_template: httpTemplate,
+    built_in: true,
+  };
+}
+
+function makeOpenAiChatTemplate(group: any, endpoint: string, provider = "openai", providerLabel = "OpenAI", defaultModel = "gpt-4o-mini") {
+  const label = platformLabel(group.source_platform);
+  const { mapper, parameters } = sampleMapper(group);
+  const model = firstTextValue(mapper.model, mapper.Model, parameters.model, defaultModel) || defaultModel;
+  const body: Record<string, any> = {
+    model,
+    messages: chatMessagesFromMapper(mapper),
+  };
+  const temperature = firstNumberValue(mapper.temperature, mapper.Temperature, parameters.temperature);
+  const maxTokens = firstNumberValue(mapper.max_tokens, mapper.maxTokens, mapper.max_completion_tokens, parameters.max_tokens);
+  if (temperature !== null) body.temperature = temperature;
+  if (maxTokens !== null) body.max_tokens = maxTokens;
+
+  return httpMapping(group, {
+    method: "POST",
+    url: endpoint,
+    auth_type: "bearer",
+    credential_provider: provider,
+    credential_label: providerLabel,
+    n8n_credential_type: "httpBearerAuth",
+    headers: {},
+    query: {},
+    body_json: body,
+    notes: `${providerLabel} chat/completions HTTP substitute generated from the ${label} step mapper.`,
+  });
+}
+
+function makeOpenAiEmbeddingTemplate(group: any) {
+  const label = platformLabel(group.source_platform);
+  const { mapper, parameters } = sampleMapper(group);
+  const model = firstTextValue(mapper.model, parameters.model, "text-embedding-3-small");
+  const input = firstTextValue(mapper.input, mapper.text, mapper.content, "{{NEXUS_SETUP.text}}");
+
+  return httpMapping(group, {
+    method: "POST",
+    url: "https://api.openai.com/v1/embeddings",
+    auth_type: "bearer",
+    credential_provider: "openai",
+    credential_label: "OpenAI",
+    n8n_credential_type: "httpBearerAuth",
+    headers: {},
+    query: {},
+    body_json: { model, input },
+    notes: `OpenAI embeddings HTTP substitute generated from the ${label} step mapper.`,
+  });
+}
+
+function makeOpenAiImageTemplate(group: any) {
+  const label = platformLabel(group.source_platform);
+  const { mapper, parameters } = sampleMapper(group);
+  const model = firstTextValue(mapper.model, parameters.model, "gpt-image-1");
+  const prompt = promptFromMapper(mapper);
+
+  return httpMapping(group, {
+    method: "POST",
+    url: "https://api.openai.com/v1/images/generations",
+    auth_type: "bearer",
+    credential_provider: "openai",
+    credential_label: "OpenAI",
+    n8n_credential_type: "httpBearerAuth",
+    headers: {},
+    query: {},
+    body_json: { model, prompt },
+    notes: `OpenAI image-generation HTTP substitute generated from the ${label} step mapper.`,
+  });
+}
+
+function makeGeminiTemplate(group: any) {
+  const label = platformLabel(group.source_platform);
+  const { mapper, parameters } = sampleMapper(group);
+  const model = firstTextValue(mapper.model, mapper.Model, parameters.model, "gemini-2.0-flash")
+    .replace(/^models\//i, "");
+  const prompt = promptFromMapper(mapper);
+
+  return httpMapping(group, {
+    method: "POST",
+    url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    auth_type: "header",
+    credential_provider: "google_gemini",
+    credential_label: "Google Gemini",
+    n8n_credential_type: "httpHeaderAuth",
+    headers: {},
+    query: {},
+    body_json: {
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+          ],
+        },
+      ],
+    },
+    notes: `Google Gemini generateContent HTTP substitute generated from the ${label} step mapper.`,
+  });
+}
+
+function makeAnthropicTemplate(group: any) {
+  const label = platformLabel(group.source_platform);
+  const { mapper, parameters } = sampleMapper(group);
+  const model = firstTextValue(mapper.model, mapper.Model, parameters.model, "claude-3-5-sonnet-latest");
+  const maxTokens = firstNumberValue(mapper.max_tokens, mapper.maxTokens, parameters.max_tokens) || 1024;
+
+  return httpMapping(group, {
+    method: "POST",
+    url: "https://api.anthropic.com/v1/messages",
+    auth_type: "header",
+    credential_provider: "anthropic",
+    credential_label: "Anthropic",
+    n8n_credential_type: "httpHeaderAuth",
+    headers: {
+      "anthropic-version": "2023-06-01",
+    },
+    query: {},
+    body_json: {
+      model,
+      max_tokens: maxTokens,
+      messages: [
+        {
+          role: "user",
+          content: promptFromMapper(mapper),
+        },
+      ],
+    },
+    notes: `Anthropic Messages API HTTP substitute generated from the ${label} step mapper.`,
+  });
+}
+
+function makeSlackPostMessageTemplate(group: any) {
+  const label = platformLabel(group.source_platform);
+  const { mapper, parameters } = sampleMapper(group);
+  const channel = firstTextValue(mapper.channel, mapper.channelId, parameters.channel, "{{NEXUS_SETUP.slack_channel}}");
+  const text = firstTextValue(mapper.text, mapper.message, mapper.content, parameters.text, "{{NEXUS_SETUP.message_text}}");
+
+  return httpMapping(group, {
+    method: "POST",
+    url: "https://slack.com/api/chat.postMessage",
+    auth_type: "bearer",
+    credential_provider: "slack",
+    credential_label: "Slack",
+    n8n_credential_type: "httpBearerAuth",
+    headers: {},
+    query: {},
+    body_json: { channel, text },
+    notes: `Slack chat.postMessage HTTP substitute generated from the ${label} step mapper.`,
+  }, "medium", "chat.postMessage");
+}
+
+function aiProviderMappingFor(group: any) {
+  const moduleKey = lower(group.source_module_key);
+  const text = moduleActionText(group);
+  const isChatLike = /(chat|completion|message|response|prompt|assistant|generate|create)/i.test(text);
+
+  if (text.includes("openai") || moduleKey.includes("openai-gpt")) {
+    if (/(embedding|embeddings)/i.test(text)) return makeOpenAiEmbeddingTemplate(group);
+    if (/(image|images|picture|dall)/i.test(text)) return makeOpenAiImageTemplate(group);
+    if (isChatLike) return makeOpenAiChatTemplate(group, "https://api.openai.com/v1/chat/completions");
+  }
+
+  if (text.includes("openrouter")) {
+    return makeOpenAiChatTemplate(group, "https://openrouter.ai/api/v1/chat/completions", "openrouter", "OpenRouter", "openai/gpt-4o-mini");
+  }
+
+  if (text.includes("groq")) {
+    return makeOpenAiChatTemplate(group, "https://api.groq.com/openai/v1/chat/completions", "groq", "Groq", "llama-3.1-8b-instant");
+  }
+
+  if (text.includes("mistral")) {
+    return makeOpenAiChatTemplate(group, "https://api.mistral.ai/v1/chat/completions", "mistral", "Mistral AI", "mistral-small-latest");
+  }
+
+  if (text.includes("perplexity")) {
+    return makeOpenAiChatTemplate(group, "https://api.perplexity.ai/chat/completions", "perplexity", "Perplexity", "sonar");
+  }
+
+  if (text.includes("gemini") || text.includes("google-ai") || text.includes("google ai") || text.includes("palm")) {
+    return makeGeminiTemplate(group);
+  }
+
+  if (text.includes("anthropic") || text.includes("claude")) {
+    return makeAnthropicTemplate(group);
+  }
+
+  if (text.includes("slack") && /(post|send|create).*(message)|chat\.postmessage/i.test(text)) {
+    return makeSlackPostMessageTemplate(group);
+  }
+
+  return null;
+}
+
+function knownConverterLocationFor(group: any) {
+  const platform = sourcePlatform(group.source_platform);
+  const locationMap = platform === "zapier" ? ZAPIER_KNOWN_CONVERTER_LOCATION_MAP : MAKE_KNOWN_CONVERTER_LOCATION_MAP;
+  const externalAppSet = platform === "zapier" ? ZAPIER_COMMON_EXTERNAL_APP_SET : MAKE_COMMON_EXTERNAL_APP_SET;
+
+  return locationMap.get(group.source_module_key)
+    || locationMap.get(normalizeModuleKey(`${group.source_app}:${group.source_action}`))
+    || locationMap.get(normalizeModuleKey(`${group.source_app}:*`))
+    || (
+      externalAppSet.has(normalizeModuleKey(group.source_app))
+        ? {
+            source_module_key: group.source_module_key,
+            app: normalizeModuleKey(group.source_app),
+            action: normalizeModuleKey(group.source_action || group.source_module_label || (platform === "zapier" ? "api request" : "make-an-api-call")),
+            strategy: "http_request",
+            confidence: "low",
+          }
+        : null
+    );
+}
+
+function knownExternalSupportMappingFor(group: any) {
+  const location = knownConverterLocationFor(group);
+  if (!location || location.strategy !== "http_request") return null;
+
+  return {
+    id: `builtin-known:${group.source_module_key}`,
+    source_platform: sourcePlatform(group.source_platform),
+    source_module_key: group.source_module_key,
+    target_strategy: "manual_support",
+    suggested_strategy: "http_request",
+    confidence: location.confidence || "low",
+    status: "known",
+    scope: "global",
+    built_in: true,
+    known_converter_location: true,
+    known_app: location.app || group.source_app,
+    known_action: location.action || group.source_action,
+    reason: `Nexus recognizes this ${platformLabel(group.source_platform)} app/action. Add one HTTP substitute for this module type; after the workflow passes, Nexus can reuse it for future imports.`,
   };
 }
 
@@ -253,14 +926,130 @@ function collectMakeModules(blueprint: any) {
   return unique;
 }
 
-function groupModules(modules: any[]) {
+function extractZapierStepObject(candidate: any) {
+  const record = asObject(candidate);
+  const app = cleanString(
+    record.app ||
+      record.app_name ||
+      record.appName ||
+      record.application ||
+      record.service ||
+      record.service_name ||
+      record.provider ||
+      record.selected_api ||
+      record.selectedApi ||
+      record.module ||
+      "",
+  );
+  const action = cleanString(
+    record.event ||
+      record.action ||
+      record.operation ||
+      record.action_name ||
+      record.actionName ||
+      record.event_name ||
+      record.eventName ||
+      record.type ||
+      record.trigger ||
+      "",
+  );
+
+  if (!app && !action) return null;
+
+  const rawModule = app && action ? `${app}:${action}` : app || action;
+  const split = splitModule(rawModule);
+  const label = cleanString(
+    record.label ||
+      record.name ||
+      record.title ||
+      record.step_name ||
+      record.stepName ||
+      record.description ||
+      rawModule,
+  );
+
+  return {
+    id: cleanString(record.id || record.uid || record.step_id || record.stepId || crypto.randomUUID()),
+    label: label || rawModule,
+    raw_module: rawModule,
+    ...split,
+    parameters: asObject(record.parameters || record.params || record.config),
+    mapper: asObject(record.mapper || record.fields || record.input || record.inputs || record.values),
+    metadata: asObject(record.metadata || record.meta),
+    raw: record,
+  };
+}
+
+function collectZapierModules(blueprint: any) {
+  const modules: any[] = [];
+  const seen = new Set<any>();
+
+  function addCandidate(value: any) {
+    const maybeStep = extractZapierStepObject(value);
+    if (maybeStep) modules.push(maybeStep);
+  }
+
+  const root = asObject(blueprint);
+  addCandidate(root.trigger);
+  asArray(root.steps).forEach(addCandidate);
+  asArray(root.actions).forEach(addCandidate);
+  asArray(root.nodes).forEach(addCandidate);
+  asArray(root.flow).forEach(addCandidate);
+
+  function walk(value: any, path: string[] = []) {
+    if (!value || typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+
+    const last = path[path.length - 1] || "";
+    const maybeStep = extractZapierStepObject(value);
+    if (maybeStep && (
+      Boolean(value.app || value.appName || value.app_name || value.service || value.provider || value.selected_api) ||
+      ["trigger", "steps", "actions", "nodes", "flow", "zap"].includes(last)
+    )) {
+      modules.push(maybeStep);
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => walk(item, [...path, String(index)]));
+      return;
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      if (["metadata", "meta", "mapper", "fields", "input", "inputs", "parameters", "params", "config"].includes(key) && maybeStep) continue;
+      walk(child, [...path, key]);
+    }
+  }
+
+  walk(blueprint);
+
+  const unique: any[] = [];
+  const uniqueSeen = new Set<string>();
+  for (const item of modules) {
+    const key = `${item.id}:${item.source_module_key}`;
+    if (uniqueSeen.has(key)) continue;
+    uniqueSeen.add(key);
+    unique.push(item);
+  }
+
+  return unique;
+}
+
+function collectSourceModules(blueprint: any, platform: string) {
+  return sourcePlatform(platform) === "zapier"
+    ? collectZapierModules(blueprint)
+    : collectMakeModules(blueprint);
+}
+
+function groupModules(modules: any[], platform = "make") {
+  const normalizedPlatform = sourcePlatform(platform);
   const groups = new Map<string, any>();
 
   for (const module of modules) {
     const key = module.source_module_key;
     if (!groups.has(key)) {
       groups.set(key, {
-        source_platform: "make",
+        source_platform: normalizedPlatform,
         source_app: module.source_app,
         source_action: module.source_action,
         source_module: module.source_module,
@@ -285,6 +1074,23 @@ function groupModules(modules: any[]) {
 function builtInMappingFor(group: any) {
   const moduleKey = lower(group.source_module_key);
   const moduleText = `${group.source_module} ${group.source_app} ${group.source_action}`.toLowerCase();
+  const aiMapping = aiProviderMappingFor(group);
+  if (aiMapping) return aiMapping;
+
+  const knownLocation = knownConverterLocationFor(group);
+
+  if (knownLocation?.strategy === "code_node") {
+    return {
+      id: `builtin:${group.source_module_key}`,
+      target_strategy: "code_node",
+      target_n8n_node_type: "n8n-nodes-base.code",
+      target_operation: "logic_passthrough",
+      confidence: knownLocation.confidence || "medium",
+      status: "global",
+      scope: "global",
+      built_in: true,
+    };
+  }
 
   if (moduleText.includes("httprequest") || moduleText.includes("http:") || moduleKey.includes("http")) {
     const sample = asObject(group.sample);
@@ -297,7 +1103,7 @@ function builtInMappingFor(group: any) {
 
     return {
       id: `builtin:${group.source_module_key}`,
-      source_platform: "make",
+      source_platform: sourcePlatform(group.source_platform),
       source_module_key: group.source_module_key,
       target_strategy: "http_request",
       target_n8n_node_type: "n8n-nodes-base.httpRequest",
@@ -329,7 +1135,13 @@ function builtInMappingFor(group: any) {
 
   if (
     moduleText.includes("router") ||
+    moduleText.includes("paths by zapier") ||
     moduleText.includes("filter") ||
+    moduleText.includes("formatter") ||
+    moduleText.includes("delay by zapier") ||
+    moduleText.includes("looping by zapier") ||
+    moduleText.includes("code by zapier") ||
+    moduleText.includes("schedule by zapier") ||
     moduleText.includes("tools:") ||
     moduleText.includes("json") ||
     moduleText.includes("text") ||
@@ -347,14 +1159,18 @@ function builtInMappingFor(group: any) {
     };
   }
 
+  const knownExternal = knownExternalSupportMappingFor(group);
+  if (knownExternal) return knownExternal;
+
   return null;
 }
 
-async function loadMappings(adminClient: any, operator: OperatorContext) {
+async function loadMappings(adminClient: any, operator: OperatorContext, platform = "make") {
+  const normalizedPlatform = sourcePlatform(platform);
   const { data, error } = await adminClient
     .from("workflow_node_mappings")
     .select("*")
-    .eq("source_platform", "make")
+    .eq("source_platform", normalizedPlatform)
     .neq("status", "disabled")
     .order("last_validated_at", { ascending: false })
     .order("updated_at", { ascending: false })
@@ -415,10 +1231,15 @@ function summarizeGroups(groups: any[], mappings: any[]) {
         built_in: Boolean(mapping.built_in),
       });
     } else {
+      const manualMapping = mapping && mapping.target_strategy === "manual_support" ? mapping : null;
       unresolved.push({
         ...group,
-        suggested_strategy: "http_request",
-        reason: "No safe reusable n8n mapping exists yet. Add one HTTP substitute for this module group or request Nexus support.",
+        suggested_strategy: manualMapping?.suggested_strategy || "http_request",
+        reason: manualMapping?.reason || "No safe reusable n8n mapping exists yet. Add one HTTP substitute for this module group or request Nexus support.",
+        known_converter_location: Boolean(manualMapping?.known_converter_location),
+        known_app: manualMapping?.known_app || "",
+        known_action: manualMapping?.known_action || "",
+        confidence: manualMapping?.confidence || group.confidence || "low",
       });
     }
   }
@@ -426,15 +1247,16 @@ function summarizeGroups(groups: any[], mappings: any[]) {
   return { resolved, unresolved };
 }
 
-function safeBlueprint(value: unknown) {
+function safeBlueprint(value: unknown, platform = "make") {
+  const label = platformLabel(platform);
   const parsed = safeJson(value, null);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Upload or paste a Make.com blueprint JSON object.");
+    throw new Error(`Upload or paste a ${label} workflow JSON object.`);
   }
 
   const serialized = JSON.stringify(parsed);
   if (serialized.length > 2000000) {
-    throw new Error("Make blueprint is too large for the MVP importer. Keep the file under about 2 MB.");
+    throw new Error(`${label} workflow JSON is too large for the MVP importer. Keep the file under about 2 MB.`);
   }
 
   return parsed;
@@ -619,7 +1441,8 @@ function mergeGeneratedSetupSchema(existingSchema: unknown, generatedFields: any
   return { schema, added };
 }
 
-function generatedSetupFieldsForMake(blueprint: any, generatedWorkflow: any) {
+function generatedSetupFieldsForSource(blueprint: any, generatedWorkflow: any, platform = "make") {
+  const label = platformLabel(platform);
   const sourceText = `${JSON.stringify(blueprint || {})}\n${JSON.stringify(generatedWorkflow || {})}`;
   const names = new Set<string>([
     ...extractRuntimeSetupKeys(sourceText),
@@ -628,7 +1451,7 @@ function generatedSetupFieldsForMake(blueprint: any, generatedWorkflow: any) {
 
   return [...names].sort().map((name) => makeSetupField(
     name,
-    "Auto-generated by Nexus from the Make blueprint and workflow setup references. You can edit this before launch.",
+    `Auto-generated by Nexus from the ${label} workflow and setup references. You can edit this before launch.`,
   ));
 }
 
@@ -664,12 +1487,15 @@ function makeCodeNode(name: string, index: number, code: string) {
 
 function makeProxyFetchCode(name: string, template: any, headersJson: Record<string, string>, query: Record<string, any>, bodyJson: any) {
   const proxyUrl = `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/runtime-http-proxy`;
+  const body = bodyJson || {};
+  const rawMethod = cleanString(template.method || "GET").toUpperCase();
+  const method = rawMethod === "GET" && hasPayload(body) ? "POST" : rawMethod;
   const payloadTemplate = {
-    method: cleanString(template.method || "GET").toUpperCase(),
+    method,
     url: cleanString(template.url),
     headers: headersJson || {},
     query: query || {},
-    body: bodyJson || {},
+    body,
     auth_type: cleanString(template.auth_type || "bearer"),
     provider: cleanString(template.credential_provider || "custom"),
     provider_label: cleanString(template.credential_label || "API credential"),
@@ -893,7 +1719,7 @@ function makeHttpNode(name: string, index: number, mapping: any) {
         body: bodyJson,
       }),
       nexusProxyTemplate: {
-        method: cleanString(template.method || "GET").toUpperCase(),
+        method,
         url: cleanString(template.url),
         headers: headersJson || {},
         query: query || {},
@@ -929,10 +1755,12 @@ function makeHttpNode(name: string, index: number, mapping: any) {
   return node;
 }
 
-function buildN8nWorkflow(product: any, groups: any[], mappings: any[]) {
+function buildN8nWorkflow(product: any, groups: any[], mappings: any[], platform = "make") {
+  const normalizedPlatform = sourcePlatform(platform);
+  const label = platformLabel(normalizedPlatform);
   const nodes: any[] = [];
   const connections: Record<string, any> = {};
-  const workflowName = `${cleanString(product?.title || "Make import")} - converted from Make`;
+  const workflowName = `${cleanString(product?.title || `${label} import`)} - converted from ${label}`;
 
   const inputNode = {
     id: n8nNodeId(),
@@ -942,7 +1770,7 @@ function buildN8nWorkflow(product: any, groups: any[], mappings: any[]) {
     position: [0, 0],
     parameters: {
       httpMethod: "POST",
-      path: `nexus-make-${crypto.randomUUID().slice(0, 8)}`,
+      path: `nexus-${normalizedPlatform}-${crypto.randomUUID().slice(0, 8)}`,
       responseMode: "lastNode",
       options: {},
     },
@@ -965,8 +1793,8 @@ function buildN8nWorkflow(product: any, groups: any[], mappings: any[]) {
         safeName,
         index + 1,
         [
-          `// Converted from Make module: ${group.source_module}`,
-          "// This logic node preserves workflow order. Replace with exact n8n logic if the imported Make module used custom filters/routes.",
+          `// Converted from ${label} step: ${group.source_module}`,
+          `// This logic node preserves workflow order. Replace with exact n8n logic if the imported ${label} step used custom filters/routes.`,
           "return items;",
         ].join("\n"),
       );
@@ -987,8 +1815,8 @@ function buildN8nWorkflow(product: any, groups: any[], mappings: any[]) {
       "    status: 'success',",
       "    output_type: 'report',",
       "    title: first.title || 'Automation output',",
-      "    summary: first.summary || 'Converted Make workflow completed successfully.',",
-      "    content_html: first.content_html || '<h1>Automation output</h1><p>The converted Make workflow ran successfully.</p>',",
+      `    summary: first.summary || 'Converted ${label} workflow completed successfully.',`,
+      `    content_html: first.content_html || '<h1>Automation output</h1><p>The converted ${label} workflow ran successfully.</p>',`,
       "    raw_result: first",
       "  }",
       "}];",
@@ -1017,11 +1845,12 @@ function makeSummary(modules: any[], groups: any[], resolved: any[], unresolved:
   };
 }
 
-async function upsertImportSession(adminClient: any, operator: OperatorContext, product: any, blueprint: any, result: any) {
+async function upsertImportSession(adminClient: any, operator: OperatorContext, product: any, blueprint: any, result: any, platform = "make") {
+  const normalizedPlatform = sourcePlatform(platform);
   const patch = {
     automation_id: product?.id || null,
     developer_id: product?.developer_id || operator.developer?.id || null,
-    source_platform: "make",
+    source_platform: normalizedPlatform,
     source_blueprint: blueprint,
     module_summary: result.summary,
     resolved_groups: result.resolved,
@@ -1059,13 +1888,14 @@ async function upsertImportSession(adminClient: any, operator: OperatorContext, 
   return data;
 }
 
-async function updateAutomationAfterScan(adminClient: any, product: any, session: any, result: any, blueprint: any) {
+async function updateAutomationAfterScan(adminClient: any, product: any, session: any, result: any, blueprint: any, platform = "make") {
   if (!product?.id) return;
-  const generatedSetupFields = generatedSetupFieldsForMake(blueprint, result.generated_workflow_json);
+  const normalizedPlatform = sourcePlatform(platform);
+  const generatedSetupFields = generatedSetupFieldsForSource(blueprint, result.generated_workflow_json, normalizedPlatform);
   const mergedSetup = mergeGeneratedSetupSchema(product.setup_schema, generatedSetupFields);
 
   const patch: Record<string, any> = {
-    workflow_source_platform: "make",
+    workflow_source_platform: normalizedPlatform,
     make_blueprint: blueprint,
     make_import_status: result.status,
     make_import_session_id: session.id,
@@ -1079,7 +1909,7 @@ async function updateAutomationAfterScan(adminClient: any, product: any, session
     patch.n8n_last_import_result = {
       ...(asObject(product.n8n_last_import_result)),
       generated_setup_fields: mergedSetup.added,
-      generated_setup_source: "make_blueprint",
+      generated_setup_source: `${normalizedPlatform}_workflow`,
     };
   }
 
@@ -1110,17 +1940,23 @@ async function runScan(adminClient: any, operator: OperatorContext, body: any) {
   const product = await loadAutomation(adminClient, operator, automationId);
   if (automationId && !product) throw new Error("Product not found or access denied.");
 
-  const blueprint = safeBlueprint(body.blueprint || product?.make_blueprint);
-  const modules = collectMakeModules(blueprint);
-  const groups = groupModules(modules);
-  const mappings = await loadMappings(adminClient, operator);
+  const normalizedPlatform = sourcePlatform(body.source_platform || body.platform || product?.workflow_source_platform || "make");
+  const label = platformLabel(normalizedPlatform);
+  const blueprint = safeBlueprint(body.blueprint || product?.make_blueprint, normalizedPlatform);
+  const modules = collectSourceModules(blueprint, normalizedPlatform);
+  if (!modules.length) {
+    throw new Error(`Nexus could not find ${label} steps in this JSON. Use a JSON object with a trigger/steps array or app/action step objects.`);
+  }
+  const groups = groupModules(modules, normalizedPlatform);
+  const mappings = await loadMappings(adminClient, operator, normalizedPlatform);
   const { resolved, unresolved } = summarizeGroups(groups, mappings);
   const status = unresolved.length ? "needs_substitutes" : "converted";
   const generatedWorkflow = status === "converted" && product
-    ? buildN8nWorkflow(product, groups, mappings)
+    ? buildN8nWorkflow(product, groups, mappings, normalizedPlatform)
     : null;
   const summary = makeSummary(modules, groups, resolved, unresolved);
   const result = {
+    source_platform: normalizedPlatform,
     status,
     summary,
     modules,
@@ -1133,18 +1969,19 @@ async function runScan(adminClient: any, operator: OperatorContext, body: any) {
   let session = null;
   let productPatchResult: any = null;
   if (product?.id) {
-    session = await upsertImportSession(adminClient, operator, product, blueprint, result);
-    productPatchResult = await updateAutomationAfterScan(adminClient, product, session, result, blueprint);
+    session = await upsertImportSession(adminClient, operator, product, blueprint, result, normalizedPlatform);
+    productPatchResult = await updateAutomationAfterScan(adminClient, product, session, result, blueprint, normalizedPlatform);
   }
 
   return {
     session,
+    source_platform: normalizedPlatform,
     ...result,
     setup_schema: productPatchResult?.setup_schema || product?.setup_schema || [],
     generated_setup_fields: productPatchResult?.generated_setup_fields || [],
     message: unresolved.length
-      ? "Make blueprint scanned. Add HTTP substitutes or request Nexus support for unresolved module groups."
-      : "Make blueprint converted into n8n workflow JSON. Import and run the technical test next.",
+      ? `${label} workflow scanned. Add HTTP substitutes or request Nexus support for unresolved step groups.`
+      : `${label} workflow converted into n8n workflow JSON. Import and run the technical test next.`,
   };
 }
 
@@ -1167,6 +2004,8 @@ async function getImportSession(adminClient: any, operator: OperatorContext, bod
   const automationId = cleanString(body.automation_id);
   const product = automationId ? await loadAutomation(adminClient, operator, automationId) : null;
   const sessionId = cleanString(body.session_id || product?.make_import_session_id);
+  const productPlatform = sourcePlatform(body.source_platform || body.platform || product?.workflow_source_platform || "make");
+  const productLabel = platformLabel(productPlatform);
 
   if (!sessionId) {
     return {
@@ -1175,34 +2014,38 @@ async function getImportSession(adminClient: any, operator: OperatorContext, bod
       summary: product?.make_conversion_summary || {},
       resolved: [],
       unresolved: product?.make_unresolved_modules || [],
-      message: "No Make import session is linked to this product yet.",
+      message: `No ${productLabel} import session is linked to this product yet.`,
     };
   }
 
   const session = await loadSession(adminClient, operator, sessionId);
   const unresolved = asArray(session.unresolved_groups);
+  const label = platformLabel(session.source_platform || productPlatform);
 
   return {
     session: { id: session.id },
+    source_platform: sourcePlatform(session.source_platform || productPlatform),
     status: session.status,
     summary: session.module_summary || {},
     resolved: asArray(session.resolved_groups),
     unresolved,
     generated_workflow_json: session.generated_workflow_json || null,
     message: unresolved.length
-      ? "Make blueprint scanned. Add or edit HTTP substitutes for unresolved module groups."
-      : "Make blueprint converted. Draft HTTP substitutes remain editable until the workflow test passes.",
+      ? `${label} workflow scanned. Add or edit HTTP substitutes for unresolved step groups.`
+      : `${label} workflow converted. Draft HTTP substitutes remain editable until the workflow test passes.`,
   };
 }
 
 async function saveHttpSubstitute(adminClient: any, operator: OperatorContext, body: any) {
   const session = await loadSession(adminClient, operator, cleanString(body.session_id));
+  const normalizedPlatform = sourcePlatform(session.source_platform || body.source_platform || "make");
+  const label = platformLabel(normalizedPlatform);
   const sourceModuleKey = normalizeModuleKey(body.source_module_key);
   const unresolved = asArray(session.unresolved_groups);
   const group = unresolved.find((item) => item.source_module_key === sourceModuleKey)
     || asArray(session.resolved_groups).find((item) => item.source_module_key === sourceModuleKey);
 
-  if (!group) throw new Error("Unsupported Make module group was not found in this import session.");
+  if (!group) throw new Error(`Unsupported ${label} step group was not found in this import session.`);
 
   const httpTemplate = normalizeHttpTemplate({
     ...body.http_template,
@@ -1213,7 +2056,7 @@ async function saveHttpSubstitute(adminClient: any, operator: OperatorContext, b
   const scope = operator.profile.role === "admin" ? "admin" : "developer";
 
   const mappingPatch = {
-    source_platform: "make",
+    source_platform: normalizedPlatform,
     source_app: group.source_app,
     source_module: group.source_module,
     source_action: group.source_action,
@@ -1236,7 +2079,7 @@ async function saveHttpSubstitute(adminClient: any, operator: OperatorContext, b
   const { data: existing } = await adminClient
     .from("workflow_node_mappings")
     .select("*")
-    .eq("source_platform", "make")
+    .eq("source_platform", normalizedPlatform)
     .eq("source_module_key", sourceModuleKey)
     .eq("created_by", operator.profile.id)
     .neq("status", "disabled")
@@ -1280,35 +2123,38 @@ async function saveHttpSubstitute(adminClient: any, operator: OperatorContext, b
     .in("status", ["open", "in_review"]);
 
   if (supportUpdateError) {
-    console.warn("Could not resolve Make import support request:", supportUpdateError.message);
+    console.warn(`Could not resolve ${label} import support request:`, supportUpdateError.message);
   }
 
   const product = session.automations;
   const rerun = await runScan(adminClient, operator, {
     automation_id: product?.id,
     blueprint: session.source_blueprint,
+    source_platform: normalizedPlatform,
   });
 
   return {
     mapping,
     ...rerun,
     message: rerun.unresolved?.length
-      ? "HTTP substitute saved. Resolve the remaining Make module groups before importing."
-      : "HTTP substitute saved and Make blueprint converted. Import and run the technical test next.",
+      ? `HTTP substitute saved. Resolve the remaining ${label} step groups before importing.`
+      : `HTTP substitute saved and ${label} workflow converted. Import and run the technical test next.`,
   };
 }
 
 async function requestSupport(adminClient: any, operator: OperatorContext, body: any) {
   const session = await loadSession(adminClient, operator, cleanString(body.session_id));
+  const normalizedPlatform = sourcePlatform(session.source_platform || body.source_platform || "make");
+  const label = platformLabel(normalizedPlatform);
   const sourceModuleKey = normalizeModuleKey(body.source_module_key);
   const group = asArray(session.unresolved_groups).find((item) => item.source_module_key === sourceModuleKey);
-  if (!group) throw new Error("Unsupported Make module group was not found in this import session.");
+  if (!group) throw new Error(`Unsupported ${label} step group was not found in this import session.`);
 
   const row = {
     import_session_id: session.id,
     automation_id: session.automation_id,
     developer_id: session.developer_id,
-    source_platform: "make",
+    source_platform: normalizedPlatform,
     source_module_key: sourceModuleKey,
     source_app: group.source_app,
     source_module: group.source_module,
@@ -1351,8 +2197,8 @@ async function requestSupport(adminClient: any, operator: OperatorContext, body:
   try {
     await adminClient.from("admin_notifications").insert({
       notification_type: "make_import_support",
-      title: "Make import support requested",
-      message: `${session.automations?.title || "A product"} needs a Make module mapping for ${group.source_module_label || group.source_module}.`,
+      title: `${label} import support requested`,
+      message: `${session.automations?.title || "A product"} needs a ${label} step mapping for ${group.source_module_label || group.source_module}.`,
       status: "unread",
       metadata: {
         support_request_id: data.id,
@@ -1363,7 +2209,7 @@ async function requestSupport(adminClient: any, operator: OperatorContext, body:
       created_at: nowIso(),
     });
   } catch (error) {
-    console.warn("Could not create Make import notification:", error);
+    console.warn(`Could not create ${label} import notification:`, error);
   }
 
   return {
@@ -1375,12 +2221,14 @@ async function requestSupport(adminClient: any, operator: OperatorContext, body:
 async function validateSuccessfulMappings(adminClient: any, operator: OperatorContext, body: any) {
   const product = await loadAutomation(adminClient, operator, cleanString(body.automation_id));
   if (!product) throw new Error("Product not found or access denied.");
+  const normalizedPlatform = sourcePlatform(body.source_platform || body.platform || product.workflow_source_platform || "make");
+  const label = platformLabel(normalizedPlatform);
 
   const passed = ["passed", "passed_with_expected_test_callback_error"].includes(lower(product.n8n_last_test_status));
   if (!passed) {
     return {
       promoted_count: 0,
-      message: "Workflow test has not passed yet, so Make HTTP substitutes were not made reusable.",
+      message: `Workflow test has not passed yet, so ${label} HTTP substitutes were not made reusable.`,
     };
   }
 
@@ -1388,7 +2236,7 @@ async function validateSuccessfulMappings(adminClient: any, operator: OperatorCo
   if (!sessionId) {
     return {
       promoted_count: 0,
-      message: "No Make import session is linked to this product.",
+      message: `No ${label} import session is linked to this product.`,
     };
   }
 
@@ -1400,7 +2248,7 @@ async function validateSuccessfulMappings(adminClient: any, operator: OperatorCo
   if (!mappingIds.length) {
     return {
       promoted_count: 0,
-      message: "No reusable HTTP substitutes needed validation for this Make import.",
+      message: `No reusable HTTP substitutes needed validation for this ${label} import.`,
     };
   }
 
@@ -1422,13 +2270,14 @@ async function validateSuccessfulMappings(adminClient: any, operator: OperatorCo
 
   return {
     promoted_count: data?.length || 0,
-    message: `${data?.length || 0} Make substitute mapping${data?.length === 1 ? "" : "s"} validated for reuse.`,
+    message: `${data?.length || 0} ${label} substitute mapping${data?.length === 1 ? "" : "s"} validated for reuse.`,
   };
 }
 
 async function listSupportRequests(adminClient: any, operator: OperatorContext, body: any) {
   if (operator.profile.role !== "admin") throw new Error("Admin access required.");
 
+  const platformFilter = cleanString(body.source_platform || body.platform);
   let query = adminClient
     .from("workflow_import_support_requests")
     .select("*, automations(id, title, slug), developers(id, display_name, handle)")
@@ -1437,6 +2286,9 @@ async function listSupportRequests(adminClient: any, operator: OperatorContext, 
 
   if (body.status) {
     query = query.eq("status", cleanString(body.status));
+  }
+  if (platformFilter) {
+    query = query.eq("source_platform", sourcePlatform(platformFilter));
   }
 
   const { data, error } = await query;
@@ -1447,15 +2299,21 @@ async function listSupportRequests(adminClient: any, operator: OperatorContext, 
   };
 }
 
-async function listMappings(adminClient: any, operator: OperatorContext) {
+async function listMappings(adminClient: any, operator: OperatorContext, body: any = {}) {
   if (operator.profile.role !== "admin") throw new Error("Admin access required.");
+  const rawPlatformFilter = cleanString(body.source_platform || body.platform);
 
-  const { data, error } = await adminClient
+  let query = adminClient
     .from("workflow_node_mappings")
     .select("*, developers(id, display_name, handle)")
-    .eq("source_platform", "make")
     .order("updated_at", { ascending: false })
     .limit(500);
+
+  if (rawPlatformFilter && rawPlatformFilter !== "all") {
+    query = query.eq("source_platform", sourcePlatform(rawPlatformFilter));
+  }
+
+  const { data, error } = await query;
 
   if (error) throw new Error(error.message);
   return { mappings: data || [] };
@@ -1473,6 +2331,12 @@ Deno.serve(async (req) => {
     return jsonResponse({
       ok: true,
       message: "make-import-assistant is alive.",
+      converter_locations: MAKE_KNOWN_CONVERTER_LOCATIONS.length,
+      zapier_converter_locations: ZAPIER_KNOWN_CONVERTER_LOCATIONS.length,
+      common_external_apps: MAKE_COMMON_EXTERNAL_APPS.length,
+      zapier_common_external_apps: ZAPIER_COMMON_EXTERNAL_APPS.length,
+      common_external_actions: MAKE_COMMON_EXTERNAL_ACTIONS.length,
+      zapier_common_external_actions: ZAPIER_COMMON_EXTERNAL_ACTIONS.length,
     });
   }
 
@@ -1509,9 +2373,9 @@ Deno.serve(async (req) => {
     } else if (action === "list_support_requests") {
       result = await listSupportRequests(adminClient, operator, body);
     } else if (action === "list_mappings") {
-      result = await listMappings(adminClient, operator);
+      result = await listMappings(adminClient, operator, body);
     } else {
-      return errorResponse("Unknown Make import assistant action.", 400);
+      return errorResponse("Unknown import assistant action.", 400);
     }
 
     return jsonResponse({
@@ -1521,7 +2385,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error(error);
 
-    const message = error instanceof Error ? error.message : "Could not run Make import assistant.";
+    const message = error instanceof Error ? error.message : "Could not run import assistant.";
     const schemaMissing = /workflow_node_mappings|workflow_import_sessions|workflow_import_support_requests|schema cache|relation .* does not exist|could not find/i.test(message);
 
     return errorResponse(

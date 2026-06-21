@@ -868,14 +868,14 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
     "from runtime setup references",
   );
 
-  if (cleanString(product.workflow_source_platform).toLowerCase() === "make" || product.make_blueprint) {
+  if (["make", "zapier"].includes(cleanString(product.workflow_source_platform).toLowerCase()) || product.make_blueprint) {
     addGeneratedSetupFields(
       setupSchema,
       setupNames,
       inferMakeSetupKeysFromText(JSON.stringify(product.make_blueprint || {}) + "\n" + workflowText),
       warnings,
       addedSetupFields,
-      "from Make blueprint buyer input hints",
+      "from source workflow buyer input hints",
     );
   }
 
@@ -1337,6 +1337,17 @@ function providerFromUrlOrName(value: string) {
     return { provider: "google_gemini", label: "Google Gemini" };
   }
   if (text.includes("openai")) return { provider: "openai", label: "OpenAI" };
+  if (text.includes("anthropic") || text.includes("claude")) return { provider: "anthropic", label: "Anthropic" };
+  if (text.includes("openrouter")) return { provider: "openrouter", label: "OpenRouter" };
+  if (text.includes("groq")) return { provider: "groq", label: "Groq" };
+  if (text.includes("mistral")) return { provider: "mistral", label: "Mistral AI" };
+  if (text.includes("perplexity")) return { provider: "perplexity", label: "Perplexity" };
+  if (text.includes("slack")) return { provider: "slack", label: "Slack" };
+  if (text.includes("hubspot")) return { provider: "hubspot", label: "HubSpot" };
+  if (text.includes("airtable")) return { provider: "airtable", label: "Airtable" };
+  if (text.includes("notion")) return { provider: "notion", label: "Notion" };
+  if (text.includes("stripe")) return { provider: "stripe", label: "Stripe" };
+  if (text.includes("github")) return { provider: "github", label: "GitHub" };
   if (text.includes("apify")) return { provider: "apify", label: "Apify" };
   if (text.includes("serper")) return { provider: "serper", label: "Serper" };
   if (text.includes("firecrawl")) return { provider: "firecrawl", label: "Firecrawl" };
@@ -1723,13 +1734,16 @@ function refreshNexusProxyCodeNode(node: any, supabaseUrl: string) {
       return cleanString(credential.allowed_host);
     }
   })();
+  const templateBody = httpTemplateBody(template);
+  const rawMethod = cleanString(template.method || "GET").toUpperCase();
+  const method = rawMethod === "GET" && hasHttpPayload(templateBody) ? "POST" : rawMethod;
   const proxyTemplate = {
-    method: cleanString(template.method || "GET").toUpperCase(),
+    method,
     url: templateUrl,
     headers: asObject(template.headers),
     query: asObject(template.query),
-    body: httpTemplateBody(template),
-    body_json: httpTemplateBody(template),
+    body: templateBody,
+    body_json: templateBody,
     auth_type: cleanString(template.auth_type || (credentialKey ? "bearer" : "none")),
     provider: cleanString(template.provider || credential.provider || providerInfo.provider),
     provider_label: cleanString(template.provider_label || credential.provider_label || providerInfo.label),
@@ -1758,8 +1772,10 @@ function refreshNexusProxyCodeNode(node: any, supabaseUrl: string) {
 function convertMakeHttpRequestNodesToProxy(workflowInput: any, product: any, supabaseUrl: string) {
   const workflow = deepClone(workflowInput);
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const sourcePlatform = cleanString(product?.workflow_source_platform).toLowerCase();
   const looksLikeMake =
-    cleanString(product?.workflow_source_platform).toLowerCase() === "make" ||
+    sourcePlatform === "make" ||
+    sourcePlatform === "zapier" ||
     Boolean(product?.make_import_session_id || product?.make_blueprint) ||
     nodes.some((node: any) => ["NEXUS_INPUT", "NEXUS_FINAL_OUTPUT"].includes(cleanString(node?.name)));
 
@@ -2036,9 +2052,11 @@ function normalizeHttpRequestNodesForN8n(nodes: any[], product: any) {
     const name = cleanString(node?.name);
     return name === "NEXUS_INPUT" || name === "NEXUS_FINAL_OUTPUT";
   });
+  const sourcePlatform = cleanString(product?.workflow_source_platform).toLowerCase();
 
   const forceLegacyForMake =
-    cleanString(product?.workflow_source_platform).toLowerCase() === "make" ||
+    sourcePlatform === "make" ||
+    sourcePlatform === "zapier" ||
     Boolean(product?.make_import_session_id || product?.make_blueprint || workflowLooksMakeConverted);
 
   return nodes.map((node: any) => {
@@ -3077,7 +3095,10 @@ Deno.serve(async (req) => {
       throw new Error("n8n did not return a workflow ID.");
     }
 
-    const activation = await activateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
+    const shouldKeepActiveAfterImport = ["active", "published"].includes(cleanString(product.status).toLowerCase());
+    const postImportWorkflowState = shouldKeepActiveAfterImport
+      ? await activateWorkflow(n8nBaseUrl, n8nApiKey, workflowId)
+      : await deactivateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
 
     const { data: updatedProduct, error: updateError } = await adminClient
       .from("automations")
@@ -3096,6 +3117,10 @@ Deno.serve(async (req) => {
         setup_schema: productForImport.setup_schema,
         credential_schema: productForImport.credential_schema,
         n8n_workflow_json: productForImport.n8n_workflow_json,
+        n8n_last_test_status: "not_tested",
+        n8n_last_test_error: null,
+        n8n_last_test_result: null,
+        n8n_last_tested_at: null,
         detected_placeholders: validation.detected,
         placeholder_validation_status: "valid",
         placeholder_validation_errors: [],
@@ -3121,7 +3146,9 @@ Deno.serve(async (req) => {
           ],
           auto_added_setup_fields: autoSchema.addedSetupFields,
           auto_added_credential_fields: autoSchema.addedCredentialFields,
-          activation,
+          workflow_state: shouldKeepActiveAfterImport ? "active" : "draft_inactive",
+          activation: shouldKeepActiveAfterImport ? postImportWorkflowState : null,
+          deactivation_after_import: shouldKeepActiveAfterImport ? null : postImportWorkflowState,
         },
       })
       .eq("id", automationId)
@@ -3136,6 +3163,7 @@ Deno.serve(async (req) => {
       ok: true,
       product_id: updatedProduct.id,
       workflow_id: workflowId,
+      workflow_state: shouldKeepActiveAfterImport ? "active" : "draft_inactive",
       webhook_url: normalized.webhookUrl,
       callback_url: normalized.callbackUrl,
       http_nodes: httpDiagnostics,

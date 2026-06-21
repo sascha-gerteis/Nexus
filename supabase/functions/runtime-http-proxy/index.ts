@@ -76,6 +76,7 @@ function authHeaderName(provider: string, fields: Record<string, any>) {
   }
 
   if (provider === "google_gemini") return "x-goog-api-key";
+  if (provider === "anthropic") return "x-api-key";
   if (provider === "serper") return "X-API-KEY";
 
   return "Authorization";

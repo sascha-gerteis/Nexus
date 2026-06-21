@@ -69,6 +69,29 @@ function hasAttachedCheckoutFlow(product: any) {
   );
 }
 
+function checkoutRuntimeReadinessIssue(product: any) {
+  if (cleanString(product?.listing_type) === "custom_request") return "";
+
+  const runtimeType = cleanString(product?.runtime_type).toLowerCase();
+  const hasN8nWorkflow = Boolean(
+    product?.n8n_workflow_json ||
+      cleanString(product?.n8n_workflow_id) ||
+      cleanString(product?.runtime_webhook_url || product?.n8n_webhook_url)
+  );
+
+  if (runtimeType !== "n8n_managed" && !hasN8nWorkflow) return "";
+
+  if (cleanString(product?.n8n_import_status).toLowerCase() !== "imported") {
+    return "This automation is not fully imported yet.";
+  }
+
+  if (!isPassingWorkflowTest(product?.n8n_last_test_status)) {
+    return "This automation needs a fresh technical test before checkout.";
+  }
+
+  return "";
+}
+
 async function pauseInvalidCheckoutProduct(adminClient: any, product: any) {
   const now = nowIso();
 
@@ -813,6 +836,14 @@ Deno.serve(async (req) => {
       await pauseInvalidCheckoutProduct(adminClient, product);
       return errorResponse(
         "This product was paused because it has no workflow attached. Please contact Nexus or choose another automation.",
+        409,
+      );
+    }
+
+    const readinessIssue = checkoutRuntimeReadinessIssue(product);
+    if (readinessIssue) {
+      return errorResponse(
+        `${readinessIssue} Please contact Nexus or choose another automation.`,
         409,
       );
     }

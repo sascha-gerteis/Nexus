@@ -958,6 +958,7 @@ function defaultHeaderNameForProvider(credential: any, slot: any) {
   const provider = slotProvider(slot) || credentialProvider(credential);
 
   if (provider === "google_gemini") return "x-goog-api-key";
+  if (provider === "anthropic") return "x-api-key";
   if (provider === "serper") return "X-API-KEY";
 
   return "Authorization";
@@ -1554,6 +1555,12 @@ export async function bindAutomationCredentials(options: {
     credential_binding_status: status,
     credential_binding_errors: errors,
     n8n_last_credential_bound_at: new Date().toISOString(),
+    n8n_last_test_status: "not_tested",
+    n8n_last_test_error: errors.length
+      ? "Credential binding is incomplete. Add or sync credentials, apply them, then run a fresh technical test."
+      : null,
+    n8n_last_test_result: null,
+    n8n_last_tested_at: null,
   };
 
   if (!errors.length) {

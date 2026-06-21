@@ -307,6 +307,26 @@ async function getExecutionById(executionId: string) {
   return await n8nFetch(`/api/v1/executions/${encodeURIComponent(executionId)}?includeData=true`);
 }
 
+async function activateWorkflow(workflowId: string) {
+  if (!workflowId) return null;
+  return await n8nFetch(`/api/v1/workflows/${encodeURIComponent(workflowId)}/activate`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+async function deactivateWorkflow(workflowId: string) {
+  if (!workflowId) return null;
+  return await n8nFetch(`/api/v1/workflows/${encodeURIComponent(workflowId)}/deactivate`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+function shouldDeactivateAfterTechnicalTest(automation: any) {
+  return !["active", "published"].includes(cleanString(automation?.status).toLowerCase());
+}
+
 async function listRecentExecutions(workflowId: string) {
   const encodedWorkflowId = encodeURIComponent(workflowId);
   const data = await n8nFetch(`/api/v1/executions?workflowId=${encodedWorkflowId}&limit=25`);
@@ -856,25 +876,6 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
     throw new Error("This automation has no runtime webhook URL. Import the workflow first.");
   }
 
-  const credentialStatus = cleanString(automation.credential_binding_status).toLowerCase();
-  const credentialErrors = Array.isArray(automation.credential_binding_errors)
-    ? automation.credential_binding_errors
-    : [];
-
-  if (
-    credentialStatus === "needs_credentials" ||
-    credentialStatus === "needs_attention" ||
-    credentialErrors.length > 0
-  ) {
-    const firstError = credentialErrors
-      .map((error: any) => cleanString(error?.message))
-      .find(Boolean);
-    throw new Error(
-      firstError ||
-        "Add the required developer credentials, then press Apply credentials & run check. Nexus has not started the technical test yet.",
-    );
-  }
-
   if (!forceNew) {
     /*
       If a test is already running, return it instead of starting another.
@@ -922,9 +923,27 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
     throw new Error(error?.message || "Could not create automation test run.");
   }
 
+  const deactivateAfterTest = shouldDeactivateAfterTechnicalTest(automation);
+  let activationResult: unknown = null;
+  let deactivationResult: unknown = null;
+
   try {
+    if (deactivateAfterTest) {
+      activationResult = await activateWorkflow(workflowId);
+    }
+
     const testProfile = await loadDefaultTestProfile(adminClient, automation.id);
     const trigger = await triggerWorkflow(webhookUrl, automation, testRun, testProfile);
+
+    if (deactivateAfterTest) {
+      try {
+        deactivationResult = await deactivateWorkflow(workflowId);
+      } catch (deactivationError) {
+        deactivationResult = {
+          warning: deactivationError instanceof Error ? deactivationError.message : String(deactivationError),
+        };
+      }
+    }
 
     const updated = await updateTestRun(adminClient, testRun.id, {
       webhook_response: {
@@ -932,6 +951,9 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
         used_test_profile: Boolean(testProfile?.id),
         test_profile_id: testProfile?.id || null,
         test_profile_name: testProfile?.name || null,
+        temporary_activation: deactivateAfterTest,
+        activation_result: activationResult,
+        deactivation_result: deactivationResult,
       },
       n8n_execution_id: trigger.execution_id || null,
       last_checked_at: new Date().toISOString(),
@@ -953,6 +975,16 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
+    if (deactivateAfterTest) {
+      try {
+        deactivationResult = await deactivateWorkflow(workflowId);
+      } catch (deactivationError) {
+        deactivationResult = {
+          warning: deactivationError instanceof Error ? deactivationError.message : String(deactivationError),
+        };
+      }
+    }
+
     const failed = await updateTestRun(adminClient, testRun.id, {
       status: "failed",
       finished_at: new Date().toISOString(),
@@ -961,6 +993,9 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
       error_message: message,
       error_details: {
         message,
+        temporary_activation: deactivateAfterTest,
+        activation_result: activationResult,
+        deactivation_result: deactivationResult,
       },
     });
 

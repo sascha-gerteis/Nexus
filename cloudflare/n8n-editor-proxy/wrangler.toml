@@ -1,0 +1,16 @@
+name = "nexus-n8n-editor-proxy"
+main = "src/worker.js"
+compatibility_date = "2026-06-19"
+
+# Recommended production route:
+# routes = [
+#   { pattern = "editor.nexus-ai.software/*", custom_domain = true }
+# ]
+
+[vars]
+# Public/non-secret values. Secrets are configured with wrangler secret put.
+NEXUS_APP_ORIGIN = "https://nexus-ai.software"
+
+# Example after setup:
+# SUPABASE_URL = "https://vzgblkghicyozoxkljga.supabase.co"
+# N8N_BASE_URL = "https://your-private-n8n.example.com"

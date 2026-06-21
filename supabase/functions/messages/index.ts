@@ -33,6 +33,10 @@ async function requireUser(req: Request) {
   });
 
   const token = authHeader.replace("Bearer ", "").trim();
+  if (!token || token === SUPABASE_ANON_KEY) {
+    return { user: null, error: "Login required." };
+  }
+
   const { data, error } = await userClient.auth.getUser(token);
 
   if (error || !data?.user) {

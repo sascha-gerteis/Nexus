@@ -1,5 +1,14 @@
 User-agent: *
 Allow: /
+Disallow: /pages/admin/
+Disallow: /pages/auth/
+Disallow: /pages/buyer/
+Disallow: /pages/checkout/
+Disallow: /pages/developer/
+Disallow: /pages/workflow-editor/
+Disallow: /supabase/
+Disallow: /cloudflare/
+Disallow: /workflow-templates/
 
 Sitemap: https://nexus-ai.software/sitemap.xml
 

@@ -1,6 +1,9 @@
 {
   "name": "Nexus",
   "short_name": "Nexus",
+  "description": "Nexus is a business automation marketplace for workflow products, AI agents, reporting systems, and custom automation requests.",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/assets/favicons/android-chrome-192x192.png",
@@ -15,5 +18,6 @@
   ],
   "theme_color": "#2563ff",
   "background_color": "#ffffff",
-  "display": "standalone"
+  "display": "standalone",
+  "categories": ["business", "productivity", "automation"]
 }

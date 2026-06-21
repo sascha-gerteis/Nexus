@@ -34,7 +34,7 @@
   <a href="/pages/admin/automations.html">Products</a>
   <a class="active" href="/pages/admin/product-form.html">Create Product</a>
   <a href="/pages/admin/credentials.html">Credentials</a>
-  <a href="/pages/admin/make-imports.html">Make Imports</a>
+  <a href="/pages/admin/make-imports.html">Import Assistant</a>
   <a href="/pages/admin/customer-automations.html">Cancellation Requests</a>
   <a href="/pages/admin/messages.html">Inquiries</a>
   <a href="/pages/admin/notifications.html">Notifications</a>
@@ -627,12 +627,12 @@
         <select class="select" id="workflowProvider" onchange="NexusAdminUI.handleWorkflowProviderChange()">
           <option value="n8n">n8n - available now</option>
           <option value="make">Make.com - beta import assistant</option>
-          <option value="zapier" disabled>Zapier - coming soon</option>
+          <option value="zapier">Zapier - beta import assistant</option>
           <option value="pipedream" disabled>Pipedream - coming soon</option>
           <option value="manual">Manual / Nexus fulfilled</option>
         </select>
         <small>
-          n8n is the hosted runtime. Make.com blueprints can be scanned and converted into n8n JSON before import.
+          n8n is the hosted runtime. Make.com and Zapier workflows can be scanned and converted into n8n JSON before import.
         </small>
         <div id="workflowProviderNotice" class="runtime-import-result" style="margin-top:.75rem"></div>
       </div>
@@ -653,19 +653,19 @@
         <div class="make-import-assistant">
           <div class="make-import-head">
             <div>
-              <h3>Make.com import assistant</h3>
-              <p>Scan a Make blueprint, resolve unsupported module groups with HTTP substitutes, then import the generated n8n workflow.</p>
+              <h3 id="adminSourceImportAssistantTitle">Make.com import assistant</h3>
+              <p id="adminSourceImportAssistantCopy">Scan a Make blueprint, resolve unsupported module groups with HTTP substitutes, then import the generated n8n workflow.</p>
             </div>
             <span class="pill blue">Beta</span>
           </div>
 
           <div class="form-grid">
             <div class="full">
-              <label>Upload Make blueprint JSON</label>
+              <label id="adminSourceBlueprintUploadLabel">Upload Make blueprint JSON</label>
               <input class="input" type="file" id="adminMakeBlueprintFile" accept=".json,application/json">
             </div>
             <div class="full">
-              <label>Make blueprint JSON</label>
+              <label id="adminSourceBlueprintJsonLabel">Make blueprint JSON</label>
               <textarea class="textarea code-textarea" id="adminMakeBlueprintJson" rows="7" placeholder="Paste exported Make.com blueprint JSON here..."></textarea>
             </div>
           </div>
@@ -1066,6 +1066,20 @@
       }
     },
 
+    workflowEditorUrl(productId) {
+      const returnPath = `${location.pathname}${location.search}${location.hash}`;
+      return `/pages/workflow-editor/index.html?automation_id=${encodeURIComponent(productId)}&return=${encodeURIComponent(returnPath)}`;
+    },
+
+    openWorkflowEditor(productId = "") {
+      const id = productId || this.getCurrentProductId();
+      if (!id) {
+        this.toast("Import the workflow before opening the editor.");
+        return;
+      }
+      window.open(this.workflowEditorUrl(id), "_blank", "noopener");
+    },
+
     setResult(elementId, html) {
       const element = document.getElementById(elementId);
       if (element) element.innerHTML = html;
@@ -1457,7 +1471,7 @@
       const runtimeTypeElement = document.querySelector("[name='runtime_type']");
       const workflowProvider = String(document.getElementById("workflowProvider")?.value || "n8n");
 
-      if ((workflowProvider === "n8n" || workflowProvider === "make") && runtimeTypeElement) {
+      if ((workflowProvider === "n8n" || workflowProvider === "make" || workflowProvider === "zapier") && runtimeTypeElement) {
         runtimeTypeElement.value = "n8n_managed";
       }
 
@@ -1643,6 +1657,21 @@
         placeholderStatus.value = product.placeholder_validation_status || "not_checked";
       }
 
+      if (product.n8n_import_status === "imported" && product.n8n_workflow_id) {
+        this.setResult("n8nImportResult", `
+          <div class="success">
+            <strong>Workflow imported.</strong><br>
+            Workflow ID: ${this.escapeHtml(product.n8n_workflow_id)}<br>
+            ${product.runtime_webhook_url || product.n8n_webhook_url ? `Webhook URL: ${this.escapeHtml(product.runtime_webhook_url || product.n8n_webhook_url)}` : "Webhook URL saved to product."}
+            <div style="margin-top:.75rem">
+              <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openWorkflowEditor('${this.escapeHtml(product.id || "")}')">
+                Edit workflow
+              </button>
+            </div>
+          </div>
+        `);
+      }
+
       this.scanWorkflowPlaceholders();
     },
 
@@ -1732,11 +1761,19 @@
           : "";
 
         if (result) {
+          const workflowId = data?.workflow_id || data?.n8n_workflow_id || "";
           result.innerHTML = `
             <div class="success">
               <strong>Workflow imported.</strong><br>
-              Workflow ID: ${this.escapeHtml(data?.workflow_id || data?.n8n_workflow_id || "created/updated")}<br>
+              Workflow ID: ${this.escapeHtml(workflowId || "created/updated")}<br>
               Webhook URL: ${this.escapeHtml(data?.webhook_url || data?.runtime_webhook_url || "saved to product")}
+              ${workflowId ? `
+                <div style="margin-top:.75rem">
+                  <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openWorkflowEditor('${this.escapeHtml(savedProduct.id || "")}')">
+                    Edit workflow
+                  </button>
+                </div>
+              ` : ""}
             </div>
             ${warningHtml}
           `;
@@ -1777,14 +1814,24 @@
       }
     },
 
+    currentSourceImportPlatform() {
+      const provider = String(document.getElementById("workflowProvider")?.value || "make").toLowerCase();
+      return provider === "zapier" ? "zapier" : "make";
+    },
+
+    sourceImportLabel(platform = this.currentSourceImportPlatform()) {
+      return platform === "zapier" ? "Zapier workflow" : "Make blueprint";
+    },
+
     readMakeBlueprint() {
+      const label = this.sourceImportLabel();
       const raw = String(document.getElementById("adminMakeBlueprintJson")?.value || "").trim();
-      if (!raw) throw new Error("Paste or upload a Make.com blueprint JSON first.");
+      if (!raw) throw new Error(`Paste or upload a ${label} JSON first.`);
 
       try {
         return JSON.parse(raw);
       } catch {
-        throw new Error("Make blueprint JSON is invalid.");
+        throw new Error(`${label} JSON is invalid.`);
       }
     },
 
@@ -1810,7 +1857,7 @@
         <article class="make-module-card" data-admin-make-module-card="${key}">
           <div class="make-module-card-head">
             <div>
-              <strong>${this.escapeHtml(group.source_module_label || group.source_module || "Unsupported Make module")}</strong>
+              <strong>${this.escapeHtml(group.source_module_label || group.source_module || "Unsupported source step")}</strong>
               <p>${this.escapeHtml(group.source_app || "Make")} ${group.source_action ? `| ${this.escapeHtml(group.source_action)}` : ""} | used ${this.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</p>
             </div>
             <span class="pill orange">HTTP substitute needed</span>
@@ -1853,7 +1900,7 @@
 
       root.innerHTML = `
         <div class="${unresolved.length ? "runtime-import-result" : "success"}">
-          <strong>${data.generated_workflow_json || data.status === "converted" ? "Make blueprint converted." : "Make blueprint scanned."}</strong>
+          <strong>${data.generated_workflow_json || data.status === "converted" ? `${this.sourceImportLabel(data.source_platform || this.currentSourceImportPlatform())} converted.` : `${this.sourceImportLabel(data.source_platform || this.currentSourceImportPlatform())} scanned.`}</strong>
           <p>${this.escapeHtml(data.message || "Review the Make conversion result below.")}</p>
         </div>
         ${this.makeImportSummaryHtml(data)}
@@ -1871,6 +1918,8 @@
 
     async scanMakeBlueprint(button = null) {
       const originalText = button?.textContent || "";
+      const sourcePlatform = this.currentSourceImportPlatform();
+      const sourceLabel = this.sourceImportLabel(sourcePlatform);
       if (button) {
         button.disabled = true;
         button.textContent = "Scanning...";
@@ -1889,33 +1938,34 @@
 
         const { data, error } = await NexusDB.scanMakeImport({
           automation_id: savedProduct.id,
-          blueprint
+          blueprint,
+          source_platform: sourcePlatform
         });
-        if (error) throw new Error(error.message || "Could not scan Make blueprint.");
+        if (error) throw new Error(error.message || `Could not scan ${sourceLabel}.`);
 
         this.renderMakeImportResult(data);
         if (data?.generated_workflow_json) {
           document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
-          this.toast("Make blueprint converted. Next: import/update hosted n8n workflow.");
+          this.toast(`${sourceLabel} converted. Next: import/update hosted n8n workflow.`);
         } else {
-          this.toast(data?.message || "Make blueprint scanned.");
+          this.toast(data?.message || `${sourceLabel} scanned.`);
         }
 
         await this.refreshProductWorkflowFields(savedProduct.id);
       } catch (error) {
-        this.toast(error.message || "Could not scan Make blueprint.");
-        this.renderMakeImportResult({ status: "failed", message: error.message || "Could not scan Make blueprint.", summary: {}, unresolved: [] });
+        this.toast(error.message || `Could not scan ${sourceLabel}.`);
+        this.renderMakeImportResult({ status: "failed", message: error.message || `Could not scan ${sourceLabel}.`, summary: {}, unresolved: [] });
       } finally {
         if (button) {
           button.disabled = false;
-          button.textContent = originalText || "Scan Make blueprint";
+          button.textContent = originalText || `Scan ${sourceLabel}`;
         }
       }
     },
 
     collectMakeSubstitutePayload(sourceModuleKey) {
       const card = document.querySelector(`[data-admin-make-module-card="${CSS.escape(sourceModuleKey)}"]`);
-      if (!card) throw new Error("Make module card was not found.");
+      if (!card) throw new Error("Source step card was not found.");
 
       const field = (name) => card.querySelector(`[data-admin-make-field="${name}"]`)?.value || "";
       const parseJson = (name, fallback) => {
@@ -1931,6 +1981,7 @@
       return {
         session_id: field("session_id"),
         source_module_key: field("source_module_key"),
+        source_platform: this.currentSourceImportPlatform(),
         http_template: {
           method: field("method"),
           url: field("url"),
@@ -1968,7 +2019,8 @@
         const { data, error } = await NexusDB.requestMakeImportSupport({
           session_id: sessionId,
           source_module_key: sourceModuleKey,
-          notes
+          notes,
+          source_platform: this.currentSourceImportPlatform()
         });
         if (error) throw new Error(error.message || "Could not request support.");
         this.toast(data?.message || "Support request created.");
@@ -1987,11 +2039,31 @@
       const workflowTextarea = document.querySelector("[name='n8n_workflow_json']");
       const makeSections = document.querySelectorAll(".workflow-source-make");
       const n8nSections = document.querySelectorAll(".workflow-source-n8n");
+      const sourcePlatform = provider === "zapier" ? "zapier" : "make";
+      const sourceLabel = sourcePlatform === "zapier" ? "Zapier workflow" : "Make blueprint";
+      const sourceTitle = sourcePlatform === "zapier" ? "Zapier import assistant" : "Make.com import assistant";
+      const sourceCopy = sourcePlatform === "zapier"
+        ? "Scan a Zapier-style workflow JSON, resolve unsupported app/action groups with HTTP substitutes, then import the generated n8n workflow."
+        : "Scan a Make blueprint, resolve unsupported module groups with HTTP substitutes, then import the generated n8n workflow.";
+      const sourceTitleNode = document.getElementById("adminSourceImportAssistantTitle");
+      const sourceCopyNode = document.getElementById("adminSourceImportAssistantCopy");
+      const sourceUploadLabel = document.getElementById("adminSourceBlueprintUploadLabel");
+      const sourceJsonLabel = document.getElementById("adminSourceBlueprintJsonLabel");
+      const sourceJson = document.getElementById("adminMakeBlueprintJson");
+      const sourceScanButton = document.getElementById("adminScanMakeBlueprintButton");
 
-      const showMake = provider === "make";
+      const showMake = provider === "make" || provider === "zapier";
       const showN8n = provider === "n8n";
       makeSections.forEach((section) => section.classList.toggle("hidden", !showMake));
       n8nSections.forEach((section) => section.classList.toggle("hidden", !showN8n));
+      if (sourceTitleNode) sourceTitleNode.textContent = sourceTitle;
+      if (sourceCopyNode) sourceCopyNode.textContent = sourceCopy;
+      if (sourceUploadLabel) sourceUploadLabel.textContent = `Upload ${sourceLabel} JSON`;
+      if (sourceJsonLabel) sourceJsonLabel.textContent = `${sourceLabel} JSON`;
+      if (sourceJson) sourceJson.placeholder = provider === "zapier"
+        ? "Paste Zapier workflow JSON with trigger and steps here..."
+        : "Paste exported Make.com blueprint JSON here...";
+      if (sourceScanButton) sourceScanButton.textContent = `Scan ${sourceLabel}`;
 
       if (provider === "n8n") {
         if (runtimeType) runtimeType.value = "n8n_managed";
@@ -2009,12 +2081,12 @@
         return;
       }
 
-      if (provider === "make") {
+      if (provider === "make" || provider === "zapier") {
         if (runtimeType) runtimeType.value = "n8n_managed";
         if (notice) {
           notice.innerHTML = `
             <div class="runtime-import-result">
-              <strong>Make assistant enabled.</strong> Scan a Make blueprint below. Nexus will generate n8n JSON only after every Make module group is resolved.
+              <strong>${this.escapeHtml(provider === "zapier" ? "Zapier assistant enabled." : "Make assistant enabled.")}</strong> Scan a ${this.escapeHtml(sourceLabel)} below. Nexus will generate n8n JSON only after every source step group is resolved.
             </div>
           `;
         }
@@ -2061,7 +2133,9 @@
 
       if (!workflowProvider) return;
 
-      if (this.currentSavedProduct?.workflow_source_platform === "make" || this.currentSavedProduct?.make_blueprint) {
+      if (this.currentSavedProduct?.workflow_source_platform === "zapier") {
+        workflowProvider.value = "zapier";
+      } else if (this.currentSavedProduct?.workflow_source_platform === "make" || this.currentSavedProduct?.make_blueprint) {
         workflowProvider.value = "make";
       } else if (runtimeType === "n8n_managed") {
         workflowProvider.value = "n8n";
@@ -2614,7 +2688,7 @@
         if (!provider) return;
         if (runtimeType.value !== "n8n_managed") {
           provider.value = "manual";
-        } else if (provider.value !== "make") {
+        } else if (!["make", "zapier"].includes(provider.value)) {
           provider.value = "n8n";
         }
         NexusAdminUI.handleWorkflowProviderChange();
@@ -2631,12 +2705,10 @@
 
         try {
           makeTextarea.value = JSON.stringify(JSON.parse(await file.text()), null, 2);
-          const provider = document.getElementById("workflowProvider");
-          if (provider) provider.value = "make";
           NexusAdminUI.handleWorkflowProviderChange();
-          NexusUI.toast("Make blueprint loaded. Scan it next.");
+          NexusUI.toast(`${NexusAdminUI.sourceImportLabel()} loaded. Scan it next.`);
         } catch (error) {
-          NexusUI.toast("Invalid JSON file. Please export the Make blueprint again.");
+          NexusUI.toast(`Invalid JSON file. Please export or prepare the ${NexusAdminUI.sourceImportLabel()} again.`);
           makeUpload.value = "";
         }
       });

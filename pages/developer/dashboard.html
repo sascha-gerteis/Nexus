@@ -267,6 +267,7 @@
                   <select class="select" name="workflow_provider">
                     <option value="n8n">n8n - available now</option>
                     <option value="make">Make.com - beta import assistant</option>
+                    <option value="zapier">Zapier - beta import assistant</option>
                     <option value="manual">Manual / Nexus fulfilled</option>
                   </select>
                 </div>
@@ -281,19 +282,19 @@
                   <div class="make-import-assistant">
                     <div class="make-import-head">
                       <div>
-                        <h3>Make.com import assistant</h3>
-                        <p>Upload a Make blueprint. Nexus converts safe modules, groups unsupported modules, and asks for one HTTP substitute per missing module type.</p>
+                        <h3 id="sourceImportAssistantTitle">Make.com import assistant</h3>
+                        <p id="sourceImportAssistantCopy">Upload a Make blueprint. Nexus converts safe modules, groups unsupported modules, and asks for one HTTP substitute per missing module type.</p>
                       </div>
                       <span class="pill blue">Beta</span>
                     </div>
 
                     <div class="developer-field-grid">
                       <div class="full">
-                        <label>Upload Make blueprint JSON</label>
+                        <label id="sourceBlueprintUploadLabel">Upload Make blueprint JSON</label>
                         <input class="input" id="makeBlueprintUpload" type="file" accept=".json,application/json">
                       </div>
                       <div class="full">
-                        <label>Make blueprint JSON</label>
+                        <label id="sourceBlueprintJsonLabel">Make blueprint JSON</label>
                         <textarea class="textarea code-textarea" id="makeBlueprintJson" rows="7" placeholder="Paste exported Make.com blueprint JSON here..."></textarea>
                       </div>
                     </div>
@@ -303,7 +304,7 @@
                     </div>
 
                     <div id="makeImportResult" class="runtime-import-result">
-                      Make imports are optional. Scan a blueprint to convert it into n8n JSON before using Save, import & test.
+                      Source imports are optional. Scan a Make or Zapier JSON file to convert it into n8n JSON before using Save, import & test.
                     </div>
                   </div>
                 </div>
@@ -1015,21 +1016,42 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (!form) return;
 
       const provider = String(form.elements.workflow_provider?.value || "n8n");
+      const sourceProvider = provider === "zapier" ? "zapier" : "make";
+      const sourceLabel = sourceProvider === "zapier" ? "Zapier" : "Make.com";
+      const sourceName = sourceProvider === "zapier" ? "Zapier workflow" : "Make blueprint";
       const makeSections = document.querySelectorAll(".developer-workflow-source-make");
       const n8nSections = document.querySelectorAll(".developer-workflow-source-n8n");
       const makeUpload = document.getElementById("makeBlueprintUpload");
       const workflowUpload = document.getElementById("workflowUpload");
       const workflowJson = form.elements.n8n_workflow_json;
+      const assistantTitle = document.getElementById("sourceImportAssistantTitle");
+      const assistantCopy = document.getElementById("sourceImportAssistantCopy");
+      const uploadLabel = document.getElementById("sourceBlueprintUploadLabel");
+      const jsonLabel = document.getElementById("sourceBlueprintJsonLabel");
+      const jsonField = document.getElementById("makeBlueprintJson");
+      const scanButton = document.getElementById("scanMakeBlueprintButton");
 
-      makeSections.forEach((section) => section.classList.toggle("hidden", provider !== "make"));
+      makeSections.forEach((section) => section.classList.toggle("hidden", !["make", "zapier"].includes(provider)));
       n8nSections.forEach((section) => section.classList.toggle("hidden", provider !== "n8n"));
 
       if (form.elements.runtime_type) {
         form.elements.runtime_type.value = provider === "manual" ? "manual" : "n8n_managed";
       }
-      if (makeUpload) makeUpload.disabled = provider !== "make";
+      if (makeUpload) makeUpload.disabled = !["make", "zapier"].includes(provider);
       if (workflowUpload) workflowUpload.disabled = provider !== "n8n";
       if (workflowJson) workflowJson.disabled = provider === "manual";
+      if (assistantTitle) assistantTitle.textContent = `${sourceLabel} import assistant`;
+      if (assistantCopy) {
+        assistantCopy.textContent = sourceProvider === "zapier"
+          ? "Upload a Zapier-style workflow JSON. Nexus converts core steps, groups unsupported app actions, and asks for one HTTP substitute per missing step type."
+          : "Upload a Make blueprint. Nexus converts safe modules, groups unsupported modules, and asks for one HTTP substitute per missing module type.";
+      }
+      if (uploadLabel) uploadLabel.textContent = `Upload ${sourceName} JSON`;
+      if (jsonLabel) jsonLabel.textContent = `${sourceName} JSON`;
+      if (jsonField) jsonField.placeholder = sourceProvider === "zapier"
+        ? "Paste Zapier workflow JSON with trigger and steps here..."
+        : "Paste exported Make.com blueprint JSON here...";
+      if (scanButton) scanButton.textContent = `Scan ${sourceProvider === "zapier" ? "Zapier workflow" : "Make blueprint"}`;
     }
 
     function selectedProduct() {
@@ -1335,7 +1357,6 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     }
 
     function workflowRuntimeState(product) {
-      const errors = safeArray(product.credential_binding_errors);
       const testStatus = String(product.n8n_last_test_status || "not tested").toLowerCase();
       const importStatus = String(product.n8n_import_status || "").toLowerCase();
       const passed = isPassingTestStatus(testStatus);
@@ -1356,15 +1377,6 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           className: "workflow-status danger",
           detail: "Import this workflow into hosted n8n before review.",
           sort: 1
-        };
-      }
-
-      if (errors.length) {
-        return {
-          label: "Credentials missing",
-          className: "workflow-status danger",
-          detail: errors[0]?.message || "One or more credentials are missing.",
-          sort: 2
         };
       }
 
@@ -1389,7 +1401,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return {
         label: "Ready",
         className: "workflow-status success",
-        detail: "Credentials are bound and the latest run passed.",
+        detail: "Nexus credential lock is active and the latest full run passed.",
         sort: 9
       };
     }
@@ -1725,7 +1737,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const passed = isPassingTestStatus(testStatus);
       const running = String(testStatus || "").toLowerCase() === "running";
       const requirements = credentialRequirementNames(slots);
-      const firstError = errors[0]?.message || testResult.error_message || testResult.message || product.n8n_last_test_error || "";
+      const firstError = testResult.error_message || testResult.message || product.n8n_last_test_error || "";
 
       if (!slots.length) {
         return {
@@ -1736,31 +1748,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         };
       }
 
-      if (errors.length) {
-        const nextCredential = requirements.join(", ") || "developer credential";
-        return {
-          className: "credential-gate danger",
-          label: "Next: add credentials",
-          detail: firstError || `Add the missing ${nextCredential} credential, then press Apply credentials & run check. Nexus will not run this product while credentials are missing.`,
-          meta: [`Credentials needed: ${requirements.join(", ")}`, "Run gate: waiting for credentials"]
-        };
-      }
-
-      if (!bindings.length) {
-        return {
-          className: "credential-gate danger",
-          label: "Next: apply credentials",
-          detail: "Credentials were detected but have not been applied to the hosted n8n workflow yet. Press Apply credentials & run check.",
-          meta: [`Credentials detected: ${requirements.join(", ")}`, "Run gate: waiting for apply"]
-        };
-      }
-
       if (passed) {
         return {
           className: "credential-gate success",
           label: "Run passed",
-          detail: "Credentials are bound, the hosted n8n workflow was updated, and the latest technical check passed.",
-          meta: [`Credentials bound: ${requirements.join(", ")}`, "Live gate: ready"]
+          detail: "Nexus credential lock is active and the latest full workflow check passed.",
+          meta: [`Credentials detected: ${requirements.join(", ")}`, "Live gate: ready"]
         };
       }
 
@@ -1769,15 +1762,15 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           className: "credential-gate warning",
           label: "Run in progress",
           detail: "Nexus started the workflow check and is waiting for the n8n execution result.",
-          meta: [`Credentials bound: ${requirements.join(", ")}`, "Live gate: waiting"]
+          meta: [`Credentials detected: ${requirements.join(", ")}`, "Live gate: waiting"]
         };
       }
 
       return {
         className: "credential-gate danger",
         label: "Run incomplete",
-        detail: firstError || "Credentials are bound, but this product has not passed a full workflow check yet.",
-        meta: [`Credentials bound: ${requirements.join(", ")}`, "Live gate: blocked"]
+        detail: firstError || "Run a full technical check. If a credential is wrong, n8n will return the exact failing node.",
+        meta: [`Credentials detected: ${requirements.join(", ")}`, "Live gate: blocked until run passes"]
       };
     }
 
@@ -2060,6 +2053,20 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return parseJson(formData.get(name), fallback);
     }
 
+    function workflowEditorUrl(automationId) {
+      const returnPath = `${location.pathname}${location.search}${location.hash}`;
+      return `/pages/workflow-editor/index.html?automation_id=${encodeURIComponent(automationId)}&return=${encodeURIComponent(returnPath)}`;
+    }
+
+    function openEmbeddedWorkflowEditor(automationId = "") {
+      const id = automationId || state.selectedProductId || "";
+      if (!id) {
+        NexusUI.toast("Select an imported product first.");
+        return;
+      }
+      window.open(workflowEditorUrl(id), "_blank", "noopener");
+    }
+
     function updateDeveloperImportResult(product = null, message = "") {
       const root = document.getElementById("developerN8nImportResult");
       if (!root) return;
@@ -2076,19 +2083,24 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       const imported = product.n8n_import_status === "imported";
       const tested = isPassingTestStatus(product.n8n_last_test_status);
-      const credentialStatus = String(product.credential_binding_status || "").toLowerCase();
-      const waitingForCredentials = imported && ["needs_credentials", "needs_attention"].includes(credentialStatus);
       const importClass = imported ? "success" : "error";
-      const testClass = tested ? "success" : waitingForCredentials ? "runtime-import-result" : "error";
-      const testStatus = waitingForCredentials
-        ? "Waiting for developer credentials"
-        : product.n8n_last_test_status || "Not tested";
-      const testDetail = waitingForCredentials
-        ? "Next: add the required developer credentials, then press Apply credentials & run check."
-        : product.n8n_last_test_error || "";
+      const testClass = tested ? "success" : "error";
+      const testStatus = product.n8n_last_test_status || "Not tested";
+      const testDetail = product.n8n_last_test_error || (!tested && imported
+        ? "Run a full technical test. Nexus validates credentials through the real n8n execution."
+        : "");
       const messageClass = /fail|error|could not|did not pass|invalid|missing|not found|blocked/i.test(message)
         ? "error"
         : "success";
+      const editorButton = imported && product.n8n_workflow_id
+        ? `
+          <div class="credential-action-row" style="margin-top:.7rem">
+            <button class="btn btn-secondary btn-small" type="button" onclick="openEmbeddedWorkflowEditor('${NexusUI.escapeAttribute(product.id || "")}')">
+              Edit workflow
+            </button>
+          </div>
+        `
+        : "";
 
       root.innerHTML = `
         ${message ? `<div class="${messageClass}">${NexusUI.escapeHtml(message)}</div>` : ""}
@@ -2102,6 +2114,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           ${NexusUI.escapeHtml(testStatus)}
           ${testDetail ? `<br><small>${NexusUI.escapeHtml(testDetail)}</small>` : ""}
         </div>
+        ${editorButton}
       `;
     }
 
@@ -2222,7 +2235,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         const selectedId = String(product.id || "");
         const { data, error } = await NexusDB.getMakeImportSession({
           automation_id: product.id,
-          session_id: product.make_import_session_id
+          session_id: product.make_import_session_id,
+          source_platform: product.workflow_source_platform || "make"
         });
         if (error || String(state.selectedProductId || "") !== selectedId) return;
 
@@ -2264,6 +2278,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
                     ? `<button class="btn btn-secondary btn-small" type="button" data-test-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id && product.n8n_workflow_json ? "" : "disabled"}>Test</button>`
                     : ""
                 }
+                ${
+                  product.n8n_import_status === "imported" && product.n8n_workflow_id
+                    ? `<button class="btn btn-secondary btn-small" type="button" data-edit-workflow="${NexusUI.escapeAttribute(product.id || "")}">Edit workflow</button>`
+                    : ""
+                }
                 <button class="btn btn-danger btn-small" type="button" data-remove-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id ? "" : "disabled"}>Remove</button>
               </div>
             </article>
@@ -2298,6 +2317,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       root.querySelectorAll("[data-test-product]").forEach((button) => {
         button.addEventListener("click", () => importAndTestProduct(button.dataset.testProduct, button));
+      });
+
+      root.querySelectorAll("[data-edit-workflow]").forEach((button) => {
+        button.addEventListener("click", () => openEmbeddedWorkflowEditor(button.dataset.editWorkflow));
       });
     }
 
@@ -2796,26 +2819,6 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (importError) throw new Error(importError.message || "Workflow import failed.");
         importData = data || null;
 
-        const latestCredentialStatus = String(
-          importData?.credential_binding_status ||
-          product.credential_binding_status ||
-          ""
-        ).toLowerCase();
-
-        if (latestCredentialStatus === "needs_credentials" || latestCredentialStatus === "needs_attention") {
-          const message = "Workflow imported. Add the required developer credentials, then press Apply credentials & run check.";
-          NexusUI.toast(message);
-          updateDeveloperImportResult(product, message);
-          const credentialSection = document.getElementById("developerProductCredentialsSection");
-          if (credentialSection) credentialSection.open = true;
-          setSelectedProductId(product.id);
-          setTimeout(() => {
-            credentialSection?.scrollIntoView({ behavior: "smooth", block: "start" });
-            scanCurrentProductCredentials();
-          }, 150);
-          return;
-        }
-
         if (button) button.textContent = "Testing...";
         updateDeveloperImportResult(product, "Workflow imported. Starting technical test...");
 
@@ -2863,14 +2866,24 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
     }
 
+    function currentSourceImportPlatform() {
+      const provider = String(document.querySelector("[name='workflow_provider']")?.value || "make").toLowerCase();
+      return provider === "zapier" ? "zapier" : "make";
+    }
+
+    function sourceImportLabel(platform = currentSourceImportPlatform()) {
+      return platform === "zapier" ? "Zapier workflow" : "Make blueprint";
+    }
+
     function readMakeBlueprint() {
+      const label = sourceImportLabel();
       const raw = String(document.getElementById("makeBlueprintJson")?.value || "").trim();
-      if (!raw) throw new Error("Paste or upload a Make.com blueprint JSON first.");
+      if (!raw) throw new Error(`Paste or upload a ${label} JSON first.`);
 
       try {
         return JSON.parse(raw);
       } catch {
-        throw new Error("Make blueprint JSON is invalid.");
+        throw new Error(`${label} JSON is invalid.`);
       }
     }
 
@@ -2894,7 +2907,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (!root) return;
 
       if (!data) {
-        root.innerHTML = "Make imports are optional. Scan a blueprint to convert it into n8n JSON before using Save, import & test.";
+        root.innerHTML = "Source imports are optional. Scan a Make or Zapier JSON file to convert it into n8n JSON before using Save, import & test.";
         return;
       }
 
@@ -2909,7 +2922,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       root.innerHTML = `
         <div class="${unresolved.length ? "runtime-import-result" : "success"}">
-          <strong>${converted ? "Make blueprint converted." : "Make blueprint scanned."}</strong>
+          <strong>${converted ? `${sourceImportLabel(data.source_platform || currentSourceImportPlatform())} converted.` : `${sourceImportLabel(data.source_platform || currentSourceImportPlatform())} scanned.`}</strong>
           <p>${NexusUI.escapeHtml(data.message || (unresolved.length ? "Add HTTP substitutes for the missing module groups." : "Generated n8n JSON is ready below."))}</p>
         </div>
 
@@ -2982,7 +2995,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         <article class="make-module-card" data-make-module-card="${key}">
           <div class="make-module-card-head">
             <div>
-              <strong>${NexusUI.escapeHtml(group.source_module_label || group.source_module || "Unsupported Make module")}</strong>
+              <strong>${NexusUI.escapeHtml(group.source_module_label || group.source_module || "Unsupported source step")}</strong>
               <p>${NexusUI.escapeHtml(group.source_app || "Make")} ${group.source_action ? `| ${NexusUI.escapeHtml(group.source_action)}` : ""} | used ${NexusUI.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</p>
             </div>
             <span class="pill orange">${isEdit ? "HTTP substitute needs test" : "HTTP substitute needed"}</span>
@@ -3032,7 +3045,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
               </div>
               <div class="full">
                 <label>Notes</label>
-                <textarea class="textarea" data-make-field="notes" rows="2" placeholder="What this Make module does and what the HTTP call replaces.">${NexusUI.escapeHtml(template.notes || group.dev_notes || "")}</textarea>
+                <textarea class="textarea" data-make-field="notes" rows="2" placeholder="What this source step does and what the HTTP call replaces.">${NexusUI.escapeHtml(template.notes || group.dev_notes || "")}</textarea>
               </div>
             </div>
             <div class="credential-action-row">
@@ -3046,7 +3059,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
     function collectMakeSubstitutePayload(sourceModuleKey) {
       const card = document.querySelector(`[data-make-module-card="${CSS.escape(sourceModuleKey)}"]`);
-      if (!card) throw new Error("Make module card was not found.");
+      if (!card) throw new Error("Source step card was not found.");
 
       const field = (name) => card.querySelector(`[data-make-field="${name}"]`)?.value || "";
       const parseJson = (name, fallback) => {
@@ -3068,6 +3081,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return {
         session_id: field("session_id"),
         source_module_key: field("source_module_key"),
+        source_platform: currentSourceImportPlatform(),
         http_template: {
           method,
           url: field("url"),
@@ -3083,6 +3097,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
     async function scanMakeBlueprint(button = null) {
       const originalText = button?.textContent || "";
+      const sourcePlatform = currentSourceImportPlatform();
+      const sourceLabel = sourceImportLabel(sourcePlatform);
       if (button) {
         button.disabled = true;
         button.textContent = "Scanning...";
@@ -3091,13 +3107,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       try {
         const blueprint = readMakeBlueprint();
         const savedProduct = await saveProductDraft({ silent: true });
-        if (!savedProduct?.id) throw new Error("Save the product before scanning a Make blueprint.");
+        if (!savedProduct?.id) throw new Error(`Save the product before scanning a ${sourceLabel}.`);
 
         const { data, error } = await NexusDB.scanMakeImport({
           automation_id: savedProduct.id,
-          blueprint
+          blueprint,
+          source_platform: sourcePlatform
         });
-        if (error) throw new Error(error.message || "Could not scan Make blueprint.");
+        if (error) throw new Error(error.message || `Could not scan ${sourceLabel}.`);
 
         state.makeImport = data;
         renderMakeImportResult(data);
@@ -3105,24 +3122,24 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
         if (data?.generated_workflow_json) {
           document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
-          NexusUI.toast("Make blueprint converted. Next: Save, import & test.");
+          NexusUI.toast(`${sourceLabel} converted. Next: Save, import & test.`);
         } else {
-          NexusUI.toast(data?.message || "Make blueprint scanned.");
+          NexusUI.toast(data?.message || `${sourceLabel} scanned.`);
         }
 
         await loadProducts();
       } catch (error) {
-        NexusUI.toast(error.message || "Could not scan Make blueprint.");
+        NexusUI.toast(error.message || `Could not scan ${sourceLabel}.`);
         renderMakeImportResult({
           status: "failed",
-          message: error.message || "Could not scan Make blueprint.",
+          message: error.message || `Could not scan ${sourceLabel}.`,
           summary: {},
           unresolved: []
         });
       } finally {
         if (button) {
           button.disabled = false;
-          button.textContent = originalText || "Scan Make blueprint";
+          button.textContent = originalText || `Scan ${sourceLabel}`;
         }
       }
     }
@@ -3155,7 +3172,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         const { data, error } = await NexusDB.requestMakeImportSupport({
           session_id: sessionId,
           source_module_key: sourceModuleKey,
-          notes
+          notes,
+          source_platform: currentSourceImportPlatform()
         });
         if (error) throw new Error(error.message || "Could not request Nexus support.");
         NexusUI.toast(data?.message || "Nexus support requested.");
@@ -3167,7 +3185,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     async function validateSuccessfulMakeMappings(automationId) {
       if (!automationId || typeof NexusDB.validateMakeImportMappings !== "function") return;
       try {
-        const { data, error } = await NexusDB.validateMakeImportMappings(automationId);
+        const { data, error } = await NexusDB.validateMakeImportMappings(automationId, currentSourceImportPlatform());
         if (!error && Number(data?.promoted_count || 0) > 0) {
           NexusUI.toast(data.message || "Make HTTP substitutes validated for reuse.");
         }
@@ -3550,11 +3568,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (!file) return;
         try {
           document.getElementById("makeBlueprintJson").value = JSON.stringify(JSON.parse(await file.text()), null, 2);
-          document.querySelector("[name='workflow_provider']").value = "make";
           updateDeveloperWorkflowProviderUI();
-          NexusUI.toast("Make blueprint loaded. Scan it next.");
+          NexusUI.toast(`${sourceImportLabel(currentSourceImportPlatform())} loaded. Scan it next.`);
         } catch (error) {
-          NexusUI.toast("That Make blueprint file is not valid JSON.");
+          NexusUI.toast(`That ${sourceImportLabel(currentSourceImportPlatform())} file is not valid JSON.`);
         }
       });
 

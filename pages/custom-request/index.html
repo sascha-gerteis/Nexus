@@ -7,15 +7,44 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/nexus.css?v=20260608-devfix">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/assets/js/config.js"></script>
-  <title>Custom Automation Request | Nexus</title>
+  <title>Custom Automation Request | Nexus Workflow and AI Agent Builds</title>
+  <meta name="description" content="Request a custom automation, workflow, AI agent, reporting system, internal tool, or micro-SaaS solution built around your business process.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nexus-ai.software/pages/custom-request/index.html">
+  <link rel="alternate" type="text/markdown" href="/llms.txt">
+  <meta property="og:title" content="Request a Custom Automation | Nexus">
+  <meta property="og:description" content="Tell Nexus what process you want automated and share the tools, timeline, budget, and output you need.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nexus-ai.software/pages/custom-request/index.html">
+  <meta property="og:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Request a Custom Automation | Nexus">
+  <meta name="twitter:description" content="Request a custom workflow, AI agent, reporting system, or internal automation built around your process.">
+  <meta name="twitter:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#2563ff">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    "name": "Custom automation request",
+    "url": "https://nexus-ai.software/pages/custom-request/index.html",
+    "provider": {
+      "@type": "Organization",
+      "name": "Nexus",
+      "url": "https://nexus-ai.software/"
+    },
+    "serviceType": "Custom workflow automation, AI agent, reporting system, and internal tool request intake",
+    "areaServed": "Global",
+    "description": "Nexus reviews custom automation requests for business processes, tools, timelines, budgets, desired outputs, and setup paths."
+  }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="/assets/js/config.js"></script>
 </head>
 <body data-page="custom-request">
   <header class="site-header" id="globalNav" data-active="marketplace"></header>
@@ -60,8 +89,8 @@
   </main>
 
   <div class="toast" id="toast"></div>
-  <script src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
-  <script src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
+  <script defer src="/assets/js/nexus-ui.js?v=20260607-demo"></script>
+  <script defer src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
   <script>
     document.addEventListener("DOMContentLoaded", async function () {
       const params = new URLSearchParams(location.search);

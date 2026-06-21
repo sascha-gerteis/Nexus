@@ -10,16 +10,114 @@
 
   <link rel="stylesheet" href="/assets/css/nexus.css?v=20260615-guidedinstall">
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/assets/js/config.js"></script>
-
-  <title>Nexus | Business Automation Marketplace</title>
+  <title>Nexus | Business Automation Marketplace for Workflows and AI Agents</title>
+  <meta name="description" content="Nexus helps businesses solve operational bottlenecks with ready-made workflow automations, AI agents, reporting systems, guided setup, and custom automation requests.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nexus-ai.software/">
+  <link rel="alternate" type="text/markdown" href="/llms.txt">
+  <meta property="og:title" content="Nexus | Business Automation Marketplace">
+  <meta property="og:description" content="Find ready-made automations, AI agents, workflow products, reports, and custom automation support for real business processes.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nexus-ai.software/">
+  <meta property="og:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Nexus | Business Automation Marketplace">
+  <meta name="twitter:description" content="Solve business bottlenecks with ready-made automation products, AI agents, reporting systems, and custom workflow requests.">
+  <meta name="twitter:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#2563ff">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://nexus-ai.software/#organization",
+        "name": "Nexus",
+        "url": "https://nexus-ai.software/",
+        "logo": "https://nexus-ai.software/assets/favicons/android-chrome-512x512.png",
+        "description": "Nexus is a business automation marketplace for ready-made workflow automations, AI agents, reporting systems, custom automation requests, and micro-SaaS tools.",
+        "knowsAbout": [
+          "business automation",
+          "workflow automation",
+          "AI agents",
+          "reporting automation",
+          "sales operations automation",
+          "customer support automation",
+          "custom automation"
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://nexus-ai.software/#website",
+        "url": "https://nexus-ai.software/",
+        "name": "Nexus",
+        "publisher": {
+          "@id": "https://nexus-ai.software/#organization"
+        },
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://nexus-ai.software/pages/marketplace/index.html?search={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://nexus-ai.software/#webpage",
+        "url": "https://nexus-ai.software/",
+        "name": "Nexus business automation marketplace",
+        "isPartOf": {
+          "@id": "https://nexus-ai.software/#website"
+        },
+        "about": [
+          "business automation marketplace",
+          "workflow automation products",
+          "AI agents for business",
+          "custom automation requests"
+        ],
+        "description": "Nexus helps businesses replace manual work with ready-made automation products, guided setup, and custom workflow requests."
+      }
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is Nexus?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Nexus is a marketplace for business automation products, workflow automations, AI agents, reporting systems, and custom automation requests."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What can businesses buy on Nexus?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Businesses can browse ready-made automations, preview expected outputs, choose setup support, request custom workflows, and manage purchased automations in a dashboard."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Who should use Nexus?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Nexus is for teams that want to reduce manual reporting, sales, support, operations, data, or internal workflow tasks without starting from scratch."
+        }
+      }
+    ]
+  }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="/assets/js/config.js"></script>
 </head>
 
 <body data-page="home">
@@ -439,9 +537,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260615-guidedinstall"></script>
-<script src="/assets/js/nexus-db.js?v=20260608-walletpopupfix"></script>
-<script src="/assets/js/nexus-buyer-nav.js"></script>
-<script src="/assets/js/nexus-app.js?v=20260615-guidedinstall"></script>
+  <script defer src="/assets/js/nexus-ui.js?v=20260615-guidedinstall"></script>
+<script defer src="/assets/js/nexus-db.js?v=20260608-walletpopupfix"></script>
+<script defer src="/assets/js/nexus-buyer-nav.js"></script>
+<script defer src="/assets/js/nexus-app.js?v=20260615-guidedinstall"></script>
 </body>
 </html>

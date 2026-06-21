@@ -20,6 +20,10 @@ function cleanString(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function lower(value: unknown) {
+  return cleanString(value).toLowerCase();
+}
+
 function cleanBaseUrl(value: string) {
   return cleanString(value).replace(/\/+$/, "");
 }
@@ -39,6 +43,40 @@ function jsonObject(value: unknown) {
   } catch {
     return {};
   }
+}
+
+async function fetchLiveN8nWorkflow(workflowId: string) {
+  const baseUrl = cleanBaseUrl(env("N8N_BASE_URL"));
+  const apiKey = cleanString(env("N8N_API_KEY"));
+  const id = cleanString(workflowId);
+
+  if (!baseUrl || !apiKey || !id) return null;
+
+  const response = await fetch(`${baseUrl}/api/v1/workflows/${encodeURIComponent(id)}`, {
+    headers: {
+      Accept: "application/json",
+      "X-N8N-API-KEY": apiKey,
+    },
+  });
+
+  const text = await response.text();
+  let data: any = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    console.warn(
+      "Could not fetch live n8n workflow for credential scan:",
+      data?.message || data?.error || text || response.status,
+    );
+    return null;
+  }
+
+  return data?.data && typeof data.data === "object" ? data.data : data;
 }
 
 function isSchemaMissingError(error: unknown) {
@@ -70,6 +108,92 @@ function isGenericHttpCredentialType(value: unknown) {
     "httpQueryAuth",
     "httpCustomAuth",
   ].some((type) => type.toLowerCase() === cleanString(value).toLowerCase());
+}
+
+function slotKey(slot: any) {
+  const nodeName = cleanString(slot?.node_name);
+  const credentialKey = cleanString(slot?.credential_key || slot?.n8n_credential_type);
+  return `${nodeName}:${credentialKey}`;
+}
+
+function bindingMatchesSlot(binding: any, slot: any) {
+  if (!binding || !slot) return false;
+
+  const sameNode = cleanString(binding.node_name) === cleanString(slot.node_name);
+  const bindingKey = cleanString(binding.credential_key || binding.n8n_credential_type);
+  const slotCredentialKey = cleanString(slot.credential_key || slot.n8n_credential_type);
+  const sameKey = Boolean(bindingKey && slotCredentialKey && bindingKey === slotCredentialKey);
+  const sameN8nCredential = Boolean(
+    cleanString(binding.n8n_credential_id) &&
+    cleanString(slot.current_id) &&
+    cleanString(binding.n8n_credential_id) === cleanString(slot.current_id),
+  );
+
+  return sameNode && (sameKey || sameN8nCredential);
+}
+
+function providerMatchesCredential(credential: any, slot: any) {
+  const credentialProvider = lower(credential?.provider || credential?.provider_label);
+  const slotProvider = lower(slot?.provider || slot?.provider_label);
+  if (!credentialProvider || !slotProvider) return true;
+  if (credentialProvider === slotProvider) return true;
+  return Boolean(providerPreset(credentialProvider)?.provider === providerPreset(slotProvider)?.provider);
+}
+
+function credentialMatchesSlotReference(credential: any, slot: any) {
+  const slotId = cleanString(slot?.current_id);
+  const slotName = cleanString(slot?.current_name);
+  const credentialId = cleanString(credential?.n8n_credential_id);
+  const credentialName = cleanString(credential?.n8n_credential_name);
+  const credentialLabel = cleanString(credential?.label);
+  const typeMatches = !slot?.n8n_credential_type ||
+    !credential?.n8n_credential_type ||
+    cleanString(slot.n8n_credential_type) === cleanString(credential.n8n_credential_type);
+
+  if (!typeMatches || !providerMatchesCredential(credential, slot)) return false;
+  if (slotId && credentialId && slotId === credentialId) return true;
+  if (slotName && (slotName === credentialName || slotName === credentialLabel)) return true;
+  return false;
+}
+
+async function loadCredentialCandidatesForProduct(adminClient: any, product: any) {
+  const { data, error } = await adminClient
+    .from("developer_credentials")
+    .select("id, label, provider, provider_label, developer_id, owner_role, n8n_credential_id, n8n_credential_name, n8n_credential_type, status")
+    .in("status", ["active", "needs_attention"])
+    .limit(250);
+
+  if (error) {
+    console.warn("Could not load credential candidates for scan:", error.message);
+    return [];
+  }
+
+  const productDeveloperId = cleanString(product?.developer_id);
+
+  return (data || []).filter((credential: any) => {
+    const credentialDeveloperId = cleanString(credential.developer_id);
+    if (!productDeveloperId) {
+      return !credentialDeveloperId && cleanString(credential.owner_role) === "admin";
+    }
+
+    return credentialDeveloperId === productDeveloperId ||
+      (!credentialDeveloperId && cleanString(credential.owner_role) === "admin");
+  });
+}
+
+function inferredBindingFromCredential(slot: any, credential: any) {
+  return {
+    node_name: slot.node_name,
+    node_type: slot.node_type,
+    provider: slot.provider || credential.provider || null,
+    provider_label: slot.provider_label || credential.provider_label || null,
+    credential_key: slot.credential_key || slot.n8n_credential_type,
+    n8n_credential_type: credential.n8n_credential_type || slot.n8n_credential_type,
+    n8n_credential_id: credential.n8n_credential_id || slot.current_id || null,
+    n8n_credential_name: credential.n8n_credential_name || credential.label || slot.current_name || null,
+    developer_credential_id: credential.id,
+    inferred_from_workflow_scan: true,
+  };
 }
 
 function normalizeSecretFields(body: any) {
@@ -267,7 +391,62 @@ async function saveCredential(adminClient: any, operator: any, body: any) {
   const { data, error } = await request.select().single();
   if (error) throw new Error(error.message);
 
+  if (existing?.id) {
+    await markCredentialAutomationsNeedFreshTest(
+      adminClient,
+      existing.id,
+      "Credential updated. Apply credentials to the workflow and run a fresh technical test before this product can go live.",
+    );
+  }
+
   return data;
+}
+
+async function markCredentialAutomationsNeedFreshTest(adminClient: any, credentialId: string, message: string) {
+  const safeCredentialId = cleanString(credentialId);
+  if (!safeCredentialId) return;
+
+  try {
+    const { data: rows, error: loadError } = await adminClient
+      .from("automation_credential_requirements")
+      .select("automation_id")
+      .eq("developer_credential_id", safeCredentialId);
+
+    if (loadError) {
+      console.warn("Could not load credential-dependent automations:", loadError.message);
+      return;
+    }
+
+    const automationIds = [...new Set((rows || [])
+      .map((row: any) => cleanString(row.automation_id))
+      .filter(Boolean))];
+
+    if (!automationIds.length) return;
+
+    const now = new Date().toISOString();
+    const { error: updateError } = await adminClient
+      .from("automations")
+      .update({
+        credential_binding_status: "needs_attention",
+        n8n_last_test_status: "not_tested",
+        n8n_last_test_error: message,
+        n8n_last_test_result: {
+          credential_changed: true,
+          developer_credential_id: safeCredentialId,
+          message,
+          at: now,
+        },
+        n8n_last_tested_at: null,
+        updated_at: now,
+      })
+      .in("id", automationIds);
+
+    if (updateError) {
+      console.warn("Could not mark credential-dependent automations stale:", updateError.message);
+    }
+  } catch (error) {
+    console.warn("Could not mark credential-dependent automations stale:", error instanceof Error ? error.message : error);
+  }
 }
 
 async function revokeCredential(adminClient: any, operator: any, body: any) {
@@ -287,6 +466,12 @@ async function revokeCredential(adminClient: any, operator: any, body: any) {
   const { data, error } = await query.select().maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Credential not found.");
+
+  await markCredentialAutomationsNeedFreshTest(
+    adminClient,
+    data.id,
+    "Credential revoked. Add or choose a replacement credential, apply it to the workflow, and run a fresh technical test.",
+  );
 
   return data;
 }
@@ -388,6 +573,12 @@ async function deleteCredential(adminClient: any, operator: any, body: any) {
 
   if (error) throw new Error(error.message);
 
+  await markCredentialAutomationsNeedFreshTest(
+    adminClient,
+    credential.id,
+    "Credential removed. Add or choose a replacement credential, apply it to the workflow, and run a fresh technical test.",
+  );
+
   return credential;
 }
 
@@ -408,30 +599,68 @@ async function getAutomation(adminClient: any, operator: any, automationId: stri
 
 async function scanAutomation(adminClient: any, operator: any, body: any) {
   const product = await getAutomation(adminClient, operator, cleanString(body.automation_id));
-  const slots = detectWorkflowCredentialSlots(product.n8n_workflow_json);
+  const workflow = await fetchLiveN8nWorkflow(product.n8n_workflow_id)
+    || product.n8n_normalized_workflow_json
+    || product.n8n_workflow_json;
+  const slots = detectWorkflowCredentialSlots(workflow);
   const slotKeys = new Set(
-    slots.map((slot: any) => {
-      const nodeName = cleanString(slot.node_name);
-      const credentialKey = cleanString(slot.credential_key || slot.n8n_credential_type);
-      return `${nodeName}:${credentialKey}`;
-    }),
+    slots.map((slot: any) => slotKey(slot)),
   );
   const bindings = Array.isArray(product.n8n_credential_bindings)
-    ? product.n8n_credential_bindings.filter((binding: any) => binding?.developer_credential_id)
+    ? product.n8n_credential_bindings.filter((binding: any) => (
+      binding?.developer_credential_id &&
+      slots.some((slot: any) => bindingMatchesSlot(binding, slot))
+    ))
     : [];
+
+  const credentialCandidates = await loadCredentialCandidatesForProduct(adminClient, product);
+  for (const slot of slots) {
+    if (bindings.some((binding: any) => bindingMatchesSlot(binding, slot))) continue;
+    const credential = credentialCandidates.find((candidate: any) => credentialMatchesSlotReference(candidate, slot));
+    if (credential) {
+      bindings.push(inferredBindingFromCredential(slot, credential));
+    }
+  }
+
+  const boundSlotKeys = new Set(
+    bindings
+      .filter((binding: any) => binding?.developer_credential_id)
+      .map((binding: any) => slotKey(binding)),
+  );
+
   const errors = Array.isArray(product.credential_binding_errors)
     ? product.credential_binding_errors.filter((error: any) => {
       if (cleanString(error?.message).toLowerCase().startsWith("scan only")) return false;
-      const errorKey = `${cleanString(error?.node_name)}:${cleanString(error?.credential_key || error?.n8n_credential_type)}`;
-      return slotKeys.has(errorKey);
+      const errorKey = slotKey(error);
+      return slotKeys.has(errorKey) && !boundSlotKeys.has(errorKey);
     })
     : [];
+
+  const missingSlots = slots.filter((slot: any) => !boundSlotKeys.has(slotKey(slot)));
+  const credentialStatus = !slots.length
+    ? "not_required"
+    : errors.length || missingSlots.length
+      ? "needs_credentials"
+      : "bound";
+
+  const updatedProduct = {
+    ...product,
+    developer_credential_requirements: slots,
+    n8n_credential_bindings: bindings,
+    credential_binding_status: credentialStatus,
+    credential_binding_errors: errors,
+    n8n_last_credential_bound_at: !missingSlots.length ? new Date().toISOString() : product.n8n_last_credential_bound_at || null,
+  };
 
   try {
     await adminClient
       .from("automations")
       .update({
-        developer_credential_requirements: slots,
+        developer_credential_requirements: updatedProduct.developer_credential_requirements,
+        n8n_credential_bindings: updatedProduct.n8n_credential_bindings,
+        credential_binding_status: updatedProduct.credential_binding_status,
+        credential_binding_errors: updatedProduct.credential_binding_errors,
+        n8n_last_credential_bound_at: updatedProduct.n8n_last_credential_bound_at,
         updated_at: new Date().toISOString(),
       })
       .eq("id", product.id);
@@ -439,7 +668,7 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
     console.warn("Could not update automation credential scan:", error instanceof Error ? error.message : error);
   }
 
-  return { product, slots, bindings, errors };
+  return { product: updatedProduct, slots, bindings, errors };
 }
 
 function productRuntimeSummary(product: any) {
@@ -453,6 +682,7 @@ function productRuntimeSummary(product: any) {
     n8n_import_status: product?.n8n_import_status || "",
     n8n_last_test_status: product?.n8n_last_test_status || "",
     n8n_last_test_error: product?.n8n_last_test_error || "",
+    n8n_last_test_result: product?.n8n_last_test_result || null,
     n8n_last_tested_at: product?.n8n_last_tested_at || null,
     credential_binding_status: product?.credential_binding_status || "",
     n8n_last_credential_bound_at: product?.n8n_last_credential_bound_at || null,

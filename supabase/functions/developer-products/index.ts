@@ -295,7 +295,7 @@ function requiredSetupFieldsForProduct(product: any) {
     ...extractRuntimeSetupKeys(`${workflowText}\n${mappingText}`),
   ]);
 
-  if (cleanString(product?.workflow_source_platform).toLowerCase() === "make" || product?.make_blueprint) {
+  if (["make", "zapier"].includes(cleanString(product?.workflow_source_platform).toLowerCase()) || product?.make_blueprint) {
     for (const key of inferMakeSetupKeysFromText(`${blueprintText}\n${workflowText}\n${mappingText}`)) {
       names.add(key);
     }

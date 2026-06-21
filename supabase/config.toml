@@ -27,3 +27,6 @@ verify_jwt = false
 
 [functions.make-import-assistant]
 verify_jwt = false
+
+[functions.n8n-editor-gateway]
+verify_jwt = false

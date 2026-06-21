@@ -2131,7 +2131,7 @@ function missingSetupSchemaFieldsForProduct(product) {
   const blueprintText = JSON.stringify(product?.make_blueprint || {});
   const required = new Set(extractRuntimeSetupKeysFromText(`${workflowText}\n${mappingText}`));
 
-  if (String(product?.workflow_source_platform || "").toLowerCase() === "make" || product?.make_blueprint) {
+  if (["make", "zapier"].includes(String(product?.workflow_source_platform || "").toLowerCase()) || product?.make_blueprint) {
     inferMakeSetupKeysFromText(`${blueprintText}\n${workflowText}\n${mappingText}`).forEach((key) => required.add(key));
   }
 

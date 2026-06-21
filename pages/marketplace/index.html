@@ -10,16 +10,81 @@
 
   <link rel="stylesheet" href="/assets/css/nexus.css?v=20260615-guidedinstall">
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/assets/js/config.js"></script>
-
-  <title>Marketplace | Nexus</title>
+  <title>Automation Marketplace | Nexus Workflow Products and AI Agents</title>
+  <meta name="description" content="Browse Nexus marketplace products for business workflow automation, AI agents, reporting automation, support automation, operations tools, and custom automation requests.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nexus-ai.software/pages/marketplace/index.html">
+  <link rel="alternate" type="text/markdown" href="/llms.txt">
+  <meta property="og:title" content="Nexus Automation Marketplace">
+  <meta property="og:description" content="Find ready-made business automations, compare outcomes, preview outputs, and request custom automation when your process needs a tailored workflow.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nexus-ai.software/pages/marketplace/index.html">
+  <meta property="og:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Nexus Automation Marketplace">
+  <meta name="twitter:description" content="Browse workflow automations, AI agents, reporting systems, support tools, and custom automation options.">
+  <meta name="twitter:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#2563ff">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": "Nexus Automation Marketplace",
+    "url": "https://nexus-ai.software/pages/marketplace/index.html",
+    "description": "A marketplace for ready-made business automation products, workflow automations, AI agents, reporting tools, support workflows, and custom automation requests.",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Nexus",
+      "url": "https://nexus-ai.software/"
+    },
+    "about": [
+      "workflow automation",
+      "business automation",
+      "AI agents",
+      "reporting automation",
+      "custom automation"
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What can I find in the Nexus marketplace?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The Nexus marketplace lists ready-made business automations, AI agents, reporting workflows, support tools, operations automations, and custom request products."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I preview automation products before buying?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Marketplace listings are built around outcomes, expected outputs, setup requirements, developer context, and preview information before checkout."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What if the exact automation is not listed?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Businesses can send a custom automation request so Nexus can review the process, tools, desired output, timeline, and next step."
+        }
+      }
+    ]
+  }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="/assets/js/config.js"></script>
 </head>
 
 <body data-page="marketplace">
@@ -166,10 +231,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260615-guidedinstall"></script>
-  <script src="/assets/js/nexus-db.js?v=20260608-walletpopupfix"></script>
-  <script src="/assets/js/nexus-buyer-nav.js"></script>
-  <script src="/assets/js/nexus-app.js?v=20260615-guidedinstall"></script>
+  <script defer src="/assets/js/nexus-ui.js?v=20260615-guidedinstall"></script>
+  <script defer src="/assets/js/nexus-db.js?v=20260608-walletpopupfix"></script>
+  <script defer src="/assets/js/nexus-buyer-nav.js"></script>
+  <script defer src="/assets/js/nexus-app.js?v=20260615-guidedinstall"></script>
 
   <script>
     function NexusMarketplaceSetCategory(category) {

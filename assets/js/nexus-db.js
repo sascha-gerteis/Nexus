@@ -109,19 +109,29 @@ const NexusDB = (() => {
     return { data: data?.session?.user || null, error: null };
   }
 
-  async function getSession() {
+  async function getSession(options = {}) {
     const now = Date.now();
+    const forceRefresh = Boolean(options.forceRefresh);
 
-    if (sessionCache.result && sessionCache.expiresAt > now) {
+    if (!forceRefresh && sessionCache.result && sessionCache.expiresAt > now) {
       return sessionCache.result;
     }
 
-    if (sessionCache.promise) {
+    if (!forceRefresh && sessionCache.promise) {
       return sessionCache.promise;
     }
 
-    sessionCache.promise = supabase.auth
-      .getSession()
+    if (forceRefresh) {
+      sessionCache = { result: null, promise: null, expiresAt: 0 };
+    }
+
+    const sessionRequest = forceRefresh
+      ? supabase.auth.refreshSession().then((result) => (
+          result?.data?.session ? result : supabase.auth.getSession()
+        ))
+      : supabase.auth.getSession();
+
+    sessionCache.promise = sessionRequest
       .then((result) => {
         sessionCache = {
           result,
@@ -1121,34 +1131,63 @@ const NexusDB = (() => {
 
 async function callNexusFunction(functionName, payload = {}) {
   try {
-    const { data: sessionData } = await getSession();
-    const token = sessionData?.session?.access_token;
+    let lastResponse = null;
+    let lastData = null;
 
-    const response = await fetch(`${getFunctionsBaseUrl()}/${functionName}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": token ? `Bearer ${token}` : `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const { data: sessionData } = await getSession({ forceRefresh: attempt > 0 });
+      const session = sessionData?.session || null;
+      const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : 0;
+      const shouldRefreshBeforeCall = attempt === 0 && session?.access_token && expiresAtMs && expiresAtMs < Date.now() + 60 * 1000;
+      const token = shouldRefreshBeforeCall
+        ? (await getSession({ forceRefresh: true }))?.data?.session?.access_token
+        : session?.access_token;
 
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok || data.error) {
-      return {
-        data: null,
-        error: {
-          message: data.error || `Function ${functionName} failed.`,
-          details: data,
+      const response = await fetch(`${getFunctionsBaseUrl()}/${functionName}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": token ? `Bearer ${token}` : `Bearer ${SUPABASE_ANON_KEY}`,
         },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      lastResponse = response;
+      lastData = data;
+
+      if (!response.ok || data.error) {
+        const message = String(data.error || data.message || "").toLowerCase();
+        const authFailed = response.status === 401 &&
+          /auth token|jwt|login required|authentication|required|expired|invalid/.test(message);
+
+        if (authFailed && attempt === 0) {
+          clearAuthCaches();
+          continue;
+        }
+
+        return {
+          data: null,
+          error: {
+            message: data.error || `Function ${functionName} failed.`,
+            details: data,
+          },
+        };
+      }
+
+      return {
+        data,
+        error: null,
       };
     }
 
     return {
-      data,
-      error: null,
+      data: null,
+      error: {
+        message: lastData?.error || `Function ${functionName} failed.`,
+        details: lastData || { status: lastResponse?.status || 0 },
+      },
     };
   } catch (error) {
     return {
@@ -1625,6 +1664,27 @@ async function listOutputsForCustomerAutomation(customerAutomationId) {
 async function importN8nWorkflow(automationId) {
   return callNexusFunction("import-n8n-workflow", {
     automation_id: automationId
+  });
+}
+
+async function createN8nEditorSession(automationId) {
+  return callNexusFunction("n8n-editor-gateway", {
+    action: "create_session",
+    automation_id: automationId
+  });
+}
+
+async function syncN8nEditorWorkflow(automationId) {
+  return callNexusFunction("n8n-editor-gateway", {
+    action: "sync_workflow",
+    automation_id: automationId
+  });
+}
+
+async function revokeN8nEditorSession(sessionId) {
+  return callNexusFunction("n8n-editor-gateway", {
+    action: "revoke_session",
+    session_id: sessionId
   });
 }
 
@@ -2117,10 +2177,11 @@ async function requestMakeImportSupport(payload = {}) {
   });
 }
 
-async function validateMakeImportMappings(automationId) {
+async function validateMakeImportMappings(automationId, sourcePlatform = "make") {
   return callMakeImportAssistant({
     action: "validate_successful_mappings",
-    automation_id: automationId
+    automation_id: automationId,
+    source_platform: sourcePlatform
   });
 }
 
@@ -2272,6 +2333,9 @@ createSetupSubmission,
 listBuyerOutputs,
 listOutputsForCustomerAutomation,
 importN8nWorkflow,
+createN8nEditorSession,
+syncN8nEditorWorkflow,
+revokeN8nEditorSession,
 startN8nWorkflowTest,
 checkN8nWorkflowTest,
 listBuyerCustomerAutomations,
