@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260617-make-import">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260622-payout-fields">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
   <title>Developer Dashboard | Nexus AI</title>
@@ -174,7 +174,7 @@
               Select a product from the list, or create a new draft.
             </div>
 
-            <details class="developer-form-section developer-details-section developer-editor-section compact" open>
+            <details class="developer-form-section developer-details-section developer-editor-section compact">
               <summary>
                 <span>
                   <strong>Basics</strong>
@@ -510,19 +510,16 @@
                   <option value="manual_bank_transfer">Bank transfer</option>
                   <option value="promptpay">PromptPay</option>
                   <option value="wise">Wise</option>
-                  <option value="other">Other</option>
+                  <option value="paypal">PayPal</option>
+                  <option value="payoneer">Payoneer</option>
+                  <option value="revolut">Revolut</option>
+                  <option value="crypto_usdt">USDT crypto</option>
+                  <option value="other">Other method</option>
                 </select>
+                <p class="payout-method-hint" id="manualPayoutMethodHint">Choose how Nexus should send your manual payout.</p>
               </div>
 
-              <div>
-                <label>Payout details</label>
-                <textarea
-                  class="textarea"
-                  id="manualPayoutDetails"
-                  rows="6"
-                  placeholder="Bank name, account holder, account number, PromptPay number, or other payout instructions."
-                ></textarea>
-              </div>
+              <div class="developer-payout-method-fields" id="manualPayoutDynamicFields"></div>
 
               <div>
                 <label>Note to Nexus</label>
@@ -932,7 +929,6 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (shouldFocusCredentials) {
         setTimeout(() => {
           const credentialSection = document.getElementById("developerProductCredentialsSection");
-          if (credentialSection) credentialSection.open = true;
           credentialSection?.scrollIntoView({ behavior: "smooth", block: "start" });
           if (state.selectedProductId) {
             scanCurrentProductCredentials();
@@ -1122,10 +1118,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     function openPayoutSettings() {
       const panel = document.getElementById("payoutSettingsModal");
       if (!panel) return;
+      hydratePayoutSettingsForm();
       panel.hidden = false;
       panel.classList.add("open");
       panel.setAttribute("aria-hidden", "false");
-      setTimeout(() => document.getElementById("manualPayoutDetails")?.focus(), 80);
+      setTimeout(() => panel.querySelector("[data-payout-field]")?.focus(), 80);
     }
 
     function closePayoutSettings() {
@@ -1322,11 +1319,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       const developer = getDeveloper();
       const method = developer.payout_method || "manual_bank_transfer";
-      const details = payoutDetailsText(developer.payout_details);
+      const details = payoutDetailsObject(developer.payout_details);
+      const summary = payoutDetailsText(details);
 
       root.innerHTML = `
-        <strong>${NexusUI.escapeHtml(productStatusText(method.replaceAll("_", " ")))}</strong>
-        <p>${NexusUI.escapeHtml(details || "No payout details saved yet.")}</p>
+        <strong>${NexusUI.escapeHtml(payoutMethodLabel(method))}</strong>
+        <p>${NexusUI.escapeHtml(summary || "No payout details saved yet.")}</p>
       `;
     }
 
@@ -3001,7 +2999,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
             <span class="pill orange">${isEdit ? "HTTP substitute needs test" : "HTTP substitute needed"}</span>
           </div>
 
-          <details ${isEdit ? "open" : ""}>
+          <details>
             <summary><strong>${isEdit ? "Edit HTTP substitute" : "Add HTTP substitute"}</strong></summary>
             <div class="make-http-grid">
               <input type="hidden" data-make-field="session_id" value="${NexusUI.escapeAttribute(sessionId)}">
@@ -3209,15 +3207,196 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return "pill";
     }
 
-    function payoutDetailsPayload() {
-      return {
-        details: document.getElementById("manualPayoutDetails").value.trim()
+    const payoutMethodConfigs = {
+      manual_bank_transfer: {
+        label: "Bank transfer",
+        hint: "Best for local or international bank payouts.",
+        required: ["account_holder", "bank_name", "account_number"],
+        fields: [
+          ["account_holder", "Account holder", "Legal name on the bank account"],
+          ["bank_name", "Bank name", "Kasikornbank, Bangkok Bank, Chase..."],
+          ["account_number", "Account number / IBAN", "Account number or IBAN"],
+          ["swift_bic", "SWIFT / BIC", "Optional for international transfers"],
+          ["bank_country", "Bank country", "Thailand, United States, United Kingdom..."],
+          ["preferred_currency", "Preferred currency", "THB, USD, EUR..."]
+        ]
+      },
+      promptpay: {
+        label: "PromptPay",
+        hint: "Popular for Thailand payouts.",
+        required: ["account_holder", "promptpay"],
+        fields: [
+          ["account_holder", "Account holder", "Legal name connected to PromptPay"],
+          ["promptpay", "PromptPay ID / phone", "Phone number, national ID, or business ID"],
+          ["preferred_currency", "Preferred currency", "THB"]
+        ]
+      },
+      wise: {
+        label: "Wise",
+        hint: "Good for cross-border payouts when Wise is available.",
+        required: ["account_holder", "wise_email"],
+        fields: [
+          ["account_holder", "Recipient name", "Legal name in Wise"],
+          ["wise_email", "Wise email", "name@example.com"],
+          ["wise_country", "Recipient country", "Thailand, Germany, United States..."],
+          ["preferred_currency", "Preferred currency", "THB, USD, EUR..."]
+        ]
+      },
+      paypal: {
+        label: "PayPal",
+        hint: "Useful for developers who already receive business payments by PayPal.",
+        required: ["paypal_email"],
+        fields: [
+          ["paypal_email", "PayPal email", "name@example.com"],
+          ["account_holder", "Account holder", "Optional"],
+          ["preferred_currency", "Preferred currency", "USD, EUR, GBP..."]
+        ]
+      },
+      payoneer: {
+        label: "Payoneer",
+        hint: "Common for marketplace and freelancer payouts.",
+        required: ["payoneer_email"],
+        fields: [
+          ["payoneer_email", "Payoneer email", "name@example.com"],
+          ["account_holder", "Account holder", "Legal name in Payoneer"],
+          ["preferred_currency", "Preferred currency", "USD, EUR, GBP..."]
+        ]
+      },
+      revolut: {
+        label: "Revolut",
+        hint: "Useful for supported countries and fast transfers.",
+        required: ["revolut_contact"],
+        fields: [
+          ["revolut_contact", "Revolut tag / email", "@username or email"],
+          ["account_holder", "Account holder", "Legal name in Revolut"],
+          ["preferred_currency", "Preferred currency", "USD, EUR, GBP..."]
+        ]
+      },
+      crypto_usdt: {
+        label: "USDT crypto",
+        hint: "Only use this if you are comfortable receiving stablecoin payouts.",
+        required: ["wallet_address", "network"],
+        fields: [
+          ["wallet_address", "Wallet address", "USDT wallet address"],
+          ["network", "Network", "TRC20, ERC20, BEP20..."],
+          ["account_holder", "Recipient name", "Optional internal reference"]
+        ]
+      },
+      other: {
+        label: "Other method",
+        hint: "Use only when the normal payout methods do not fit.",
+        required: ["instructions"],
+        fields: [
+          ["instructions", "Payout instructions", "Explain exactly how Nexus should send the payout", "textarea"]
+        ]
+      }
+    };
+
+    function payoutMethodLabel(method) {
+      return payoutMethodConfigs[method]?.label || productStatusText(String(method || "manual payout").replaceAll("_", " "));
+    }
+
+    function payoutDetailsObject(details) {
+      if (!details) return {};
+      if (typeof details === "string") {
+        const raw = details.trim();
+        if (!raw) return {};
+        try {
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === "object" ? parsed : { details: raw };
+        } catch {
+          return { details: raw };
+        }
+      }
+      return typeof details === "object" ? details : {};
+    }
+
+    function payoutDetailsSummary(method, details) {
+      const value = payoutDetailsObject(details);
+      if (value.details) return String(value.details);
+      const labels = {
+        account_holder: "Account holder",
+        bank_name: "Bank",
+        account_number: "Account",
+        swift_bic: "SWIFT",
+        bank_country: "Country",
+        promptpay: "PromptPay",
+        wise_email: "Wise email",
+        paypal_email: "PayPal email",
+        payoneer_email: "Payoneer email",
+        revolut_contact: "Revolut",
+        wallet_address: "Wallet",
+        network: "Network",
+        preferred_currency: "Currency",
+        instructions: "Instructions"
       };
+      const keys = (payoutMethodConfigs[method]?.fields || [])
+        .map(([name]) => name)
+        .filter((name) => value[name]);
+      return keys.map((name) => `${labels[name] || name}: ${value[name]}`).join(" | ");
+    }
+
+    function payoutDetailsPayload() {
+      const method = document.getElementById("manualPayoutMethod")?.value || "manual_bank_transfer";
+      const config = payoutMethodConfigs[method] || payoutMethodConfigs.manual_bank_transfer;
+      const details = {
+        method,
+        method_label: payoutMethodLabel(method)
+      };
+      for (const [name] of config.fields) {
+        const field = document.querySelector(`[data-payout-field="${name}"]`);
+        details[name] = String(field?.value || "").trim();
+      }
+      details.details = payoutDetailsSummary(method, details);
+      return details;
     }
 
     function payoutDetailsText(details) {
-      if (!details || typeof details !== "object") return "";
-      return details.details || details.promptpay || details.account_number || "";
+      const value = payoutDetailsObject(details);
+      return value.details || value.promptpay || value.account_number || value.wise_email || value.paypal_email || value.payoneer_email || value.wallet_address || value.instructions || "";
+    }
+
+    function renderPayoutMethodFields(method, savedDetails = {}) {
+      const root = document.getElementById("manualPayoutDynamicFields");
+      if (!root) return;
+      const config = payoutMethodConfigs[method] || payoutMethodConfigs.manual_bank_transfer;
+      const values = payoutDetailsObject(savedDetails);
+      const required = new Set(config.required || []);
+      const hint = document.getElementById("manualPayoutMethodHint");
+      if (hint) hint.textContent = config.hint;
+
+      root.innerHTML = config.fields.map(([name, label, placeholder, type]) => {
+        const isTextarea = type === "textarea";
+        const textValue = NexusUI.escapeHtml(values[name] || "");
+        const attrValue = NexusUI.escapeAttribute(values[name] || "");
+        const requiredText = required.has(name) ? " *" : "";
+        return `
+          <div class="${isTextarea ? "full" : ""}">
+            <label>${NexusUI.escapeHtml(label)}${requiredText}</label>
+            ${
+              isTextarea
+                ? `<textarea class="textarea" rows="4" data-payout-field="${NexusUI.escapeAttribute(name)}" placeholder="${NexusUI.escapeAttribute(placeholder || "")}">${textValue}</textarea>`
+                : `<input class="input" data-payout-field="${NexusUI.escapeAttribute(name)}" value="${attrValue}" placeholder="${NexusUI.escapeAttribute(placeholder || "")}">`
+            }
+          </div>
+        `;
+      }).join("");
+    }
+
+    function hydratePayoutSettingsForm() {
+      const developer = getDeveloper();
+      const methodField = document.getElementById("manualPayoutMethod");
+      const method = developer.payout_method || methodField?.value || "manual_bank_transfer";
+      if (methodField) methodField.value = payoutMethodConfigs[method] ? method : "manual_bank_transfer";
+      renderPayoutMethodFields(methodField?.value || "manual_bank_transfer", developer.payout_details);
+      const noteField = document.getElementById("manualPayoutNote");
+      if (noteField && developer.payout_note && !noteField.value.trim()) noteField.value = developer.payout_note;
+    }
+
+    function validatePayoutDetails(method, details) {
+      const config = payoutMethodConfigs[method] || payoutMethodConfigs.manual_bank_transfer;
+      const missing = (config.required || []).find((name) => !String(details[name] || "").trim());
+      return missing ? (config.fields.find(([name]) => name === missing)?.[1] || missing) : "";
     }
 
     function hasSavedPayoutDetails() {
@@ -3238,10 +3417,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const details = payoutDetailsPayload();
       const method = document.getElementById("manualPayoutMethod").value;
       const note = document.getElementById("manualPayoutNote").value.trim();
+      const missingField = validatePayoutDetails(method, details);
 
-      if (!details.details) {
-        NexusUI.toast("Add payout details before saving.");
-        showPayoutFeedback("Add payout details before saving.");
+      if (missingField) {
+        const message = `Add ${missingField} before saving payout settings.`;
+        NexusUI.toast(message);
+        showPayoutFeedback(message);
         return;
       }
 
@@ -3272,11 +3453,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     }
 
     async function requestManualPayout(currency) {
-      const details = document.getElementById("manualPayoutDetails").value.trim();
+      const details = payoutDetailsPayload();
       const method = document.getElementById("manualPayoutMethod").value;
       const note = document.getElementById("manualPayoutNote").value.trim();
+      const missingField = validatePayoutDetails(method, details);
 
-      if (!details && !hasSavedPayoutDetails()) {
+      if (missingField && !hasSavedPayoutDetails()) {
         NexusUI.toast("Add or save payout details before requesting a payout.");
         showPayoutFeedback("Add or save payout details before requesting a payout.");
         return;
@@ -3286,8 +3468,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       const { data, error } = await NexusDB.requestDeveloperManualPayout({
         currency,
-        payout_method: method,
-        payout_details: details ? { details } : {},
+        payout_method: missingField ? (getDeveloper().payout_method || method) : method,
+        payout_details: missingField ? {} : details,
         developer_note: note
       });
 
@@ -3318,12 +3500,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (data?.developer) {
         state.account = { ...(state.account || {}), developer: data.developer };
       }
-      const savedDetailsText = payoutDetailsText(developer.payout_details);
       const methodField = document.getElementById("manualPayoutMethod");
-      const detailsField = document.getElementById("manualPayoutDetails");
 
       if (methodField && developer.payout_method) methodField.value = developer.payout_method;
-      if (detailsField && savedDetailsText && !detailsField.value.trim()) detailsField.value = savedDetailsText;
+      renderPayoutMethodFields(methodField?.value || "manual_bank_transfer", developer.payout_details);
       renderPayoutSettingsPreview();
 
       const productTotals = new Map();
@@ -3647,6 +3827,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       });
 
       document.getElementById("savePayoutSettings").addEventListener("click", savePayoutSettings);
+      document.getElementById("manualPayoutMethod").addEventListener("change", (event) => {
+        renderPayoutMethodFields(event.target.value, {});
+      });
 
       const requestedTab = new URLSearchParams(location.search).get("tab") || location.hash.replace("#", "");
       const initialTab = ["profile", "products", "installs", "messages", "credentials", "wallet"].includes(requestedTab) ? requestedTab : "profile";

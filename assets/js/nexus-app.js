@@ -1631,6 +1631,28 @@ async function submitCheckoutIntent(event) {
     const moneyValue = (value, currency = "THB") => {
       return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(Number(value || 0));
     };
+    const payoutMethodLabels = {
+      manual_bank_transfer: "Bank transfer",
+      promptpay: "PromptPay",
+      wise: "Wise",
+      paypal: "PayPal",
+      payoneer: "Payoneer",
+      revolut: "Revolut",
+      crypto_usdt: "USDT crypto",
+      other: "Other method",
+    };
+    const payoutMethodLabel = (method) => payoutMethodLabels[method] || String(method || "Manual payout").replaceAll("_", " ");
+    const payoutDetailsText = (details) => {
+      if (!details) return "";
+      const value = typeof details === "object" ? details : (() => {
+        try {
+          return JSON.parse(details);
+        } catch {
+          return { details };
+        }
+      })();
+      return value.details || value.account_number || value.promptpay || value.wise_email || value.paypal_email || value.payoneer_email || value.wallet_address || value.instructions || "";
+    };
     const earningByOrder = new Map();
     (earnings || []).forEach((earning) => {
       if (earning.order_id) earningByOrder.set(earning.order_id, earning);
@@ -1762,10 +1784,10 @@ async function submitCheckoutIntent(event) {
               <td>${moneyValue(request.amount || 0, request.currency || "THB")}</td>
               <td><span class="${status === "paid" ? "pill green" : status === "rejected" ? "pill red" : "pill orange"}">${NexusUI.escapeHtml(status)}</span></td>
               <td>
-                ${NexusUI.escapeHtml(request.payout_method || "manual")}
+                ${NexusUI.escapeHtml(payoutMethodLabel(request.payout_method))}
                 <br>
                 <span style="color:var(--muted);font-size:.85rem">
-                  ${NexusUI.escapeHtml(request.payout_details?.details || "")}
+                  ${NexusUI.escapeHtml(payoutDetailsText(request.payout_details))}
                 </span>
               </td>
               <td>${request.requested_at ? new Date(request.requested_at).toLocaleString() : ""}</td>

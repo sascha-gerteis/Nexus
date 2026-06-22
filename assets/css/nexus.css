@@ -6318,6 +6318,10 @@ body[data-page="checkout"] .site-header {
     grid-template-columns: 1fr;
   }
 
+  .developer-payout-method-fields {
+    grid-template-columns: 1fr;
+  }
+
   .admin-list-actions {
     justify-items: start;
   }
@@ -11657,6 +11661,23 @@ body.developer-modal-open::before {
 
 .developer-payout-editor .developer-modal-head p {
   font-size: .88rem;
+}
+
+.developer-payout-method-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.developer-payout-method-fields .full {
+  grid-column: 1 / -1;
+}
+
+.payout-method-hint {
+  margin: .4rem 0 0;
+  color: var(--muted);
+  font-size: .86rem;
+  line-height: 1.45;
 }
 
 .developer-form-section {
