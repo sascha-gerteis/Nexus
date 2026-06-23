@@ -19,7 +19,8 @@ function numberValue(value: unknown) {
 }
 
 function boolValue(value: unknown) {
-  return value === true || value === "true" || value === "on";
+  const raw = cleanString(value).toLowerCase();
+  return value === true || value === 1 || ["true", "1", "yes", "on"].includes(raw);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -229,6 +230,67 @@ function normalizeSetupKey(value: unknown) {
     .slice(0, 80);
 }
 
+function stripDerivedSetupSuffix(key: string) {
+  const suffixes = [
+    "_join",
+    "_joined",
+    "_csv",
+    "_lines",
+    "_text",
+    "_string",
+  ];
+
+  for (const suffix of suffixes) {
+    if (key.endsWith(suffix) && key.length > suffix.length + 2) {
+      return key.slice(0, -suffix.length);
+    }
+  }
+
+  return key;
+}
+
+function canonicalBuyerSetupKey(value: unknown) {
+  const key = stripDerivedSetupSuffix(normalizeSetupKey(value));
+  const aliases: Record<string, string> = {
+    main_website: "company_url",
+    company_website: "company_url",
+    company_site: "company_url",
+    company_url: "company_url",
+    business_website: "company_url",
+    business_site: "company_url",
+    buyer_website: "company_url",
+    buyer_site: "company_url",
+    client_website: "company_url",
+    client_site: "company_url",
+    customer_website: "company_url",
+    customer_site: "company_url",
+    competitor_websites: "competitor_urls",
+    competitor_sites: "competitor_urls",
+    competitor_urls: "competitor_urls",
+    competitors: "competitor_urls",
+    competitor_list: "competitor_urls",
+    market_or_region: "market_region",
+    market_region: "market_region",
+    target_market: "market_region",
+    local_market: "market_region",
+  };
+
+  return aliases[key] || key;
+}
+
+function setupNameSet(setupSchema: any[]) {
+  const names = new Set<string>();
+
+  for (const field of setupSchema || []) {
+    const raw = normalizeSetupKey(field?.name);
+    const canonical = canonicalBuyerSetupKey(field?.name);
+    if (raw) names.add(raw);
+    if (canonical) names.add(canonical);
+  }
+
+  return names;
+}
+
 function extractRuntimeSetupKeys(text: string) {
   const setupNames = new Set<string>();
   const source = String(text || "");
@@ -246,7 +308,7 @@ function extractRuntimeSetupKeys(text: string) {
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(source)) !== null) {
-      const key = normalizeSetupKey(match[1]);
+      const key = canonicalBuyerSetupKey(match[1]);
       if (key) setupNames.add(key);
     }
   }
@@ -259,11 +321,11 @@ function inferMakeSetupKeysFromText(text: string) {
   const source = String(text || "").toLowerCase();
   const rules = [
     {
-      key: "company_website",
+      key: "company_url",
       pattern: /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/,
     },
     {
-      key: "competitor_websites",
+      key: "competitor_urls",
       pattern: /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/,
     },
     {
@@ -271,7 +333,7 @@ function inferMakeSetupKeysFromText(text: string) {
       pattern: /\bfocus\s+areas?\b|\bfocus\s+topics?\b|\bpricing,\s*offers,\s*messaging\b|\bpricing\s+offers\s+messaging\b/,
     },
     {
-      key: "market_or_region",
+      key: "market_region",
       pattern: /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/,
     },
     {
@@ -307,13 +369,28 @@ function requiredSetupFieldsForProduct(product: any) {
 function setupSchemaReadiness(product: any) {
   const requiredFields = requiredSetupFieldsForProduct(product);
   const setupSchema = cleanSchema(product?.setup_schema);
-  const existingNames = new Set(setupSchema.map((field: any) => normalizeSetupKey(field.name)).filter(Boolean));
-  const missingFields = requiredFields.filter((field) => !existingNames.has(normalizeSetupKey(field.name)));
+  const existingNames = setupNameSet(setupSchema);
+  const missingFields = requiredFields.filter((field) => !existingNames.has(canonicalBuyerSetupKey(field.name)));
 
   return {
     requiredFields,
     missingFields,
   };
+}
+
+function mergeMissingSetupFields(setupSchema: any[], missingFields: any[]) {
+  const output = cleanSchema(setupSchema);
+  const existingNames = setupNameSet(output);
+
+  for (const field of missingFields || []) {
+    const key = canonicalBuyerSetupKey(field?.name);
+    if (!key || existingNames.has(key)) continue;
+
+    output.push(makeInferredSetupField(key));
+    existingNames.add(key);
+  }
+
+  return output;
 }
 
 function hasAttachedWorkflowFlow(product: any) {
@@ -694,10 +771,7 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
     });
 
     if (schemaCheck.missingFields.length) {
-      return {
-        error: `Add buyer setup schema fields before submitting. Required by this workflow: ${schemaCheck.missingFields.map((field) => field.name).join(", ")}.`,
-        status: 400,
-      };
+      payload.setup_schema = mergeMissingSetupFields(payload.setup_schema, schemaCheck.missingFields);
     }
   }
 

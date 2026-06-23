@@ -45,6 +45,85 @@ function asObject(value: unknown) {
   return value as Record<string, unknown>;
 }
 
+function assignIfUseful(target: Record<string, unknown>, key: string, value: unknown) {
+  if (target[key] !== undefined && cleanString(target[key])) return;
+  if (value === undefined || value === null) return;
+  if (Array.isArray(value) && !value.length) return;
+  if (!Array.isArray(value) && !cleanString(value)) return;
+  target[key] = value;
+}
+
+function pickSetupValue(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (Array.isArray(value) && value.length) return value;
+    if (value !== undefined && value !== null && cleanString(value)) return value;
+  }
+
+  return undefined;
+}
+
+function joinSetupList(value: unknown) {
+  if (Array.isArray(value)) return value.map((item) => cleanString(item)).filter(Boolean).join("\n");
+  return cleanString(value);
+}
+
+function expandBuyerSetupAliases(setup: Record<string, unknown>) {
+  const output = { ...(setup || {}) };
+  const companyUrl = pickSetupValue(output, [
+    "company_url",
+    "company_website",
+    "main_website",
+    "business_website",
+    "buyer_website",
+    "client_website",
+    "customer_website",
+  ]);
+  const competitorUrls = pickSetupValue(output, [
+    "competitor_urls",
+    "competitor_websites",
+    "competitor_sites",
+    "competitors",
+    "competitor_list",
+  ]);
+  const marketRegion = pickSetupValue(output, [
+    "market_region",
+    "market_or_region",
+    "target_market",
+    "local_market",
+  ]);
+
+  if (companyUrl !== undefined) {
+    for (const key of ["company_url", "company_website", "main_website"]) {
+      assignIfUseful(output, key, companyUrl);
+    }
+  }
+
+  if (competitorUrls !== undefined) {
+    const joined = joinSetupList(competitorUrls);
+    for (const key of ["competitor_urls", "competitor_websites", "competitor_sites"]) {
+      assignIfUseful(output, key, competitorUrls);
+    }
+    for (const key of [
+      "competitor_urls_join",
+      "competitor_urls_joined",
+      "competitor_urls_csv",
+      "competitor_urls_lines",
+      "competitor_websites_join",
+    ]) {
+      assignIfUseful(output, key, joined);
+    }
+  }
+
+  if (marketRegion !== undefined) {
+    for (const key of ["market_region", "market_or_region", "target_market"]) {
+      assignIfUseful(output, key, marketRegion);
+    }
+  }
+
+  return output;
+}
+
 function pickFirstString(...values: unknown[]) {
   for (const value of values) {
     const cleaned = cleanString(value);
@@ -168,7 +247,7 @@ function buildSetupFromSchema(setupSchema: any[]) {
     setup[key] = testValueForField(field);
   }
 
-  return setup;
+  return expandBuyerSetupAliases(setup);
 }
 
 function buildSecretsFromSchema(credentialSchema: any[]) {
@@ -248,7 +327,7 @@ function buildTestSetupAndSecrets(automation: any, testProfile: any) {
     workflow fields from becoming undefined during early testing.
   */
   return {
-    setup: mergeObjectValues(generatedSetup, testProfile.setup_values),
+    setup: expandBuyerSetupAliases(mergeObjectValues(generatedSetup, testProfile.setup_values)),
     secrets: mergeObjectValues(generatedSecrets, testProfile.secret_values) as Record<string, string>,
     used_test_profile: true,
     test_profile_id: testProfile.id || null,

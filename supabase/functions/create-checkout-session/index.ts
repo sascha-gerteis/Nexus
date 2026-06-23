@@ -135,6 +135,12 @@ function productAllowsGuidedInstall(product: any) {
   const developerId = cleanString(product?.developer_id || product?.developers?.id);
   const developerHandle = cleanString(product?.developers?.handle).toLowerCase();
   const developerName = cleanString(product?.developers?.display_name).toLowerCase();
+  const listingType = cleanString(product?.listing_type).toLowerCase();
+  const pricingType = cleanString(product?.pricing_type).toLowerCase();
+
+  if (listingType === "custom_request" || pricingType === "custom_quote" || pricingType === "free_demo") {
+    return false;
+  }
 
   if (
     !developerId ||
@@ -146,8 +152,10 @@ function productAllowsGuidedInstall(product: any) {
     return true;
   }
 
+  const raw = cleanString(product?.guided_install_enabled).toLowerCase();
   return product?.guided_install_enabled === true ||
-    cleanString(product?.guided_install_enabled).toLowerCase() === "true";
+    product?.guided_install_enabled === 1 ||
+    ["true", "1", "yes", "on"].includes(raw);
 }
 
 function roundMoney(amount: number, currency: SupportedCheckoutCurrency) {

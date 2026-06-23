@@ -42,6 +42,85 @@ function cleanString(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function assignIfUseful(target: Record<string, unknown>, key: string, value: unknown) {
+  if (target[key] !== undefined && cleanString(target[key])) return;
+  if (value === undefined || value === null) return;
+  if (Array.isArray(value) && !value.length) return;
+  if (!Array.isArray(value) && !cleanString(value)) return;
+  target[key] = value;
+}
+
+function pickSetupValue(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (Array.isArray(value) && value.length) return value;
+    if (value !== undefined && value !== null && cleanString(value)) return value;
+  }
+
+  return undefined;
+}
+
+function joinSetupList(value: unknown) {
+  if (Array.isArray(value)) return value.map((item) => cleanString(item)).filter(Boolean).join("\n");
+  return cleanString(value);
+}
+
+function expandBuyerSetupAliases(setup: Record<string, unknown>) {
+  const output = { ...(setup || {}) };
+  const companyUrl = pickSetupValue(output, [
+    "company_url",
+    "company_website",
+    "main_website",
+    "business_website",
+    "buyer_website",
+    "client_website",
+    "customer_website",
+  ]);
+  const competitorUrls = pickSetupValue(output, [
+    "competitor_urls",
+    "competitor_websites",
+    "competitor_sites",
+    "competitors",
+    "competitor_list",
+  ]);
+  const marketRegion = pickSetupValue(output, [
+    "market_region",
+    "market_or_region",
+    "target_market",
+    "local_market",
+  ]);
+
+  if (companyUrl !== undefined) {
+    for (const key of ["company_url", "company_website", "main_website"]) {
+      assignIfUseful(output, key, companyUrl);
+    }
+  }
+
+  if (competitorUrls !== undefined) {
+    const joined = joinSetupList(competitorUrls);
+    for (const key of ["competitor_urls", "competitor_websites", "competitor_sites"]) {
+      assignIfUseful(output, key, competitorUrls);
+    }
+    for (const key of [
+      "competitor_urls_join",
+      "competitor_urls_joined",
+      "competitor_urls_csv",
+      "competitor_urls_lines",
+      "competitor_websites_join",
+    ]) {
+      assignIfUseful(output, key, joined);
+    }
+  }
+
+  if (marketRegion !== undefined) {
+    for (const key of ["market_region", "market_or_region", "target_market"]) {
+      assignIfUseful(output, key, marketRegion);
+    }
+  }
+
+  return output;
+}
+
 function safeJsonParse(value: unknown, fallback: any) {
   if (Array.isArray(value) || (value && typeof value === "object")) return value;
 
@@ -648,6 +727,7 @@ async function triggerN8nWebhook(params: {
 }) {
   const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
   const callbackUrl = buildCallbackUrl();
+  const setupPayload = expandBuyerSetupAliases(params.setupAnswers || {});
 
   const payload = {
     customer_automation_id: params.customerAutomation.id,
@@ -655,7 +735,7 @@ async function triggerN8nWebhook(params: {
     order_id: params.customerAutomation.order_id,
     buyer_id: params.customerAutomation.buyer_id,
 
-    setup: params.setupAnswers || {},
+    setup: setupPayload,
     secrets: params.secrets || {},
 
     customer: buildCustomerPayload(params.user, params.customerAutomation, params.order),

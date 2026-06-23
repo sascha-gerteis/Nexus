@@ -699,8 +699,56 @@ function normalizedSetupKey(value: unknown) {
     .slice(0, 80);
 }
 
+function stripDerivedSetupSuffix(key: string) {
+  const suffixes = [
+    "_join",
+    "_joined",
+    "_csv",
+    "_lines",
+    "_text",
+    "_string",
+  ];
+
+  for (const suffix of suffixes) {
+    if (key.endsWith(suffix) && key.length > suffix.length + 2) {
+      return key.slice(0, -suffix.length);
+    }
+  }
+
+  return key;
+}
+
+function canonicalSetupKey(value: unknown) {
+  const key = stripDerivedSetupSuffix(normalizedSetupKey(value));
+  const aliases: Record<string, string> = {
+    main_website: "company_url",
+    company_website: "company_url",
+    company_site: "company_url",
+    company_url: "company_url",
+    business_website: "company_url",
+    business_site: "company_url",
+    buyer_website: "company_url",
+    buyer_site: "company_url",
+    client_website: "company_url",
+    client_site: "company_url",
+    customer_website: "company_url",
+    customer_site: "company_url",
+    competitor_websites: "competitor_urls",
+    competitor_sites: "competitor_urls",
+    competitor_urls: "competitor_urls",
+    competitors: "competitor_urls",
+    competitor_list: "competitor_urls",
+    market_or_region: "market_region",
+    market_region: "market_region",
+    target_market: "market_region",
+    local_market: "market_region",
+  };
+
+  return aliases[key] || key;
+}
+
 function addSetupName(target: Set<string>, value: unknown) {
-  const key = normalizedSetupKey(value);
+  const key = canonicalSetupKey(value);
   if (key) target.add(key);
 }
 
@@ -734,11 +782,11 @@ function inferMakeSetupKeysFromText(text: string) {
 
   const rules = [
     {
-      key: "company_website",
+      key: "company_url",
       pattern: /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/,
     },
     {
-      key: "competitor_websites",
+      key: "competitor_urls",
       pattern: /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/,
     },
     {
@@ -746,7 +794,7 @@ function inferMakeSetupKeysFromText(text: string) {
       pattern: /\bfocus\s+areas?\b|\bfocus\s+topics?\b|\bpricing,\s*offers,\s*messaging\b|\bpricing\s+offers\s+messaging\b/,
     },
     {
-      key: "market_or_region",
+      key: "market_region",
       pattern: /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/,
     },
     {
@@ -771,7 +819,7 @@ function addGeneratedSetupFields(
   reason: string,
 ) {
   for (const name of detectedNames || []) {
-    const key = normalizedSetupKey(name);
+    const key = canonicalSetupKey(name);
     if (!key || setupNames.has(key)) continue;
 
     const field = makeSetupField(key);
@@ -787,7 +835,11 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
   const setupSchema = normalizeJsonArray(product.setup_schema);
   const credentialSchema = normalizeJsonArray(product.credential_schema);
 
-  const setupNames = new Set(setupSchema.map((item: any) => cleanString(item?.name)).filter(Boolean));
+  const setupNames = new Set(
+    setupSchema
+      .map((item: any) => canonicalSetupKey(item?.name))
+      .filter(Boolean),
+  );
   const credentialNames = new Set(credentialSchema.map((item: any) => cleanString(item?.name)).filter(Boolean));
 
   const addedSetupFields: any[] = [];
@@ -801,7 +853,7 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
   const detected = extractPlaceholders(workflowText);
 
   for (const name of detected.setup || []) {
-    const key = cleanString(name);
+    const key = canonicalSetupKey(name);
     if (!key || setupNames.has(key)) continue;
 
     const field = makeSetupField(key);
@@ -837,12 +889,13 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
     if (!workflowText.includes(placeholder)) continue;
 
     if (source === "setup") {
-      if (!setupNames.has(key)) {
-        const field = makeSetupField(key);
+      const canonicalKey = canonicalSetupKey(key);
+      if (!setupNames.has(canonicalKey)) {
+        const field = makeSetupField(canonicalKey);
         setupSchema.push(field);
-        setupNames.add(key);
+        setupNames.add(canonicalKey);
         addedSetupFields.push(field);
-        warnings.push(`Auto-added setup field ${key} because workflow uses ${placeholder}.`);
+        warnings.push(`Auto-added setup field ${canonicalKey} because workflow uses ${placeholder}.`);
       }
       continue;
     }

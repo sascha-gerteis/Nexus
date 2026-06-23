@@ -552,6 +552,35 @@ function guidedInstallFeeMoney(product) {
   return formatMoney(amount, getCurrency());
 }
 
+function productAllowsGuidedInstall(product) {
+  if (!product) return false;
+
+  const listingType = String(product.listing_type || "").toLowerCase();
+  const pricingType = String(product.pricing_type || "").toLowerCase();
+
+  if (listingType === "custom_request" || pricingType === "custom_quote" || pricingType === "free_demo") {
+    return false;
+  }
+
+  const developerId = product.developer_id || product.developers?.id || "";
+  const developerHandle = String(product.developers?.handle || "").toLowerCase();
+  const developerName = String(product.developers?.display_name || "").toLowerCase();
+
+  if (
+    !developerId ||
+    developerHandle === "nexus-internal" ||
+    developerHandle === "nexus" ||
+    developerName === "nexus internal" ||
+    developerName === "nexus"
+  ) {
+    return true;
+  }
+
+  const raw = product.guided_install_enabled;
+  const normalized = String(raw || "").toLowerCase();
+  return raw === true || raw === 1 || ["true", "1", "yes", "on"].includes(normalized);
+}
+
 function money(product) {
   if (!product || product.pricing_type === "custom_quote") {
     return "Custom quote";
@@ -1044,7 +1073,7 @@ function productColorTheme(color) {
             <strong>${money(product)}</strong>
           </div>
 
-          ${guidedInstallFeeMoney(product) ? `
+          ${productAllowsGuidedInstall(product) && guidedInstallFeeMoney(product) ? `
             <div class="meta">
               <span>${escapeHtml(l("Guided install"))}</span>
               <strong>+ ${guidedInstallFeeMoney(product)}</strong>
@@ -1128,6 +1157,7 @@ function productColorTheme(color) {
           <iframe
             class="html-preview-frame"
             sandbox=""
+            loading="lazy"
             srcdoc="${escapeAttribute(responsiveHtml)}"
             title="${escapeAttribute(title)}"
           ></iframe>
@@ -1151,6 +1181,8 @@ function productColorTheme(color) {
                 class="image-preview"
                 src="${escapeAttribute(imageSource)}"
                 alt="${escapeAttribute(title)}"
+                loading="lazy"
+                decoding="async"
                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
               >
 
@@ -4087,6 +4119,7 @@ function mountAdminSidebar(options = {}) {
   setCurrency,
   currencySwitch,
   priceAmount,
+  productAllowsGuidedInstall,
   guidedInstallFeeAmount,
   guidedInstallFeeMoney,
   money,

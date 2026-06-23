@@ -59,6 +59,54 @@ function normalizeName(value: unknown, fallback = "value") {
     .slice(0, 80) || fallback;
 }
 
+function stripDerivedSetupSuffix(key: string) {
+  const suffixes = [
+    "_join",
+    "_joined",
+    "_csv",
+    "_lines",
+    "_text",
+    "_string",
+  ];
+
+  for (const suffix of suffixes) {
+    if (key.endsWith(suffix) && key.length > suffix.length + 2) {
+      return key.slice(0, -suffix.length);
+    }
+  }
+
+  return key;
+}
+
+function canonicalSetupKey(value: unknown) {
+  const key = stripDerivedSetupSuffix(normalizeName(value, ""));
+  const aliases: Record<string, string> = {
+    main_website: "company_url",
+    company_website: "company_url",
+    company_site: "company_url",
+    company_url: "company_url",
+    business_website: "company_url",
+    business_site: "company_url",
+    buyer_website: "company_url",
+    buyer_site: "company_url",
+    client_website: "company_url",
+    client_site: "company_url",
+    customer_website: "company_url",
+    customer_site: "company_url",
+    competitor_websites: "competitor_urls",
+    competitor_sites: "competitor_urls",
+    competitor_urls: "competitor_urls",
+    competitors: "competitor_urls",
+    competitor_list: "competitor_urls",
+    market_or_region: "market_region",
+    market_region: "market_region",
+    target_market: "market_region",
+    local_market: "market_region",
+  };
+
+  return aliases[key] || key;
+}
+
 function inferFieldLabel(name: string) {
   return cleanString(name)
     .replace(/[_-]+/g, " ")
@@ -1374,7 +1422,7 @@ function extractRuntimeSetupKeys(text: string) {
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(source)) !== null) {
-      const key = normalizeName(match[1], "");
+      const key = canonicalSetupKey(match[1]);
       if (key) setupNames.add(key);
     }
   }
@@ -1387,11 +1435,11 @@ function inferMakeSetupKeysFromText(text: string) {
   const source = String(text || "").toLowerCase();
   const rules = [
     {
-      key: "company_website",
+      key: "company_url",
       pattern: /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/,
     },
     {
-      key: "competitor_websites",
+      key: "competitor_urls",
       pattern: /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/,
     },
     {
@@ -1399,7 +1447,7 @@ function inferMakeSetupKeysFromText(text: string) {
       pattern: /\bfocus\s+areas?\b|\bfocus\s+topics?\b|\bpricing,\s*offers,\s*messaging\b|\bpricing\s+offers\s+messaging\b/,
     },
     {
-      key: "market_or_region",
+      key: "market_region",
       pattern: /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/,
     },
     {
@@ -1419,11 +1467,11 @@ function mergeGeneratedSetupSchema(existingSchema: unknown, generatedFields: any
   const schema = asArray(existingSchema)
     .filter((field) => field && typeof field === "object")
     .map((field) => ({ ...field }));
-  const names = new Set(schema.map((field) => normalizeName(field.name, "")).filter(Boolean));
+  const names = new Set(schema.map((field) => canonicalSetupKey(field.name)).filter(Boolean));
   const added: any[] = [];
 
   for (const field of generatedFields || []) {
-    const name = normalizeName(field?.name, "");
+    const name = canonicalSetupKey(field?.name);
     if (!name || names.has(name)) continue;
     const cleanField = {
       ...makeSetupField(name),

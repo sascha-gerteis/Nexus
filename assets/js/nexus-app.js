@@ -514,7 +514,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       <div class="price-box">
         <span>Price</span>
         <strong>${NexusUI.money(product)}</strong>
-        ${NexusUI.guidedInstallFeeMoney?.(product) ? `
+        ${productAllowsGuidedInstall(product) && NexusUI.guidedInstallFeeMoney?.(product) ? `
           <small>Guided install: + ${NexusUI.guidedInstallFeeMoney(product)}</small>
         ` : ""}
       </div>
@@ -618,23 +618,9 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   }
 
   function productAllowsGuidedInstall(product) {
-    if (!product) return false;
-    const developerId = product.developer_id || product.developers?.id || "";
-    const developerHandle = String(product.developers?.handle || "").toLowerCase();
-    const developerName = String(product.developers?.display_name || "").toLowerCase();
-
-    if (
-      !developerId ||
-      developerHandle === "nexus-internal" ||
-      developerHandle === "nexus" ||
-      developerName === "nexus internal" ||
-      developerName === "nexus"
-    ) {
-      return true;
-    }
-
-    return product.guided_install_enabled === true ||
-      String(product.guided_install_enabled || "").toLowerCase() === "true";
+    return typeof NexusUI.productAllowsGuidedInstall === "function"
+      ? NexusUI.productAllowsGuidedInstall(product)
+      : product?.guided_install_enabled === true || String(product?.guided_install_enabled || "").toLowerCase() === "true";
   }
 
   function selectCustomization(index, target = "modal") {
@@ -2104,6 +2090,44 @@ function normalizeSetupSchemaName(value) {
     .slice(0, 80);
 }
 
+function stripDerivedSetupNameSuffix(key) {
+  const suffixes = ["_join", "_joined", "_csv", "_lines", "_text", "_string"];
+  for (const suffix of suffixes) {
+    if (key.endsWith(suffix) && key.length > suffix.length + 2) {
+      return key.slice(0, -suffix.length);
+    }
+  }
+  return key;
+}
+
+function canonicalSetupSchemaName(value) {
+  const key = stripDerivedSetupNameSuffix(normalizeSetupSchemaName(value));
+  const aliases = {
+    main_website: "company_url",
+    company_website: "company_url",
+    company_site: "company_url",
+    company_url: "company_url",
+    business_website: "company_url",
+    business_site: "company_url",
+    buyer_website: "company_url",
+    buyer_site: "company_url",
+    client_website: "company_url",
+    client_site: "company_url",
+    customer_website: "company_url",
+    customer_site: "company_url",
+    competitor_websites: "competitor_urls",
+    competitor_sites: "competitor_urls",
+    competitor_urls: "competitor_urls",
+    competitors: "competitor_urls",
+    competitor_list: "competitor_urls",
+    market_or_region: "market_region",
+    market_region: "market_region",
+    target_market: "market_region",
+    local_market: "market_region"
+  };
+  return aliases[key] || key;
+}
+
 function extractRuntimeSetupKeysFromText(text) {
   const source = String(text || "");
   const patterns = [
@@ -2121,7 +2145,7 @@ function extractRuntimeSetupKeysFromText(text) {
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(source)) !== null) {
-      const key = normalizeSetupSchemaName(match[1]);
+      const key = canonicalSetupSchemaName(match[1]);
       if (key) keys.add(key);
     }
   }
@@ -2133,10 +2157,10 @@ function inferMakeSetupKeysFromText(text) {
   const source = String(text || "").toLowerCase();
   const keys = new Set();
   const rules = [
-    ["company_website", /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/],
-    ["competitor_websites", /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/],
+    ["company_url", /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/],
+    ["competitor_urls", /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/],
     ["focus_areas", /\bfocus\s+areas?\b|\bfocus\s+topics?\b|\bpricing,\s*offers,\s*messaging\b|\bpricing\s+offers\s+messaging\b/],
-    ["market_or_region", /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/],
+    ["market_region", /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/],
     ["report_title", /\breport\s+title\b|\btitle\s+for\s+(?:the\s+)?report\b/]
   ];
 
@@ -2160,9 +2184,9 @@ function missingSetupSchemaFieldsForProduct(product) {
   if (!required.size) return [];
 
   const setupSchema = Array.isArray(product?.setup_schema) ? product.setup_schema : [];
-  const existing = new Set(setupSchema.map((field) => normalizeSetupSchemaName(field?.name)).filter(Boolean));
+  const existing = new Set(setupSchema.map((field) => canonicalSetupSchemaName(field?.name)).filter(Boolean));
 
-  return [...required].filter((key) => !existing.has(key));
+  return [...required].filter((key) => !existing.has(canonicalSetupSchemaName(key)));
 }
 
 async function approveDeveloperProduct(id) {
