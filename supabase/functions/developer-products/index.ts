@@ -18,6 +18,11 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function productCurrency(value: unknown) {
+  const currency = cleanString(value).toUpperCase();
+  return ["THB", "USD", "EUR", "GBP", "JPY"].includes(currency) ? currency : "THB";
+}
+
 function boolValue(value: unknown) {
   const raw = cleanString(value).toLowerCase();
   return value === true || value === 1 || ["true", "1", "yes", "on"].includes(raw);
@@ -525,10 +530,12 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     ? "custom_quote"
     : cleanString(body.pricing_type) || "custom_quote";
 
-  const currency = cleanString(body.currency).toUpperCase() === "THB" ? "THB" : "USD";
+  const currency = productCurrency(body.currency);
   const title = cleanString(body.title);
+  const price = numberValue(body.price);
   const priceUsd = numberValue(body.price_usd);
   const priceThb = numberValue(body.price_thb);
+  const setupFee = numberValue(body.setup_fee);
   const setupFeeUsd = numberValue(body.setup_fee_usd);
   const setupFeeThb = numberValue(body.setup_fee_thb);
   const workflowJson = listingType === "custom_request"
@@ -568,10 +575,10 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
 
     pricing_type: pricingType,
     currency,
-    price: currency === "THB" ? priceThb : priceUsd,
+    price: currency === "THB" ? priceThb : currency === "USD" ? priceUsd : price,
     price_usd: priceUsd,
     price_thb: priceThb,
-    setup_fee: currency === "THB" ? setupFeeThb : setupFeeUsd,
+    setup_fee: currency === "THB" ? setupFeeThb : currency === "USD" ? setupFeeUsd : setupFee,
     setup_fee_usd: setupFeeUsd,
     setup_fee_thb: setupFeeThb,
 

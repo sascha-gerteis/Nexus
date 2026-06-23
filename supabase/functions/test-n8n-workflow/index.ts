@@ -35,6 +35,11 @@ function parseJson(value: unknown, fallback: any) {
   }
 }
 
+function asArray(value: unknown) {
+  const parsed = parseJson(value, []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
 function normalizeSchema(value: unknown) {
   const parsed = parseJson(value, []);
   return Array.isArray(parsed) ? parsed : [];
@@ -43,6 +48,16 @@ function normalizeSchema(value: unknown) {
 function asObject(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
+}
+
+function lower(value: unknown) {
+  return cleanString(value).toLowerCase();
+}
+
+function sourcePlatform(value: unknown) {
+  const platform = lower(value);
+  if (platform === "make" || platform === "zapier") return platform;
+  return "";
 }
 
 function assignIfUseful(target: Record<string, unknown>, key: string, value: unknown) {
@@ -813,6 +828,98 @@ async function findExecutionForTestRun(testRun: any) {
   return exactMatch || detailed[0] || candidates[0];
 }
 
+function isPassingWorkflowTestStatus(status: unknown) {
+  return ["passed", "passed_with_expected_test_callback_error"].includes(lower(status));
+}
+
+async function validateReusableImportMappings(adminClient: any, automationId: string, result: any) {
+  if (!isPassingWorkflowTestStatus(result?.status)) return;
+
+  let automation: any = null;
+  try {
+    automation = await loadAutomation(adminClient, automationId);
+  } catch (error) {
+    console.warn("Could not load automation for reusable import mapping validation:", error);
+    return;
+  }
+
+  const platform = sourcePlatform(automation.workflow_source_platform);
+  if (!platform) return;
+
+  const sessionId = cleanString(automation.make_import_session_id);
+  if (!sessionId) return;
+
+  const { data: session, error } = await adminClient
+    .from("workflow_import_sessions")
+    .select("id, source_platform, resolved_groups")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  if (error || !session) {
+    console.warn("Could not load import session for reusable mapping validation:", error?.message || "session not found");
+    return;
+  }
+
+  const normalizedPlatform = sourcePlatform(session.source_platform || platform);
+  if (!normalizedPlatform) return;
+
+  const mappingIds = Array.from(new Set(
+    asArray(session.resolved_groups)
+      .filter((group) => cleanString(group.target_strategy) === "http_request")
+      .map((group) => cleanString(group.mapping_id))
+      .filter((id) => id && !id.startsWith("builtin:")),
+  ));
+
+  if (!mappingIds.length) return;
+
+  const now = new Date().toISOString();
+  const { data: promoted, error: updateError } = await adminClient
+    .from("workflow_node_mappings")
+    .update({
+      status: "validated",
+      scope: "global",
+      confidence: "high",
+      validated_by_automation_id: automation.id,
+      last_validated_at: now,
+      updated_at: now,
+    })
+    .eq("source_platform", normalizedPlatform)
+    .in("id", mappingIds)
+    .neq("status", "disabled")
+    .select("id");
+
+  if (updateError) {
+    console.warn("Could not validate reusable import mappings:", updateError.message);
+    return;
+  }
+
+  const promotedIds = new Set((promoted || []).map((row: any) => cleanString(row.id)).filter(Boolean));
+  if (!promotedIds.size) return;
+
+  const resolvedGroups = asArray(session.resolved_groups).map((group) => {
+    const mappingId = cleanString(group.mapping_id);
+    if (!promotedIds.has(mappingId)) return group;
+    return {
+      ...group,
+      mapping_status: "validated",
+      mapping_validated: true,
+      needs_validation: false,
+    };
+  });
+
+  const { error: sessionUpdateError } = await adminClient
+    .from("workflow_import_sessions")
+    .update({
+      resolved_groups: resolvedGroups,
+      updated_at: now,
+    })
+    .eq("id", session.id);
+
+  if (sessionUpdateError) {
+    console.warn("Reusable mappings were promoted, but the import session summary was not refreshed:", sessionUpdateError.message);
+  }
+}
+
 async function updateAutomationTestResult(adminClient: any, automationId: string, result: any) {
   const storedResult = {
     ...result,
@@ -834,6 +941,8 @@ async function updateAutomationTestResult(adminClient: any, automationId: string
   if (error) {
     console.warn("Could not update automations test columns:", error.message);
   }
+
+  await validateReusableImportMappings(adminClient, automationId, result);
 }
 
 async function updateTestRun(adminClient: any, testRunId: string, updates: Record<string, unknown>) {

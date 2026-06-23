@@ -186,11 +186,9 @@
                 <div><label>Slug</label><input class="input" name="slug"></div>
                 <div><label>Listing type</label><select class="select" name="listing_type"><option value="standard">Standard product</option><option value="custom_request">Custom request</option></select></div>
                 <div><label>Pricing</label><select class="select" name="pricing_type"><option value="one_time">One-time</option><option value="monthly">Monthly</option><option value="setup_fee">Setup fee</option><option value="custom_quote">Custom quote</option></select></div>
-                <div><label>Currency</label><select class="select" name="currency"><option value="USD">USD</option><option value="THB">THB</option></select></div>
-                <div><label>USD price</label><input class="input" name="price_usd" type="number" step="0.01" min="0"></div>
-                <div><label>THB price</label><input class="input" name="price_thb" type="number" step="0.01" min="0"></div>
-                <div><label>Guided install USD fee</label><input class="input" name="setup_fee_usd" type="number" step="0.01" min="0" placeholder="Optional"></div>
-                <div><label>Guided install THB fee</label><input class="input" name="setup_fee_thb" type="number" step="0.01" min="0" placeholder="Optional"></div>
+                <div><label>Currency</label><select class="select" name="currency"><option value="THB">THB</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="JPY">JPY</option></select></div>
+                <div><label id="developerPriceAmountLabel">Price</label><input class="input" name="price_amount" type="number" step="0.01" min="0"></div>
+                <div><label id="developerSetupFeeAmountLabel">Guided install fee</label><input class="input" name="setup_fee_amount" type="number" step="0.01" min="0" placeholder="Optional"></div>
                 <div><label>Category</label><input class="input" name="category"></div>
                 <div><label>Badge</label><input class="input" name="badge"></div>
                 <div><label>Icon letters</label><input class="input" name="icon" maxlength="3" placeholder="AI"></div>
@@ -675,7 +673,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
   </section>
 
   <div class="toast" id="toast"></div>
-  <script src="/assets/js/nexus-ui.js?v=20260623-launchfix"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260623-dev-wallet-currency"></script>
 <script src="/assets/js/nexus-db.js?v=20260617-make-import"></script>
   <script>
     const state = { account: null, products: [], wallet: null, credentials: [], installs: [], selectedProductId: "", makeImport: null };
@@ -987,7 +985,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       form.elements.id.value = "";
       form.elements.listing_type.value = "standard";
       form.elements.pricing_type.value = "one_time";
-      form.elements.currency.value = "USD";
+      form.elements.currency.value = "THB";
       form.elements.icon.value = "AI";
       form.elements.color.value = "blue";
       form.elements.runtime_type.value = "n8n_managed";
@@ -1007,6 +1005,31 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       updateDeveloperImportResult(null);
       renderMakeImportResult(null);
       updateDeveloperWorkflowProviderUI();
+      updateDeveloperPricingLabels();
+    }
+
+    function updateDeveloperPricingLabels() {
+      const form = document.getElementById("developerProductForm");
+      const currency = String(form?.elements?.currency?.value || "USD").toUpperCase();
+      const priceLabel = document.getElementById("developerPriceAmountLabel");
+      const setupFeeLabel = document.getElementById("developerSetupFeeAmountLabel");
+
+      if (priceLabel) priceLabel.textContent = `Price (${currency})`;
+      if (setupFeeLabel) setupFeeLabel.textContent = `Guided install fee (${currency})`;
+    }
+
+    function productMainPriceValue(product) {
+      const currency = String(product?.currency || "USD").toUpperCase();
+      if (currency === "THB") return Number(product?.price_thb || product?.price || 0);
+      if (!["USD", "THB"].includes(currency)) return Number(product?.price || 0);
+      return Number(product?.price_usd || product?.price || 0);
+    }
+
+    function productSetupFeeValue(product) {
+      const currency = String(product?.currency || "USD").toUpperCase();
+      if (currency === "THB") return Number(product?.setup_fee_thb || product?.setup_fee || 0);
+      if (!["USD", "THB"].includes(currency)) return Number(product?.setup_fee || 0);
+      return Number(product?.setup_fee_usd || product?.setup_fee || 0);
     }
 
     function updateDeveloperWorkflowProviderUI() {
@@ -1180,9 +1203,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     function productPriceLabel(product) {
       const pricing = String(product?.pricing_type || "custom_quote");
       if (pricing === "custom_quote" || product?.listing_type === "custom_request") return "Custom quote";
-      const thb = Number(product?.price_thb || 0);
-      const usd = Number(product?.price_usd || 0);
-      const base = thb > 0 ? moneyValue(thb, "THB") : usd > 0 ? moneyValue(usd, "USD") : "Price pending";
+      const currency = String(product?.currency || "USD").toUpperCase();
+      const amount = productMainPriceValue(product);
+      const base = amount > 0 ? moneyValue(amount, currency, false) : "Price pending";
       return pricing === "monthly" ? `${base} / month` : base;
     }
 
@@ -1279,8 +1302,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const developer = getDeveloper();
       const products = state.products || [];
       const liveProducts = products.filter((product) => ["live", "approved", "active", "published"].includes(String(product.status || "").toLowerCase())).length;
-      const firstCurrencyTotal = state.wallet?.totals?.[0] || null;
-      const availableBalance = firstCurrencyTotal ? moneyValue(firstCurrencyTotal.available_amount || 0, firstCurrencyTotal.currency || "THB") : moneyValue(0, "THB");
+      const availableBalance = moneyValue(walletDisplayTotal("available_amount"), NexusUI.getCurrency?.() || "THB", false);
       const completeness = profileCompleteness(developer);
       const workflowProducts = products.filter((product) => product.listing_type !== "custom_request");
       const incompleteRuns = workflowProducts.filter((product) => !isPassingTestStatus(product.n8n_last_test_status)).length;
@@ -2121,20 +2143,23 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     function productPayload() {
       const form = document.getElementById("developerProductForm");
       const formData = new FormData(form);
+      const selectedCurrency = String(formData.get("currency") || "USD").toUpperCase();
+      const priceAmount = Number(formData.get("price_amount") || 0);
+      const setupFeeAmount = Number(formData.get("setup_fee_amount") || 0);
+
       return {
         id: String(formData.get("id") || "") || undefined,
         title: String(formData.get("title") || ""),
         slug: String(formData.get("slug") || "") || NexusUI.slugify(formData.get("title")),
         listing_type: String(formData.get("listing_type") || "standard"),
         pricing_type: String(formData.get("pricing_type") || "custom_quote"),
-        currency: String(formData.get("currency") || "USD"),
-        price_usd: Number(formData.get("price_usd") || 0),
-        price_thb: Number(formData.get("price_thb") || 0),
-        setup_fee: String(formData.get("currency") || "USD").toUpperCase() === "THB"
-          ? Number(formData.get("setup_fee_thb") || 0)
-          : Number(formData.get("setup_fee_usd") || 0),
-        setup_fee_usd: Number(formData.get("setup_fee_usd") || 0),
-        setup_fee_thb: Number(formData.get("setup_fee_thb") || 0),
+        currency: selectedCurrency,
+        price: priceAmount,
+        price_usd: selectedCurrency === "USD" ? priceAmount : 0,
+        price_thb: selectedCurrency === "THB" ? priceAmount : 0,
+        setup_fee: setupFeeAmount,
+        setup_fee_usd: selectedCurrency === "USD" ? setupFeeAmount : 0,
+        setup_fee_thb: selectedCurrency === "THB" ? setupFeeAmount : 0,
         category: String(formData.get("category") || ""),
         badge: String(formData.get("badge") || ""),
         icon: String(formData.get("icon") || "AI"),
@@ -2198,6 +2223,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
         field.value = typeof value === "object" && value !== null ? JSON.stringify(value, null, 2) : value || "";
       });
+      if (form.elements.price_amount) {
+        form.elements.price_amount.value = productMainPriceValue(product) || "";
+      }
+      if (form.elements.setup_fee_amount) {
+        form.elements.setup_fee_amount.value = productSetupFeeValue(product) || "";
+      }
       if (form.elements.workflow_provider) {
         form.elements.workflow_provider.value = product.workflow_source_platform || (product.make_blueprint ? "make" : "n8n");
       }
@@ -2217,6 +2248,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       renderMakeImportResult(state.makeImport);
       loadMakeImportSessionForProduct(product);
       updateDeveloperWorkflowProviderUI();
+      updateDeveloperPricingLabels();
       updateDeveloperImportResult(product);
       renderSelectedProductSummary(product);
       renderProducts();
@@ -3199,11 +3231,40 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
     }
 
-    function moneyValue(value, currency = "THB") {
+    function moneyValue(value, currency = "THB", convertToSelected = true) {
+      const sourceCurrency = String(currency || "THB").toUpperCase();
+      const displayCurrency = convertToSelected ? String(NexusUI.getCurrency?.() || sourceCurrency).toUpperCase() : sourceCurrency;
+      const amount = convertToSelected && typeof NexusUI.convertAmount === "function"
+        ? NexusUI.convertAmount(Number(value || 0), sourceCurrency, displayCurrency)
+        : Number(value || 0);
+
+      if (typeof NexusUI.formatMoney === "function") {
+        return NexusUI.formatMoney(amount, displayCurrency);
+      }
+
       return new Intl.NumberFormat(undefined, {
         style: "currency",
-        currency
-      }).format(Number(value || 0));
+        currency: displayCurrency
+      }).format(amount);
+    }
+
+    function walletDisplayTotal(field) {
+      const targetCurrency = String(NexusUI.getCurrency?.() || "THB").toUpperCase();
+      return (state.wallet?.totals || []).reduce((sum, item) => {
+        const sourceCurrency = String(item.currency || "THB").toUpperCase();
+        const amount = Number(item[field] || 0);
+        const converted = typeof NexusUI.convertAmount === "function"
+          ? NexusUI.convertAmount(amount, sourceCurrency, targetCurrency)
+          : amount;
+        return sum + Number(converted || 0);
+      }, 0);
+    }
+
+    function originalCurrencyHint(value, currency) {
+      const sourceCurrency = String(currency || "THB").toUpperCase();
+      const displayCurrency = String(NexusUI.getCurrency?.() || sourceCurrency).toUpperCase();
+      if (sourceCurrency === displayCurrency) return "";
+      return `<small>Original ${moneyValue(value, sourceCurrency, false)}</small>`;
     }
 
     function payoutStatusPill(status) {
@@ -3492,13 +3553,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       await loadWallet();
     }
 
-    async function loadWallet() {
+    function renderWallet(data = state.wallet) {
       const root = document.getElementById("walletStatus");
-      const { data, error } = await NexusDB.getDeveloperWalletSummary();
-      if (error) {
-        root.innerHTML = `<div class="error">${error.message}</div>`;
-        return;
-      }
+      if (!root || !data) return;
 
       const totals = data?.totals || [];
       const earnings = data?.earnings || [];
@@ -3521,7 +3578,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           earning.metadata?.automation_title ||
           earning.automation_title ||
           "Automation sale";
-        const key = earning.automation_id || earningTitle || "unknown";
+        const key = `${earning.automation_id || earningTitle || "unknown"}:${earning.currency || "THB"}`;
         const current = productTotals.get(key) || {
           title: earningTitle,
           currency: earning.currency || "THB",
@@ -3555,6 +3612,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
               <article class="developer-wallet-balance-card">
                 <span>${NexusUI.escapeHtml(item.currency || "THB")} balance</span>
                 <strong>${moneyValue(item.available_amount || 0, item.currency || "THB")}</strong>
+                ${originalCurrencyHint(item.available_amount || 0, item.currency || "THB")}
                 <p>Available to request</p>
                 <dl>
                   <div><dt>Lifetime</dt><dd>${moneyValue(item.developer_amount || 0, item.currency || "THB")}</dd></div>
@@ -3646,6 +3704,17 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       renderOverview();
     }
 
+    async function loadWallet() {
+      const root = document.getElementById("walletStatus");
+      const { data, error } = await NexusDB.getDeveloperWalletSummary();
+      if (error) {
+        root.innerHTML = `<div class="error">${error.message}</div>`;
+        return;
+      }
+
+      renderWallet(data);
+    }
+
     async function loadMessages() {
       const root = document.getElementById("developerMessages");
       if (!root || typeof NexusUI.mountMessageCenter !== "function") return;
@@ -3655,6 +3724,13 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         viewerRole: "developer"
       });
     }
+
+    document.addEventListener("currencychange", function () {
+      renderProducts();
+      renderSelectedProductSummary();
+      renderOverview();
+      if (state.wallet) renderWallet(state.wallet);
+    });
 
     document.addEventListener("DOMContentLoaded", async function () {
       const { data: sessionData } = await NexusDB.getSession();
@@ -3749,6 +3825,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       document.querySelector("[name='workflow_provider']")?.addEventListener("change", updateDeveloperWorkflowProviderUI);
       updateDeveloperWorkflowProviderUI();
+      document.querySelector("#developerProductForm [name='currency']")?.addEventListener("change", updateDeveloperPricingLabels);
+      updateDeveloperPricingLabels();
 
       document.getElementById("makeBlueprintUpload")?.addEventListener("change", async function () {
         const file = this.files && this.files[0];

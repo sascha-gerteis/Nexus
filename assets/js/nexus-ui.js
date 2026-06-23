@@ -4144,6 +4144,7 @@ function mountAdminSidebar(options = {}) {
   priceAmount,
 money,
 formatMoney,
+convertAmount,
 refreshUsdToThbRate,
 getLanguage,
 setLanguage,

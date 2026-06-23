@@ -144,19 +144,7 @@ async function requireDeveloper(req: Request, adminClient: any) {
 }
 
 function isGuidedInstallRow(row: any) {
-  const installText = [
-    row?.order?.install_type,
-    row?.customer_automation?.install_type,
-    row?.order?.order_status,
-    row?.customer_automation?.status,
-    row?.customer_automation?.setup_status,
-  ].map((item) => cleanString(item).toLowerCase()).join(" ");
-
-  return Boolean(
-    row?.install_request ||
-      installText.includes("guided") ||
-      installText.includes("nexus_install")
-  );
+  return Boolean(cleanString(row?.install_request?.id));
 }
 
 function developerOwnsInstallRow(row: any, developerId: string) {
