@@ -1043,6 +1043,13 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
 .price-box span{color:var(--muted);font-weight:850;font-size:.88rem}
 .price-box strong{display:block;color:var(--navy);font-size:1.65rem}
 .price-box small{display:block;margin-top:.35rem;color:var(--muted);font-weight:800}
+.checkout-price-lines{display:grid;gap:.55rem;margin-top:.75rem}
+.checkout-price-line{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid rgba(37,99,255,.12);padding-bottom:.5rem}
+.checkout-price-line:last-child{border-bottom:0;padding-bottom:0}
+.checkout-price-line span{font-size:.82rem}
+.checkout-price-line strong{font-size:1rem;text-align:right}
+.checkout-price-total{border-top:1px solid rgba(37,99,255,.16);border-bottom:0;padding-top:.65rem}
+.checkout-price-total strong{font-size:1.35rem}
 .customization-grid{display:grid;gap:.8rem}
 .customization-card{border:1px solid #dbeafe;border-radius:18px;background:#fff;padding:1rem;cursor:pointer}
 .customization-card.active{border-color:var(--blue);box-shadow:0 0 0 4px rgba(37,99,255,.08)}

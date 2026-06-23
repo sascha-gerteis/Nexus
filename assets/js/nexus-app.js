@@ -1,6 +1,7 @@
 const NexusApp = (() => {
   let liveAutomations = [];
   let activeProduct = null;
+  let checkoutSetupProduct = null;
   let selectedCustomizationName = "";
   let marketplaceDrawTimer = null;
   const compareSlugs = new Set();
@@ -615,6 +616,56 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     document.querySelectorAll("[data-install-choice]").forEach((element) => {
       element.classList.toggle("active", element.dataset.installChoice === type);
     });
+
+    updateCheckoutSetupSummary(type);
+  }
+
+  function setupSummaryAmountText(amount) {
+    return typeof NexusUI.formatMoney === "function"
+      ? NexusUI.formatMoney(amount, NexusUI.getCurrency())
+      : String(amount || 0);
+  }
+
+  function setupBasePriceText(product) {
+    return typeof NexusUI.money === "function"
+      ? NexusUI.money(product)
+      : setupSummaryAmountText(NexusUI.priceAmount?.(product) || 0);
+  }
+
+  function updateCheckoutSetupSummary(type) {
+    const product = checkoutSetupProduct;
+    if (!product) return;
+
+    const installType = type || document.getElementById("chosenInstallType")?.value || "self_serve";
+    const baseAmount = Number(NexusUI.priceAmount?.(product) || 0);
+    const guidedAmount = installType === "nexus_guided"
+      ? Number(NexusUI.guidedInstallFeeAmount?.(product) || 0)
+      : 0;
+    const totalAmount = baseAmount + guidedAmount;
+    const pricingType = String(product.pricing_type || "").toLowerCase();
+
+    const baseEl = document.getElementById("checkoutBasePriceText");
+    const guidedRow = document.getElementById("checkoutGuidedFeeRow");
+    const guidedEl = document.getElementById("checkoutGuidedFeeText");
+    const totalEl = document.getElementById("checkoutTotalPriceText");
+    const totalNote = document.getElementById("checkoutTotalPriceNote");
+
+    if (baseEl) baseEl.textContent = setupBasePriceText(product);
+    if (guidedEl) guidedEl.textContent = guidedAmount > 0 ? `+ ${setupSummaryAmountText(guidedAmount)}` : "Included";
+    if (guidedRow) guidedRow.hidden = installType !== "nexus_guided";
+    if (totalEl) totalEl.textContent = setupSummaryAmountText(totalAmount);
+
+    if (totalNote) {
+      if (installType === "nexus_guided" && guidedAmount > 0 && pricingType === "monthly") {
+        totalNote.textContent = `Then ${setupSummaryAmountText(baseAmount)}/mo after the one-time guided install fee.`;
+      } else if (installType === "nexus_guided" && guidedAmount > 0) {
+        totalNote.textContent = "Includes the selected one-time guided install fee.";
+      } else if (pricingType === "monthly") {
+        totalNote.textContent = `${setupSummaryAmountText(baseAmount)}/mo recurring subscription.`;
+      } else {
+        totalNote.textContent = "No guided install fee selected.";
+      }
+    }
   }
 
   function productAllowsGuidedInstall(product) {
@@ -707,6 +758,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 }
 
 function renderSetupChoicePage(root, product) {
+  checkoutSetupProduct = product;
   const guidedInstallEnabled = productAllowsGuidedInstall(product);
   const guidedInstallFee = NexusUI.guidedInstallFeeMoney?.(product) || "";
   const guidedInstallFeeLabel = guidedInstallFee ? `+ ${guidedInstallFee}` : "Included";
@@ -763,8 +815,26 @@ function renderSetupChoicePage(root, product) {
             <p>${product.short_description || ""}</p>
 
             <div class="price-box">
-              <span>Price</span>
-              <strong>${NexusUI.money(product)}</strong>
+              <span>Checkout summary</span>
+              <div class="checkout-price-lines">
+                <div class="checkout-price-line">
+                  <span>Product price</span>
+                  <strong id="checkoutBasePriceText">${NexusUI.money(product)}</strong>
+                </div>
+                <div class="checkout-price-line" id="checkoutGuidedFeeRow" hidden>
+                  <span>Guided install fee</span>
+                  <strong id="checkoutGuidedFeeText">${guidedInstallFee ? `+ ${guidedInstallFee}` : "Included"}</strong>
+                </div>
+                <div class="checkout-price-line checkout-price-total">
+                  <span>Due today</span>
+                  <strong id="checkoutTotalPriceText">${NexusUI.formatMoney?.(NexusUI.priceAmount?.(product) || 0, NexusUI.getCurrency()) || NexusUI.money(product)}</strong>
+                </div>
+              </div>
+              <small id="checkoutTotalPriceNote">
+                ${product.pricing_type === "monthly"
+                  ? `${NexusUI.formatMoney?.(NexusUI.priceAmount?.(product) || 0, NexusUI.getCurrency()) || NexusUI.money(product)}/mo recurring subscription.`
+                  : "No guided install fee selected."}
+              </small>
             </div>
 
             <div class="tags">
@@ -819,6 +889,7 @@ function renderSetupChoicePage(root, product) {
   `;
 
   NexusUI.applyTranslations?.(root);
+  updateCheckoutSetupSummary("self_serve");
 
   const form = document.getElementById("setupChoicePageForm");
 

@@ -1013,12 +1013,6 @@ updated_at: nowIso(),
               source: "nexus_guided_install",
             },
           },
-          metadata: {
-            automation_id: product.id,
-            slug: product.slug || "",
-            install_type: installType,
-            source: "nexus_guided_install",
-          },
         },
         quantity: 1,
       });
