@@ -1967,6 +1967,80 @@ async function getSystemHealth() {
   });
 }
 
+function readStoredId(storage, key, prefix) {
+  try {
+    let value = storage.getItem(key);
+    if (!value) {
+      value = `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      storage.setItem(key, value);
+    }
+    return value;
+  } catch {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+function analyticsBasePayload(extra = {}) {
+  const params = new URLSearchParams(location.search || "");
+  const viewport = {
+    width: window.innerWidth || 0,
+    height: window.innerHeight || 0,
+    device_pixel_ratio: window.devicePixelRatio || 1
+  };
+
+  return {
+    page_path: location.pathname,
+    page_url: location.href,
+    referrer: document.referrer || "",
+    anonymous_id: readStoredId(localStorage, "nexus_analytics_anonymous_id", "anon"),
+    session_id: readStoredId(sessionStorage, "nexus_analytics_session_id", "session"),
+    product_slug: params.get("slug") || extra.product_slug || "",
+    profile_developer_id: params.get("id") || extra.profile_developer_id || "",
+    viewport,
+    metadata: {
+      title: document.title || "",
+      page: document.body?.dataset?.page || "",
+      admin_page: document.body?.dataset?.adminPage || "",
+      ...extra.metadata
+    },
+    ...extra
+  };
+}
+
+async function trackAnalyticsEvent(eventName, payload = {}) {
+  if (!eventName || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { data: null, error: null };
+  }
+
+  return callNexusFunction("analytics-events", {
+    action: "track",
+    event_name: eventName,
+    ...analyticsBasePayload(payload)
+  });
+}
+
+function trackPageView() {
+  window.setTimeout(() => {
+    trackAnalyticsEvent("page_view").catch((error) => {
+      console.warn("Nexus analytics page view failed:", error);
+    });
+  }, 800);
+}
+
+async function getAdminAnalytics(days = 30) {
+  return callNexusFunction("analytics-events", {
+    action: "admin_summary",
+    days
+  });
+}
+
+async function getDeveloperAnalytics(days = 30) {
+  return callNexusFunction("analytics-events", {
+    action: "developer_summary",
+    days
+  });
+}
+
 async function manageAutomationLifecycle(payload) {
   return callNexusFunction("manage-automation-lifecycle", payload);
 }
@@ -2199,6 +2273,7 @@ async function listMakeImportMappings(payload = {}) {
   });
 }
 
+  trackPageView();
 
   return {
     supabase,
@@ -2269,6 +2344,9 @@ async function listMakeImportMappings(payload = {}) {
     validateMakeImportMappings,
     listMakeImportSupportRequests,
     listMakeImportMappings,
+    trackAnalyticsEvent,
+    getAdminAnalytics,
+    getDeveloperAnalytics,
 
     upsertBuyerProfile,
     getBuyerProfile,

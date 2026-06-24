@@ -30,3 +30,6 @@ verify_jwt = false
 
 [functions.n8n-editor-gateway]
 verify_jwt = false
+
+[functions.analytics-events]
+verify_jwt = false

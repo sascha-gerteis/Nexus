@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260623-launchfix">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
   <title>Developer Dashboard | Nexus AI</title>
@@ -38,16 +38,20 @@
           <span>02</span>
           <strong>Products</strong>
         </a>
-        <a href="#installs" data-dev-tab="installs">
+        <a href="#analytics" data-dev-tab="analytics">
           <span>03</span>
+          <strong>Analytics</strong>
+        </a>
+        <a href="#installs" data-dev-tab="installs">
+          <span>04</span>
           <strong>Installs</strong>
         </a>
         <a href="#messages" data-dev-tab="messages">
-          <span>04</span>
+          <span>05</span>
           <strong>Messages</strong>
         </a>
         <a href="#wallet" data-dev-tab="wallet">
-          <span>05</span>
+          <span>06</span>
           <strong>Wallet</strong>
         </a>
       </nav>
@@ -444,6 +448,54 @@
         </div>
       </section>
 
+      <section class="developer-panel" data-dev-panel="analytics" hidden>
+        <div class="developer-panel-head">
+          <div>
+            <span class="eyebrow">Analytics</span>
+            <h2>Product and profile performance</h2>
+            <p>Track visits, product interest, checkout starts, and message intent across your Nexus storefront.</p>
+          </div>
+          <div class="developer-head-actions">
+            <select class="select" id="developerAnalyticsDays" onchange="loadDeveloperAnalytics()">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last year</option>
+            </select>
+            <button class="btn btn-secondary btn-small" type="button" onclick="loadDeveloperAnalytics()">Refresh</button>
+          </div>
+        </div>
+
+        <div class="developer-overview-grid" id="developerAnalyticsSummary">
+          <div class="developer-console-stat skeleton-card"></div>
+          <div class="developer-console-stat skeleton-card"></div>
+          <div class="developer-console-stat skeleton-card"></div>
+          <div class="developer-console-stat skeleton-card"></div>
+        </div>
+
+        <div class="analytics-grid">
+          <section class="developer-wallet-section">
+            <h3>Top products</h3>
+            <div class="analytics-list" id="developerAnalyticsProducts">Loading analytics...</div>
+          </section>
+
+          <section class="developer-wallet-section">
+            <h3>Audience actions</h3>
+            <div class="analytics-list" id="developerAnalyticsEvents">Loading analytics...</div>
+          </section>
+
+          <section class="developer-wallet-section">
+            <h3>Daily activity</h3>
+            <div class="analytics-bars" id="developerAnalyticsDaily">Loading analytics...</div>
+          </section>
+
+          <section class="developer-wallet-section">
+            <h3>Recent activity</h3>
+            <div class="analytics-list" id="developerAnalyticsRecent">Loading analytics...</div>
+          </section>
+        </div>
+      </section>
+
       <section class="developer-panel" data-dev-panel="installs" hidden>
         <div class="developer-panel-head">
           <div>
@@ -673,10 +725,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
   </section>
 
   <div class="toast" id="toast"></div>
-  <script src="/assets/js/nexus-ui.js?v=20260623-dev-wallet-currency"></script>
-<script src="/assets/js/nexus-db.js?v=20260617-make-import"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
+<script src="/assets/js/nexus-db.js?v=20260624-analytics"></script>
   <script>
-    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], selectedProductId: "", makeImport: null };
+    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null };
 
     const developerGuideSnippets = {
       setupSchema: JSON.stringify([
@@ -917,7 +969,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const shouldFocusCredentials = tab === "credentials";
       if (shouldFocusCredentials) tab = "products";
 
-      if (["profile", "products", "installs", "messages", "wallet"].includes(tab) && location.hash !== `#${tab}`) {
+      if (["profile", "products", "analytics", "installs", "messages", "wallet"].includes(tab) && location.hash !== `#${tab}`) {
         history.replaceState(null, "", `${location.pathname}${location.search}#${tab}`);
       }
       document.querySelectorAll("[data-dev-tab]").forEach((link) => {
@@ -937,6 +989,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
       if (tab === "installs") {
         loadDeveloperInstalls();
+      }
+      if (tab === "analytics") {
+        loadDeveloperAnalytics();
       }
     }
 
@@ -1335,6 +1390,124 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           <button class="btn btn-secondary btn-small" type="button" onclick="activeTab('credentials')">Open product workspace</button>
         </article>
       `;
+    }
+
+    function analyticsNumber(value) {
+      return Number(value || 0).toLocaleString();
+    }
+
+    function analyticsDate(value) {
+      if (!value) return "Unknown";
+      try {
+        return new Date(value).toLocaleString();
+      } catch (error) {
+        return "Unknown";
+      }
+    }
+
+    function renderDeveloperAnalytics(data = state.analytics) {
+      const summaryRoot = document.getElementById("developerAnalyticsSummary");
+      if (!summaryRoot) return;
+
+      if (!data) {
+        summaryRoot.innerHTML = `
+          <div class="developer-console-stat skeleton-card"></div>
+          <div class="developer-console-stat skeleton-card"></div>
+          <div class="developer-console-stat skeleton-card"></div>
+          <div class="developer-console-stat skeleton-card"></div>
+        `;
+        return;
+      }
+
+      const totals = data.totals || {};
+      const metric = (label, value, note) => `
+        <article class="developer-console-stat">
+          <span>${NexusUI.escapeHtml(label)}</span>
+          <strong>${NexusUI.escapeHtml(String(value))}</strong>
+          <p>${NexusUI.escapeHtml(note)}</p>
+        </article>
+      `;
+
+      summaryRoot.innerHTML = [
+        metric("Visitors", analyticsNumber(totals.unique_visitors), "Unique visitors tracked for your products and profile."),
+        metric("Product views", analyticsNumber(totals.product_views), "Product modal and listing views connected to your products."),
+        metric("Profile views", analyticsNumber(totals.profile_views), "Visits to your public developer profile."),
+        metric("Checkout starts", analyticsNumber(totals.checkout_starts), "Buyers who started checkout for your products.")
+      ].join("");
+
+      const productRoot = document.getElementById("developerAnalyticsProducts");
+      if (productRoot) {
+        const products = data.top_products || [];
+        productRoot.innerHTML = products.length ? products.slice(0, 8).map((item) => `
+          <article class="analytics-list-row">
+            <div>
+              <strong>${NexusUI.escapeHtml(item.title || item.slug || "Unknown product")}</strong>
+              <p>${NexusUI.escapeHtml(item.slug || "Product traffic")}</p>
+            </div>
+            <span>${analyticsNumber(item.count)}</span>
+          </article>
+        `).join("") : `<p class="muted">No product views tracked yet.</p>`;
+      }
+
+      const eventRoot = document.getElementById("developerAnalyticsEvents");
+      if (eventRoot) {
+        const events = data.events_by_name || [];
+        eventRoot.innerHTML = events.length ? events.slice(0, 8).map((item) => `
+          <article class="analytics-list-row">
+            <strong>${NexusUI.escapeHtml(String(item.name || "event").replace(/_/g, " "))}</strong>
+            <span>${analyticsNumber(item.count)}</span>
+          </article>
+        `).join("") : `<p class="muted">No tracked actions yet.</p>`;
+      }
+
+      const dailyRoot = document.getElementById("developerAnalyticsDaily");
+      if (dailyRoot) {
+        const daily = data.daily || [];
+        const max = Math.max(...daily.map((item) => Number(item.count || 0)), 1);
+        dailyRoot.innerHTML = daily.length ? daily.slice(-14).map((item) => {
+          const width = Math.max(5, Math.round((Number(item.count || 0) / max) * 100));
+          return `
+            <div class="analytics-bar-row">
+              <span>${NexusUI.escapeHtml(item.date || "")}</span>
+              <div><i style="width:${width}%"></i></div>
+              <strong>${analyticsNumber(item.count)}</strong>
+            </div>
+          `;
+        }).join("") : `<p class="muted">No daily analytics yet.</p>`;
+      }
+
+      const recentRoot = document.getElementById("developerAnalyticsRecent");
+      if (recentRoot) {
+        const recent = data.recent_events || [];
+        recentRoot.innerHTML = recent.length ? recent.slice(0, 10).map((event) => `
+          <article class="analytics-list-row">
+            <div>
+              <strong>${NexusUI.escapeHtml(String(event.event_name || "event").replace(/_/g, " "))}</strong>
+              <p>${NexusUI.escapeHtml(event.product_title || event.page_path || "Storefront activity")}</p>
+            </div>
+            <span>${NexusUI.escapeHtml(analyticsDate(event.created_at))}</span>
+          </article>
+        `).join("") : `<p class="muted">No recent activity yet.</p>`;
+      }
+    }
+
+    async function loadDeveloperAnalytics() {
+      const days = Number(document.getElementById("developerAnalyticsDays")?.value || 30);
+      try {
+        const { data, error } = await NexusDB.getDeveloperAnalytics(days);
+        if (error) throw new Error(error.message || "Could not load analytics.");
+        state.analytics = data || null;
+        renderDeveloperAnalytics(state.analytics);
+      } catch (error) {
+        const summaryRoot = document.getElementById("developerAnalyticsSummary");
+        if (summaryRoot) {
+          summaryRoot.innerHTML = `<div class="notice error">${NexusUI.escapeHtml(error.message || "Could not load analytics.")}</div>`;
+        }
+        ["developerAnalyticsProducts", "developerAnalyticsEvents", "developerAnalyticsDaily", "developerAnalyticsRecent"].forEach((id) => {
+          const root = document.getElementById(id);
+          if (root) root.innerHTML = `<p class="muted">Analytics unavailable.</p>`;
+        });
+      }
     }
 
     function renderPayoutSettingsPreview() {
@@ -3917,7 +4090,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       });
 
       const requestedTab = new URLSearchParams(location.search).get("tab") || location.hash.replace("#", "");
-      const initialTab = ["profile", "products", "installs", "messages", "credentials", "wallet"].includes(requestedTab) ? requestedTab : "profile";
+      const initialTab = ["profile", "products", "analytics", "installs", "messages", "credentials", "wallet"].includes(requestedTab) ? requestedTab : "profile";
       await Promise.all([
         loadProducts(),
         loadCredentials()

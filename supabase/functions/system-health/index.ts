@@ -121,6 +121,62 @@ async function checkStripe() {
   }
 }
 
+async function checkScheduledRunner() {
+  const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
+
+  if (!SUPABASE_URL || !runtimeSecret) {
+    return check(
+      "Supabase Cron runner",
+      "error",
+      "Missing SUPABASE_URL or NEXUS_RUNTIME_SECRET, so the monthly runner cannot be checked.",
+    );
+  }
+
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/run-scheduled-automations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-nexus-runtime-secret": runtimeSecret,
+      },
+      body: JSON.stringify({
+        action: "dry_run",
+        limit: 1,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data?.ok === false) {
+      return check(
+        "Supabase Cron runner",
+        "error",
+        data?.error || data?.message || `run-scheduled-automations responded with ${response.status}.`,
+        {
+          status: response.status,
+          response: data,
+        },
+      );
+    }
+
+    return check(
+      "Supabase Cron runner",
+      "ok",
+      "Scheduled automation runner is callable with the runtime secret.",
+      {
+        action: data?.action || "dry_run",
+        candidate_count: data?.count || 0,
+      },
+    );
+  } catch (error) {
+    return check(
+      "Supabase Cron runner",
+      "error",
+      error instanceof Error ? error.message : "Could not call run-scheduled-automations.",
+    );
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -170,6 +226,8 @@ Deno.serve(async (req) => {
     countTable(adminClient, "developer_payout_requests"),
     countTable(adminClient, "message_threads"),
     countTable(adminClient, "reviews"),
+    countTable(adminClient, "analytics_events"),
+    countTable(adminClient, "workflow_node_mappings"),
   ]);
 
   const monthlyChecks = await Promise.all([
@@ -182,15 +240,8 @@ Deno.serve(async (req) => {
     filteredCount(adminClient, "automation_runs", "Runs in last 32 days", (query) =>
       query.gte("created_at", new Date(Date.now() - 32 * 24 * 60 * 60 * 1000).toISOString())
     ),
+    checkScheduledRunner(),
   ]);
-
-  monthlyChecks.push(
-    check(
-      "Supabase Cron",
-      "warning",
-      "Confirm the pg_cron job nexus-monthly-runner-daily exists in Supabase SQL. This function cannot safely expose cron.job through the browser.",
-    ),
-  );
 
   const externalChecks = await Promise.all([
     checkN8n(),

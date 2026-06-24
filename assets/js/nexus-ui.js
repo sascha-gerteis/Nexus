@@ -4025,6 +4025,7 @@ function adminSidebarSections(active = "") {
       items: [
         { id: "dashboard", label: "Overview", href: "/pages/admin/dashboard.html" },
         { id: "orders", label: "Orders", href: "/pages/admin/orders.html" },
+        { id: "analytics", label: "Analytics", href: "/pages/admin/analytics.html" },
         { id: "finance", label: "Finance", href: "/pages/admin/finance.html" },
         { id: "health", label: "System Health", href: "/pages/admin/health.html" }
       ]

@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260623-launchfix">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
   <title>Custom Automation Request | Nexus Workflow and AI Agent Builds</title>
   <meta name="description" content="Request a custom automation, workflow, AI agent, reporting system, internal tool, or micro-SaaS solution built around your business process.">
   <meta name="robots" content="index, follow">
@@ -89,8 +89,8 @@
   </main>
 
   <div class="toast" id="toast"></div>
-  <script defer src="/assets/js/nexus-ui.js?v=20260623-launchfix"></script>
-  <script defer src="/assets/js/nexus-db.js?v=20260608-devfix"></script>
+  <script defer src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
+  <script defer src="/assets/js/nexus-db.js?v=20260624-analytics"></script>
   <script>
     document.addEventListener("DOMContentLoaded", async function () {
       const params = new URLSearchParams(location.search);
@@ -115,7 +115,18 @@
             <p>${NexusUI.escapeHtml(product.long_description || product.short_description || "")}</p>
             ${product.outcome ? `<p><strong>Outcome:</strong> ${NexusUI.escapeHtml(product.outcome)}</p>` : ""}
           `;
+          NexusDB.trackAnalyticsEvent?.("custom_request_start", {
+            automation_id: product.id,
+            product_slug: product.slug || slug,
+            product_title: product.title || "",
+            developer_id: product.developer_id || null,
+            metadata: { source: "custom_request_page" }
+          });
         }
+      } else {
+        NexusDB.trackAnalyticsEvent?.("custom_request_start", {
+          metadata: { source: "generic_custom_request_page" }
+        });
       }
 
       const { data: session } = await NexusDB.getSession();
@@ -178,6 +189,18 @@
         if (error) {
           NexusUI.toast(error.message || "Could not send request.");
           return;
+        }
+
+        try {
+          await NexusDB.trackAnalyticsEvent?.("custom_request_submit", {
+            automation_id: product?.id || null,
+            product_slug: product?.slug || slug || "",
+            product_title: title,
+            developer_id: product?.developer_id || null,
+            metadata: { source: "custom_request_page", budget_range: fields.budget_range || "", timeline: fields.timeline || "" }
+          });
+        } catch (analyticsError) {
+          console.warn("Custom request analytics failed", analyticsError);
         }
 
         location.href = "/pages/contact/index.html?sent=custom-request";

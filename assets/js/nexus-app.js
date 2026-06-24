@@ -474,6 +474,19 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (!product) return;
 
     const developer = product.developers || {};
+    NexusDB.trackAnalyticsEvent?.("product_view", {
+      automation_id: product.id,
+      product_slug: product.slug,
+      product_title: product.title,
+      developer_id: product.developer_id || developer.id || "",
+      developer_name: developer.display_name || "Nexus Internal",
+      metadata: {
+        source: "product_modal",
+        category: product.category || "",
+        listing_type: product.listing_type || "",
+        pricing_type: product.pricing_type || ""
+      }
+    }).catch((error) => console.warn("Could not track product view:", error));
 
     let productReviews = [];
 
@@ -586,6 +599,11 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   }
 
   async function startProductMessage(productId) {
+    NexusDB.trackAnalyticsEvent?.("message_product_click", {
+      automation_id: productId,
+      metadata: { source: "product_modal" }
+    }).catch((error) => console.warn("Could not track product message click:", error));
+
     const { data: sessionData } = await NexusDB.getSession();
 
     if (!sessionData?.session?.user) {
@@ -935,6 +953,19 @@ function renderSetupChoicePage(root, product) {
       setup_notes: "",
     };
 
+    NexusDB.trackAnalyticsEvent?.("checkout_start", {
+      automation_id: product.id,
+      product_slug: product.slug,
+      product_title: product.title,
+      developer_id: product.developer_id || "",
+      metadata: {
+        install_type: installType,
+        selected_customization: customization,
+        currency: payload.currency,
+        guided_install: installType === "nexus_guided"
+      }
+    }).catch((analyticsError) => console.warn("Could not track checkout start:", analyticsError));
+
     const { data, error } = await NexusDB.createStripeCheckoutSession(payload);
 
     if (error) {
@@ -1197,6 +1228,15 @@ async function submitCheckoutIntent(event) {
       NexusDB.getSession ? NexusDB.getSession() : Promise.resolve({ data: null })
     ]);
 
+    NexusDB.trackAnalyticsEvent?.("developer_profile_view", {
+      profile_developer_id: developer.id,
+      developer_name: developer.display_name || "",
+      metadata: {
+        handle: developer.handle || "",
+        product_count: products?.length || 0
+      }
+    }).catch((analyticsError) => console.warn("Could not track developer profile view:", analyticsError));
+
     const reviewStats = NexusUI.reviewStats(developerReviews || []);
     const currentUser = sessionData?.session?.user || null;
     const isOwnDeveloperProfile = currentUser?.id && developer.profile_id && currentUser.id === developer.profile_id;
@@ -1415,6 +1455,11 @@ async function submitCheckoutIntent(event) {
   }
 
   async function startDeveloperMessage(developerId) {
+    NexusDB.trackAnalyticsEvent?.("message_developer_click", {
+      profile_developer_id: developerId,
+      metadata: { source: "developer_profile" }
+    }).catch((analyticsError) => console.warn("Could not track developer message click:", analyticsError));
+
     const { data: sessionData } = await NexusDB.getSession();
 
     if (!sessionData?.session?.user) {
