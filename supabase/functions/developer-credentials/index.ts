@@ -10,7 +10,9 @@ import {
   providerOptions,
   providerPreset,
   redactCredential,
+  sanitizeWorkflowCredentialReferences,
 } from "../_shared/nexus-credentials.ts";
+import { isLegacyNexusProduct } from "../_shared/legacy-nexus-products.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -88,15 +90,39 @@ function providerLabelFor(provider: string) {
   return providerPreset(provider)?.label || cleanString(provider || "Custom");
 }
 
+function normalizedProviderForCredential(body: any) {
+  const explicitProvider = cleanString(body.provider);
+  const explicitType = cleanString(body.n8n_credential_type);
+  const typePreset = providerPreset(explicitType);
+  const providerPresetValue = providerPreset(explicitProvider);
+  const providerIsGeneric = !explicitProvider ||
+    ["custom", "bearer_token", "webhook_api", "basic_auth"].includes(cleanString(providerPresetValue?.provider || explicitProvider));
+
+  if (
+    typePreset?.provider &&
+    !isGenericHttpCredentialType(typePreset.n8nCredentialType) &&
+    providerIsGeneric
+  ) {
+    return typePreset.provider;
+  }
+
+  return cleanString(providerPresetValue?.provider || explicitProvider || typePreset?.provider || "custom");
+}
+
 function n8nTypeFor(provider: string, explicitType = "") {
   const providerValue = cleanString(provider);
   const explicit = cleanString(explicitType);
+  const presetType = cleanString(providerPreset(provider)?.n8nCredentialType);
 
   if (providerValue === "apify" && (!explicit || explicit === "apifyApi")) {
     return "httpBearerAuth";
   }
 
-  return explicit || providerPreset(provider)?.n8nCredentialType || "";
+  if (presetType && explicit && isGenericHttpCredentialType(explicit) && !isGenericHttpCredentialType(presetType)) {
+    return presetType;
+  }
+
+  return explicit || presetType || "";
 }
 
 function isGenericHttpCredentialType(value: unknown) {
@@ -135,6 +161,17 @@ function bindingMatchesSlot(binding: any, slot: any) {
 function providerMatchesCredential(credential: any, slot: any) {
   const credentialProvider = lower(credential?.provider || credential?.provider_label);
   const slotProvider = lower(slot?.provider || slot?.provider_label);
+  const credentialTypePreset = providerPreset(credential?.n8n_credential_type);
+  const slotTypePreset = providerPreset(slot?.n8n_credential_type || slot?.credential_key);
+
+  if (
+    credentialTypePreset?.provider &&
+    slotTypePreset?.provider &&
+    credentialTypePreset.provider === slotTypePreset.provider
+  ) {
+    return true;
+  }
+
   if (!credentialProvider || !slotProvider) return true;
   if (credentialProvider === slotProvider) return true;
   return Boolean(providerPreset(credentialProvider)?.provider === providerPreset(slotProvider)?.provider);
@@ -196,7 +233,64 @@ function inferredBindingFromCredential(slot: any, credential: any) {
   };
 }
 
+function isNativeN8nCredentialSlot(slot: any) {
+  const type = cleanString(slot?.n8n_credential_type || slot?.credential_key);
+  const nodeType = cleanString(slot?.node_type);
+  return Boolean(
+    type &&
+    nodeType &&
+    !isGenericHttpCredentialType(type) &&
+    !lower(nodeType).includes("httprequest"),
+  );
+}
+
+function manualNativeBindingFromSlot(slot: any) {
+  if (!isNativeN8nCredentialSlot(slot)) return null;
+
+  const n8nCredentialId = cleanString(slot?.current_id);
+  const n8nCredentialName = cleanString(slot?.current_name);
+  if (!n8nCredentialId && !n8nCredentialName) return null;
+
+  return {
+    node_name: slot.node_name,
+    node_type: slot.node_type,
+    provider: slot.provider || null,
+    provider_label: slot.provider_label || null,
+    credential_key: slot.credential_key || slot.n8n_credential_type,
+    n8n_credential_type: slot.n8n_credential_type || slot.credential_key,
+    n8n_credential_id: n8nCredentialId || null,
+    n8n_credential_name: n8nCredentialName || "Existing n8n credential",
+    developer_credential_id: null,
+    manual_n8n_credential: true,
+    managed_in_n8n_editor: true,
+  };
+}
+
 function normalizeSecretFields(body: any) {
+  const provider = normalizedProviderForCredential(body);
+  const openAiApiKey = cleanString(
+    body.openai_api_key ||
+    body.openaiApiKey ||
+    body.api_key ||
+    body.apiKey ||
+    body.token,
+  );
+
+  if (provider === "openai" && openAiApiKey) {
+    const fields: Record<string, any> = {
+      api_key: openAiApiKey,
+    };
+    const baseUrl = cleanString(
+      body.openai_base_url ||
+      body.openaiBaseUrl ||
+      body.base_url ||
+      body.baseURL,
+    );
+
+    if (baseUrl) fields.url = baseUrl;
+    return fields;
+  }
+
   const secretFields = jsonObject(body.secret_fields);
   const apiKey = cleanString(body.api_key || body.token || body.secret);
 
@@ -300,10 +394,39 @@ async function listCredentials(adminClient: any, operator: any, body: any) {
   return data || [];
 }
 
+async function findActiveCredentialByLabel(adminClient: any, ownerPatch: any, provider: string, label: string, excludeId = "") {
+  const cleanLabel = cleanString(label).toLowerCase();
+  if (!cleanLabel) return null;
+
+  let query = adminClient
+    .from("developer_credentials")
+    .select("*")
+    .eq("provider", provider)
+    .ilike("label", cleanLabel)
+    .neq("status", "revoked")
+    .limit(1);
+
+  if (ownerPatch.developer_id) {
+    query = query.eq("developer_id", ownerPatch.developer_id);
+  } else {
+    query = query.is("developer_id", null);
+  }
+
+  if (excludeId) {
+    query = query.neq("id", excludeId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  const match = data || null;
+
+  return cleanString(match?.label).toLowerCase() === cleanLabel ? match : null;
+}
+
 async function saveCredential(adminClient: any, operator: any, body: any) {
   const credentialSecret = env("NEXUS_CREDENTIAL_SECRET");
   const id = cleanString(body.id);
-  const provider = cleanString(body.provider || body.n8n_credential_type || "custom");
+  const provider = normalizedProviderForCredential(body);
   const secretFields = normalizeSecretFields(body);
   const ownerPatch = credentialOwnerPatch(operator, body);
   const n8nCredentialType = n8nTypeFor(provider, body.n8n_credential_type);
@@ -337,13 +460,7 @@ async function saveCredential(adminClient: any, operator: any, body: any) {
   let encryptedPayload = existing?.encrypted_payload || null;
   let fingerprint = existing?.fingerprint || null;
   let lastFour = existing?.last_four || null;
-  const providerChanged = Boolean(existing) && cleanString(existing?.provider).toLowerCase() !== provider.toLowerCase();
-  const typeChanged = Boolean(existing) && cleanString(existing?.n8n_credential_type).toLowerCase() !== n8nCredentialType.toLowerCase();
   const hasNewSecretFields = Object.keys(secretFields).length > 0;
-  const canKeepExistingN8nCredential = Boolean(existing) &&
-    !providerChanged &&
-    !typeChanged &&
-    !(hasNewSecretFields && isGenericHttpCredentialType(n8nCredentialType));
   const suppliedN8nCredentialId = cleanString(body.n8n_credential_id);
   const suppliedN8nCredentialName = cleanString(body.n8n_credential_name);
 
@@ -358,6 +475,27 @@ async function saveCredential(adminClient: any, operator: any, body: any) {
   } else if (!existing && !cleanString(body.n8n_credential_id)) {
     throw new Error("Add an API key/token or an existing n8n credential ID.");
   }
+
+  const duplicateByLabel = await findActiveCredentialByLabel(
+    adminClient,
+    ownerPatch,
+    provider,
+    label,
+    existing?.id || "",
+  );
+
+  if (duplicateByLabel) {
+    throw new Error(
+      `A ${providerLabelFor(provider)} credential named "${duplicateByLabel.label}" already exists. Use a different credential name.`,
+    );
+  }
+
+  const providerChanged = Boolean(existing) && cleanString(existing?.provider).toLowerCase() !== provider.toLowerCase();
+  const typeChanged = Boolean(existing) && cleanString(existing?.n8n_credential_type).toLowerCase() !== n8nCredentialType.toLowerCase();
+  const canKeepExistingN8nCredential = Boolean(existing) &&
+    !providerChanged &&
+    !typeChanged &&
+    !(hasNewSecretFields && isGenericHttpCredentialType(n8nCredentialType));
 
   const patch = {
     ...ownerPatch,
@@ -384,12 +522,24 @@ async function saveCredential(adminClient: any, operator: any, body: any) {
     ...(existing ? {} : { created_by: operator.profile.id }),
   };
 
-  const request = id
-    ? adminClient.from("developer_credentials").update(patch).eq("id", id)
+  const request = existing?.id
+    ? adminClient.from("developer_credentials").update(patch).eq("id", existing.id)
     : adminClient.from("developer_credentials").insert(patch);
 
   const { data, error } = await request.select().single();
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (error.code === "23505" && String(error.message || "").includes("idx_developer_credentials_fingerprint")) {
+      throw new Error(
+        "Your database still has the old duplicate-key rule for credential secrets. Run supabase/developer_credentials_name_unique_patch.sql, then try saving again.",
+      );
+    }
+
+    if (error.code === "23505") {
+      throw new Error(`A ${providerLabelFor(provider)} credential with this name already exists. Use a different credential name.`);
+    }
+
+    throw new Error(error.message);
+  }
 
   if (existing?.id) {
     await markCredentialAutomationsNeedFreshTest(
@@ -427,7 +577,7 @@ async function markCredentialAutomationsNeedFreshTest(adminClient: any, credenti
     const { error: updateError } = await adminClient
       .from("automations")
       .update({
-        credential_binding_status: "needs_attention",
+        credential_binding_status: "needs_credentials",
         n8n_last_test_status: "not_tested",
         n8n_last_test_error: message,
         n8n_last_test_result: {
@@ -599,16 +749,48 @@ async function getAutomation(adminClient: any, operator: any, automationId: stri
 
 async function scanAutomation(adminClient: any, operator: any, body: any) {
   const product = await getAutomation(adminClient, operator, cleanString(body.automation_id));
-  const workflow = await fetchLiveN8nWorkflow(product.n8n_workflow_id)
+
+  if (isLegacyNexusProduct(product)) {
+    const updatedProduct = {
+      ...product,
+      developer_credential_requirements: [],
+      n8n_credential_bindings: [],
+      credential_binding_status: "bound",
+      credential_binding_errors: [],
+      n8n_last_credential_bound_at: product.n8n_last_credential_bound_at || new Date().toISOString(),
+    };
+
+    await adminClient
+      .from("automations")
+      .update({
+        developer_credential_requirements: [],
+        n8n_credential_bindings: [],
+        credential_binding_status: "bound",
+        credential_binding_errors: [],
+        n8n_last_credential_bound_at: updatedProduct.n8n_last_credential_bound_at,
+      })
+      .eq("id", product.id);
+
+    return {
+      product: updatedProduct,
+      slots: [],
+      bindings: [],
+      errors: [],
+      legacy_nexus_direct_n8n_credentials: true,
+    };
+  }
+
+  const sourceWorkflow = await fetchLiveN8nWorkflow(product.n8n_workflow_id)
     || product.n8n_normalized_workflow_json
     || product.n8n_workflow_json;
+  const workflow = sanitizeWorkflowCredentialReferences(sourceWorkflow);
   const slots = detectWorkflowCredentialSlots(workflow);
   const slotKeys = new Set(
     slots.map((slot: any) => slotKey(slot)),
   );
   const bindings = Array.isArray(product.n8n_credential_bindings)
     ? product.n8n_credential_bindings.filter((binding: any) => (
-      binding?.developer_credential_id &&
+      (binding?.developer_credential_id || binding?.manual_n8n_credential || binding?.n8n_credential_id) &&
       slots.some((slot: any) => bindingMatchesSlot(binding, slot))
     ))
     : [];
@@ -616,6 +798,13 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
   const credentialCandidates = await loadCredentialCandidatesForProduct(adminClient, product);
   for (const slot of slots) {
     if (bindings.some((binding: any) => bindingMatchesSlot(binding, slot))) continue;
+
+    const manualBinding = manualNativeBindingFromSlot(slot);
+    if (manualBinding) {
+      bindings.push(manualBinding);
+      continue;
+    }
+
     const credential = credentialCandidates.find((candidate: any) => credentialMatchesSlotReference(candidate, slot));
     if (credential) {
       bindings.push(inferredBindingFromCredential(slot, credential));
@@ -624,19 +813,22 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
 
   const boundSlotKeys = new Set(
     bindings
-      .filter((binding: any) => binding?.developer_credential_id)
+      .filter((binding: any) => binding?.developer_credential_id || binding?.manual_n8n_credential || binding?.n8n_credential_id)
       .map((binding: any) => slotKey(binding)),
   );
 
-  const errors = Array.isArray(product.credential_binding_errors)
-    ? product.credential_binding_errors.filter((error: any) => {
-      if (cleanString(error?.message).toLowerCase().startsWith("scan only")) return false;
-      const errorKey = slotKey(error);
-      return slotKeys.has(errorKey) && !boundSlotKeys.has(errorKey);
-    })
-    : [];
-
   const missingSlots = slots.filter((slot: any) => !boundSlotKeys.has(slotKey(slot)));
+  const errors = missingSlots.map((slot: any) => ({
+    node_name: slot.node_name,
+    node_type: slot.node_type,
+    credential_key: slot.credential_key,
+    n8n_credential_type: slot.n8n_credential_type,
+    provider: slot.provider,
+    provider_label: slot.provider_label,
+    imported_n8n_credential_id: slot.current_id || null,
+    imported_n8n_credential_name: slot.current_name || null,
+    message: `Add a ${slot.provider_label || slot.provider || "developer"} credential for ${slot.node_name} (${slot.n8n_credential_type || slot.credential_key || "n8n credential"}), then press Apply credentials & run check.`,
+  }));
   const credentialStatus = !slots.length
     ? "not_required"
     : errors.length || missingSlots.length
@@ -656,6 +848,7 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
     await adminClient
       .from("automations")
       .update({
+        n8n_normalized_workflow_json: workflow,
         developer_credential_requirements: updatedProduct.developer_credential_requirements,
         n8n_credential_bindings: updatedProduct.n8n_credential_bindings,
         credential_binding_status: updatedProduct.credential_binding_status,
@@ -692,6 +885,33 @@ function productRuntimeSummary(product: any) {
 async function applyAutomation(adminClient: any, operator: any, body: any) {
   const product = await getAutomation(adminClient, operator, cleanString(body.automation_id));
 
+  if (isLegacyNexusProduct(product)) {
+    const result = await bindAutomationCredentials({
+      adminClient,
+      product,
+      n8nBaseUrl: cleanBaseUrl(env("N8N_BASE_URL")),
+      n8nApiKey: env("N8N_API_KEY"),
+      credentialSecret: env("NEXUS_CREDENTIAL_SECRET"),
+      syncMissingN8nCredentials: false,
+    });
+
+    return {
+      ...result,
+      product: {
+        ...product,
+        developer_credential_requirements: [],
+        n8n_credential_bindings: [],
+        credential_binding_status: "bound",
+        credential_binding_errors: [],
+      },
+    };
+  }
+
+  const liveWorkflow = await fetchLiveN8nWorkflow(product.n8n_workflow_id);
+  const workflowInput = liveWorkflow || product.n8n_normalized_workflow_json || product.n8n_workflow_json;
+  const workflowJsonColumn = (liveWorkflow || product.n8n_normalized_workflow_json)
+    ? "n8n_normalized_workflow_json"
+    : "n8n_workflow_json";
   const result = await bindAutomationCredentials({
     adminClient,
     product,
@@ -699,6 +919,9 @@ async function applyAutomation(adminClient: any, operator: any, body: any) {
     n8nApiKey: env("N8N_API_KEY"),
     credentialSecret: env("NEXUS_CREDENTIAL_SECRET"),
     syncMissingN8nCredentials: body.sync_n8n !== false,
+    workflowInput,
+    workflowJsonColumn,
+    updateHostedWorkflow: true,
   });
 
   return {

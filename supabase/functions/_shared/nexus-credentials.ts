@@ -1,3 +1,5 @@
+import { isLegacyNexusProduct } from "./legacy-nexus-products.ts";
+
 type SupabaseAdminClient = any;
 
 function cleanString(value: unknown) {
@@ -11,6 +13,10 @@ function lower(value: unknown) {
 function asObject(value: unknown): Record<string, any> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, any>;
+}
+
+function cloneJson(value: unknown) {
+  return JSON.parse(JSON.stringify(value || {}));
 }
 
 function b64FromBytes(bytes: Uint8Array) {
@@ -114,7 +120,19 @@ const PROVIDER_PRESETS = [
     provider: "openai",
     label: "OpenAI",
     n8nCredentialType: "openAiApi",
-    matches: ["openai", "open ai", "openaichat", "lmchatopenai"],
+    matches: [
+      "openai",
+      "open ai",
+      "openaiapi",
+      "openai chat",
+      "openai chat model",
+      "openai account",
+      "openaichat",
+      "lmchatopenai",
+      "lm chat openai",
+      "chatopenai",
+      "n8n-nodes-langchain.lmchatopenai",
+    ],
     aliases: API_KEY_ALIASES,
   },
   {
@@ -575,6 +593,24 @@ export function providerPreset(value: unknown) {
   const raw = lower(value);
   if (!raw) return null;
 
+  /*
+    n8n's generic HTTP credential types are shared by many providers. Do not
+    let the first provider that happens to use httpBearerAuth/httpHeaderAuth
+    claim those slots; keep them generic unless a URL or explicit provider says
+    otherwise.
+  */
+  if (raw === "httpbearerauth") {
+    return PROVIDER_PRESETS.find((preset) => preset.provider === "bearer_token") || null;
+  }
+
+  if (raw === "httpheaderauth" || raw === "httpqueryauth" || raw === "httpcustomauth") {
+    return PROVIDER_PRESETS.find((preset) => preset.provider === "webhook_api") || null;
+  }
+
+  if (raw === "httpbasicauth" || raw === "httpdigestauth") {
+    return PROVIDER_PRESETS.find((preset) => preset.provider === "basic_auth") || null;
+  }
+
   return PROVIDER_PRESETS.find((preset) => (
     preset.provider === raw ||
     lower(preset.label) === raw ||
@@ -592,7 +628,15 @@ export function providerOptions() {
 }
 
 function presetForSlot(slot: any) {
-  return providerPreset(slot.provider)
+  /*
+    Native model/tool nodes must win over stale generic credential metadata.
+    Without this, an imported OpenAI Chat Model can keep an old httpHeaderAuth
+    type and Nexus will try to create the wrong n8n credential family.
+  */
+  const nativePreset = nativePresetForNonHttpCredentialNode(slot);
+
+  return nativePreset
+    || providerPreset(slot.provider)
     || providerPreset(slot.n8n_credential_type)
     || providerPreset(slot.node_type)
     || providerPreset(slot.credential_key);
@@ -606,15 +650,45 @@ function isGenericCredentialProvider(value: unknown) {
   return GENERIC_CREDENTIAL_PROVIDERS.has(lower(value));
 }
 
+function isHttpRequestNodeType(value: unknown) {
+  return lower(value).includes("httprequest");
+}
+
+function nativeNodeText(value: any) {
+  return lower([
+    value?.node_type,
+    value?.type,
+    value?.node_name,
+    value?.name,
+    value?.provider,
+    value?.provider_label,
+    value?.credential_key,
+    value?.n8n_credential_type,
+  ].filter(Boolean).join(" "));
+}
+
+function isNativeOpenAiModelSlot(value: any) {
+  const text = nativeNodeText(value);
+  if (!text || isHttpRequestNodeType(text)) return false;
+
+  return (
+    text.includes("lmchatopenai") ||
+    text.includes("openai chat model") ||
+    text.includes("openai account") ||
+    text.includes("openaiapi") ||
+    (text.includes("openai") && (text.includes("chat") || text.includes("model") || text.includes("langchain")))
+  );
+}
+
 function slotProvider(slot: any) {
   const preset = presetForSlot(slot);
-  return lower(slot?.provider || preset?.provider);
+  return lower(preset?.provider || slot?.provider);
 }
 
 function credentialProvider(credential: any) {
   const preset = providerPreset(credential?.provider)
     || providerPreset(credential?.n8n_credential_type);
-  return lower(credential?.provider || preset?.provider);
+  return lower(preset?.provider || credential?.provider);
 }
 
 function compactNodeType(value: unknown) {
@@ -624,6 +698,35 @@ function compactNodeType(value: unknown) {
     .replace(/^n8n-nodes-base\./, "")
     .replace(/^@n8n\/n8n-nodes-langchain\./, "")
     .replace(/^n8n-nodes-langchain\./, "");
+}
+
+function nativePresetForNonHttpCredentialNode(value: any) {
+  const text = nativeNodeText(value);
+  if (isHttpRequestNodeType(text)) return null;
+
+  if (isNativeOpenAiModelSlot(value)) {
+    return providerPreset("openai");
+  }
+
+  const preset = providerPreset(text);
+  if (!preset?.n8nCredentialType || isGenericHttpCredentialType(preset.n8nCredentialType)) {
+    return null;
+  }
+
+  return preset;
+}
+
+function coerceNativeCredentialSlot(slot: any) {
+  const preset = nativePresetForNonHttpCredentialNode(slot);
+  if (!preset) return slot;
+
+  return {
+    ...slot,
+    provider: preset.provider,
+    provider_label: preset.label,
+    credential_key: preset.n8nCredentialType,
+    n8n_credential_type: preset.n8nCredentialType,
+  };
 }
 
 function redactUrl(value: unknown) {
@@ -732,8 +835,102 @@ function isHttpRequestNode(node: any) {
   return lower(node?.type).includes("httprequest");
 }
 
+function isNexusInternalRuntimeNode(node: any) {
+  const name = lower(node?.name);
+  return [
+    "nexus webhook trigger",
+    "nexus runtime context",
+    "nexus runtime merge",
+    "nexus submit output",
+  ].includes(name);
+}
+
+function rawHttpTarget(node: any) {
+  const parameters = asObject(node?.parameters);
+  const nexusCredential = asObject(parameters.nexusCredential);
+  return pickFirstString(
+    parameters.url,
+    parameters.endpoint,
+    parameters.webhookUrl,
+    nexusCredential.url,
+    nexusCredential.allowed_host,
+  );
+}
+
+function isDynamicHttpTarget(node: any) {
+  const raw = lower(rawHttpTarget(node));
+  return Boolean(
+    raw.startsWith("=") ||
+    raw.includes("{{") ||
+    raw.includes("$json") ||
+    raw.includes("nexus_setup") ||
+    raw.includes("nexus_runtime") ||
+    raw.includes("$("),
+  );
+}
+
+function httpTargetPresetForNode(node: any) {
+  const summary = nodeSummary(node);
+  const urlText = [
+    summary.url,
+    summary.host,
+    summary.path,
+  ].filter(Boolean).join(" ");
+  const nodeText = `${node?.type || ""} ${node?.name || ""}`;
+
+  return providerPreset(urlText)
+    || providerPreset(nodeText);
+}
+
+function isProviderSpecificPreset(preset: any) {
+  return Boolean(preset?.provider && !isGenericCredentialProvider(preset.provider));
+}
+
+function httpNodeHasCredentialRequirement(node: any) {
+  if (!isHttpRequestNode(node)) return false;
+
+  const parameters = asObject(node?.parameters);
+  const nexusCredential = asObject(parameters.nexusCredential);
+  if (Object.keys(nexusCredential).length) return true;
+
+  const authentication = lower(parameters.authentication);
+  const genericAuthType = cleanString(parameters.genericAuthType);
+  const nodeCredentialType = cleanString(parameters.nodeCredentialType);
+  const credentialType = genericAuthType || nodeCredentialType;
+  const targetPreset = httpTargetPresetForNode(node);
+
+  /*
+    n8n exports can keep a stale credentials object even after an HTTP Request
+    node has been changed back to "No auth". Trust the explicit auth controls
+    first so public website fetches do not become fake developer-key requirements.
+  */
+  if (!authentication || ["none", "noauth", "no auth"].includes(authentication)) {
+    return false;
+  }
+
+  /*
+    Dynamic customer URLs such as {{$json["Landing Page Url"]}} are setup data,
+    not provider APIs. If an old import accidentally attached a generic bearer
+    credential to that node, strip it instead of asking developers for a key.
+  */
+  if (isDynamicHttpTarget(node) && !isProviderSpecificPreset(targetPreset)) {
+    return false;
+  }
+
+  /*
+    Generic HTTP auth without a static host/provider is almost always a stale
+    binding from a previous import attempt. Real API calls either have a static
+    API host or explicit Nexus credential metadata.
+  */
+  if (isGenericHttpCredentialType(credentialType) && !isProviderSpecificPreset(targetPreset)) {
+    return false;
+  }
+
+  return true;
+}
+
 function servicePresetForNode(node: any) {
-  if (isNonCredentialUtilityNode(node)) return null;
+  if (isNonCredentialUtilityNode(node) || isNexusInternalRuntimeNode(node)) return null;
 
   const nexusCredential = asObject(asObject(node?.parameters).nexusCredential);
   const explicitProvider = pickFirstString(
@@ -744,19 +941,13 @@ function servicePresetForNode(node: any) {
   const explicitPreset = providerPreset(explicitProvider);
   if (explicitPreset) return explicitPreset;
 
-  const summary = nodeSummary(node);
-  const urlText = [
-    summary.url,
-    summary.host,
-    summary.path,
-  ].filter(Boolean).join(" ");
-  const nodeText = `${node?.type || ""} ${node?.name || ""}`;
-
   if (isHttpRequestNode(node)) {
-    return providerPreset(urlText)
-      || providerPreset(nodeText);
+    if (!httpNodeHasCredentialRequirement(node)) return null;
+
+    return httpTargetPresetForNode(node);
   }
 
+  const nodeText = `${node?.type || ""} ${node?.name || ""}`;
   return providerPreset(nodeText);
 }
 
@@ -797,7 +988,8 @@ function inferSlotFromNode(node: any) {
     };
   }
 
-  if (isCodeLikeNode(node) || isNonCredentialUtilityNode(node)) return null;
+  if (isCodeLikeNode(node) || isNonCredentialUtilityNode(node) || isNexusInternalRuntimeNode(node)) return null;
+  if (isHttpRequestNode(node) && !httpNodeHasCredentialRequirement(node)) return null;
 
   const parameters = asObject(node?.parameters);
   const summary = nodeSummary(node);
@@ -816,32 +1008,45 @@ function inferSlotFromNode(node: any) {
 
   if (!credentialType) return null;
 
-    return {
-      provider: preset.provider,
-      provider_label: preset.label,
+  return {
+    provider: preset.provider,
+    provider_label: preset.label,
     credential_type: "api_key",
     credential_key: credentialType,
     n8n_credential_type: credentialType,
-      current_id: "",
-      current_name: "",
-      inferred: true,
-      uses_nexus_proxy: false,
-      allowed_host: "",
-      summary,
-    };
-  }
+    current_id: "",
+    current_name: "",
+    inferred: true,
+    uses_nexus_proxy: false,
+    allowed_host: "",
+    summary,
+  };
+}
 
 function normalizeWorkflowObject(workflow: any) {
   if (!workflow || typeof workflow !== "object") return { nodes: [], connections: {} };
   return JSON.parse(JSON.stringify(workflow));
 }
 
-function removeUtilityNodeCredentials(workflowInput: any) {
+export function sanitizeWorkflowCredentialReferences(workflowInput: any) {
   const workflow = normalizeWorkflowObject(workflowInput);
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
 
   workflow.nodes = nodes.map((node: any) => {
-    if (!isNonCredentialUtilityNode(node) || !node?.credentials) return node;
+    if (isHttpRequestNode(node) && !httpNodeHasCredentialRequirement(node)) {
+      const parameters = { ...asObject(node.parameters) };
+      delete parameters.authentication;
+      delete parameters.genericAuthType;
+      delete parameters.nodeCredentialType;
+
+      const { credentials: _credentials, ...cleanNode } = node || {};
+      return {
+        ...cleanNode,
+        parameters,
+      };
+    }
+
+    if ((!isNonCredentialUtilityNode(node) && !isNexusInternalRuntimeNode(node)) || !node?.credentials) return node;
     const { credentials: _credentials, ...cleanNode } = node;
     return cleanNode;
   });
@@ -850,13 +1055,14 @@ function removeUtilityNodeCredentials(workflowInput: any) {
 }
 
 export function detectWorkflowCredentialSlots(workflowInput: any) {
-  const workflow = removeUtilityNodeCredentials(workflowInput);
+  const workflow = sanitizeWorkflowCredentialReferences(workflowInput);
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
   const slots: any[] = [];
   const seen = new Set<string>();
 
   for (const node of nodes) {
-    if (isNonCredentialUtilityNode(node)) continue;
+    if (isNonCredentialUtilityNode(node) || isNexusInternalRuntimeNode(node)) continue;
+    if (isHttpRequestNode(node) && !httpNodeHasCredentialRequirement(node)) continue;
 
     const credentials = asObject(node?.credentials);
     const credentialEntries = Object.entries(credentials);
@@ -866,17 +1072,30 @@ export function detectWorkflowCredentialSlots(workflowInput: any) {
       const servicePreset = servicePresetForNode(node);
       const credentialPreset = providerPreset(credentialKey) || providerPreset(node?.type);
       const preset = servicePreset || credentialPreset;
-      const n8nCredentialType = credentialKey || preset?.n8nCredentialType || "";
-      const key = `${node?.name || ""}:${credentialKey}:${n8nCredentialType}`;
+      const serviceCredentialType = cleanString(servicePreset?.n8nCredentialType);
+      const importedCredentialType = cleanString(credentialKey || preset?.n8nCredentialType || "");
+      const shouldUseNativeServiceCredential = Boolean(
+        !isHttpRequestNode(node) &&
+        serviceCredentialType &&
+        isProviderSpecificPreset(servicePreset) &&
+        !isGenericHttpCredentialType(serviceCredentialType)
+      );
+      const n8nCredentialType = shouldUseNativeServiceCredential
+        ? serviceCredentialType
+        : importedCredentialType;
+      const credentialSlotKey = shouldUseNativeServiceCredential
+        ? serviceCredentialType
+        : cleanString(credentialKey || n8nCredentialType);
+      const key = `${node?.name || ""}:${credentialSlotKey}:${n8nCredentialType}`;
 
       if (seen.has(key)) continue;
       seen.add(key);
 
-      slots.push({
+      slots.push(coerceNativeCredentialSlot({
         provider: preset?.provider || lower(credentialKey || node?.type || "custom"),
         provider_label: preset?.label || cleanString(credentialKey || "Custom credential"),
         credential_type: "api_key",
-        credential_key: credentialKey || n8nCredentialType,
+        credential_key: credentialSlotKey,
         node_name: cleanString(node?.name || "Unnamed node"),
         node_type: cleanString(node?.type),
         n8n_credential_type: n8nCredentialType,
@@ -884,7 +1103,7 @@ export function detectWorkflowCredentialSlots(workflowInput: any) {
         current_name: cleanString(value.name),
         inferred: false,
         summary: nodeSummary(node),
-      });
+      }));
     }
 
     if (!credentialEntries.length) {
@@ -895,11 +1114,11 @@ export function detectWorkflowCredentialSlots(workflowInput: any) {
       if (seen.has(key)) continue;
       seen.add(key);
 
-      slots.push({
+      slots.push(coerceNativeCredentialSlot({
         ...inferred,
         node_name: cleanString(node?.name || "Unnamed node"),
         node_type: cleanString(node?.type),
-      });
+      }));
     }
   }
 
@@ -942,6 +1161,8 @@ function firstSecretValue(rawFields: Record<string, any>) {
     "api_token",
     "access_token",
     "value",
+    "headerValue",
+    "header_value",
     "password",
     "secret",
   ];
@@ -979,7 +1200,25 @@ function credentialDataCandidatesForN8n(
   const base = secretFieldsForN8n(credential, rawFields, targetCredentialType, slot);
   const candidates: Record<string, any>[] = [];
 
-  if (type === "httpbearerauth" && value) {
+  if (type === "openaiapi" && value) {
+    const openAiApiKey = value.replace(/^Bearer\s+/i, "").trim();
+    const openAiData: Record<string, any> = {
+      apiKey: openAiApiKey,
+      organizationId: "",
+      url: "https://api.openai.com/v1",
+      header: false,
+    };
+    const baseUrl = cleanString(
+      rawFields.baseURL ||
+      rawFields.baseUrl ||
+      rawFields.base_url ||
+      rawFields.url,
+    );
+
+    if (baseUrl) openAiData.url = baseUrl;
+    candidates.push(openAiData);
+    return candidates;
+  } else if (type === "httpbearerauth" && value) {
     candidates.push({ token: value });
   } else if (type === "httpheaderauth" && value) {
     const defaultHeaderName = defaultHeaderNameForProvider(credential, slot);
@@ -1020,6 +1259,48 @@ function credentialDataCandidatesForN8n(
   });
 }
 
+function isNativeN8nCredentialSlot(slot: any, credentialType = "") {
+  const type = cleanString(credentialType || slot?.n8n_credential_type || slot?.credential_key);
+  const nodeType = cleanString(slot?.node_type || slot?.type);
+
+  return Boolean(
+    type &&
+    nodeType &&
+    !isGenericHttpCredentialType(type) &&
+    !isHttpRequestNodeType(nodeType),
+  );
+}
+
+function n8nCredentialPayloadVariants(name: string, type: string, data: Record<string, any>, slot: any) {
+  const base = { name, type, data };
+  const nodeType = cleanString(slot?.node_type || slot?.type);
+
+  if (isNativeN8nCredentialSlot(slot, type) && nodeType) {
+    return [
+      {
+        ...base,
+        nodesAccess: [{ nodeType }],
+      },
+      base,
+    ];
+  }
+
+  return [base];
+}
+
+function nativeCredentialManualSetupMessage(slot: any, credentialType: string, error: Error | null) {
+  const preset = providerPreset(credentialType) || providerPreset(slot?.provider);
+  const provider = cleanString(slot?.provider_label || preset?.label || slot?.provider || credentialType || "provider");
+  const node = cleanString(slot?.node_name || "the workflow node");
+  const nodeType = cleanString(slot?.node_type);
+  const rawError = cleanString(error?.message || "")
+    .replace(/^n8n credential API failed \(\d+\):\s*/i, "")
+    .replace(/^Nexus tried to sync .*?again\.$/i, "")
+    .trim();
+
+  return `${provider} uses n8n's native credential account setup on "${node}". Nexus tried to create the credential profile automatically, but n8n rejected the API setup${rawError ? `: ${rawError}` : "."} Fallback: click Edit workflow, open "${node}"${nodeType ? ` (${nodeType})` : ""}, use Set up credential / select ${provider} account, save the workflow, then click Sync changes and Run check.`;
+}
+
 function cleanBaseUrl(value: string) {
   return cleanString(value).replace(/\/+$/, "");
 }
@@ -1052,6 +1333,15 @@ async function n8nRequest(
 
   if (!response.ok) {
     const message = typeof data === "string" ? data : JSON.stringify(data);
+    if (
+      /headerName|headerValue|header name|header value/i.test(message) &&
+      lower(`${context.provider || ""} ${context.provider_label || ""} ${context.node_name || ""} ${context.node_type || ""}`).includes("openai")
+    ) {
+      throw new Error(
+        "Nexus tried to sync an OpenAI model credential as a generic HTTP header credential. OpenAI Chat Model nodes must use n8n credential type openAiApi. Refresh credentials, then press Apply credentials & run check again.",
+      );
+    }
+
     if (/type is not a known type/i.test(message)) {
       const type = cleanString(context.credential_type);
       const provider = cleanString(context.provider_label || context.provider);
@@ -1060,7 +1350,9 @@ async function n8nRequest(
         `Nexus n8n runtime does not recognize credential type "${type || "unknown"}"${provider ? ` for ${provider}` : ""}${node ? ` on ${node}` : ""}. Update/install the matching n8n node package once on the Nexus n8n runtime, then this credential will sync automatically for every developer.`,
       );
     }
-    throw new Error(`n8n credential API failed (${response.status}): ${message}`);
+    const apiArea = cleanString(context.api_area)
+      || (path.includes("/credentials") ? "credential" : "workflow");
+    throw new Error(`n8n ${apiArea} API failed (${response.status}): ${message}`);
   }
 
   return data;
@@ -1086,19 +1378,32 @@ export async function syncCredentialToN8n(options: {
     credentialName: explicitCredentialName,
     slot,
   } = options;
+  const normalizedSlot = coerceNativeCredentialSlot(slot);
   const rawFields = await decryptCredentialPayload(credential.encrypted_payload, credentialSecret);
-  const credentialType =
-    cleanString(explicitCredentialType)
-    || cleanString(slot?.n8n_credential_type)
-    || cleanString(slot?.credential_key)
+  const nativeSlotType = cleanString(normalizedSlot?.n8n_credential_type);
+  let credentialType =
+    (nativeSlotType && !isGenericHttpCredentialType(nativeSlotType) ? nativeSlotType : "")
+    || cleanString(explicitCredentialType)
+    || cleanString(normalizedSlot?.n8n_credential_type)
+    || cleanString(normalizedSlot?.credential_key)
     || cleanString(credential.n8n_credential_type)
     || providerPreset(credential.provider)?.n8nCredentialType;
+
+  if (
+    isNativeOpenAiModelSlot(normalizedSlot) ||
+    (
+      credentialProvider(credential) === "openai" &&
+      !isHttpRequestNodeType(normalizedSlot?.node_type || normalizedSlot?.type)
+    )
+  ) {
+    credentialType = "openAiApi";
+  }
 
   if (!credentialType) {
     throw new Error("Add an n8n credential type before syncing this credential.");
   }
 
-  const dataCandidates = credentialDataCandidatesForN8n(credential, rawFields, credentialType, slot);
+  const dataCandidates = credentialDataCandidatesForN8n(credential, rawFields, credentialType, normalizedSlot);
   if (!dataCandidates.length) {
     throw new Error("This credential has no saved secret fields to sync.");
   }
@@ -1106,16 +1411,17 @@ export async function syncCredentialToN8n(options: {
   const requestContext = {
     credential_type: credentialType,
     provider: credential.provider,
-    provider_label: credential.provider_label || slot?.provider_label,
-    node_name: slot?.node_name,
+    provider_label: credential.provider_label || normalizedSlot?.provider_label,
+    node_name: normalizedSlot?.node_name,
+    node_type: normalizedSlot?.node_type,
   };
 
   let synced: any = null;
   let lastSyncError: Error | null = null;
   const forceFreshCredential = Boolean(
     isGenericHttpCredentialType(credentialType) &&
-    slotProvider(slot) &&
-    !isGenericCredentialProvider(slotProvider(slot)),
+    slotProvider(normalizedSlot) &&
+    !isGenericCredentialProvider(slotProvider(normalizedSlot)),
   );
   const existingCredentialMatchesType =
     !forceFreshCredential &&
@@ -1125,45 +1431,51 @@ export async function syncCredentialToN8n(options: {
   const credentialName = cleanString(explicitCredentialName || credential.n8n_credential_name || credential.label);
 
   for (const data of dataCandidates) {
-    const payload = {
-      name: credentialName,
-      type: credentialType,
-      data,
-    };
+    const payloads = n8nCredentialPayloadVariants(credentialName, credentialType, data, normalizedSlot);
 
-    if (existingCredentialMatchesType) {
+    for (const payload of payloads) {
+      if (existingCredentialMatchesType) {
+        try {
+          synced = await n8nRequest(
+            n8nBaseUrl,
+            n8nApiKey,
+            `/api/v1/credentials/${encodeURIComponent(credential.n8n_credential_id)}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify(payload),
+            },
+            requestContext,
+          );
+        } catch (error) {
+          lastSyncError = error instanceof Error ? error : new Error(String(error));
+          synced = null;
+        }
+
+        if (synced) break;
+      }
+
+      if (synced) break;
+
       try {
-        synced = await n8nRequest(
-          n8nBaseUrl,
-          n8nApiKey,
-          `/api/v1/credentials/${encodeURIComponent(credential.n8n_credential_id)}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-          },
-          requestContext,
-        );
+        synced = await n8nRequest(n8nBaseUrl, n8nApiKey, "/api/v1/credentials", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }, requestContext);
+        if (synced) break;
       } catch (error) {
         lastSyncError = error instanceof Error ? error : new Error(String(error));
         synced = null;
       }
-
-      if (synced) break;
     }
 
-    try {
-      synced = await n8nRequest(n8nBaseUrl, n8nApiKey, "/api/v1/credentials", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      }, requestContext);
-      if (synced) break;
-    } catch (error) {
-      lastSyncError = error instanceof Error ? error : new Error(String(error));
-      synced = null;
-    }
+    if (synced) break;
   }
 
   if (!synced) {
+    if (isNativeN8nCredentialSlot(normalizedSlot, credentialType)) {
+      throw new Error(nativeCredentialManualSetupMessage(normalizedSlot, credentialType, lastSyncError));
+    }
+
     throw lastSyncError || new Error("Could not create n8n credential.");
   }
 
@@ -1231,6 +1543,11 @@ function credentialMatchScore(credential: any, slot: any) {
     slotProviderName === credentialProviderName,
   );
   const slotHasSpecificProvider = Boolean(slotProviderName && !isGenericCredentialProvider(slotProviderName));
+  const slotHasProviderSpecificCredentialType = Boolean(
+    slotType &&
+    !isGenericHttpCredentialType(slotType) &&
+    slotHasSpecificProvider,
+  );
 
   /*
     Several third-party APIs are represented in n8n with the same generic
@@ -1239,6 +1556,20 @@ function credentialMatchScore(credential: any, slot: any) {
   */
   if (isGenericHttpCredentialType(slotType) && slotHasSpecificProvider) {
     if (!providerMatches) return 0;
+    return typeMatches ? 100 : 80;
+  }
+
+  /*
+    Native n8n credential-bearing nodes such as OpenAI Chat Model need their
+    exact credential family inside n8n. If a Nexus key was saved earlier as a
+    generic HTTP credential but the provider still matches, allow it so the
+    sync step can recreate/upgrade it as the native n8n credential type.
+  */
+  if (slotHasProviderSpecificCredentialType) {
+    if (!providerMatches) return 0;
+    if (credentialType && credentialType !== slotType) {
+      return isGenericHttpCredentialType(credentialType) ? 70 : 0;
+    }
     return typeMatches ? 100 : 80;
   }
 
@@ -1266,6 +1597,28 @@ function bestCredentialForSlot(credentials: any[], slot: any, previousBindings: 
     }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score)[0]?.credential || null;
+}
+
+function manualNativeN8nBindingFromSlot(slot: any) {
+  if (!isNativeN8nCredentialSlot(slot)) return null;
+
+  const n8nCredentialId = cleanString(slot?.current_id);
+  const n8nCredentialName = cleanString(slot?.current_name);
+  if (!n8nCredentialId && !n8nCredentialName) return null;
+
+  return {
+    node_name: slot.node_name,
+    node_type: slot.node_type,
+    provider: slot.provider || null,
+    provider_label: slot.provider_label || null,
+    credential_key: slot.credential_key || slot.n8n_credential_type,
+    n8n_credential_type: slot.n8n_credential_type || slot.credential_key,
+    n8n_credential_id: n8nCredentialId || null,
+    n8n_credential_name: n8nCredentialName || "Existing n8n credential",
+    developer_credential_id: null,
+    manual_n8n_credential: true,
+    managed_in_n8n_editor: true,
+  };
 }
 
 async function loadCredentialsForProduct(adminClient: SupabaseAdminClient, product: any) {
@@ -1296,12 +1649,13 @@ async function loadCredentialsForProduct(adminClient: SupabaseAdminClient, produ
 }
 
 function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: any) {
+  const normalizedSlot = coerceNativeCredentialSlot(slot);
   const workflow = normalizeWorkflowObject(workflowInput);
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
-  const n8nCredentialId = cleanString(credential.n8n_credential_id || slot.current_id);
-  const n8nCredentialName = cleanString(credential.n8n_credential_name || credential.label || slot.current_name);
-  const credentialKey = cleanString(slot.credential_key || slot.n8n_credential_type);
-  const isHttpRequestNode = cleanString(slot.node_type).includes("httpRequest");
+  const n8nCredentialId = cleanString(credential.n8n_credential_id || normalizedSlot.current_id);
+  const n8nCredentialName = cleanString(credential.n8n_credential_name || credential.label || normalizedSlot.current_name);
+  const credentialKey = cleanString(normalizedSlot.credential_key || normalizedSlot.n8n_credential_type);
+  const isHttpRequestNode = cleanString(normalizedSlot.node_type).includes("httpRequest");
   const isGenericHttpCredential = [
     "httpBasicAuth",
     "httpBearerAuth",
@@ -1314,7 +1668,7 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
   if (!n8nCredentialId || !credentialKey) return workflow;
 
   workflow.nodes = nodes.map((node: any) => {
-    if (cleanString(node?.name) !== cleanString(slot.node_name)) return node;
+    if (cleanString(node?.name) !== cleanString(normalizedSlot.node_name)) return node;
 
     const parameters = {
       ...asObject(node.parameters),
@@ -1325,16 +1679,27 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
       parameters.genericAuthType = credentialKey;
     }
 
+    const nextCredentials = {
+      ...asObject(node.credentials),
+    };
+
+    if (!isHttpRequestNode && !isGenericHttpCredentialType(credentialKey)) {
+      for (const key of Object.keys(nextCredentials)) {
+        if (isGenericHttpCredentialType(key)) {
+          delete nextCredentials[key];
+        }
+      }
+    }
+
+    nextCredentials[credentialKey] = {
+      id: n8nCredentialId,
+      name: n8nCredentialName,
+    };
+
     return {
       ...node,
       parameters,
-      credentials: {
-        ...asObject(node.credentials),
-        [credentialKey]: {
-          id: n8nCredentialId,
-          name: n8nCredentialName,
-        },
-      },
+      credentials: nextCredentials,
     };
   });
 
@@ -1406,6 +1771,45 @@ async function updateAutomationCredentialStatus(adminClient: SupabaseAdminClient
   }
 }
 
+function workflowForN8nApi(workflow: any, fallbackName: string) {
+  const source = normalizeWorkflowObject(workflow);
+
+  return {
+    name: cleanString(source.name || fallbackName || "Nexus Workflow"),
+    nodes: Array.isArray(source.nodes) ? source.nodes : [],
+    connections: asObject(source.connections),
+    settings: {
+      executionOrder: cleanString(source.settings?.executionOrder) || "v1",
+    },
+    staticData: asObject(source.staticData),
+  };
+}
+
+async function updateHostedN8nWorkflow(
+  n8nBaseUrl: string,
+  n8nApiKey: string,
+  workflowId: string,
+  workflow: any,
+  fallbackName: string,
+) {
+  const id = cleanString(workflowId);
+  if (!id) return null;
+
+  return await n8nRequest(
+    n8nBaseUrl,
+    n8nApiKey,
+    `/api/v1/workflows/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(workflowForN8nApi(workflow, fallbackName)),
+    },
+    {
+      api_area: "workflow",
+      node_name: "Hosted n8n workflow",
+    },
+  );
+}
+
 export async function bindAutomationCredentials(options: {
   adminClient: SupabaseAdminClient;
   product: any;
@@ -1413,6 +1817,9 @@ export async function bindAutomationCredentials(options: {
   n8nApiKey: string;
   credentialSecret: string;
   syncMissingN8nCredentials?: boolean;
+  workflowInput?: any;
+  workflowJsonColumn?: "n8n_workflow_json" | "n8n_normalized_workflow_json";
+  updateHostedWorkflow?: boolean;
 }) {
   const {
     adminClient,
@@ -1421,10 +1828,35 @@ export async function bindAutomationCredentials(options: {
     n8nApiKey,
     credentialSecret,
     syncMissingN8nCredentials = true,
+    workflowInput,
+    workflowJsonColumn = "n8n_workflow_json",
+    updateHostedWorkflow = false,
   } = options;
 
-  const workflow = removeUtilityNodeCredentials(product?.n8n_workflow_json);
-  const slots = detectWorkflowCredentialSlots(workflow);
+  if (isLegacyNexusProduct(product)) {
+    const workflow = cloneJson(product?.n8n_workflow_json);
+
+    await updateAutomationCredentialStatus(adminClient, product.id, {
+      developer_credential_requirements: [],
+      n8n_credential_bindings: [],
+      credential_binding_status: "bound",
+      credential_binding_errors: [],
+      n8n_last_credential_bound_at: new Date().toISOString(),
+    });
+
+    return {
+      ok: true,
+      workflow,
+      slots: [],
+      bindings: [],
+      errors: [],
+      status: "bound",
+      legacy_nexus_direct_n8n_credentials: true,
+    };
+  }
+
+  const workflow = sanitizeWorkflowCredentialReferences(workflowInput || product?.n8n_workflow_json);
+  const slots = detectWorkflowCredentialSlots(workflow).map(coerceNativeCredentialSlot);
 
   if (!slots.length) {
     await updateAutomationCredentialStatus(adminClient, product.id, {
@@ -1454,6 +1886,12 @@ export async function bindAutomationCredentials(options: {
   const errors: any[] = [];
 
   for (const slot of slots) {
+    const manualNativeBinding = manualNativeN8nBindingFromSlot(slot);
+    if (manualNativeBinding) {
+      bindings.push(manualNativeBinding);
+      continue;
+    }
+
     let credential = bestCredentialForSlot(credentials, slot, previousBindings);
     const usesNexusProxy = Boolean(slot.uses_nexus_proxy);
 
@@ -1548,13 +1986,38 @@ export async function bindAutomationCredentials(options: {
   await persistCredentialRequirements(adminClient, product, rows);
 
   const status = errors.length ? "needs_credentials" : "bound";
+  let hostedUpdate: any = null;
+  let hostedUpdateError = "";
+
+  if (updateHostedWorkflow && cleanString(product?.n8n_workflow_id)) {
+    try {
+      hostedUpdate = await updateHostedN8nWorkflow(
+        n8nBaseUrl,
+        n8nApiKey,
+        product.n8n_workflow_id,
+        boundWorkflow,
+        product.n8n_workflow_name || product.title || product.slug || "Nexus Workflow",
+      );
+    } catch (error) {
+      hostedUpdateError = error instanceof Error ? error.message : String(error);
+      errors.push({
+        node_name: "Hosted n8n workflow",
+        node_type: "n8n-workflow",
+        credential_key: "workflow_update",
+        n8n_credential_type: null,
+        provider: "n8n",
+        provider_label: "n8n",
+        message: `Credentials were prepared, but Nexus could not update the hosted n8n workflow: ${hostedUpdateError}`,
+      });
+    }
+  }
 
   const automationPatch: Record<string, any> = {
     developer_credential_requirements: slots,
     n8n_credential_bindings: bindings,
-    credential_binding_status: status,
+    credential_binding_status: errors.length ? "needs_credentials" : status,
     credential_binding_errors: errors,
-    n8n_last_credential_bound_at: new Date().toISOString(),
+    n8n_last_credential_bound_at: !errors.length ? new Date().toISOString() : product.n8n_last_credential_bound_at || null,
     n8n_last_test_status: "not_tested",
     n8n_last_test_error: errors.length
       ? "Credential binding is incomplete. Add or sync credentials, apply them, then run a fresh technical test."
@@ -1564,7 +2027,13 @@ export async function bindAutomationCredentials(options: {
   };
 
   if (!errors.length) {
-    automationPatch.n8n_workflow_json = boundWorkflow;
+    automationPatch[workflowJsonColumn] = boundWorkflow;
+    if (hostedUpdate) {
+      automationPatch.n8n_last_synced_at = new Date().toISOString();
+    }
+  } else if (hostedUpdate) {
+    automationPatch[workflowJsonColumn] = boundWorkflow;
+    automationPatch.n8n_last_synced_at = new Date().toISOString();
   }
 
   await updateAutomationCredentialStatus(adminClient, product.id, automationPatch);
@@ -1575,6 +2044,8 @@ export async function bindAutomationCredentials(options: {
     slots,
     bindings,
     errors,
-    status,
+    status: errors.length ? "needs_credentials" : status,
+    hosted_update: hostedUpdate,
+    hosted_update_error: hostedUpdateError || null,
   };
 }

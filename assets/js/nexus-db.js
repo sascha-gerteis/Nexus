@@ -720,6 +720,33 @@ const NexusDB = (() => {
       .single();
   }
 
+  async function rejectAutomationForEdits(id, note = "") {
+    const timestamp = new Date().toISOString();
+    const existing = await getAutomationById(id);
+
+    if (existing.error) return existing;
+    if (!existing.data) {
+      return {
+        data: null,
+        error: {
+          message: "Product not found. It may already have been deleted."
+        }
+      };
+    }
+
+    const currentNotes = String(existing.data.internal_notes || "").trim();
+    const rejectionNote = `[${timestamp}] Returned to developer for edits.${note ? ` ${note}` : ""}`;
+    const internalNotes = currentNotes
+      ? `${currentNotes}\n\n${rejectionNote}`
+      : rejectionNote;
+
+    return updateAutomation(id, {
+      status: "draft",
+      internal_notes: internalNotes,
+      updated_at: timestamp
+    });
+  }
+
   async function deleteAutomation(id) {
     return supabase
       .from("automations")
@@ -2363,6 +2390,7 @@ async function listMakeImportMappings(payload = {}) {
     getAutomationById,
     upsertAutomation,
     updateAutomation,
+    rejectAutomationForEdits,
     deleteAutomation,
 
     listDevelopers,

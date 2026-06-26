@@ -376,7 +376,13 @@
 
                   <div id="developerCredentialForm" class="credential-form-grid">
                     <input type="hidden" data-credential-name="id">
-                    <div>
+                    <div class="full">
+                      <label>Detected credential</label>
+                      <div class="runtime-import-result compact" id="developerCredentialDetectedContext">
+                        Scan a product first. Nexus will detect the exact n8n credential account needed for the selected workflow.
+                      </div>
+                    </div>
+                    <div hidden>
                       <label>Provider</label>
                       <select class="select" data-credential-name="provider" id="developerCredentialProvider">
                         <option value="google_gemini">Google Gemini</option>
@@ -392,17 +398,29 @@
                     </div>
                     <div>
                       <label>Label</label>
-                      <input class="input" data-credential-name="label" placeholder="Gemini production key">
+                      <input class="input" data-credential-name="label" placeholder="Detected account label">
                     </div>
-                    <div>
+                    <div hidden>
                       <label>n8n credential type override</label>
                       <input class="input" data-credential-name="n8n_credential_type" placeholder="Usually detected from the workflow">
                     </div>
                     <input type="hidden" data-credential-name="n8n_credential_id">
                     <input type="hidden" data-credential-name="n8n_credential_name">
-                    <div class="full">
+                    <div class="full" data-generic-credential-field>
                       <label>API key / token</label>
                       <input class="input" data-credential-name="api_key" type="password" autocomplete="off" placeholder="Paste key. It will not be shown again after saving.">
+                    </div>
+                    <div class="full provider-native-fields" data-provider-fields="openai" hidden>
+                      <div class="credential-form-grid">
+                        <div class="full">
+                          <label>OpenAI API Key</label>
+                          <input class="input" data-credential-name="openai_api_key" type="password" autocomplete="off" placeholder="Paste the key for n8n's OpenAI account credential.">
+                        </div>
+                        <div>
+                          <label>Base URL</label>
+                          <input class="input" data-credential-name="openai_base_url" placeholder="https://api.openai.com/v1">
+                        </div>
+                      </div>
                     </div>
                     <details class="full">
                       <summary><strong>Advanced secret fields JSON</strong></summary>
@@ -728,7 +746,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
   <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
 <script src="/assets/js/nexus-db.js?v=20260624-analytics"></script>
   <script>
-    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null };
+    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null };
 
     const developerGuideSnippets = {
       setupSchema: JSON.stringify([
@@ -777,7 +795,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       placeholderMappings: JSON.stringify([], null, 2),
       developerCredential: [
         "Provider: OpenAI",
-        "n8n credential type: httpBearerAuth",
+        "n8n credential type: openAiApi",
         "Used by node: Generate Competitor Brief",
         "Where to enter it: Credential vault, not inside the workflow JSON"
       ].join("\n"),
@@ -1525,6 +1543,119 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       `;
     }
 
+    function providerForCredentialType(type) {
+      const cleanType = String(type || "").trim().toLowerCase();
+      if (!cleanType) return "";
+
+      for (const [_groupLabel, options] of credentialProviderGroups) {
+        const match = options.find(([provider, _label, n8nType]) => (
+          String(n8nType || "").trim().toLowerCase() === cleanType ||
+          String(provider || "").trim().toLowerCase() === cleanType
+        ));
+        if (match) return match[0];
+      }
+
+      return "";
+    }
+
+    function providerLabelForProvider(provider) {
+      const cleanProvider = String(provider || "").trim().toLowerCase();
+      for (const [_groupLabel, options] of credentialProviderGroups) {
+        const match = options.find(([value]) => String(value || "").trim().toLowerCase() === cleanProvider);
+        if (match) return match[1];
+      }
+      return cleanProvider || "Provider";
+    }
+
+    function updateCredentialDetectedContext(slot = null) {
+      const root = document.getElementById("developerCredentialDetectedContext");
+      if (!root) return;
+
+      if (!slot) {
+        root.innerHTML = "Scan a product first. Nexus will detect the exact n8n credential account needed for the selected workflow.";
+        return;
+      }
+
+      const n8nType = slot.n8n_credential_type || slot.credential_key || "";
+      const provider = slot.provider || providerForCredentialType(n8nType) || "custom";
+      const providerLabel = slot.provider_label || providerLabelForProvider(provider) || "Provider";
+      const nodeName = slot.node_name || "workflow";
+
+      root.innerHTML = `
+        <strong>${NexusUI.escapeHtml(providerLabel)} account</strong>
+        <p>Detected from ${NexusUI.escapeHtml(nodeName)}. Nexus will create the matching n8n credential type <code>${NexusUI.escapeHtml(n8nType || credentialProviderDefaults[provider] || "detected")}</code>.</p>
+      `;
+    }
+
+    function prepareCredentialFormForSlot(slot = {}, options = {}) {
+      const form = document.getElementById("developerCredentialForm");
+      if (!form || !slot) return;
+
+      const n8nType = slot.n8n_credential_type || slot.credential_key || "";
+      const provider = slot.provider || providerForCredentialType(n8nType) || "custom";
+      const providerLabel = slot.provider_label || providerLabelForProvider(provider) || "Provider";
+      const nodeName = slot.node_name || "workflow";
+      const label = `${providerLabel} account - ${nodeName}`;
+
+      form.querySelector("[data-credential-name='id']").value = "";
+      form.querySelector("[data-credential-name='provider']").value = provider;
+      form.querySelector("[data-credential-name='label']").value = label;
+      form.querySelector("[data-credential-name='n8n_credential_type']").value = n8nType || credentialProviderDefaults[provider] || "";
+      form.querySelector("[data-credential-name='n8n_credential_id']").value = "";
+      form.querySelector("[data-credential-name='n8n_credential_name']").value = slot.current_name || label;
+      form.querySelector("[data-credential-name='api_key']").value = "";
+      form.querySelector("[data-credential-name='secret_fields']").value = "";
+      form.querySelector("[data-credential-name='openai_api_key']").value = "";
+      form.querySelector("[data-credential-name='openai_base_url']").value = "";
+      renderCredentialProviderFields();
+      updateCredentialDetectedContext({
+        ...slot,
+        provider,
+        provider_label: providerLabel,
+        n8n_credential_type: n8nType || credentialProviderDefaults[provider] || "",
+      });
+
+      const credentialSection = document.getElementById("developerProductCredentialsSection");
+      if (credentialSection) credentialSection.open = true;
+
+      if (!options.quiet) {
+        const targetField = provider === "openai"
+          ? form.querySelector("[data-credential-name='openai_api_key']")
+          : form.querySelector("[data-credential-name='api_key']");
+        targetField?.focus();
+        NexusUI.toast(`${providerLabel} credential form prepared from ${nodeName}. Paste the API key and save.`);
+      }
+    }
+
+    function maybePrepareFirstMissingCredential(slots, errors, bindings) {
+      if (!errors?.length) return;
+
+      const form = document.getElementById("developerCredentialForm");
+      if (!form) return;
+
+      const hasDraftCredential = [
+        "id",
+        "label",
+        "api_key",
+        "openai_api_key",
+        "secret_fields",
+      ].some((name) => String(form.querySelector(`[data-credential-name='${name}']`)?.value || "").trim());
+      if (hasDraftCredential) return;
+
+      const firstError = errors[0];
+      const firstSlot = (slots || []).find((slot) => (
+        slot.node_name === firstError.node_name &&
+        (slot.credential_key === firstError.credential_key || slot.n8n_credential_type === firstError.n8n_credential_type)
+      )) || firstError;
+
+      if (isNativeCredentialSlot(firstSlot)) {
+        updateCredentialDetectedContext(firstSlot);
+        return;
+      }
+
+      prepareCredentialFormForSlot(firstSlot, { quiet: true });
+    }
+
     function resetCredentialForm() {
       const form = document.getElementById("developerCredentialForm");
       if (!form) return;
@@ -1533,6 +1664,26 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       });
       form.querySelector("[data-credential-name='provider']").value = "google_gemini";
       form.querySelector("[data-credential-name='n8n_credential_type']").value = credentialProviderDefaults.google_gemini;
+      renderCredentialProviderFields();
+      updateCredentialDetectedContext(null);
+    }
+
+    function renderCredentialProviderFields() {
+      const form = document.getElementById("developerCredentialForm");
+      if (!form) return;
+
+      const provider = form.querySelector("[data-credential-name='provider']")?.value || "";
+      form.querySelectorAll("[data-provider-fields]").forEach((panel) => {
+        panel.hidden = panel.dataset.providerFields !== provider;
+      });
+      form.querySelectorAll("[data-generic-credential-field]").forEach((panel) => {
+        panel.hidden = provider === "openai";
+      });
+
+      const openAiBaseUrl = form.querySelector("[data-credential-name='openai_base_url']");
+      if (provider === "openai" && openAiBaseUrl && !openAiBaseUrl.value) {
+        openAiBaseUrl.value = "https://api.openai.com/v1";
+      }
     }
 
     function credentialStatusClass(status) {
@@ -1777,6 +1928,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           form.querySelector("[data-credential-name='n8n_credential_name']").value = credential.n8n_credential_name || "";
           form.querySelector("[data-credential-name='api_key']").value = "";
           form.querySelector("[data-credential-name='secret_fields']").value = "";
+          form.querySelector("[data-credential-name='openai_api_key']").value = "";
+          form.querySelector("[data-credential-name='openai_base_url']").value = "";
+          renderCredentialProviderFields();
         });
       });
 
@@ -2002,6 +2156,21 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return "pill red";
     }
 
+    function isNativeCredentialSlot(slot) {
+      const type = String(slot?.n8n_credential_type || slot?.credential_key || "").trim().toLowerCase();
+      const nodeType = String(slot?.node_type || "").trim().toLowerCase();
+      const genericTypes = new Set([
+        "httpbasicauth",
+        "httpbearerauth",
+        "httpdigestauth",
+        "httpheaderauth",
+        "httpqueryauth",
+        "httpcustomauth"
+      ]);
+
+      return Boolean(type && nodeType && !genericTypes.has(type) && !nodeType.includes("httprequest"));
+    }
+
     function workflowRunGuidance(message, slots, bindings) {
       const text = String(message || "");
       if (!text) return "";
@@ -2019,14 +2188,18 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     }
 
     function flowCredentialRows(slots, errors, bindings) {
-      return groupCredentialSlots(slots, errors, bindings).map((group) => {
+      return groupCredentialSlots(slots, errors, bindings).map((group, index) => {
         const missing = group.errors.length > 0;
         const bound = group.bindings.length > 0;
+        const nativeGroup = group.slots.some(isNativeCredentialSlot);
         const status = missing ? "Missing" : bound ? "Bound" : "Detected only";
         const statusClassName = missing ? "pill red" : bound ? "pill green" : "pill orange";
         const credentialNames = Array.from(new Set(group.bindings.map((binding) => binding.n8n_credential_name || binding.developer_credential_id || "Nexus credential").filter(Boolean)));
         const nodeNames = group.slots.map((slot) => slot.node_name || "Workflow node").slice(0, 4);
         const firstError = group.errors[0]?.message || "";
+        const nativeFallbackCopy = nativeGroup && missing
+          ? `This is a native n8n account credential. Open the workflow editor, open ${nodeNames[0] || "the node"}, set/select the credential account there, save, then sync and run the check.`
+          : "";
 
         return `
           <article class="flow-credential-card">
@@ -2042,7 +2215,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
               <div><dt>Credential</dt><dd>${NexusUI.escapeHtml(credentialNames.join(", ") || "Not applied yet")}</dd></div>
             </dl>
             <p class="flow-credential-nodes">${NexusUI.escapeHtml(nodeNames.join(", "))}${group.slots.length > 4 ? ` +${group.slots.length - 4} more` : ""}</p>
-            ${firstError ? `<p class="error">${NexusUI.escapeHtml(firstError)}</p>` : ""}
+            ${nativeFallbackCopy ? `<p class="error">${NexusUI.escapeHtml(nativeFallbackCopy)}</p>` : firstError ? `<p class="error">${NexusUI.escapeHtml(firstError)}</p>` : ""}
+            ${missing
+              ? nativeGroup
+                ? `<button class="btn btn-secondary btn-small" type="button" data-open-workflow-editor="${index}">Set in n8n editor</button>`
+                : `<button class="btn btn-secondary btn-small" type="button" data-prepare-credential-group="${index}">Add ${NexusUI.escapeHtml(group.provider)} key</button>`
+              : ""}
           </article>
         `;
       }).join("");
@@ -2101,12 +2279,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const slots = result?.slots || [];
       const errors = result?.errors || [];
       const bindings = result?.bindings || [];
+      state.lastCredentialScan = { slots, errors, bindings };
 
       if (!slots.length) {
         root.innerHTML = `
           ${renderFlowSummary(result, slots, errors, bindings)}
           ${result?.message ? `<div class="${errors.length ? "error" : "success"}" style="margin-bottom:.75rem">${NexusUI.escapeHtml(result.message)}</div>` : ""}
         `;
+        maybePrepareFirstMissingCredential(slots, errors, bindings);
         return;
       }
 
@@ -2114,6 +2294,21 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         ${renderFlowSummary(result, slots, errors, bindings)}
         ${result?.message ? `<div class="${errors.length ? "error" : "success"}" style="margin-bottom:.75rem">${NexusUI.escapeHtml(result.message)}</div>` : ""}
       `;
+
+      const groups = groupCredentialSlots(slots, errors, bindings);
+      root.querySelectorAll("[data-prepare-credential-group]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const group = groups[Number(button.dataset.prepareCredentialGroup)];
+          prepareCredentialFormForSlot(group?.slots?.[0] || group?.errors?.[0] || {});
+        });
+      });
+      root.querySelectorAll("[data-open-workflow-editor]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const product = currentCredentialProduct(result);
+          openEmbeddedWorkflowEditor(product.id || state.selectedProductId);
+        });
+      });
+      maybePrepareFirstMissingCredential(slots, errors, bindings);
     }
 
     async function scanCurrentProductCredentials() {
@@ -4037,6 +4232,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (!typeField.value || credentialProviderDefaults[this.value]) {
           typeField.value = credentialProviderDefaults[this.value] || "";
         }
+        renderCredentialProviderFields();
       });
 
       document.getElementById("developerShowRevokedCredentials")?.addEventListener("change", loadCredentials);

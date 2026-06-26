@@ -2151,7 +2151,7 @@ async function submitCheckoutIntent(event) {
     product.status === "pending_review"
       ? `
         <button class="btn btn-primary btn-small" onclick="NexusApp.approveDeveloperProduct('${product.id}')">Approve</button>
-        <button class="btn btn-secondary btn-small" onclick="NexusApp.rejectDeveloperProduct('${product.id}')">Reject</button>
+        <button class="btn btn-secondary btn-small" onclick="NexusApp.rejectDeveloperProduct('${product.id}')">Return for edits</button>
       `
       : ""
   }
@@ -2370,20 +2370,25 @@ async function approveDeveloperProduct(id) {
 
 async function rejectDeveloperProduct(id) {
   const confirmed = await NexusUI.confirmDialog({
-    title: "Reject product?",
-    message: "This product will be removed from the review queue.",
-    confirmText: "Reject product"
+    title: "Return product for edits?",
+    message: "This will move the product back to the developer's draft workspace so they can edit and resubmit it. It will not be deleted.",
+    confirmText: "Return for edits"
   });
   if (!confirmed) return;
 
-  const { error } = await NexusDB.deleteAutomation(id);
-
-  if (error) {
-    NexusUI.toast(error.message || "Could not reject product.");
+  if (typeof NexusDB.rejectAutomationForEdits !== "function") {
+    NexusUI.toast("Reject-for-edits function is missing in nexus-db.js.");
     return;
   }
 
-  NexusUI.toast("Product rejected and removed.");
+  const { error } = await NexusDB.rejectAutomationForEdits(id);
+
+  if (error) {
+    NexusUI.toast(error.message || "Could not return product for edits.");
+    return;
+  }
+
+  NexusUI.toast("Product returned to developer for edits.");
   await renderAdminAutomations();
 }
 

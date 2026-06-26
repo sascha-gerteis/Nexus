@@ -14,6 +14,10 @@ function cleanString(value: unknown) {
   return String(value || "").trim();
 }
 
+function lower(value: unknown) {
+  return cleanString(value).toLowerCase();
+}
+
 function asObject(value: unknown): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, any>
@@ -65,6 +69,18 @@ function isCredentialSchemaError(error: unknown) {
    NEXUS RUNTIME CONTEXT EXPRESSIONS
    ========================================================= */
 
+function runtimeContextPath(section: string, key: string) {
+  const cleanSection = cleanString(section);
+  const cleanKey = cleanString(key);
+  if (!cleanSection || !cleanKey) return "";
+
+  const keyPath = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(cleanKey)
+    ? `.${cleanKey}`
+    : `[${JSON.stringify(cleanKey)}]`;
+
+  return `$("Nexus Runtime Context").first().json.${cleanSection}${keyPath}`;
+}
+
 function contextPathForMapping(source: string, key: string) {
   const cleanSource = cleanString(source).toLowerCase();
   const cleanKey = cleanString(key);
@@ -72,7 +88,7 @@ function contextPathForMapping(source: string, key: string) {
   if (!cleanKey) return "";
 
   if (cleanSource === "setup") {
-    return `$("Nexus Runtime Context").first().json.setup.${cleanKey}`;
+    return runtimeContextPath("setup", cleanKey);
   }
 
   if (
@@ -81,19 +97,19 @@ function contextPathForMapping(source: string, key: string) {
     cleanSource === "credential" ||
     cleanSource === "credentials"
   ) {
-    return `$("Nexus Runtime Context").first().json.secrets.${cleanKey}`;
+    return runtimeContextPath("secrets", cleanKey);
   }
 
   if (cleanSource === "customer") {
-    return `$("Nexus Runtime Context").first().json.customer.${cleanKey}`;
+    return runtimeContextPath("customer", cleanKey);
   }
 
   if (cleanSource === "system") {
-    return `$("Nexus Runtime Context").first().json.system.${cleanKey}`;
+    return runtimeContextPath("system", cleanKey);
   }
 
   if (cleanSource === "order") {
-    return `$("Nexus Runtime Context").first().json.order.${cleanKey}`;
+    return runtimeContextPath("order", cleanKey);
   }
 
   return "";
@@ -452,6 +468,24 @@ function convertLegacyPlaceholdersInCode(sourceCode: string) {
 
   for (const item of legacy) {
     output = replaceQuotedCodePlaceholder(output, item.regex, item.source);
+  }
+
+  const bracketSetupPatterns = [
+    /\{\{\s*\$json\[['"]([^'"]+)['"]\]\s*\}\}/g,
+    /\{\{\s*\$json\.body\[['"]([^'"]+)['"]\]\s*\}\}/g,
+  ];
+
+  for (const pattern of bracketSetupPatterns) {
+    output = output.replace(
+      new RegExp("([\"'`])\\s*" + pattern.source + "\\s*\\1", "g"),
+      (_full: string, _quote: string, key: string) => {
+        return jsStringAccessorForMapping("setup", canonicalSetupKey(key)) || "\"\"";
+      },
+    );
+
+    output = output.replace(pattern, (_full: string, key: string) => {
+      return jsStringAccessorForMapping("setup", canonicalSetupKey(key)) || "\"\"";
+    });
   }
 
   return output;
@@ -1074,6 +1108,14 @@ function convertLegacyDynamicReferences(value: any, childKey = ""): any {
         source: "setup",
       },
       {
+        regex: /\{\{\s*\$json\[['"]([^'"]+)['"]\]\s*\}\}/g,
+        source: "setup",
+      },
+      {
+        regex: /\{\{\s*\$json\.body\[['"]([^'"]+)['"]\]\s*\}\}/g,
+        source: "setup",
+      },
+      {
         regex: /\{\{\s*\$json\.body\.secrets\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
         source: "secret",
       },
@@ -1111,7 +1153,8 @@ function convertLegacyDynamicReferences(value: any, childKey = ""): any {
       output = output.replace(item.regex, (fullMatch: string, key: string) => {
         const whole = isWholeString(value, fullMatch);
         const expressionMode = whole && isLikelyExpressionField(childKey);
-        return contextExpressionForMapping(item.source, key, expressionMode);
+        const mappedKey = item.source === "setup" ? canonicalSetupKey(key) : key;
+        return contextExpressionForMapping(item.source, mappedKey, expressionMode);
       });
     }
 
@@ -1980,6 +2023,43 @@ function stripContentTypeHeaderJson(value: any) {
   return Object.keys(stripped).length ? JSON.stringify(stripped, null, 2) : "";
 }
 
+function isHtmlFetchHttpNode(node: any, parameters: Record<string, any>) {
+  const haystack = lower([
+    node?.name,
+    parameters.url,
+    parameters.nexusProxyTemplate?.url,
+    parameters.nexusCredential?.url,
+  ].filter(Boolean).join(" "));
+
+  if (
+    haystack.includes("fetch website") ||
+    haystack.includes("website html") ||
+    haystack.includes("fetch html") ||
+    haystack.includes("scrape website") ||
+    haystack.includes("landing page") ||
+    haystack.includes("page html") ||
+    haystack.includes("webpage") ||
+    haystack.includes("extract page")
+  ) {
+    return true;
+  }
+
+  const method = cleanString(parameters.requestMethod || parameters.method || "GET").toUpperCase();
+  const hasBody = hasHttpPayload(parameters.bodyParametersJson || parameters.jsonBody || parameters.body);
+  const url = cleanString(parameters.url || parameters.nexusProxyTemplate?.url || parameters.nexusCredential?.url);
+
+  return method === "GET" &&
+    !hasBody &&
+    (
+      url.includes("Nexus Runtime Context") ||
+      url.includes("$json.url") ||
+      url.includes("$json[") ||
+      url.includes("landing_page_url") ||
+      url.includes("company_url") ||
+      url.includes("website")
+    );
+}
+
 function normalizeLegacyHttpRequestNodeForN8n(node: any) {
   if (!isHttpRequestNode(node) || !node || typeof node !== "object") return node;
 
@@ -1997,7 +2077,9 @@ function normalizeLegacyHttpRequestNodeForN8n(node: any) {
     requestMethod: method || "GET",
     url: cleanString(parameters.url),
     allowUnauthorizedCerts: Boolean(parameters.allowUnauthorizedCerts),
-    responseFormat: parameters.responseFormat || "json",
+    responseFormat: isHtmlFetchHttpNode(node, parameters)
+      ? "string"
+      : (parameters.responseFormat || "json"),
     jsonParameters: true,
     options: legacyOptions,
   };
@@ -2055,6 +2137,17 @@ function normalizeModernHttpRequestNodeForN8n(node: any) {
   const parameters = {
     ...(node.parameters || {}),
   };
+
+  if (isHtmlFetchHttpNode(node, parameters)) {
+    parameters.responseFormat = "text";
+    parameters.options = {
+      ...asObject(parameters.options),
+      response: {
+        ...asObject(asObject(parameters.options).response),
+        responseFormat: "text",
+      },
+    };
+  }
 
   /*
     n8n HTTP Request v4 expects `contentType`, not the older/wrong

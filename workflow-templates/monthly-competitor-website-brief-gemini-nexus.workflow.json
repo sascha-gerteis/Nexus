@@ -43,6 +43,7 @@
     {
       "parameters": {
         "url": "={{ $json.url }}",
+        "responseFormat": "string",
         "options": {
           "timeout": 20000
         }

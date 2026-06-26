@@ -100,9 +100,83 @@ function joinSetupList(value: unknown) {
   return cleanString(value);
 }
 
+function normalizedSetupKey(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function stripDerivedSetupSuffix(key: string) {
+  for (const suffix of ["_join", "_joined", "_csv", "_lines", "_text", "_string"]) {
+    if (key.endsWith(suffix) && key.length > suffix.length + 2) {
+      return key.slice(0, -suffix.length);
+    }
+  }
+
+  return key;
+}
+
+function canonicalSetupKey(value: unknown) {
+  const key = stripDerivedSetupSuffix(normalizedSetupKey(value));
+  const aliases: Record<string, string> = {
+    landing_page: "landing_page_url",
+    landing_page_url: "landing_page_url",
+    landing_page_website: "landing_page_url",
+    landing_page_link: "landing_page_url",
+    page_url: "landing_page_url",
+    website_url: "company_url",
+    website: "company_url",
+    main_website: "company_url",
+    company_website: "company_url",
+    company_site: "company_url",
+    company_url: "company_url",
+    business_website: "company_url",
+    business_site: "company_url",
+    buyer_website: "company_url",
+    buyer_site: "company_url",
+    client_website: "company_url",
+    client_site: "company_url",
+    customer_website: "company_url",
+    customer_site: "company_url",
+    competitor_websites: "competitor_urls",
+    competitor_sites: "competitor_urls",
+    competitor_urls: "competitor_urls",
+    competitors: "competitor_urls",
+    competitor_list: "competitor_urls",
+    focus_area: "focus_areas",
+    focus_areas: "focus_areas",
+    market_or_region: "market_region",
+    market_region: "market_region",
+    target_market: "market_region",
+    local_market: "market_region",
+    report_title: "report_title",
+  };
+
+  return aliases[key] || key;
+}
+
+function addSetupAliasesForValue(output: Record<string, unknown>, rawKey: string, value: unknown) {
+  const normalized = normalizedSetupKey(rawKey);
+  const canonical = canonicalSetupKey(rawKey);
+
+  if (normalized) assignIfUseful(output, normalized, value);
+  if (canonical) assignIfUseful(output, canonical, value);
+}
+
 function expandBuyerSetupAliases(setup: Record<string, unknown>) {
   const output = { ...(setup || {}) };
+
+  for (const [key, value] of Object.entries(setup || {})) {
+    addSetupAliasesForValue(output, key, value);
+  }
+
   const companyUrl = pickSetupValue(output, [
+    "landing_page_url",
+    "page_url",
+    "website_url",
+    "website",
     "company_url",
     "company_website",
     "main_website",
@@ -126,7 +200,7 @@ function expandBuyerSetupAliases(setup: Record<string, unknown>) {
   ]);
 
   if (companyUrl !== undefined) {
-    for (const key of ["company_url", "company_website", "main_website"]) {
+    for (const key of ["landing_page_url", "page_url", "website_url", "website", "company_url", "company_website", "main_website"]) {
       assignIfUseful(output, key, companyUrl);
     }
   }

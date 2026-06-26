@@ -1,6 +1,7 @@
 import Stripe from "https://esm.sh/stripe@14.25.0?target=deno";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { isLegacyNexusProduct } from "../_shared/legacy-nexus-products.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
   apiVersion: "2024-06-20",
@@ -71,6 +72,7 @@ function hasAttachedCheckoutFlow(product: any) {
 
 function checkoutRuntimeReadinessIssue(product: any) {
   if (cleanString(product?.listing_type) === "custom_request") return "";
+  if (isLegacyNexusProduct(product)) return "";
 
   const runtimeType = cleanString(product?.runtime_type).toLowerCase();
   const hasN8nWorkflow = Boolean(

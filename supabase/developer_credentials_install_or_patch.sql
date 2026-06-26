@@ -95,9 +95,15 @@ create table if not exists public.automation_credential_requirements (
     check (status in ('missing', 'bound', 'not_required', 'failed'))
 );
 
-create unique index if not exists idx_developer_credentials_fingerprint
-  on public.developer_credentials(developer_id, provider, fingerprint)
-  where fingerprint is not null and status <> 'revoked';
+drop index if exists public.idx_developer_credentials_fingerprint;
+
+create unique index if not exists idx_developer_credentials_owner_provider_label
+  on public.developer_credentials(
+    coalesce(developer_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    lower(provider),
+    lower(label)
+  )
+  where status <> 'revoked';
 
 create index if not exists idx_developer_credentials_developer
   on public.developer_credentials(developer_id);
