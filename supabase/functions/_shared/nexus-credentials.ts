@@ -1599,28 +1599,6 @@ function bestCredentialForSlot(credentials: any[], slot: any, previousBindings: 
     .sort((left, right) => right.score - left.score)[0]?.credential || null;
 }
 
-function manualNativeN8nBindingFromSlot(slot: any) {
-  if (!isNativeN8nCredentialSlot(slot)) return null;
-
-  const n8nCredentialId = cleanString(slot?.current_id);
-  const n8nCredentialName = cleanString(slot?.current_name);
-  if (!n8nCredentialId && !n8nCredentialName) return null;
-
-  return {
-    node_name: slot.node_name,
-    node_type: slot.node_type,
-    provider: slot.provider || null,
-    provider_label: slot.provider_label || null,
-    credential_key: slot.credential_key || slot.n8n_credential_type,
-    n8n_credential_type: slot.n8n_credential_type || slot.credential_key,
-    n8n_credential_id: n8nCredentialId || null,
-    n8n_credential_name: n8nCredentialName || "Existing n8n credential",
-    developer_credential_id: null,
-    manual_n8n_credential: true,
-    managed_in_n8n_editor: true,
-  };
-}
-
 async function loadCredentialsForProduct(adminClient: SupabaseAdminClient, product: any) {
   const { data, error } = await adminClient
     .from("developer_credentials")
@@ -1701,6 +1679,50 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
       parameters,
       credentials: nextCredentials,
     };
+  });
+
+  return workflow;
+}
+
+function removeCredentialReferencesForErrors(workflowInput: any, errors: any[] = []) {
+  if (!errors.length) return workflowInput;
+
+  const workflow = normalizeWorkflowObject(workflowInput);
+  const missingByNode = new Map<string, Set<string>>();
+
+  for (const error of errors || []) {
+    const nodeName = cleanString(error?.node_name);
+    const credentialKey = cleanString(error?.credential_key || error?.n8n_credential_type);
+    if (!nodeName || !credentialKey) continue;
+
+    if (!missingByNode.has(nodeName)) {
+      missingByNode.set(nodeName, new Set());
+    }
+    missingByNode.get(nodeName)?.add(credentialKey);
+  }
+
+  if (!missingByNode.size) return workflow;
+
+  workflow.nodes = (Array.isArray(workflow.nodes) ? workflow.nodes : []).map((node: any) => {
+    const keys = missingByNode.get(cleanString(node?.name));
+    if (!keys?.size || !node?.credentials || typeof node.credentials !== "object") {
+      return node;
+    }
+
+    const nextCredentials = { ...node.credentials };
+    for (const key of keys) {
+      delete nextCredentials[key];
+    }
+
+    if (Object.keys(nextCredentials).length) {
+      return {
+        ...node,
+        credentials: nextCredentials,
+      };
+    }
+
+    const { credentials: _removedCredentials, ...withoutCredentials } = node;
+    return withoutCredentials;
   });
 
   return workflow;
@@ -1886,12 +1908,6 @@ export async function bindAutomationCredentials(options: {
   const errors: any[] = [];
 
   for (const slot of slots) {
-    const manualNativeBinding = manualNativeN8nBindingFromSlot(slot);
-    if (manualNativeBinding) {
-      bindings.push(manualNativeBinding);
-      continue;
-    }
-
     let credential = bestCredentialForSlot(credentials, slot, previousBindings);
     const usesNexusProxy = Boolean(slot.uses_nexus_proxy);
 
@@ -1986,6 +2002,10 @@ export async function bindAutomationCredentials(options: {
   await persistCredentialRequirements(adminClient, product, rows);
 
   const status = errors.length ? "needs_credentials" : "bound";
+  if (errors.length) {
+    boundWorkflow = removeCredentialReferencesForErrors(boundWorkflow, errors);
+  }
+
   let hostedUpdate: any = null;
   let hostedUpdateError = "";
 

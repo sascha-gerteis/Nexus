@@ -3274,7 +3274,7 @@ Deno.serve(async (req) => {
         n8n_credential_bindings: credentialBinding.bindings,
         credential_binding_status: credentialBinding.status,
         credential_binding_errors: credentialBinding.errors,
-        n8n_last_credential_bound_at: new Date().toISOString(),
+        n8n_last_credential_bound_at: credentialBinding.ok ? new Date().toISOString() : product.n8n_last_credential_bound_at || null,
         n8n_last_import_result: {
           workflow_id: workflowId,
           webhook_url: normalized.webhookUrl,

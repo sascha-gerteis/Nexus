@@ -233,39 +233,6 @@ function inferredBindingFromCredential(slot: any, credential: any) {
   };
 }
 
-function isNativeN8nCredentialSlot(slot: any) {
-  const type = cleanString(slot?.n8n_credential_type || slot?.credential_key);
-  const nodeType = cleanString(slot?.node_type);
-  return Boolean(
-    type &&
-    nodeType &&
-    !isGenericHttpCredentialType(type) &&
-    !lower(nodeType).includes("httprequest"),
-  );
-}
-
-function manualNativeBindingFromSlot(slot: any) {
-  if (!isNativeN8nCredentialSlot(slot)) return null;
-
-  const n8nCredentialId = cleanString(slot?.current_id);
-  const n8nCredentialName = cleanString(slot?.current_name);
-  if (!n8nCredentialId && !n8nCredentialName) return null;
-
-  return {
-    node_name: slot.node_name,
-    node_type: slot.node_type,
-    provider: slot.provider || null,
-    provider_label: slot.provider_label || null,
-    credential_key: slot.credential_key || slot.n8n_credential_type,
-    n8n_credential_type: slot.n8n_credential_type || slot.credential_key,
-    n8n_credential_id: n8nCredentialId || null,
-    n8n_credential_name: n8nCredentialName || "Existing n8n credential",
-    developer_credential_id: null,
-    manual_n8n_credential: true,
-    managed_in_n8n_editor: true,
-  };
-}
-
 function normalizeSecretFields(body: any) {
   const provider = normalizedProviderForCredential(body);
   const openAiApiKey = cleanString(
@@ -790,7 +757,7 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
   );
   const bindings = Array.isArray(product.n8n_credential_bindings)
     ? product.n8n_credential_bindings.filter((binding: any) => (
-      (binding?.developer_credential_id || binding?.manual_n8n_credential || binding?.n8n_credential_id) &&
+      binding?.developer_credential_id &&
       slots.some((slot: any) => bindingMatchesSlot(binding, slot))
     ))
     : [];
@@ -798,12 +765,6 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
   const credentialCandidates = await loadCredentialCandidatesForProduct(adminClient, product);
   for (const slot of slots) {
     if (bindings.some((binding: any) => bindingMatchesSlot(binding, slot))) continue;
-
-    const manualBinding = manualNativeBindingFromSlot(slot);
-    if (manualBinding) {
-      bindings.push(manualBinding);
-      continue;
-    }
 
     const credential = credentialCandidates.find((candidate: any) => credentialMatchesSlotReference(candidate, slot));
     if (credential) {
@@ -813,7 +774,7 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
 
   const boundSlotKeys = new Set(
     bindings
-      .filter((binding: any) => binding?.developer_credential_id || binding?.manual_n8n_credential || binding?.n8n_credential_id)
+      .filter((binding: any) => binding?.developer_credential_id)
       .map((binding: any) => slotKey(binding)),
   );
 

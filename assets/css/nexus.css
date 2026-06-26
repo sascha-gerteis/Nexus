@@ -6547,6 +6547,92 @@ body[data-page="checkout"] .site-header {
   margin: 0;
 }
 
+.dashboard-tutorial-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-tutorial-card {
+  border: 1px solid #dbeafe;
+  background: #fff;
+  border-radius: 28px;
+  padding: 1rem;
+  box-shadow: var(--shadow2);
+}
+
+.dashboard-tutorial-card-featured {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(340px, 1.3fr);
+  gap: 1rem;
+  align-items: start;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(0, 183, 255, 0.14), transparent 30%),
+    #fff;
+}
+
+.dashboard-tutorial-copy {
+  display: grid;
+  align-content: start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.dashboard-tutorial-copy h3 {
+  color: var(--navy);
+  font-size: clamp(1.55rem, 2.4vw, 2.4rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+  margin: 0;
+}
+
+.dashboard-tutorial-copy p,
+.dashboard-tutorial-up-next p {
+  color: var(--muted);
+  line-height: 1.65;
+  margin: 0;
+}
+
+.dashboard-tutorial-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid #dbeafe;
+  border-radius: 22px;
+  background: #081a33;
+  object-fit: contain;
+  overflow: hidden;
+}
+
+.dashboard-tutorial-up-next {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.dashboard-tutorial-up-next article {
+  border: 1px solid #edf2f7;
+  background: #f8fbff;
+  border-radius: 22px;
+  padding: 1rem;
+}
+
+.dashboard-tutorial-up-next span {
+  display: block;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.dashboard-tutorial-up-next strong {
+  display: block;
+  color: var(--navy);
+  font-size: 1.05rem;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.25rem;
+}
+
 .buyer-overview-dashboard {
   display: grid;
   gap: 1rem;
@@ -7396,6 +7482,7 @@ body[data-page="checkout"] .site-header {
 
   .buyer-clean-card.output,
   .buyer-clean-card.order,
+  .dashboard-tutorial-card-featured,
   .buyer-automation-progress,
   .buyer-automation-lane-list,
   .buyer-output-hero-card,
@@ -7408,6 +7495,11 @@ body[data-page="checkout"] .site-header {
   .buyer-automation-summary-grid,
   .buyer-output-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-tutorial-card-featured,
+  .dashboard-tutorial-up-next {
+    grid-template-columns: 1fr;
   }
 
   .buyer-order-status-side {
@@ -7437,6 +7529,16 @@ body[data-page="checkout"] .site-header {
   .buyer-output-row,
   .buyer-output-awaiting article {
     display: grid;
+  }
+
+  .dashboard-tutorial-card,
+  .dashboard-tutorial-up-next article {
+    border-radius: 18px;
+    padding: 0.85rem;
+  }
+
+  .dashboard-tutorial-video {
+    border-radius: 16px;
   }
 
   .buyer-builder-chip {

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260626-tutorials">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -80,9 +80,9 @@
             <button class="buyer-tab" type="button" data-tab="automations">My Automations</button>
             <button class="buyer-tab buyer-tab-contextual" type="button" data-tab="automation-detail" id="buyerAutomationDetailTab" hidden>Automation detail</button>
             <button class="buyer-tab" type="button" data-tab="outputs">Outputs</button>
-            <button class="buyer-tab" type="button" data-tab="activity">Activity</button>
-            <button class="buyer-tab" type="button" data-tab="orders">Orders</button>
             <button class="buyer-tab" type="button" data-tab="messages">Messages</button>
+            <button class="buyer-tab" type="button" data-tab="orders">Orders</button>
+            <button class="buyer-tab" type="button" data-tab="tutorials">Tutorials</button>
           </div>
 
           <section class="buyer-tab-panel active" data-tab-panel="overview">
@@ -141,17 +141,17 @@
             </div>
           </section>
 
-          <section class="buyer-tab-panel" data-tab-panel="activity">
+          <section class="buyer-tab-panel" data-tab-panel="messages">
             <div class="buyer-tab-header">
               <div>
-                <span class="eyebrow">Activity</span>
-                <h2>Setup and runtime logs</h2>
-                <p>Important status updates, setup events, and runtime errors.</p>
+                <span class="eyebrow">Messages</span>
+                <h2>Conversations</h2>
+                <p>Messages with Nexus and developers.</p>
               </div>
             </div>
 
-            <div id="buyerEventsList" class="buyer-activity-timeline">
-              Loading activity...
+            <div id="buyerMessagesList" class="buyer-clean-list">
+              Loading messages...
             </div>
           </section>
 
@@ -169,17 +169,42 @@
             </div>
           </section>
 
-          <section class="buyer-tab-panel" data-tab-panel="messages">
+          <section class="buyer-tab-panel" data-tab-panel="tutorials">
             <div class="buyer-tab-header">
               <div>
-                <span class="eyebrow">Messages</span>
-                <h2>Conversations</h2>
-                <p>Messages with Nexus and developers.</p>
+                <span class="eyebrow">Tutorials</span>
+                <h2>Buyer help videos</h2>
+                <p>Short walkthroughs for buying automations and using your Nexus dashboard.</p>
               </div>
             </div>
 
-            <div id="buyerMessagesList" class="buyer-clean-list">
-              Loading messages...
+            <div class="dashboard-tutorial-grid">
+              <article class="dashboard-tutorial-card dashboard-tutorial-card-featured">
+                <div class="dashboard-tutorial-copy">
+                  <span class="eyebrow">Buyer walkthrough</span>
+                  <h3>How to purchase an automation</h3>
+                  <p>Watch the buyer flow from marketplace preview to checkout, then see where your automation appears after purchase.</p>
+                </div>
+
+                <video class="dashboard-tutorial-video" controls preload="metadata" playsinline>
+                  <source src="/assets/videos/buyer-how-to-purchase.mp4" type="video/mp4">
+                  Your browser does not support the video tag.
+                </video>
+              </article>
+
+              <div class="dashboard-tutorial-up-next">
+                <article>
+                  <span>Coming next</span>
+                  <strong>Using the buyer dashboard</strong>
+                  <p>Setup, outputs, order history, messages, and monthly automation runs.</p>
+                </article>
+
+                <article>
+                  <span>Coming next</span>
+                  <strong>Developer product upload</strong>
+                  <p>Workflow import, setup fields, credentials, technical checks, and review submission.</p>
+                </article>
+              </div>
             </div>
           </section>
         </div>
