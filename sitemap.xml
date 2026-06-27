@@ -2,17 +2,42 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://nexus-ai.software/</loc>
-    <lastmod>2026-06-23</lastmod>
+    <lastmod>2026-06-27</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://nexus-ai.software/pages/business-solutions/index.html</loc>
-    <lastmod>2026-06-23</lastmod>
+    <lastmod>2026-06-27</lastmod>
     <priority>0.95</priority>
   </url>
   <url>
+    <loc>https://nexus-ai.software/lead-automation/</loc>
+    <lastmod>2026-06-27</lastmod>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/reporting-automation/</loc>
+    <lastmod>2026-06-27</lastmod>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/customer-support-automation/</loc>
+    <lastmod>2026-06-27</lastmod>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/social-listening-automation/</loc>
+    <lastmod>2026-06-27</lastmod>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/custom-business-automation/</loc>
+    <lastmod>2026-06-27</lastmod>
+    <priority>0.85</priority>
+  </url>
+  <url>
     <loc>https://nexus-ai.software/pages/marketplace/index.html</loc>
-    <lastmod>2026-06-23</lastmod>
+    <lastmod>2026-06-27</lastmod>
     <priority>0.9</priority>
   </url>
   <url>
@@ -37,7 +62,7 @@
   </url>
   <url>
     <loc>https://nexus-ai.software/pages/contact/index.html</loc>
-    <lastmod>2026-06-23</lastmod>
+    <lastmod>2026-06-27</lastmod>
     <priority>0.7</priority>
   </url>
   <url>

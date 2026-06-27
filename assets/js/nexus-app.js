@@ -305,17 +305,20 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (!grid) return;
 
     if (error) {
+      if (grid.querySelector(".product-card")) return;
       grid.innerHTML = `<div class="error">${error.message}</div>`;
       return;
     }
 
     liveAutomations = data || [];
+    window.NexusHomeProducts = liveAutomations;
 
     const currency = document.getElementById("homeCurrency");
     if (currency) currency.innerHTML = NexusUI.currencySwitch();
 
     grid.innerHTML =
       liveAutomations.slice(0, 3).map(NexusUI.productCard).join("") ||
+      grid.innerHTML ||
       `<div class="card"><h3>No live products yet</h3><p>Use the hidden admin URL to publish your first automation.</p></div>`;
 
     applyTranslationsIfNeeded(grid);
@@ -354,6 +357,10 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const product = pickHomeProduct(products);
 
     if (!product) {
+      if (root.querySelector(".home-product-card-large, .product-card")) {
+        applyTranslationsIfNeeded(root);
+        return;
+      }
       root.innerHTML = `
         <div class="product-card">
           <div class="product-top">
@@ -379,6 +386,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (!grid) return;
 
     if (error) {
+      if (grid.querySelector(".product-card")) return;
       grid.innerHTML = `<div class="error">${error.message}</div>`;
       return;
     }

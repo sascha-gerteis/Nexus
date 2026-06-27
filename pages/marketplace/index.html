@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://vzgblkghicyozoxkljga.supabase.co">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260627-launch-trust">
 
   <title>Automation Marketplace | Nexus Workflow Products and AI Agents</title>
   <meta name="description" content="Browse Nexus marketplace products for business workflow automation, AI agents, reporting automation, support automation, operations tools, and custom automation requests.">
@@ -105,17 +105,40 @@
         <div class="marketplace-hero-inner marketplace-hero-inner-clean">
           <span class="eyebrow">Nexus Marketplace</span>
 
-          <h1>Find ready-made business automations.</h1>
+          <h1>Find an automation for the work slowing your team down.</h1>
 
           <p>
             Browse AI tools, workflow automations, reports, chatbots, and operational systems.
-            Preview each product before choosing your setup path.
+            Preview each product, see required inputs, then choose self-serve or guided setup.
           </p>
 
           <div class="marketplace-hero-actions">
-            <a class="btn btn-primary" href="#marketplace-products">Browse products</a>
-            <a class="btn btn-secondary" href="/pages/contact/index.html">Request custom automation</a>
+            <a class="btn btn-primary" href="#marketplace-products">Browse ready-made automations</a>
+            <a class="btn btn-secondary" href="/pages/contact/index.html">Get help choosing</a>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="marketplace-trust-strip-section">
+      <div class="container">
+        <div class="marketplace-trust-strip">
+          <article>
+            <strong>No hidden setup requirements</strong>
+            <span>Listings show required inputs and setup paths before checkout.</span>
+          </article>
+          <article>
+            <strong>No raw workflow files dumped on you</strong>
+            <span>Your order, setup, messages, and outputs stay in the buyer dashboard.</span>
+          </article>
+          <article>
+            <strong>Guided setup available</strong>
+            <span>Choose support when the workflow needs credentials, tool access, or testing.</span>
+          </article>
+          <article>
+            <strong>Products reviewed first</strong>
+            <span>Developer products must pass review before going live.</span>
+          </article>
         </div>
       </div>
     </section>
@@ -128,8 +151,7 @@
             <span class="marketplace-small-label">Marketplace</span>
             <h2>Available automations</h2>
             <p>
-              Search and filter products below. Preview opens the product popup.
-              Buy opens the dedicated setup page.
+              Search and filter products below. Preview shows the outcome, inputs, setup path, and support options.
             </p>
           </div>
 
@@ -192,7 +214,92 @@
 
         
         <div class="marketplace-grid" id="marketplaceGrid">
-          <div class="loading">Loading marketplace...</div>
+          <article class="product-card color-blue">
+            <div class="product-top">
+              <div class="product-icon blue">SR</div>
+              <span class="pill blue">Performance Reporting</span>
+            </div>
+            <h3>AI Social Media Reports</h3>
+            <p>Turn raw social performance data into clean business reports, insights, and next-step recommendations.</p>
+            <div class="developer-mini">
+              <div class="avatar">NX</div>
+              <div>
+                <strong>Nexus</strong>
+                <span>Verified Nexus Operator &middot; &#9733; 5</span>
+              </div>
+            </div>
+            <div class="tags">
+              <span class="tag">Reporting</span>
+              <span class="tag">24-48 hours</span>
+              <span class="tag">&#9733; 4.8 (23)</span>
+            </div>
+            <div class="meta-grid">
+              <div class="meta"><span>Price</span><strong>THB 468/mo</strong></div>
+              <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
+            </div>
+            <div class="card-actions">
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('ai-social-media-reports') : location.href='/pages/checkout/index.html?slug=ai-social-media-reports&step=setup'">Preview</button>
+              <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=ai-social-media-reports&step=setup">Buy</a>
+            </div>
+          </article>
+
+          <article class="product-card color-cyan">
+            <div class="product-top">
+              <div class="product-icon cyan">CI</div>
+              <span class="pill cyan">Business Intelligence</span>
+            </div>
+            <h3>Competitor Intelligence Report</h3>
+            <p>Track competitors, compare their activity against your business, and receive improvement recommendations.</p>
+            <div class="developer-mini">
+              <div class="avatar">NX</div>
+              <div>
+                <strong>Nexus</strong>
+                <span>Verified Nexus Operator &middot; &#9733; 5</span>
+              </div>
+            </div>
+            <div class="tags">
+              <span class="tag">Business Intelligence</span>
+              <span class="tag">24 hours</span>
+              <span class="tag">&#9733; 5 (1)</span>
+            </div>
+            <div class="meta-grid">
+              <div class="meta"><span>Price</span><strong>THB 396/mo</strong></div>
+              <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
+            </div>
+            <div class="card-actions">
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('competitor-report') : location.href='/pages/checkout/index.html?slug=competitor-report&step=setup'">Preview</button>
+              <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=competitor-report&step=setup">Buy</a>
+            </div>
+          </article>
+
+          <article class="product-card color-indigo">
+            <div class="product-top">
+              <div class="product-icon indigo">IR</div>
+              <span class="pill blue">Management Reporting</span>
+            </div>
+            <h3>Inquiry Report</h3>
+            <p>Turn customer inquiries into a management report showing what people ask for and where to improve.</p>
+            <div class="developer-mini">
+              <div class="avatar">NX</div>
+              <div>
+                <strong>Nexus</strong>
+                <span>Verified Nexus Operator &middot; &#9733; 5</span>
+              </div>
+            </div>
+            <div class="tags">
+              <span class="tag">Management Reporting</span>
+              <span class="tag">24-48 hours</span>
+              <span class="tag">&#9733; 4.5 (3)</span>
+            </div>
+            <div class="meta-grid">
+              <div class="meta"><span>Price</span><strong>THB 313/mo</strong></div>
+              <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
+            </div>
+            <div class="card-actions">
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('inquiry-report') : location.href='/pages/checkout/index.html?slug=inquiry-report&step=setup'">Preview</button>
+              <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=inquiry-report&step=setup">Buy</a>
+            </div>
+          </article>
         </div>
 
         <div class="marketplace-bottom-card">
@@ -200,12 +307,12 @@
             <span class="eyebrow">Need something specific?</span>
             <h2>Request a custom automation.</h2>
             <p>
-              If you cannot find the workflow you need, send Nexus a request.
-              We can help determine whether it fits an existing product, a guided setup, or a custom automation request.
+              If you cannot find the workflow you need, describe the process.
+              Nexus will help determine whether it fits an existing product, a guided setup, or a custom automation request.
             </p>
           </div>
 
-          <a class="btn btn-primary" href="/pages/contact/index.html">Request custom automation</a>
+          <a class="btn btn-primary" href="/pages/contact/index.html">Request a workflow review</a>
         </div>
       </div>
     </section>
@@ -238,10 +345,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script defer src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
-  <script defer src="/assets/js/nexus-db.js?v=20260624-analytics"></script>
+  <script defer src="/assets/js/nexus-ui.js?v=20260627-launch-trust"></script>
+  <script defer src="/assets/js/nexus-db.js?v=20260627-launch-trust"></script>
   <script defer src="/assets/js/nexus-buyer-nav.js"></script>
-  <script defer src="/assets/js/nexus-app.js?v=20260624-analytics"></script>
+  <script defer src="/assets/js/nexus-app.js?v=20260627-launch-trust"></script>
 
   <script>
     function NexusMarketplaceSetCategory(category) {
