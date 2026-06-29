@@ -422,6 +422,193 @@
                         </div>
                       </div>
                     </div>
+                    <div class="full provider-native-fields" data-provider-fields="google_oauth" hidden>
+                      <div class="credential-form-grid">
+                        <div class="full">
+                          <label>Google OAuth client ID</label>
+                          <input class="input" data-credential-name="oauth_client_id" autocomplete="off" placeholder="Client ID from Google Cloud OAuth credentials">
+                        </div>
+                        <div class="full">
+                          <label>Google OAuth client secret</label>
+                          <input class="input" data-credential-name="oauth_client_secret" type="password" autocomplete="off" placeholder="Client secret">
+                        </div>
+                        <div class="full">
+                          <label>Refresh token</label>
+                          <input class="input" data-credential-name="oauth_refresh_token" type="password" autocomplete="off" placeholder="Refresh token for the Google account used by this workflow">
+                        </div>
+                        <div>
+                          <label>Access token</label>
+                          <input class="input" data-credential-name="oauth_access_token" type="password" autocomplete="off" placeholder="Optional short-lived access token">
+                        </div>
+                        <div>
+                          <label>Scopes</label>
+                          <input class="input" data-credential-name="oauth_scope" placeholder="Google scopes required by this node">
+                        </div>
+                      </div>
+                      <p class="muted">Use this for Gmail, Google Sheets, and Google Drive account credentials. Resource values like sheet URL, sheet ID, folder ID, or mailbox filters still belong in the workflow node or Nexus setup fields.</p>
+                    </div>
+                    <div class="full provider-native-fields" data-provider-fields="google_service_account" hidden>
+                      <div class="credential-form-grid">
+                        <div class="full">
+                          <label>Service account JSON</label>
+                          <textarea class="textarea code-textarea" data-credential-name="service_account_json" rows="6" placeholder='{"type":"service_account","project_id":"...","client_email":"...","private_key":"..."}'></textarea>
+                        </div>
+                        <div>
+                          <label>Service account email</label>
+                          <input class="input" data-credential-name="service_account_email" placeholder="Optional if included in JSON">
+                        </div>
+                        <div>
+                          <label>Project ID</label>
+                          <input class="input" data-credential-name="service_account_project_id" placeholder="Optional if included in JSON">
+                        </div>
+                        <div class="full">
+                          <label>Private key</label>
+                          <textarea class="textarea code-textarea" data-credential-name="service_account_private_key" rows="4" placeholder="Optional if included in JSON"></textarea>
+                        </div>
+                        <div class="full">
+                          <label>Delegated subject</label>
+                          <input class="input" data-credential-name="google_delegated_subject" placeholder="Optional Workspace delegated user email">
+                        </div>
+                      </div>
+                      <p class="muted">Use this only for Google APIs that can run with a service account. Share the target sheet or file with the service account email before running the check.</p>
+                    </div>
+                    <div class="full provider-native-fields" data-provider-fields="oauth_account" hidden>
+                      <div class="credential-form-grid">
+                        <div>
+                          <label>OAuth client ID</label>
+                          <input class="input" data-credential-name="oauth_client_id" autocomplete="off" placeholder="Client ID">
+                        </div>
+                        <div>
+                          <label>OAuth client secret</label>
+                          <input class="input" data-credential-name="oauth_client_secret" type="password" autocomplete="off" placeholder="Client secret">
+                        </div>
+                        <div>
+                          <label>Refresh token</label>
+                          <input class="input" data-credential-name="oauth_refresh_token" type="password" autocomplete="off" placeholder="Refresh token when available">
+                        </div>
+                        <div>
+                          <label>Access token</label>
+                          <input class="input" data-credential-name="oauth_access_token" type="password" autocomplete="off" placeholder="Optional access token">
+                        </div>
+                        <div>
+                          <label>Scopes</label>
+                          <input class="input" data-credential-name="oauth_scope" placeholder="Optional OAuth scopes">
+                        </div>
+                        <div>
+                          <label>Token URL</label>
+                          <input class="input" data-credential-name="token_url" placeholder="Optional token URL">
+                        </div>
+                      </div>
+                      <p class="muted">Use this for OAuth-based native nodes such as Microsoft, Salesforce, HubSpot OAuth, and other account connections. If the provider requires an interactive OAuth grant, Nexus will tell you to finish setup in the locked n8n editor.</p>
+                    </div>
+                    <div class="full provider-native-fields" data-provider-fields="api_pair" hidden>
+                      <div class="credential-form-grid">
+                        <div>
+                          <label>API key / client ID</label>
+                          <input class="input" data-credential-name="api_key" type="password" autocomplete="off" placeholder="API key, client ID, consumer key, or account SID">
+                        </div>
+                        <div>
+                          <label>API secret / token</label>
+                          <input class="input" data-credential-name="api_token" type="password" autocomplete="off" placeholder="Secret, token, consumer secret, or auth token">
+                        </div>
+                        <div>
+                          <label>Account URL</label>
+                          <input class="input" data-credential-name="url" placeholder="Optional account/base URL">
+                        </div>
+                        <div>
+                          <label>Subdomain / shop</label>
+                          <input class="input" data-credential-name="subdomain" placeholder="Optional subdomain, shop, or account slug">
+                        </div>
+                        <div>
+                          <label>Email / username</label>
+                          <input class="input" data-credential-name="email" placeholder="Optional email or username">
+                        </div>
+                      </div>
+                    </div>
+                    <div class="full provider-native-fields" data-provider-fields="database" hidden>
+                      <div class="credential-form-grid">
+                        <div class="full">
+                          <label>Connection string</label>
+                          <input class="input" data-credential-name="connection_string" type="password" autocomplete="off" placeholder="Optional database URL / connection string">
+                        </div>
+                        <div>
+                          <label>Host</label>
+                          <input class="input" data-credential-name="host" placeholder="Database host">
+                        </div>
+                        <div>
+                          <label>Port</label>
+                          <input class="input" data-credential-name="port" placeholder="5432">
+                        </div>
+                        <div>
+                          <label>Database</label>
+                          <input class="input" data-credential-name="database" placeholder="Database name">
+                        </div>
+                        <div>
+                          <label>Username</label>
+                          <input class="input" data-credential-name="username" autocomplete="off">
+                        </div>
+                        <div>
+                          <label>Password</label>
+                          <input class="input" data-credential-name="password" type="password" autocomplete="off">
+                        </div>
+                        <div>
+                          <label>SSL</label>
+                          <select class="select" data-credential-name="ssl">
+                            <option value="">Use n8n default</option>
+                            <option value="true">Enabled</option>
+                            <option value="false">Disabled</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="full provider-native-fields" data-provider-fields="email_server" hidden>
+                      <div class="credential-form-grid">
+                        <div>
+                          <label>Host</label>
+                          <input class="input" data-credential-name="host" placeholder="smtp.example.com">
+                        </div>
+                        <div>
+                          <label>Port</label>
+                          <input class="input" data-credential-name="port" placeholder="465 or 587">
+                        </div>
+                        <div>
+                          <label>Username / email</label>
+                          <input class="input" data-credential-name="username" autocomplete="off">
+                        </div>
+                        <div>
+                          <label>Password</label>
+                          <input class="input" data-credential-name="password" type="password" autocomplete="off">
+                        </div>
+                        <div>
+                          <label>Secure / SSL</label>
+                          <select class="select" data-credential-name="secure">
+                            <option value="">Use n8n default</option>
+                            <option value="true">Enabled</option>
+                            <option value="false">Disabled</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="full provider-native-fields" data-provider-fields="aws" hidden>
+                      <div class="credential-form-grid">
+                        <div>
+                          <label>Access key ID</label>
+                          <input class="input" data-credential-name="access_key_id" autocomplete="off">
+                        </div>
+                        <div>
+                          <label>Secret access key</label>
+                          <input class="input" data-credential-name="secret_access_key" type="password" autocomplete="off">
+                        </div>
+                        <div>
+                          <label>Region</label>
+                          <input class="input" data-credential-name="region" placeholder="us-east-1">
+                        </div>
+                        <div>
+                          <label>Session token</label>
+                          <input class="input" data-credential-name="session_token" type="password" autocomplete="off" placeholder="Optional">
+                        </div>
+                      </div>
+                    </div>
                     <details class="full">
                       <summary><strong>Advanced secret fields JSON</strong></summary>
                       <textarea class="textarea code-textarea" data-credential-name="secret_fields" rows="5" placeholder='{"api_key":"..."}'></textarea>
@@ -844,6 +1031,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       ]],
       ["Chat, email, and messaging", [
         ["slack", "Slack", "slackApi"],
+        ["slack_oauth", "Slack OAuth", "slackOAuth2Api"],
         ["discord", "Discord", "discordBotApi"],
         ["telegram", "Telegram", "telegramApi"],
         ["twilio", "Twilio", "twilioApi"],
@@ -854,6 +1042,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       ]],
       ["CRM, support, and marketing", [
         ["hubspot", "HubSpot", "hubspotApi"],
+        ["hubspot_oauth", "HubSpot OAuth", "hubspotOAuth2Api"],
         ["salesforce", "Salesforce", "salesforceOAuth2Api"],
         ["pipedrive", "Pipedrive", "pipedriveApi"],
         ["zendesk", "Zendesk", "zendeskApi"],
@@ -868,8 +1057,16 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         ["notion", "Notion", "notionApi"],
         ["google_sheets", "Google Sheets", "googleSheetsOAuth2Api"],
         ["google_drive", "Google Drive", "googleDriveOAuth2Api"],
+        ["google_calendar", "Google Calendar", "googleCalendarOAuth2Api"],
+        ["google_docs", "Google Docs", "googleDocsOAuth2Api"],
+        ["google_analytics", "Google Analytics", "googleAnalyticsOAuth2Api"],
+        ["google_ads", "Google Ads", "googleAdsOAuth2Api"],
         ["gmail", "Gmail", "gmailOAuth2"],
-        ["microsoft", "Microsoft 365", ""]
+        ["google_service_account", "Google Service Account", "googleApi"],
+        ["microsoft", "Microsoft 365", "microsoftOAuth2Api"],
+        ["microsoft_outlook", "Microsoft Outlook", "microsoftOutlookOAuth2Api"],
+        ["microsoft_excel", "Microsoft Excel", "microsoftExcelOAuth2Api"],
+        ["microsoft_onedrive", "Microsoft OneDrive", "microsoftOneDriveOAuth2Api"]
       ]],
       ["Commerce and payments", [
         ["stripe", "Stripe", "stripeApi"],
@@ -1567,6 +1764,90 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return cleanProvider || "Provider";
     }
 
+    function credentialProviderFieldGroup(provider, n8nType = "") {
+      const cleanProvider = String(provider || "").trim().toLowerCase();
+      const cleanType = String(n8nType || "").trim().toLowerCase();
+      if (cleanProvider === "openai") return "openai";
+      if (["google_sheets", "google_drive", "google_calendar", "google_docs", "google_analytics", "google_ads", "gmail"].includes(cleanProvider)) return "google_oauth";
+      if (cleanProvider === "google_service_account") return "google_service_account";
+      if (cleanType.includes("oauth2") || ["microsoft", "microsoft_outlook", "microsoft_excel", "microsoft_onedrive", "salesforce", "hubspot_oauth", "slack_oauth", "paypal"].includes(cleanProvider)) return "oauth_account";
+      if (["smtp", "imap"].includes(cleanProvider) || ["smtp", "imap"].includes(cleanType)) return "email_server";
+      if (["postgres", "mysql", "mongodb", "redis"].includes(cleanProvider) || ["postgres", "mysql", "mongodb", "redis"].includes(cleanType)) return "database";
+      if (cleanProvider === "aws" || cleanType === "aws") return "aws";
+      if (["twilio", "shopify", "woocommerce", "jira", "trello"].includes(cleanProvider)) return "api_pair";
+      return "";
+    }
+
+    function defaultGoogleScope(provider) {
+      const cleanProvider = String(provider || "").trim().toLowerCase();
+      if (cleanProvider === "gmail") return "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send";
+      if (cleanProvider === "google_drive") return "https://www.googleapis.com/auth/drive";
+      if (cleanProvider === "google_calendar") return "https://www.googleapis.com/auth/calendar";
+      if (cleanProvider === "google_docs") return "https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file";
+      if (cleanProvider === "google_analytics") return "https://www.googleapis.com/auth/analytics.readonly";
+      if (cleanProvider === "google_ads") return "https://www.googleapis.com/auth/adwords";
+      return "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file";
+    }
+
+    function clearCredentialSecretInputs(form) {
+      [
+        "api_key",
+        "secret_fields",
+        "openai_api_key",
+        "openai_base_url",
+        "oauth_client_id",
+        "oauth_client_secret",
+        "oauth_refresh_token",
+        "oauth_access_token",
+        "oauth_scope",
+        "token_url",
+        "service_account_json",
+        "service_account_email",
+        "service_account_project_id",
+        "service_account_private_key",
+        "google_delegated_subject",
+        "api_token",
+        "url",
+        "subdomain",
+        "email",
+        "host",
+        "port",
+        "database",
+        "username",
+        "password",
+        "ssl",
+        "secure",
+        "connection_string",
+        "access_key_id",
+        "secret_access_key",
+        "session_token",
+        "region",
+      ].forEach((name) => {
+        form.querySelectorAll(`[data-credential-name='${name}']`).forEach((field) => {
+          field.value = "";
+        });
+      });
+    }
+
+    function credentialFieldIsActive(field) {
+      const panel = field.closest("[data-provider-fields]");
+      return !panel || !panel.hidden;
+    }
+
+    function primaryCredentialField(form, provider) {
+      const type = form.querySelector("[data-credential-name='n8n_credential_type']")?.value || "";
+      const group = credentialProviderFieldGroup(provider, type);
+      if (group === "openai") return form.querySelector("[data-credential-name='openai_api_key']");
+      if (group === "google_oauth") return form.querySelector("[data-credential-name='oauth_client_id']");
+      if (group === "google_service_account") return form.querySelector("[data-credential-name='service_account_json']");
+      if (group === "oauth_account") return form.querySelector("[data-credential-name='oauth_client_id']");
+      if (group === "api_pair") return form.querySelector("[data-credential-name='api_key']");
+      if (group === "database") return form.querySelector("[data-credential-name='connection_string']") || form.querySelector("[data-credential-name='host']");
+      if (group === "email_server") return form.querySelector("[data-credential-name='host']");
+      if (group === "aws") return form.querySelector("[data-credential-name='access_key_id']");
+      return form.querySelector("[data-credential-name='api_key']");
+    }
+
     function updateCredentialDetectedContext(slot = null) {
       const root = document.getElementById("developerCredentialDetectedContext");
       if (!root) return;
@@ -1581,9 +1862,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const providerLabel = slot.provider_label || providerLabelForProvider(provider) || "Provider";
       const nodeName = slot.node_name || "workflow";
 
+      const hints = Array.isArray(slot.setup_hints) ? slot.setup_hints.filter(Boolean).join(" ") : "";
       root.innerHTML = `
         <strong>${NexusUI.escapeHtml(providerLabel)} account</strong>
-        <p>Detected from ${NexusUI.escapeHtml(nodeName)}. Nexus will create the matching n8n credential type <code>${NexusUI.escapeHtml(n8nType || credentialProviderDefaults[provider] || "detected")}</code>.</p>
+        <p>Detected from ${NexusUI.escapeHtml(nodeName)}. Nexus will create the matching n8n credential type <code>${NexusUI.escapeHtml(n8nType || credentialProviderDefaults[provider] || "detected")}</code>.${hints ? ` ${NexusUI.escapeHtml(hints)}` : ""}</p>
       `;
     }
 
@@ -1603,10 +1885,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       form.querySelector("[data-credential-name='n8n_credential_type']").value = n8nType || credentialProviderDefaults[provider] || "";
       form.querySelector("[data-credential-name='n8n_credential_id']").value = "";
       form.querySelector("[data-credential-name='n8n_credential_name']").value = slot.current_name || label;
-      form.querySelector("[data-credential-name='api_key']").value = "";
-      form.querySelector("[data-credential-name='secret_fields']").value = "";
-      form.querySelector("[data-credential-name='openai_api_key']").value = "";
-      form.querySelector("[data-credential-name='openai_base_url']").value = "";
+      clearCredentialSecretInputs(form);
       renderCredentialProviderFields();
       updateCredentialDetectedContext({
         ...slot,
@@ -1619,11 +1898,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (credentialSection) credentialSection.open = true;
 
       if (!options.quiet) {
-        const targetField = provider === "openai"
-          ? form.querySelector("[data-credential-name='openai_api_key']")
-          : form.querySelector("[data-credential-name='api_key']");
+        const targetField = primaryCredentialField(form, provider);
         targetField?.focus();
-        NexusUI.toast(`${providerLabel} credential form prepared from ${nodeName}. Paste the API key and save.`);
+        NexusUI.toast(`${providerLabel} credential form prepared from ${nodeName}. Add the required account details and save.`);
       }
     }
 
@@ -1638,6 +1915,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         "label",
         "api_key",
         "openai_api_key",
+        "oauth_client_id",
+        "oauth_client_secret",
+        "oauth_refresh_token",
+        "service_account_json",
+        "service_account_private_key",
         "secret_fields",
       ].some((name) => String(form.querySelector(`[data-credential-name='${name}']`)?.value || "").trim());
       if (hasDraftCredential) return;
@@ -1647,11 +1929,6 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         slot.node_name === firstError.node_name &&
         (slot.credential_key === firstError.credential_key || slot.n8n_credential_type === firstError.n8n_credential_type)
       )) || firstError;
-
-      if (isNativeCredentialSlot(firstSlot)) {
-        updateCredentialDetectedContext(firstSlot);
-        return;
-      }
 
       prepareCredentialFormForSlot(firstSlot, { quiet: true });
     }
@@ -1673,16 +1950,23 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (!form) return;
 
       const provider = form.querySelector("[data-credential-name='provider']")?.value || "";
+      const type = form.querySelector("[data-credential-name='n8n_credential_type']")?.value || "";
+      const group = credentialProviderFieldGroup(provider, type);
       form.querySelectorAll("[data-provider-fields]").forEach((panel) => {
-        panel.hidden = panel.dataset.providerFields !== provider;
+        panel.hidden = panel.dataset.providerFields !== group;
       });
       form.querySelectorAll("[data-generic-credential-field]").forEach((panel) => {
-        panel.hidden = provider === "openai";
+        panel.hidden = Boolean(group);
       });
 
       const openAiBaseUrl = form.querySelector("[data-credential-name='openai_base_url']");
       if (provider === "openai" && openAiBaseUrl && !openAiBaseUrl.value) {
         openAiBaseUrl.value = "https://api.openai.com/v1";
+      }
+
+      const googleScope = form.querySelector("[data-credential-name='oauth_scope']");
+      if (group === "google_oauth" && googleScope && !googleScope.value) {
+        googleScope.value = defaultGoogleScope(provider);
       }
     }
 
@@ -1926,10 +2210,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           form.querySelector("[data-credential-name='n8n_credential_type']").value = credential.n8n_credential_type || "";
           form.querySelector("[data-credential-name='n8n_credential_id']").value = credential.n8n_credential_id || "";
           form.querySelector("[data-credential-name='n8n_credential_name']").value = credential.n8n_credential_name || "";
-          form.querySelector("[data-credential-name='api_key']").value = "";
-          form.querySelector("[data-credential-name='secret_fields']").value = "";
-          form.querySelector("[data-credential-name='openai_api_key']").value = "";
-          form.querySelector("[data-credential-name='openai_base_url']").value = "";
+          clearCredentialSecretInputs(form);
           renderCredentialProviderFields();
         });
       });
@@ -2016,6 +2297,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const form = document.getElementById("developerCredentialForm");
       const payload = {};
       form.querySelectorAll("[data-credential-name]").forEach((field) => {
+        if (!credentialFieldIsActive(field)) return;
         payload[field.dataset.credentialName] = field.value;
       });
       payload.sync_n8n = false;
@@ -2197,6 +2479,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         const credentialNames = Array.from(new Set(group.bindings.map((binding) => binding.n8n_credential_name || binding.developer_credential_id || "Nexus credential").filter(Boolean)));
         const nodeNames = group.slots.map((slot) => slot.node_name || "Workflow node").slice(0, 4);
         const firstError = group.errors[0]?.message || "";
+        const setupHints = Array.from(new Set(group.slots.flatMap((slot) => Array.isArray(slot.setup_hints) ? slot.setup_hints : []).filter(Boolean))).join(" ");
         const nativeFallbackCopy = nativeGroup && missing
           ? `This is a native n8n account credential. Open the workflow editor, open ${nodeNames[0] || "the node"}, set/select the credential account there, save, then sync and run the check.`
           : "";
@@ -2215,11 +2498,17 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
               <div><dt>Credential</dt><dd>${NexusUI.escapeHtml(credentialNames.join(", ") || "Not applied yet")}</dd></div>
             </dl>
             <p class="flow-credential-nodes">${NexusUI.escapeHtml(nodeNames.join(", "))}${group.slots.length > 4 ? ` +${group.slots.length - 4} more` : ""}</p>
+            ${setupHints ? `<p class="muted">${NexusUI.escapeHtml(setupHints)}</p>` : ""}
             ${nativeFallbackCopy ? `<p class="error">${NexusUI.escapeHtml(nativeFallbackCopy)}</p>` : firstError ? `<p class="error">${NexusUI.escapeHtml(firstError)}</p>` : ""}
             ${missing
-              ? nativeGroup
-                ? `<button class="btn btn-secondary btn-small" type="button" data-open-workflow-editor="${index}">Set in n8n editor</button>`
-                : `<button class="btn btn-secondary btn-small" type="button" data-prepare-credential-group="${index}">Add ${NexusUI.escapeHtml(group.provider)} key</button>`
+              ? `
+                <div class="credential-action-row">
+                  <button class="btn btn-secondary btn-small" type="button" data-prepare-credential-group="${index}">
+                    Add ${NexusUI.escapeHtml(group.provider)} ${nativeGroup ? "account" : "key"}
+                  </button>
+                  ${nativeGroup ? `<button class="btn btn-secondary btn-small" type="button" data-open-workflow-editor="${index}">Fallback editor setup</button>` : ""}
+                </div>
+              `
               : ""}
           </article>
         `;

@@ -6,6 +6,15 @@ const NexusApp = (() => {
   let marketplaceDrawTimer = null;
   const compareSlugs = new Set();
   const MAX_COMPARE_PRODUCTS = 3;
+  const RECOMMENDATION_STOP_WORDS = new Set([
+    "the", "and", "for", "with", "that", "this", "from", "into", "onto", "about", "what", "when", "where",
+    "which", "who", "why", "how", "can", "cant", "cannot", "could", "would", "should", "need", "needs",
+    "want", "wants", "have", "has", "had", "our", "your", "you", "they", "them", "their", "there",
+    "then", "than", "every", "each", "week", "day", "month", "time", "thing", "things", "work", "manual",
+    "manually", "business", "team", "teams", "make", "makes", "made", "use", "using", "used", "get", "gets",
+    "give", "gives", "create", "creates", "take", "takes", "put", "puts", "copy", "copies", "data", "info",
+    "information", "something", "anything", "also", "just", "like", "help", "please", "maybe"
+  ]);
 
   async function init() {
     NexusUI.wireModal();
@@ -392,6 +401,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     }
 
     liveAutomations = data || [];
+    window.NexusMarketplaceProducts = liveAutomations;
 
     const currency = document.getElementById("marketCurrency");
     if (currency) currency.innerHTML = NexusUI.currencySwitch();
@@ -461,6 +471,256 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     applyTranslationsIfNeeded(grid);
     renderCompareTray();
     forceBuyLinksToCheckoutPage();
+  }
+
+  function recommendMarketplaceProducts(event) {
+    if (event) event.preventDefault();
+
+    const result = document.getElementById("marketplaceRecommendationResult");
+    const manualWork = document.getElementById("recommendationManualWork")?.value || "";
+    const outcome = document.getElementById("recommendationOutcome")?.value || "";
+    const tools = document.getElementById("recommendationTools")?.value || "";
+    const frequency = document.getElementById("recommendationFrequency")?.value || "";
+    const buyerInput = [manualWork, outcome, tools, frequency].join(" ").trim();
+
+    if (!result) return false;
+
+    if (!recommendationTokens(buyerInput).length) {
+      result.hidden = false;
+      result.innerHTML = `
+        <div class="marketplace-recommendation-result-head">
+          <div>
+            <h3>Tell us a little more.</h3>
+            <p>Describe the manual work, desired output, or tools involved so Nexus can compare it against current products.</p>
+          </div>
+          <a class="btn btn-secondary btn-small" href="/pages/contact/index.html">Ask Nexus directly</a>
+        </div>
+      `;
+      result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return false;
+    }
+
+    const products = liveAutomations.length ? liveAutomations : marketplaceRecommendationFallbackProducts();
+    const scored = products
+      .map((product) => scoreMarketplaceRecommendationProduct(product, buyerInput))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    const recommendations = scored.length
+      ? scored
+      : products
+          .map((product) => ({
+            product,
+            score: Number(product.rating || 0) + (product.featured ? 2 : 0),
+            matchedTerms: []
+          }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3);
+
+    const bestScore = recommendations[0]?.score || 0;
+    const customRecommended = bestScore < 3.5;
+
+    result.hidden = false;
+    result.innerHTML = `
+      <div class="marketplace-recommendation-result-head">
+        <div>
+          <h3>${customRecommended ? "Closest products and custom path" : "Best matches from current products"}</h3>
+          <p>
+            Nexus scored the available marketplace products against your manual process, desired output, tools, and frequency.
+            New approved developer products are included automatically when they match.
+          </p>
+        </div>
+        <a class="btn btn-primary btn-small" href="/pages/contact/index.html">Get a workflow recommendation</a>
+      </div>
+      <div class="marketplace-recommendation-grid">
+        ${recommendations.map(marketplaceRecommendationCard).join("")}
+      </div>
+      ${customRecommended ? `
+        <div class="success" style="margin-top:1rem">
+          This looks specific enough that a custom setup review may be useful. Send Nexus the process if none of the matches feel right.
+        </div>
+      ` : ""}
+    `;
+
+    NexusDB.trackAnalyticsEvent?.("marketplace_recommendation", {
+      metadata: {
+        input_length: buyerInput.length,
+        top_slug: recommendations[0]?.product?.slug || "",
+        matched_count: scored.length
+      }
+    }).catch((error) => console.warn("Could not track recommendation:", error));
+
+    result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return false;
+  }
+
+  function marketplaceRecommendationFallbackProducts() {
+    return [
+      {
+        title: "AI Social Media Reports",
+        slug: "ai-social-media-reports",
+        category: "Reporting",
+        badge: "Performance Reporting",
+        short_description: "Turn raw social performance data into clean business reports, insights, and next-step recommendations.",
+        outputs: ["Social performance report", "Recommendations", "Monthly summary"],
+        required_tools: ["Social channels", "Spreadsheets"]
+      },
+      {
+        title: "Competitor Intelligence Report",
+        slug: "competitor-report",
+        category: "Business Intelligence",
+        badge: "Competitor Tracking",
+        short_description: "Track competitors, compare activity against your business, and receive improvement recommendations.",
+        outputs: ["Competitor brief", "Market summary", "Recommended next actions"],
+        required_tools: ["Website", "Competitor websites", "Social channels"]
+      },
+      {
+        title: "Inquiry Report",
+        slug: "inquiry-report",
+        category: "Management Reporting",
+        badge: "Management Reporting",
+        short_description: "Turn customer inquiries into a management report showing what people ask for and where to improve.",
+        outputs: ["Inquiry report", "Support summary", "Improvement ideas"],
+        required_tools: ["Inbox", "Contact form", "Support messages"]
+      }
+    ];
+  }
+
+  function scoreMarketplaceRecommendationProduct(product, buyerInput) {
+    const tokens = recommendationTokens(buyerInput);
+    const phrases = recommendationPhrases(buyerInput);
+    const matched = new Map();
+    let score = 0;
+
+    const fields = [
+      { value: product.title, weight: 7 },
+      { value: product.category, weight: 6 },
+      { value: product.badge, weight: 5 },
+      { value: product.short_description, weight: 4 },
+      { value: product.long_description, weight: 3 },
+      { value: product.problem, weight: 4 },
+      { value: product.outcome, weight: 5 },
+      { value: product.best_for, weight: 3 },
+      { value: product.setup_type, weight: 2 },
+      { value: product.who_it_is_for, weight: 3 },
+      { value: product.outputs, weight: 5 },
+      { value: product.required_inputs, weight: 4 },
+      { value: product.required_tools, weight: 4 },
+      { value: product.setup_steps, weight: 2 },
+      { value: product.trust_points, weight: 2 },
+      { value: product.developers?.display_name, weight: 1 },
+      { value: product.developers?.type, weight: 1 },
+      { value: product.developers?.skills, weight: 2 }
+    ];
+
+    fields.forEach(({ value, weight }) => {
+      const text = normalizeRecommendationText(recommendationValueToText(value));
+      if (!text) return;
+
+      tokens.forEach((token) => {
+        if (!token || !text.includes(token)) return;
+        score += weight;
+        matched.set(token, (matched.get(token) || 0) + weight);
+      });
+
+      phrases.forEach((phrase) => {
+        if (!phrase || !text.includes(phrase)) return;
+        score += weight * 1.5;
+        matched.set(phrase, (matched.get(phrase) || 0) + weight * 1.5);
+      });
+    });
+
+    score += Math.min(Number(product.rating || 0), 5) * 0.15;
+    if (product.featured) score += 0.4;
+
+    return {
+      product,
+      score,
+      matchedTerms: Array.from(matched.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([term]) => term)
+    };
+  }
+
+  function recommendationTokens(value) {
+    const normalized = normalizeRecommendationText(value);
+    const words = normalized
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter((word) => word && (word.length > 2 || word === "ai") && !RECOMMENDATION_STOP_WORDS.has(word));
+    const variants = new Set();
+
+    words.forEach((word) => {
+      variants.add(word);
+      if (word.endsWith("ies") && word.length > 4) variants.add(`${word.slice(0, -3)}y`);
+      if (word.endsWith("es") && word.length > 4) variants.add(word.slice(0, -2));
+      if (word.endsWith("s") && word.length > 3) variants.add(word.slice(0, -1));
+      if (word.endsWith("ing") && word.length > 5) variants.add(word.slice(0, -3));
+      if (word.endsWith("ed") && word.length > 4) variants.add(word.slice(0, -2));
+    });
+
+    return Array.from(variants);
+  }
+
+  function recommendationPhrases(value) {
+    const words = normalizeRecommendationText(value)
+      .split(/\s+/)
+      .filter((word) => word && (word.length > 2 || word === "ai") && !RECOMMENDATION_STOP_WORDS.has(word));
+    const phrases = new Set();
+
+    for (let index = 0; index < words.length - 1; index += 1) {
+      phrases.add(`${words[index]} ${words[index + 1]}`);
+    }
+
+    return Array.from(phrases).slice(0, 14);
+  }
+
+  function normalizeRecommendationText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function recommendationValueToText(value) {
+    if (!value) return "";
+    if (Array.isArray(value)) return value.map(recommendationValueToText).join(" ");
+    if (typeof value === "object") return Object.values(value).map(recommendationValueToText).join(" ");
+    return String(value);
+  }
+
+  function marketplaceRecommendationCard(item) {
+    const product = item.product || {};
+    const slug = String(product.slug || "").trim();
+    const encodedSlug = encodeURIComponent(slug);
+    const isRequestOnly = isRequestOnlyProduct(product);
+    const actionHref = isRequestOnly
+      ? `/pages/custom-request/index.html?slug=${encodedSlug}`
+      : `/pages/checkout/index.html?slug=${encodedSlug}&step=setup`;
+    const actionLabel = isRequestOnly ? "Request" : "Buy";
+    const matchText = item.matchedTerms?.length
+      ? `Matched: ${item.matchedTerms.join(", ")}`
+      : "Closest available fit";
+
+    return `
+      <article class="marketplace-recommendation-match">
+        <div class="match-meta">
+          <span>${NexusUI.escapeHtml(product.category || product.badge || "Recommended")}</span>
+          <span>${NexusUI.escapeHtml(NexusUI.money?.(product) || "")}</span>
+        </div>
+        <h4>${NexusUI.escapeHtml(product.title || "Marketplace product")}</h4>
+        <p>${NexusUI.escapeHtml(product.short_description || product.outcome || product.problem || "Review this product to see setup requirements and expected output.")}</p>
+        <div class="match-terms">${NexusUI.escapeHtml(matchText)}</div>
+        <div class="marketplace-recommendation-match-actions">
+          <button type="button" class="btn btn-secondary btn-small" onclick="NexusApp.openProduct(decodeURIComponent('${encodedSlug}'))">Preview</button>
+          <a class="btn btn-primary btn-small" href="${NexusUI.escapeHtml(actionHref)}">${actionLabel}</a>
+        </div>
+      </article>
+    `;
   }
 
   async function fetchProduct(slug) {
@@ -3599,6 +3859,7 @@ if (shouldImportN8n) {
   clearCompare,
   openCompare,
   closeCompare,
+  recommendMarketplaceProducts,
   openSetupChoice,
   startProductMessage,
   startDeveloperMessage,

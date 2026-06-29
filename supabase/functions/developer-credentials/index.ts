@@ -260,8 +260,84 @@ function normalizeSecretFields(body: any) {
 
   const secretFields = jsonObject(body.secret_fields);
   const apiKey = cleanString(body.api_key || body.token || body.secret);
+  const oauthFields: Record<string, any> = {};
 
-  if (Object.keys(secretFields).length) return secretFields;
+  [
+    ["client_id", body.oauth_client_id || body.client_id],
+    ["client_secret", body.oauth_client_secret || body.client_secret],
+    ["refresh_token", body.oauth_refresh_token || body.refresh_token],
+    ["access_token", body.oauth_access_token || body.access_token],
+    ["scope", body.oauth_scope || body.scope],
+    ["token_url", body.token_url || body.access_token_url],
+    ["auth_url", body.auth_url || body.authorization_url],
+    ["redirect_uri", body.redirect_uri],
+  ].forEach(([key, value]) => {
+    const cleaned = cleanString(value);
+    if (cleaned) oauthFields[key] = cleaned;
+  });
+
+  const serviceAccountFields: Record<string, any> = {};
+  const serviceAccountJson = cleanString(body.service_account_json || body.serviceAccountJson);
+  if (serviceAccountJson) {
+    serviceAccountFields.service_account_json = serviceAccountJson;
+  }
+  [
+    ["service_account_email", body.service_account_email || body.client_email],
+    ["private_key", body.service_account_private_key || body.private_key],
+    ["project_id", body.service_account_project_id || body.project_id],
+    ["delegated_subject", body.google_delegated_subject || body.delegated_subject],
+  ].forEach(([key, value]) => {
+    const cleaned = cleanString(value);
+    if (cleaned) serviceAccountFields[key] = cleaned;
+  });
+  const structuredFields: Record<string, any> = {};
+  [
+    ["access_token", body.access_token || body.oauth_access_token],
+    ["api_token", body.api_token],
+    ["client_id", body.client_id || body.oauth_client_id],
+    ["client_secret", body.client_secret || body.oauth_client_secret],
+    ["consumer_key", body.consumer_key],
+    ["consumer_secret", body.consumer_secret],
+    ["account_sid", body.account_sid],
+    ["auth_token", body.auth_token],
+    ["subdomain", body.subdomain || body.shop_subdomain],
+    ["shop_subdomain", body.shop_subdomain],
+    ["url", body.url],
+    ["email", body.email],
+    ["host", body.host],
+    ["port", body.port],
+    ["database", body.database],
+    ["username", body.username || body.user],
+    ["user", body.user || body.username],
+    ["password", body.password],
+    ["schema", body.schema],
+    ["ssl", body.ssl],
+    ["secure", body.secure],
+    ["connection_string", body.connection_string || body.uri],
+    ["access_key_id", body.access_key_id],
+    ["secret_access_key", body.secret_access_key],
+    ["session_token", body.session_token],
+    ["region", body.region],
+    ["header_name", body.header_name],
+    ["header_value", body.header_value],
+  ].forEach(([key, value]) => {
+    const cleaned = cleanString(value);
+    if (cleaned) structuredFields[key] = cleaned;
+  });
+
+  if (
+    Object.keys(secretFields).length ||
+    Object.keys(oauthFields).length ||
+    Object.keys(serviceAccountFields).length ||
+    Object.keys(structuredFields).length
+  ) {
+    return {
+      ...secretFields,
+      ...oauthFields,
+      ...serviceAccountFields,
+      ...structuredFields,
+    };
+  }
   if (apiKey) return { api_key: apiKey };
   return {};
 }

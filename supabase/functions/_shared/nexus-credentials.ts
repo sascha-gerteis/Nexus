@@ -107,6 +107,99 @@ const API_KEY_ALIASES = { api_key: "apiKey", apiKey: "apiKey", key: "apiKey", to
 const TOKEN_ALIASES = { api_key: "token", apiKey: "token", token: "token", api_token: "token", access_token: "token" };
 const ACCESS_TOKEN_ALIASES = { api_key: "accessToken", apiKey: "accessToken", token: "accessToken", access_token: "accessToken" };
 const PASSWORD_ALIASES = { password: "password", pass: "password", token: "password", api_key: "password" };
+const GOOGLE_OAUTH_ALIASES = {
+  client_id: "clientId",
+  clientId: "clientId",
+  client_secret: "clientSecret",
+  clientSecret: "clientSecret",
+  refresh_token: "refreshToken",
+  refreshToken: "refreshToken",
+  access_token: "accessToken",
+  accessToken: "accessToken",
+  scope: "scope",
+  scopes: "scope",
+};
+const OAUTH_ACCOUNT_ALIASES = {
+  ...GOOGLE_OAUTH_ALIASES,
+  auth_url: "authUrl",
+  authUrl: "authUrl",
+  token_url: "accessTokenUrl",
+  accessTokenUrl: "accessTokenUrl",
+  authorization_url: "authUrl",
+  redirect_uri: "redirectUri",
+  redirectUri: "redirectUri",
+};
+const GOOGLE_SERVICE_ACCOUNT_ALIASES = {
+  service_account_json: "serviceAccountJson",
+  serviceAccountJson: "serviceAccountJson",
+  project_id: "projectId",
+  projectId: "projectId",
+  client_email: "email",
+  service_account_email: "email",
+  email: "email",
+  private_key: "privateKey",
+  privateKey: "privateKey",
+  delegated_subject: "delegatedSubject",
+  delegatedSubject: "delegatedSubject",
+  subject: "delegatedSubject",
+};
+const CONNECTION_ALIASES = {
+  host: "host",
+  hostname: "host",
+  port: "port",
+  database: "database",
+  db: "database",
+  username: "user",
+  user: "user",
+  password: "password",
+  schema: "schema",
+  ssl: "ssl",
+  connection_string: "connectionString",
+  connectionString: "connectionString",
+  uri: "connectionString",
+  url: "connectionString",
+};
+const EMAIL_SERVER_ALIASES = {
+  host: "host",
+  port: "port",
+  user: "user",
+  username: "user",
+  email: "user",
+  password: "password",
+  secure: "secure",
+  ssl: "secure",
+};
+const AWS_ALIASES = {
+  access_key_id: "accessKeyId",
+  accessKeyId: "accessKeyId",
+  secret_access_key: "secretAccessKey",
+  secretAccessKey: "secretAccessKey",
+  session_token: "sessionToken",
+  sessionToken: "sessionToken",
+  region: "region",
+};
+const API_PAIR_ALIASES = {
+  api_key: "apiKey",
+  apiKey: "apiKey",
+  key: "apiKey",
+  api_token: "apiToken",
+  token: "apiToken",
+  access_token: "accessToken",
+  client_id: "clientId",
+  clientId: "clientId",
+  client_secret: "clientSecret",
+  clientSecret: "clientSecret",
+  consumer_key: "consumerKey",
+  consumer_secret: "consumerSecret",
+  account_sid: "accountSid",
+  accountSid: "accountSid",
+  auth_token: "authToken",
+  authToken: "authToken",
+  email: "email",
+  subdomain: "subdomain",
+  shop_subdomain: "shopSubdomain",
+  url: "url",
+};
 
 const PROVIDER_PRESETS = [
   {
@@ -254,6 +347,16 @@ const PROVIDER_PRESETS = [
     n8nCredentialType: "slackApi",
     matches: ["slack"],
     aliases: ACCESS_TOKEN_ALIASES,
+    credentialProfile: "access_token",
+  },
+  {
+    provider: "slack_oauth",
+    label: "Slack OAuth",
+    n8nCredentialType: "slackOAuth2Api",
+    matches: ["slack oauth", "slackoauth2"],
+    aliases: OAUTH_ACCOUNT_ALIASES,
+    credentialProfile: "oauth_account",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
   },
   {
     provider: "discord",
@@ -261,6 +364,7 @@ const PROVIDER_PRESETS = [
     n8nCredentialType: "discordBotApi",
     matches: ["discord"],
     aliases: TOKEN_ALIASES,
+    credentialProfile: "access_token",
   },
   {
     provider: "telegram",
@@ -268,13 +372,15 @@ const PROVIDER_PRESETS = [
     n8nCredentialType: "telegramApi",
     matches: ["telegram"],
     aliases: ACCESS_TOKEN_ALIASES,
+    credentialProfile: "access_token",
   },
   {
     provider: "twilio",
     label: "Twilio",
     n8nCredentialType: "twilioApi",
     matches: ["twilio"],
-    aliases: { account_sid: "accountSid", accountSid: "accountSid", auth_token: "authToken", token: "authToken", api_key: "authToken" },
+    aliases: API_PAIR_ALIASES,
+    credentialProfile: "api_pair",
   },
   {
     provider: "sendgrid",
@@ -295,14 +401,18 @@ const PROVIDER_PRESETS = [
     label: "SMTP Email",
     n8nCredentialType: "smtp",
     matches: ["smtp"],
-    aliases: { user: "user", username: "user", password: "password", host: "host", port: "port" },
+    aliases: EMAIL_SERVER_ALIASES,
+    credentialProfile: "email_server",
+    requiredSecretFields: ["host", "port", "username", "password"],
   },
   {
     provider: "imap",
     label: "IMAP Email",
     n8nCredentialType: "imap",
     matches: ["imap"],
-    aliases: { user: "user", username: "user", password: "password", host: "host", port: "port" },
+    aliases: EMAIL_SERVER_ALIASES,
+    credentialProfile: "email_server",
+    requiredSecretFields: ["host", "port", "username", "password"],
   },
   {
     provider: "airtable",
@@ -310,6 +420,7 @@ const PROVIDER_PRESETS = [
     n8nCredentialType: "airtableTokenApi",
     matches: ["airtable"],
     aliases: ACCESS_TOKEN_ALIASES,
+    credentialProfile: "access_token",
   },
   {
     provider: "hubspot",
@@ -319,46 +430,168 @@ const PROVIDER_PRESETS = [
     aliases: API_KEY_ALIASES,
   },
   {
+    provider: "hubspot_oauth",
+    label: "HubSpot OAuth",
+    n8nCredentialType: "hubspotOAuth2Api",
+    matches: ["hubspot oauth", "hubspotoauth2"],
+    aliases: OAUTH_ACCOUNT_ALIASES,
+    credentialProfile: "oauth_account",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+  },
+  {
     provider: "notion",
     label: "Notion",
     n8nCredentialType: "notionApi",
     matches: ["notion"],
     aliases: ACCESS_TOKEN_ALIASES,
+    credentialProfile: "access_token",
   },
   {
     provider: "google_sheets",
     label: "Google Sheets",
     n8nCredentialType: "googleSheetsOAuth2Api",
-    matches: ["googlesheets", "google sheets"],
-    aliases: {},
+    matches: ["googlesheets", "google sheets", "google sheet", "sheetsoauth2"],
+    aliases: GOOGLE_OAUTH_ALIASES,
+    credentialProfile: "google_oauth",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+    setupHints: [
+      "Google Sheets nodes also need a spreadsheet ID/URL and sheet/range in the node or Nexus setup fields.",
+      "Use an OAuth refresh token for the Google account that can access the target spreadsheet.",
+    ],
   },
   {
     provider: "google_drive",
     label: "Google Drive",
     n8nCredentialType: "googleDriveOAuth2Api",
-    matches: ["googledrive", "google drive"],
-    aliases: {},
+    matches: ["googledrive", "google drive", "driveoauth2"],
+    aliases: GOOGLE_OAUTH_ALIASES,
+    credentialProfile: "google_oauth",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+    setupHints: [
+      "Google Drive nodes also need a file/folder ID or URL in the node or Nexus setup fields.",
+      "Use an OAuth refresh token for the Google account that owns or can access the file.",
+    ],
+  },
+  {
+    provider: "google_calendar",
+    label: "Google Calendar",
+    n8nCredentialType: "googleCalendarOAuth2Api",
+    matches: ["googlecalendar", "google calendar", "calendaroauth2"],
+    aliases: GOOGLE_OAUTH_ALIASES,
+    credentialProfile: "google_oauth",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+    setupHints: [
+      "Google Calendar nodes also need a calendar ID or target calendar selected in the node/setup fields.",
+      "Use an OAuth refresh token for the Google account that can access the calendar.",
+    ],
+  },
+  {
+    provider: "google_docs",
+    label: "Google Docs",
+    n8nCredentialType: "googleDocsOAuth2Api",
+    matches: ["googledocs", "google docs", "google doc", "docsoauth2"],
+    aliases: GOOGLE_OAUTH_ALIASES,
+    credentialProfile: "google_oauth",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+    setupHints: [
+      "Google Docs nodes also need a document ID/URL in the node or Nexus setup fields.",
+      "Use an OAuth refresh token for the Google account that can access the document.",
+    ],
+  },
+  {
+    provider: "google_analytics",
+    label: "Google Analytics",
+    n8nCredentialType: "googleAnalyticsOAuth2Api",
+    matches: ["googleanalytics", "google analytics", "ga4"],
+    aliases: GOOGLE_OAUTH_ALIASES,
+    credentialProfile: "google_oauth",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+    setupHints: [
+      "Google Analytics nodes also need the property/account ID in the node or Nexus setup fields.",
+    ],
+  },
+  {
+    provider: "google_ads",
+    label: "Google Ads",
+    n8nCredentialType: "googleAdsOAuth2Api",
+    matches: ["googleads", "google ads", "adwords"],
+    aliases: GOOGLE_OAUTH_ALIASES,
+    credentialProfile: "google_oauth",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+    setupHints: [
+      "Google Ads nodes also need customer/account IDs and any manager account details required by the workflow.",
+    ],
   },
   {
     provider: "gmail",
     label: "Gmail",
     n8nCredentialType: "gmailOAuth2",
-    matches: ["gmail"],
-    aliases: {},
+    matches: ["gmail", "google mail"],
+    aliases: GOOGLE_OAUTH_ALIASES,
+    credentialProfile: "google_oauth",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+    setupHints: [
+      "Gmail nodes need OAuth access for the mailbox that sends or reads mail.",
+      "Use scopes that match the action, such as gmail.send or gmail.modify.",
+    ],
+  },
+  {
+    provider: "google_service_account",
+    label: "Google Service Account",
+    n8nCredentialType: "googleApi",
+    matches: ["googleapi", "google api", "google service account", "service account"],
+    aliases: GOOGLE_SERVICE_ACCOUNT_ALIASES,
+    credentialProfile: "google_service_account",
+    requiredSecretFields: ["service_account_json"],
+    setupHints: [
+      "Use this for Google APIs that can run with a service account instead of a user OAuth account.",
+      "The target sheet/file must be shared with the service account email.",
+    ],
   },
   {
     provider: "microsoft",
     label: "Microsoft 365",
-    n8nCredentialType: "",
+    n8nCredentialType: "microsoftOAuth2Api",
     matches: ["microsoft", "outlook", "office365", "sharepoint", "onedrive"],
-    aliases: {},
+    aliases: OAUTH_ACCOUNT_ALIASES,
+    credentialProfile: "oauth_account",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+  },
+  {
+    provider: "microsoft_outlook",
+    label: "Microsoft Outlook",
+    n8nCredentialType: "microsoftOutlookOAuth2Api",
+    matches: ["outlook", "microsoft outlook"],
+    aliases: OAUTH_ACCOUNT_ALIASES,
+    credentialProfile: "oauth_account",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+  },
+  {
+    provider: "microsoft_excel",
+    label: "Microsoft Excel",
+    n8nCredentialType: "microsoftExcelOAuth2Api",
+    matches: ["microsoft excel", "excel online", "excel"],
+    aliases: OAUTH_ACCOUNT_ALIASES,
+    credentialProfile: "oauth_account",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
+  },
+  {
+    provider: "microsoft_onedrive",
+    label: "Microsoft OneDrive",
+    n8nCredentialType: "microsoftOneDriveOAuth2Api",
+    matches: ["onedrive", "one drive"],
+    aliases: OAUTH_ACCOUNT_ALIASES,
+    credentialProfile: "oauth_account",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
   },
   {
     provider: "salesforce",
     label: "Salesforce",
     n8nCredentialType: "salesforceOAuth2Api",
     matches: ["salesforce"],
-    aliases: {},
+    aliases: OAUTH_ACCOUNT_ALIASES,
+    credentialProfile: "oauth_account",
+    requiredSecretFields: ["client_id", "client_secret", "refresh_token"],
   },
   {
     provider: "pipedrive",
@@ -380,6 +613,7 @@ const PROVIDER_PRESETS = [
     n8nCredentialType: "intercomApi",
     matches: ["intercom"],
     aliases: ACCESS_TOKEN_ALIASES,
+    credentialProfile: "access_token",
   },
   {
     provider: "freshdesk",
@@ -421,49 +655,62 @@ const PROVIDER_PRESETS = [
     label: "Shopify",
     n8nCredentialType: "shopifyApi",
     matches: ["shopify"],
-    aliases: { api_key: "accessToken", token: "accessToken", access_token: "accessToken", shop_subdomain: "shopSubdomain", subdomain: "shopSubdomain" },
+    aliases: API_PAIR_ALIASES,
+    credentialProfile: "api_pair",
+    requiredSecretFields: ["access_token", "shop_subdomain"],
   },
   {
     provider: "woocommerce",
     label: "WooCommerce",
     n8nCredentialType: "wooCommerceApi",
     matches: ["woocommerce", "woo commerce"],
-    aliases: { consumer_key: "consumerKey", consumer_secret: "consumerSecret", url: "url" },
+    aliases: API_PAIR_ALIASES,
+    credentialProfile: "api_pair",
+    requiredSecretFields: ["consumer_key", "consumer_secret", "url"],
   },
   {
     provider: "paypal",
     label: "PayPal",
     n8nCredentialType: "payPalApi",
     matches: ["paypal", "pay pal"],
-    aliases: { client_id: "clientId", client_secret: "clientSecret", secret: "clientSecret" },
+    aliases: API_PAIR_ALIASES,
+    credentialProfile: "oauth_account",
+    requiredSecretFields: ["client_id", "client_secret"],
   },
   {
     provider: "postgres",
     label: "Postgres",
     n8nCredentialType: "postgres",
     matches: ["postgres", "postgresql"],
-    aliases: { host: "host", database: "database", user: "user", username: "user", password: "password", port: "port" },
+    aliases: CONNECTION_ALIASES,
+    credentialProfile: "database",
+    requiredSecretFields: ["host", "database", "username", "password"],
   },
   {
     provider: "mysql",
     label: "MySQL",
     n8nCredentialType: "mySql",
     matches: ["mysql", "mariadb", "maria db"],
-    aliases: { host: "host", database: "database", user: "user", username: "user", password: "password", port: "port" },
+    aliases: CONNECTION_ALIASES,
+    credentialProfile: "database",
+    requiredSecretFields: ["host", "database", "username", "password"],
   },
   {
     provider: "mongodb",
     label: "MongoDB",
     n8nCredentialType: "mongoDb",
     matches: ["mongodb", "mongo"],
-    aliases: { connection_string: "connectionString", uri: "connectionString", url: "connectionString" },
+    aliases: CONNECTION_ALIASES,
+    credentialProfile: "database",
+    requiredSecretFields: ["connection_string"],
   },
   {
     provider: "redis",
     label: "Redis",
     n8nCredentialType: "redis",
     matches: ["redis"],
-    aliases: PASSWORD_ALIASES,
+    aliases: CONNECTION_ALIASES,
+    credentialProfile: "database",
   },
   {
     provider: "supabase",
@@ -477,7 +724,9 @@ const PROVIDER_PRESETS = [
     label: "AWS",
     n8nCredentialType: "aws",
     matches: ["aws", "s3", "ses", "lambda"],
-    aliases: { access_key_id: "accessKeyId", accessKeyId: "accessKeyId", secret_access_key: "secretAccessKey", secretAccessKey: "secretAccessKey", region: "region" },
+    aliases: AWS_ALIASES,
+    credentialProfile: "aws",
+    requiredSecretFields: ["access_key_id", "secret_access_key", "region"],
   },
   {
     provider: "github",
@@ -485,6 +734,7 @@ const PROVIDER_PRESETS = [
     n8nCredentialType: "githubApi",
     matches: ["github", "git hub"],
     aliases: ACCESS_TOKEN_ALIASES,
+    credentialProfile: "access_token",
   },
   {
     provider: "gitlab",
@@ -492,20 +742,25 @@ const PROVIDER_PRESETS = [
     n8nCredentialType: "gitlabApi",
     matches: ["gitlab", "git lab"],
     aliases: ACCESS_TOKEN_ALIASES,
+    credentialProfile: "access_token",
   },
   {
     provider: "jira",
     label: "Jira",
     n8nCredentialType: "jiraSoftwareCloudApi",
     matches: ["jira", "atlassian"],
-    aliases: { email: "email", api_token: "apiToken", token: "apiToken", subdomain: "subdomain" },
+    aliases: API_PAIR_ALIASES,
+    credentialProfile: "api_pair",
+    requiredSecretFields: ["email", "api_token", "subdomain"],
   },
   {
     provider: "trello",
     label: "Trello",
     n8nCredentialType: "trelloApi",
     matches: ["trello"],
-    aliases: { api_key: "apiKey", apiKey: "apiKey", token: "apiToken", api_token: "apiToken" },
+    aliases: API_PAIR_ALIASES,
+    credentialProfile: "api_pair",
+    requiredSecretFields: ["api_key", "api_token"],
   },
   {
     provider: "asana",
@@ -513,6 +768,7 @@ const PROVIDER_PRESETS = [
     n8nCredentialType: "asanaApi",
     matches: ["asana"],
     aliases: ACCESS_TOKEN_ALIASES,
+    credentialProfile: "access_token",
   },
   {
     provider: "clickup",
@@ -624,7 +880,44 @@ export function providerOptions() {
     provider: preset.provider,
     label: preset.label,
     n8n_credential_type: preset.n8nCredentialType,
+    credential_profile: presetCredentialProfile(preset),
+    required_secret_fields: presetRequiredSecretFields(preset),
+    setup_hints: presetSetupHints(preset),
   }));
+}
+
+function inferredCredentialProfileFromPreset(preset: any) {
+  const provider = lower(preset?.provider);
+  const type = lower(preset?.n8nCredentialType);
+
+  if (preset?.credentialProfile) return cleanString(preset.credentialProfile);
+  if (type.includes("oauth2")) return "oauth_account";
+  if (type === "smtp" || type === "imap") return "email_server";
+  if (["postgres", "mysql", "mongodb", "redis"].includes(provider) || ["postgres", "mysql", "mongodb", "redis"].includes(type)) {
+    return "database";
+  }
+  if (provider === "aws" || type === "aws") return "aws";
+  if (type === "httpbasicauth" || provider === "basic_auth") return "basic_auth";
+  if (type === "httpbearerauth" || provider === "bearer_token") return "access_token";
+  if (type === "httpheaderauth" || provider === "webhook_api") return "header_auth";
+  if (type.includes("token") || lower(JSON.stringify(preset?.aliases || {})).includes("accesstoken")) return "access_token";
+  return "api_key";
+}
+
+function presetCredentialProfile(preset: any) {
+  return inferredCredentialProfileFromPreset(preset);
+}
+
+function presetRequiredSecretFields(preset: any) {
+  return Array.isArray(preset?.requiredSecretFields)
+    ? preset.requiredSecretFields.map(cleanString).filter(Boolean)
+    : [];
+}
+
+function presetSetupHints(preset: any) {
+  return Array.isArray(preset?.setupHints)
+    ? preset.setupHints.map(cleanString).filter(Boolean)
+    : [];
 }
 
 function presetForSlot(slot: any) {
@@ -724,6 +1017,9 @@ function coerceNativeCredentialSlot(slot: any) {
     ...slot,
     provider: preset.provider,
     provider_label: preset.label,
+    credential_profile: presetCredentialProfile(preset),
+    required_secret_fields: presetRequiredSecretFields(preset),
+    setup_hints: presetSetupHints(preset),
     credential_key: preset.n8nCredentialType,
     n8n_credential_type: preset.n8nCredentialType,
   };
@@ -933,6 +1229,16 @@ function servicePresetForNode(node: any) {
   if (isNonCredentialUtilityNode(node) || isNexusInternalRuntimeNode(node)) return null;
 
   const nexusCredential = asObject(asObject(node?.parameters).nexusCredential);
+  const parameters = asObject(node?.parameters);
+  const nodeText = `${node?.type || ""} ${node?.name || ""}`;
+  if (
+    lower(nodeText).includes("google") &&
+    lower(parameters.authentication || parameters.authType || parameters.credentialType).includes("service")
+  ) {
+    const serviceAccountPreset = providerPreset("google_service_account");
+    if (serviceAccountPreset) return serviceAccountPreset;
+  }
+
   const explicitProvider = pickFirstString(
     nexusCredential.provider,
     nexusCredential.provider_label,
@@ -947,7 +1253,6 @@ function servicePresetForNode(node: any) {
     return httpTargetPresetForNode(node);
   }
 
-  const nodeText = `${node?.type || ""} ${node?.name || ""}`;
   return providerPreset(nodeText);
 }
 
@@ -1125,6 +1430,22 @@ export function detectWorkflowCredentialSlots(workflowInput: any) {
   return slots;
 }
 
+function normalizeCredentialFieldValue(key: string, value: any) {
+  const lowerKey = lower(key);
+  const cleaned = typeof value === "string" ? value.trim() : value;
+  if (["ssl", "secure", "rejectUnauthorized", "allowUnauthorizedCerts"].map(lower).includes(lowerKey)) {
+    if (typeof cleaned === "boolean") return cleaned;
+    if (["true", "1", "yes", "on", "enabled"].includes(lower(cleaned))) return true;
+    if (["false", "0", "no", "off", "disabled"].includes(lower(cleaned))) return false;
+  }
+
+  if (lowerKey === "port" && cleanString(cleaned) && !Number.isNaN(Number(cleaned))) {
+    return Number(cleaned);
+  }
+
+  return cleaned;
+}
+
 function secretFieldsForN8n(
   credential: any,
   rawFields: Record<string, any>,
@@ -1146,7 +1467,8 @@ function secretFieldsForN8n(
   for (const [key, value] of Object.entries(rawFields || {})) {
     const cleanedValue = typeof value === "string" ? value.trim() : value;
     if (cleanedValue === "" || cleanedValue === null || cleanedValue === undefined) continue;
-    output[aliases[key] || key] = cleanedValue;
+    const outputKey = aliases[key] || key;
+    output[outputKey] = normalizeCredentialFieldValue(outputKey, cleanedValue);
   }
 
   return output;
@@ -1173,6 +1495,175 @@ function firstSecretValue(rawFields: Record<string, any>) {
   }
 
   return cleanString(Object.values(rawFields || {}).find((value) => cleanString(value)));
+}
+
+function jsonObjectFromField(value: unknown) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, any>;
+
+  const raw = cleanString(value);
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+    return asObject(parsed);
+  } catch {
+    return {};
+  }
+}
+
+function googleOAuthScopesForCredentialType(type: string) {
+  const cleanType = lower(type);
+  if (cleanType === "gmailoauth2") {
+    return [
+      "https://www.googleapis.com/auth/gmail.modify",
+      "https://www.googleapis.com/auth/gmail.send",
+    ].join(" ");
+  }
+
+  if (cleanType === "googledriveoauth2api") {
+    return "https://www.googleapis.com/auth/drive";
+  }
+
+  return [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+  ].join(" ");
+}
+
+function googleOAuthCredentialCandidates(rawFields: Record<string, any>, credentialType: string) {
+  const clientId = cleanString(rawFields.clientId || rawFields.client_id);
+  const clientSecret = cleanString(rawFields.clientSecret || rawFields.client_secret);
+  const refreshToken = cleanString(rawFields.refreshToken || rawFields.refresh_token);
+  const accessToken = cleanString(rawFields.accessToken || rawFields.access_token);
+  const scope = cleanString(rawFields.scope || rawFields.scopes) || googleOAuthScopesForCredentialType(credentialType);
+
+  if (!clientId || !clientSecret) return [];
+
+  const baseData: Record<string, any> = {
+    grantType: "authorizationCode",
+    authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    accessTokenUrl: "https://oauth2.googleapis.com/token",
+    authQueryParameters: "access_type=offline&prompt=consent",
+    authentication: "body",
+    clientId,
+    clientSecret,
+    scope,
+  };
+  const candidates: Record<string, any>[] = [baseData];
+
+  if (refreshToken || accessToken) {
+    const oauthTokenData: Record<string, any> = {
+      token_type: "Bearer",
+      scope,
+    };
+    if (refreshToken) oauthTokenData.refresh_token = refreshToken;
+    if (accessToken) oauthTokenData.access_token = accessToken;
+
+    candidates.unshift({
+      ...baseData,
+      oauthTokenData,
+    });
+
+    candidates.push({
+      ...baseData,
+      oauthTokenData: {
+        tokenType: "Bearer",
+        scope,
+        ...(refreshToken ? { refreshToken } : {}),
+        ...(accessToken ? { accessToken } : {}),
+      },
+    });
+  }
+
+  return candidates;
+}
+
+function oauthCredentialCandidates(rawFields: Record<string, any>) {
+  const clientId = cleanString(rawFields.clientId || rawFields.client_id);
+  const clientSecret = cleanString(rawFields.clientSecret || rawFields.client_secret);
+  const refreshToken = cleanString(rawFields.refreshToken || rawFields.refresh_token);
+  const accessToken = cleanString(rawFields.accessToken || rawFields.access_token);
+  const scope = cleanString(rawFields.scope || rawFields.scopes);
+  const authUrl = cleanString(rawFields.authUrl || rawFields.auth_url || rawFields.authorization_url);
+  const accessTokenUrl = cleanString(rawFields.accessTokenUrl || rawFields.token_url || rawFields.access_token_url);
+  const redirectUri = cleanString(rawFields.redirectUri || rawFields.redirect_uri);
+
+  if (!clientId && !clientSecret && !refreshToken && !accessToken) return [];
+
+  const baseData: Record<string, any> = {};
+  if (clientId) baseData.clientId = clientId;
+  if (clientSecret) baseData.clientSecret = clientSecret;
+  if (scope) baseData.scope = scope;
+  if (authUrl) baseData.authUrl = authUrl;
+  if (accessTokenUrl) baseData.accessTokenUrl = accessTokenUrl;
+  if (redirectUri) baseData.redirectUri = redirectUri;
+
+  const candidates: Record<string, any>[] = [baseData];
+  if (refreshToken || accessToken) {
+    const oauthTokenData: Record<string, any> = { token_type: "Bearer" };
+    if (scope) oauthTokenData.scope = scope;
+    if (refreshToken) oauthTokenData.refresh_token = refreshToken;
+    if (accessToken) oauthTokenData.access_token = accessToken;
+    candidates.unshift({ ...baseData, oauthTokenData });
+    candidates.push({
+      ...baseData,
+      oauthTokenData: {
+        tokenType: "Bearer",
+        ...(scope ? { scope } : {}),
+        ...(refreshToken ? { refreshToken } : {}),
+        ...(accessToken ? { accessToken } : {}),
+      },
+    });
+  }
+
+  return candidates;
+}
+
+function googleServiceAccountCredentialCandidates(rawFields: Record<string, any>) {
+  const serviceAccount = jsonObjectFromField(rawFields.serviceAccountJson || rawFields.service_account_json);
+  const email = cleanString(
+    rawFields.email ||
+    rawFields.service_account_email ||
+    rawFields.client_email ||
+    serviceAccount.client_email,
+  );
+  const privateKey = cleanString(
+    rawFields.privateKey ||
+    rawFields.private_key ||
+    serviceAccount.private_key,
+  );
+  const projectId = cleanString(rawFields.projectId || rawFields.project_id || serviceAccount.project_id);
+  const delegatedSubject = cleanString(rawFields.delegatedSubject || rawFields.delegated_subject || rawFields.subject);
+  const candidates: Record<string, any>[] = [];
+
+  if (Object.keys(serviceAccount).length) {
+    candidates.push({
+      serviceAccountJson: JSON.stringify(serviceAccount),
+      projectId,
+      email,
+      privateKey,
+      ...(delegatedSubject ? { delegatedSubject } : {}),
+    });
+    candidates.push(serviceAccount);
+  }
+
+  if (email && privateKey) {
+    candidates.push({
+      email,
+      privateKey,
+      ...(projectId ? { projectId } : {}),
+      ...(delegatedSubject ? { delegatedSubject } : {}),
+    });
+    candidates.push({
+      serviceAccountEmail: email,
+      privateKey,
+      ...(projectId ? { projectId } : {}),
+      ...(delegatedSubject ? { delegatedSubject } : {}),
+    });
+  }
+
+  return candidates;
 }
 
 function defaultHeaderNameForProvider(credential: any, slot: any) {
@@ -1218,6 +1709,12 @@ function credentialDataCandidatesForN8n(
     if (baseUrl) openAiData.url = baseUrl;
     candidates.push(openAiData);
     return candidates;
+  } else if (["googlesheetsoauth2api", "googledriveoauth2api", "googlecalendaroauth2api", "googledocsoauth2api", "googleanalyticsoauth2api", "googleadsoauth2api", "gmailoauth2"].includes(type)) {
+    candidates.push(...googleOAuthCredentialCandidates(rawFields, targetCredentialType));
+  } else if (type === "googleapi") {
+    candidates.push(...googleServiceAccountCredentialCandidates(rawFields));
+  } else if (type.includes("oauth2")) {
+    candidates.push(...oauthCredentialCandidates(rawFields));
   } else if (type === "httpbearerauth" && value) {
     candidates.push({ token: value });
   } else if (type === "httpheaderauth" && value) {
@@ -1293,12 +1790,13 @@ function nativeCredentialManualSetupMessage(slot: any, credentialType: string, e
   const provider = cleanString(slot?.provider_label || preset?.label || slot?.provider || credentialType || "provider");
   const node = cleanString(slot?.node_name || "the workflow node");
   const nodeType = cleanString(slot?.node_type);
+  const hints = presetSetupHints(preset).join(" ");
   const rawError = cleanString(error?.message || "")
     .replace(/^n8n credential API failed \(\d+\):\s*/i, "")
     .replace(/^Nexus tried to sync .*?again\.$/i, "")
     .trim();
 
-  return `${provider} uses n8n's native credential account setup on "${node}". Nexus tried to create the credential profile automatically, but n8n rejected the API setup${rawError ? `: ${rawError}` : "."} Fallback: click Edit workflow, open "${node}"${nodeType ? ` (${nodeType})` : ""}, use Set up credential / select ${provider} account, save the workflow, then click Sync changes and Run check.`;
+  return `${provider} uses n8n's native credential account setup on "${node}". Nexus tried to create the credential profile automatically, but n8n rejected the API setup${rawError ? `: ${rawError}` : "."} ${hints ? `${hints} ` : ""}Fallback: click Edit workflow, open "${node}"${nodeType ? ` (${nodeType})` : ""}, use Set up credential / select ${provider} account, save the workflow, then click Sync changes and Run check.`;
 }
 
 function cleanBaseUrl(value: string) {
@@ -1655,6 +2153,14 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
     if (isHttpRequestNode && isGenericHttpCredential) {
       parameters.authentication = "genericCredentialType";
       parameters.genericAuthType = credentialKey;
+    }
+
+    if (!isHttpRequestNode && lower(`${normalizedSlot.provider || ""} ${credentialKey}`).includes("google")) {
+      if (lower(credentialKey) === "googleapi") {
+        parameters.authentication = "serviceAccount";
+      } else if (lower(credentialKey).includes("oauth2") && !cleanString(parameters.authentication)) {
+        parameters.authentication = "oAuth2";
+      }
     }
 
     const nextCredentials = {

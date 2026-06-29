@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://vzgblkghicyozoxkljga.supabase.co">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260627-launch-trust">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260628-recommendation-polish">
 
   <title>Automation Marketplace | Nexus Workflow Products and AI Agents</title>
   <meta name="description" content="Browse Nexus marketplace products for business workflow automation, AI agents, reporting automation, support automation, operations tools, and custom automation requests.">
@@ -114,7 +114,7 @@
 
           <div class="marketplace-hero-actions">
             <a class="btn btn-primary" href="#marketplace-products">Browse ready-made automations</a>
-            <a class="btn btn-secondary" href="/pages/contact/index.html">Get help choosing</a>
+            <a class="btn btn-secondary" href="#marketplace-recommendation">Get help choosing</a>
           </div>
         </div>
       </div>
@@ -314,6 +314,56 @@
 
           <a class="btn btn-primary" href="/pages/contact/index.html">Request a workflow review</a>
         </div>
+
+        <div class="marketplace-recommendation-section" id="marketplace-recommendation">
+          <div class="marketplace-recommendation-card">
+            <div class="marketplace-recommendation-copy">
+              <span class="marketplace-small-label">Guided recommendation</span>
+              <h2>Not sure which automation fits?</h2>
+              <p>
+                Tell us what you do manually, and Nexus will recommend the closest product or custom setup path.
+              </p>
+            </div>
+
+            <form class="marketplace-recommendation-form" id="marketplaceRecommendationForm" onsubmit="return NexusApp.recommendMarketplaceProducts(event)">
+              <div class="marketplace-recommendation-fields">
+                <label>
+                  <span>What do you do manually?</span>
+                  <textarea class="textarea" id="recommendationManualWork" rows="3" placeholder="Example: Every week we copy social media numbers into a report, compare competitors, and write next steps."></textarea>
+                </label>
+
+                <label>
+                  <span>What output do you want?</span>
+                  <input class="input" id="recommendationOutcome" type="text" placeholder="Report, summary, follow-up, alert, dashboard, customer reply...">
+                </label>
+
+                <label>
+                  <span>Tools or data involved</span>
+                  <input class="input" id="recommendationTools" type="text" placeholder="Website, email, CRM, social channels, support inbox, spreadsheets...">
+                </label>
+
+                <label>
+                  <span>How often should it happen?</span>
+                  <select class="select" id="recommendationFrequency">
+                    <option value="">Choose frequency</option>
+                    <option>One-time output</option>
+                    <option>Daily</option>
+                    <option>Weekly</option>
+                    <option>Monthly</option>
+                    <option>Whenever new data arrives</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="marketplace-recommendation-actions">
+                <button class="btn btn-primary" type="submit">Get a workflow recommendation</button>
+                <a class="btn btn-secondary" href="/pages/contact/index.html">Ask Nexus directly</a>
+              </div>
+            </form>
+          </div>
+
+          <div class="marketplace-recommendation-result" id="marketplaceRecommendationResult" hidden></div>
+        </div>
       </div>
     </section>
   </main>
@@ -345,10 +395,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script defer src="/assets/js/nexus-ui.js?v=20260627-launch-trust"></script>
-  <script defer src="/assets/js/nexus-db.js?v=20260627-launch-trust"></script>
+  <script defer src="/assets/js/nexus-ui.js?v=20260628-recommendation-polish"></script>
+  <script defer src="/assets/js/nexus-db.js?v=20260628-recommendation-polish"></script>
   <script defer src="/assets/js/nexus-buyer-nav.js"></script>
-  <script defer src="/assets/js/nexus-app.js?v=20260627-launch-trust"></script>
+  <script defer src="/assets/js/nexus-app.js?v=20260628-recommendation-polish"></script>
 
   <script>
     function NexusMarketplaceSetCategory(category) {

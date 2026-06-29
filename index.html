@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://vzgblkghicyozoxkljga.supabase.co">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260627-launch-trust">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260628-recommendation-bottom">
 
   <title>Nexus | Business Automation Marketplace for Workflows and AI Agents</title>
   <meta name="description" content="Nexus helps businesses solve operational bottlenecks with ready-made workflow automations, AI agents, reporting systems, guided setup, and custom automation requests.">
@@ -833,10 +833,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script defer src="/assets/js/nexus-ui.js?v=20260627-launch-trust"></script>
-<script defer src="/assets/js/nexus-db.js?v=20260627-launch-trust"></script>
+  <script defer src="/assets/js/nexus-ui.js?v=20260628-recommendation-bottom"></script>
+<script defer src="/assets/js/nexus-db.js?v=20260628-recommendation-bottom"></script>
 <script defer src="/assets/js/nexus-buyer-nav.js"></script>
-<script defer src="/assets/js/nexus-app.js?v=20260627-launch-trust"></script>
+<script defer src="/assets/js/nexus-app.js?v=20260628-recommendation-bottom"></script>
 <script>
   function NexusHomeQuiz(event, type) {
     if (event) event.preventDefault();
@@ -942,6 +942,57 @@
     const profile = profiles[type] || profiles.unsure;
     const liveProducts = Array.isArray(window.NexusHomeProducts) ? window.NexusHomeProducts : [];
     const products = liveProducts.length ? liveProducts : fallbackProducts;
+
+    if (type === "unsure") {
+      root.hidden = false;
+      root.innerHTML = `
+        <div class="home-quiz-calc">
+          <div class="home-quiz-calc-head">
+            <span class="eyebrow">Workflow recommendation</span>
+            <h3>Tell Nexus what you do manually.</h3>
+            <p>
+              Add a short description and Nexus will compare it against current marketplace products,
+              including newly approved developer products.
+            </p>
+          </div>
+          <form class="home-quiz-calc-form" onsubmit="return NexusHomeCalculateRecommendation(event)">
+            <div class="home-quiz-calc-fields">
+              <label>
+                <span>What do you do manually?</span>
+                <textarea class="textarea" id="homeRecommendationManualWork" rows="3" placeholder="Example: We copy social media, competitor, or customer inquiry data into reports every month."></textarea>
+              </label>
+              <label>
+                <span>What output do you want?</span>
+                <input class="input" id="homeRecommendationOutcome" type="text" placeholder="Report, alert, follow-up, dashboard, summary...">
+              </label>
+              <label>
+                <span>Tools or data involved</span>
+                <input class="input" id="homeRecommendationTools" type="text" placeholder="Website, CRM, inbox, social channels, spreadsheet...">
+              </label>
+              <label>
+                <span>How often should it run?</span>
+                <select class="select" id="homeRecommendationFrequency">
+                  <option value="">Choose frequency</option>
+                  <option>One-time output</option>
+                  <option>Daily</option>
+                  <option>Weekly</option>
+                  <option>Monthly</option>
+                  <option>Whenever new data arrives</option>
+                </select>
+              </label>
+            </div>
+            <div class="home-quiz-result-actions">
+              <button class="btn btn-primary btn-small" type="submit">Get a workflow recommendation</button>
+              <a class="btn btn-secondary btn-small" href="/pages/contact/index.html">Ask Nexus directly</a>
+            </div>
+          </form>
+          <div class="home-quiz-calc-output" id="homeRecommendationCalcResult" hidden></div>
+        </div>
+      `;
+      root.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return false;
+    }
+
     const matched = products
       .map((product) => ({ product, score: scoreHomeQuizProduct(product, profile, type) }))
       .filter((item) => item.score > 0)
@@ -969,6 +1020,162 @@
     `;
     root.scrollIntoView({ behavior: "smooth", block: "nearest" });
     return false;
+  }
+
+  function NexusHomeCalculateRecommendation(event) {
+    if (event) event.preventDefault();
+
+    const output = document.getElementById("homeRecommendationCalcResult");
+    const manualWork = document.getElementById("homeRecommendationManualWork")?.value || "";
+    const outcome = document.getElementById("homeRecommendationOutcome")?.value || "";
+    const tools = document.getElementById("homeRecommendationTools")?.value || "";
+    const frequency = document.getElementById("homeRecommendationFrequency")?.value || "";
+    const buyerInput = [manualWork, outcome, tools, frequency].join(" ").trim();
+    const terms = homeRecommendationTerms(buyerInput);
+
+    if (!output) return false;
+
+    if (!terms.length) {
+      output.hidden = false;
+      output.innerHTML = `
+        <div class="error">
+          Add a little more detail so Nexus can compare your process against available products.
+        </div>
+      `;
+      return false;
+    }
+
+    const liveProducts = Array.isArray(window.NexusHomeProducts) ? window.NexusHomeProducts : [];
+    const products = liveProducts.length ? liveProducts : [
+      {
+        title: "AI Social Media Reports",
+        slug: "ai-social-media-reports",
+        category: "Reporting",
+        short_description: "Turn raw social performance data into clean business reports, insights, and next-step recommendations.",
+        badge: "Performance Reporting",
+        outputs: ["Social performance report", "Recommendations", "Monthly summary"]
+      },
+      {
+        title: "Competitor Intelligence Report",
+        slug: "competitor-report",
+        category: "Business Intelligence",
+        short_description: "Track competitors, compare activity against your business, and receive recommendations on what to improve.",
+        badge: "Competitor Tracking",
+        outputs: ["Competitor brief", "Market summary", "Recommended actions"]
+      },
+      {
+        title: "Inquiry Report",
+        slug: "inquiry-report",
+        category: "Management Reporting",
+        short_description: "Turn customer inquiries into a clear management report showing what people ask for and where to improve.",
+        badge: "Management Reporting",
+        outputs: ["Inquiry report", "Support summary", "Improvement ideas"]
+      }
+    ];
+    const scored = products
+      .map((product) => scoreHomeRecommendationProduct(product, terms))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+    const recommendations = scored.length
+      ? scored.map((item) => item.product)
+      : products.slice(0, 3);
+    const customRecommended = (scored[0]?.score || 0) < 4;
+
+    output.hidden = false;
+    output.innerHTML = `
+      <div class="home-quiz-calc-output-head">
+        <div>
+          <strong>${customRecommended ? "Closest matches plus custom path" : "Best product matches"}</strong>
+          <span>Matched from your manual process, desired output, tools, and frequency.</span>
+        </div>
+        <a class="btn btn-secondary btn-small" href="/pages/marketplace/index.html#marketplace-recommendation">Open full matcher</a>
+      </div>
+      <div class="home-quiz-result-products">
+        ${recommendations.map(homeQuizProductCard).join("")}
+      </div>
+      ${customRecommended ? `
+        <div class="success">
+          This may need a custom setup review if none of these products feel exact.
+        </div>
+      ` : ""}
+    `;
+    output.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return false;
+  }
+
+  function scoreHomeRecommendationProduct(product, terms) {
+    const weightedFields = [
+      [product?.title, 7],
+      [product?.category, 6],
+      [product?.badge, 5],
+      [product?.short_description, 4],
+      [product?.long_description, 3],
+      [product?.problem, 4],
+      [product?.outcome, 5],
+      [product?.outputs, 5],
+      [product?.required_inputs, 4],
+      [product?.required_tools, 4],
+      [product?.who_it_is_for, 3],
+      [product?.best_for, 3],
+      [product?.setup_type, 2],
+      [product?.developers?.display_name, 1],
+      [product?.developers?.type, 1],
+      [product?.developers?.skills, 2]
+    ];
+    let score = 0;
+
+    weightedFields.forEach(([value, weight]) => {
+      const text = normalizeHomeRecommendationText(homeQuizValueToText(value));
+      if (!text) return;
+
+      terms.forEach((term) => {
+        if (text.includes(term)) score += weight;
+      });
+    });
+
+    if (product?.featured) score += 0.4;
+    if (Number(product?.rating) >= 4.7) score += 0.3;
+
+    return { product, score };
+  }
+
+  function homeRecommendationTerms(value) {
+    const stopWords = new Set([
+      "the", "and", "for", "with", "that", "this", "from", "into", "about", "what", "when", "where",
+      "which", "how", "can", "could", "would", "should", "need", "needs", "want", "wants", "have",
+      "has", "our", "your", "you", "they", "them", "their", "every", "each", "week", "day", "month",
+      "manual", "manually", "business", "team", "teams", "make", "use", "using", "used", "get", "data",
+      "info", "information", "something", "anything", "also", "just", "help"
+    ]);
+    const words = normalizeHomeRecommendationText(value)
+      .split(/\s+/)
+      .filter((word) => word && (word.length > 2 || word === "ai") && !stopWords.has(word));
+    const terms = new Set();
+
+    words.forEach((word) => {
+      terms.add(word);
+      if (word.endsWith("ies") && word.length > 4) terms.add(`${word.slice(0, -3)}y`);
+      if (word.endsWith("es") && word.length > 4) terms.add(word.slice(0, -2));
+      if (word.endsWith("s") && word.length > 3) terms.add(word.slice(0, -1));
+      if (word.endsWith("ing") && word.length > 5) terms.add(word.slice(0, -3));
+      if (word.endsWith("ed") && word.length > 4) terms.add(word.slice(0, -2));
+    });
+
+    for (let index = 0; index < words.length - 1; index += 1) {
+      terms.add(`${words[index]} ${words[index + 1]}`);
+    }
+
+    return Array.from(terms);
+  }
+
+  function normalizeHomeRecommendationText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   function scoreHomeQuizProduct(product, profile, type) {

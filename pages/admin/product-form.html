@@ -1089,7 +1089,15 @@
       if (window.NexusUI && typeof NexusUI.toast === "function") {
         NexusUI.toast(message);
       } else {
-        console.log(message);
+        const fallback = document.createElement("div");
+        fallback.className = "notice notice-warning";
+        fallback.textContent = message;
+        fallback.style.position = "fixed";
+        fallback.style.right = "18px";
+        fallback.style.bottom = "18px";
+        fallback.style.zIndex = "9999";
+        document.body.appendChild(fallback);
+        setTimeout(() => fallback.remove(), 5000);
       }
     },
 
