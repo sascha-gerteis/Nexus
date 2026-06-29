@@ -2362,6 +2362,95 @@ async function submitCheckoutIntent(event) {
     });
   }
 
+  function formatAdminRuntimeDate(value) {
+    if (!value) return "Not scheduled";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not scheduled";
+
+    return date.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  function runtimeStatusPill(status) {
+    const value = String(status || "").toLowerCase();
+
+    if (["success", "succeeded", "completed", "passed", "passed_with_expected_test_callback_error", "healthy"].includes(value)) return "pill green";
+    if (["failed", "error", "cancelled", "canceled", "paused_by_health_check"].includes(value)) return "pill red";
+    if (["running", "queued", "warning", "needs_recheck", "paused"].includes(value)) return "pill orange";
+
+    return "pill";
+  }
+
+  function runtimeStatusLabel(status, fallback = "No runs") {
+    const value = String(status || fallback || "No runs")
+      .replaceAll("_", " ")
+      .trim();
+
+    return value || fallback;
+  }
+
+  function renderAdminProductRuntime(product, summary = null) {
+    const latestRun = summary?.last_customer_run || null;
+    const latestRunAt = latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || summary?.last_customer_run_at || "";
+    const nextRunAt = summary?.next_run_at || "";
+    const technicalStatus = product?.n8n_last_test_status || summary?.last_technical_run?.status || "not_tested";
+    const technicalAt = product?.n8n_last_tested_at || summary?.last_technical_run?.finished_at || summary?.last_technical_run?.created_at || "";
+    const healthStatus = product?.health_status || summary?.last_health_check?.status || "unknown";
+    const healthAt = product?.health_last_checked_at || summary?.last_health_check?.checked_at || "";
+    const dueCount = Number(summary?.due_schedules || 0);
+    const activeCount = Number(summary?.active_schedules || 0);
+    const monthlyCount = Number(summary?.monthly_schedules || 0);
+
+    return `
+      <div class="admin-runtime-cell">
+        <div class="admin-runtime-row">
+          <span>Next run</span>
+          <strong>${nextRunAt ? formatAdminRuntimeDate(nextRunAt) : activeCount ? "Waiting for schedule" : "No active schedule"}</strong>
+        </div>
+
+        <div class="admin-runtime-mini-grid">
+          <div>
+            <span>Active</span>
+            <strong>${activeCount}/${monthlyCount}</strong>
+          </div>
+          <div>
+            <span>Due</span>
+            <strong>${dueCount}</strong>
+          </div>
+        </div>
+
+        <div class="admin-runtime-row">
+          <span>Latest customer run</span>
+          <strong>
+            <span class="${runtimeStatusPill(latestRun?.status)}">${NexusUI.escapeHtml(runtimeStatusLabel(latestRun?.status, "No runs"))}</span>
+            <small>${NexusUI.escapeHtml(latestRunAt ? formatAdminRuntimeDate(latestRunAt) : "No customer runs yet")}</small>
+          </strong>
+        </div>
+
+        <div class="admin-runtime-row compact">
+          <span>Technical</span>
+          <strong>
+            <span class="${runtimeStatusPill(technicalStatus)}">${NexusUI.escapeHtml(runtimeStatusLabel(technicalStatus, "not tested"))}</span>
+            <small>${NexusUI.escapeHtml(technicalAt ? formatAdminRuntimeDate(technicalAt) : "Not tested")}</small>
+          </strong>
+        </div>
+
+        <div class="admin-runtime-row compact">
+          <span>Health</span>
+          <strong>
+            <span class="${runtimeStatusPill(healthStatus)}">${NexusUI.escapeHtml(runtimeStatusLabel(healthStatus, "unknown"))}</span>
+            <small>${NexusUI.escapeHtml(healthAt ? formatAdminRuntimeDate(healthAt) : "Not checked")}</small>
+          </strong>
+        </div>
+      </div>
+    `;
+  }
+
   async function renderAdminAutomations() {
     const { data, error } = await NexusDB.listAllAutomations();
     const body = document.getElementById("adminProductRows");
@@ -2371,7 +2460,7 @@ async function submitCheckoutIntent(event) {
     if (!body) return;
 
     if (error) {
-      body.innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="6">${error.message}</td></tr>`;
       return;
     }
 
@@ -2389,6 +2478,17 @@ async function submitCheckoutIntent(event) {
           ? "No developer products yet."
           : "No pending developer products."
       : "No products yet.";
+
+    let runtimeSummaries = {};
+
+    if (filteredProducts.length && typeof NexusDB.getAdminProductRuntimeSummary === "function") {
+      const runtimeResult = await NexusDB.getAdminProductRuntimeSummary(filteredProducts.map((product) => product.id));
+      if (runtimeResult.error) {
+        console.warn("Admin product runtime summary error:", runtimeResult.error);
+      } else {
+        runtimeSummaries = runtimeResult.data || {};
+      }
+    }
 
     body.innerHTML =
       filteredProducts
@@ -2411,6 +2511,8 @@ async function submitCheckoutIntent(event) {
               <td>${NexusUI.money(product)}</td>
 
               <td>${product.developers?.display_name || "No developer"}</td>
+
+              <td>${renderAdminProductRuntime(product, runtimeSummaries[product.id])}</td>
 
               <td>
   <a class="btn btn-primary btn-small" href="/pages/admin/product-form.html?id=${product.id}">Edit</a>
@@ -2437,7 +2539,7 @@ async function submitCheckoutIntent(event) {
             </tr>
           `;
         })
-        .join("") || `<tr><td colspan="5">${emptyLabel}</td></tr>`;
+        .join("") || `<tr><td colspan="6">${emptyLabel}</td></tr>`;
   }
 async function pauseAutomation(id) {
   const confirmed = await NexusUI.confirmDialog({
@@ -2624,6 +2726,16 @@ async function approveDeveloperProduct(id) {
 
   const { error } = await NexusDB.updateAutomation(id, {
     status: "live",
+    health_status: "healthy",
+    health_last_checked_at: new Date().toISOString(),
+    health_last_passed_at: product.n8n_last_tested_at || new Date().toISOString(),
+    health_last_failed_at: null,
+    health_failure_reason: null,
+    health_failure_details: {},
+    health_consecutive_failures: 0,
+    health_auto_paused_at: null,
+    health_previous_status: null,
+    health_next_check_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     updated_at: new Date().toISOString()
   });
 
@@ -2773,6 +2885,11 @@ key === "detected_placeholders" ||
       });
 
       fillCustomizations(product.customizations || []);
+
+      if (typeof NexusAdminUI !== "undefined" && NexusAdminUI.renderRuntimeSummary) {
+        NexusAdminUI.currentSavedProduct = product;
+        NexusAdminUI.renderRuntimeSummary(product.id, product);
+      }
     }
   }
 
@@ -2842,6 +2959,18 @@ placeholderValidationErrors = parseJsonField("placeholder_validation_errors", []
       return;
     }
 
+    const stringifyForWorkflowChange = (value) => {
+      try {
+        return JSON.stringify(value || null);
+      } catch {
+        return "";
+      }
+    };
+    const adminWorkflowJsonChanged = existingProduct &&
+      stringifyForWorkflowChange(existingProduct.n8n_workflow_json) !== stringifyForWorkflowChange(n8nWorkflowJson);
+    const requestedStatus = String(formData.get("status") || "draft");
+    const nextStatus = adminWorkflowJsonChanged && requestedStatus === "live" ? "paused" : requestedStatus;
+
     const payload = {
       id: id || undefined,
       developer_id: formData.get("developer_id"),
@@ -2852,7 +2981,7 @@ placeholderValidationErrors = parseJsonField("placeholder_validation_errors", []
       badge: String(formData.get("badge") || ""),
       icon: String(formData.get("icon") || "AI").slice(0, 3).toUpperCase(),
       color: String(formData.get("color") || "blue"),
-      status: String(formData.get("status") || "draft"),
+      status: nextStatus,
       featured: formData.get("featured") === "on",
 
       pricing_type: String(formData.get("pricing_type") || "custom_quote"),
@@ -2900,8 +3029,8 @@ placeholderValidationErrors = parseJsonField("placeholder_validation_errors", []
 
       runtime_type: String(formData.get("runtime_type") || existingProduct?.runtime_type || "manual"),
 
-      runtime_webhook_url: existingProduct?.runtime_webhook_url || "",
-      runtime_webhook_path: existingProduct?.runtime_webhook_path || "",
+      runtime_webhook_url: adminWorkflowJsonChanged ? "" : existingProduct?.runtime_webhook_url || "",
+      runtime_webhook_path: adminWorkflowJsonChanged ? "" : existingProduct?.runtime_webhook_path || "",
       runtime_output_mode: existingProduct?.runtime_output_mode || "standard",
 
       setup_schema: setupSchema,
@@ -2920,15 +3049,23 @@ placeholderValidationErrors = parseJsonField("placeholder_validation_errors", []
       output_mapping: existingProduct?.output_mapping || {},
 
       n8n_workflow_json: n8nWorkflowJson,
-      n8n_workflow_id: existingProduct?.n8n_workflow_id || "",
-      n8n_workflow_name: existingProduct?.n8n_workflow_name || "",
-      n8n_normalized_workflow_json: existingProduct?.n8n_normalized_workflow_json || null,
-      n8n_import_status: existingProduct?.n8n_import_status || "not_imported",
-      n8n_import_error: existingProduct?.n8n_import_error || null,
-      n8n_last_synced_at: existingProduct?.n8n_last_synced_at || null,
-      n8n_imported_at: existingProduct?.n8n_imported_at || null,
-      n8n_webhook_url: existingProduct?.n8n_webhook_url || "",
-      n8n_last_import_result: existingProduct?.n8n_last_import_result || {},
+      n8n_workflow_id: adminWorkflowJsonChanged ? "" : existingProduct?.n8n_workflow_id || "",
+      n8n_workflow_name: adminWorkflowJsonChanged ? "" : existingProduct?.n8n_workflow_name || "",
+      n8n_normalized_workflow_json: adminWorkflowJsonChanged ? null : existingProduct?.n8n_normalized_workflow_json || null,
+      n8n_import_status: adminWorkflowJsonChanged ? "not_imported" : existingProduct?.n8n_import_status || "not_imported",
+      n8n_import_error: adminWorkflowJsonChanged ? null : existingProduct?.n8n_import_error || null,
+      n8n_last_synced_at: adminWorkflowJsonChanged ? null : existingProduct?.n8n_last_synced_at || null,
+      n8n_imported_at: adminWorkflowJsonChanged ? null : existingProduct?.n8n_imported_at || null,
+      n8n_webhook_url: adminWorkflowJsonChanged ? "" : existingProduct?.n8n_webhook_url || "",
+      n8n_last_import_result: adminWorkflowJsonChanged ? {} : existingProduct?.n8n_last_import_result || {},
+      n8n_last_test_status: adminWorkflowJsonChanged ? "not_tested" : existingProduct?.n8n_last_test_status || "not_tested",
+      n8n_last_test_error: adminWorkflowJsonChanged ? "Workflow changed. Run a fresh technical check before publishing." : existingProduct?.n8n_last_test_error || null,
+      n8n_last_test_result: adminWorkflowJsonChanged ? null : existingProduct?.n8n_last_test_result || null,
+      n8n_last_tested_at: adminWorkflowJsonChanged ? null : existingProduct?.n8n_last_tested_at || null,
+      health_status: adminWorkflowJsonChanged ? "needs_recheck" : existingProduct?.health_status || "unknown",
+      health_failure_reason: adminWorkflowJsonChanged ? "Workflow changed. Run a fresh technical check before publishing." : existingProduct?.health_failure_reason || null,
+      health_failure_details: adminWorkflowJsonChanged ? { workflow_changed: true, at: new Date().toISOString() } : existingProduct?.health_failure_details || {},
+      health_next_check_at: adminWorkflowJsonChanged ? null : existingProduct?.health_next_check_at || null,
 
       admin_run_instructions: String(formData.get("admin_run_instructions") || ""),
       internal_notes: String(formData.get("internal_notes") || ""),

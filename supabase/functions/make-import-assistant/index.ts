@@ -2792,6 +2792,7 @@ async function upsertImportSession(adminClient: any, operator: OperatorContext, 
 async function updateAutomationAfterScan(adminClient: any, product: any, session: any, result: any, blueprint: any, platform = "make") {
   if (!product?.id) return;
   const normalizedPlatform = sourcePlatform(platform);
+  const label = platformLabel(normalizedPlatform);
   const generatedSetupFields = generatedSetupFieldsForSource(blueprint, result.generated_workflow_json, normalizedPlatform);
   const mergedSetup = mergeGeneratedSetupSchema(product.setup_schema, generatedSetupFields);
 
@@ -2821,6 +2822,16 @@ async function updateAutomationAfterScan(adminClient: any, product: any, session
     patch.n8n_import_error = null;
     patch.n8n_last_test_status = "not_tested";
     patch.n8n_last_test_error = null;
+    patch.n8n_last_test_result = null;
+    patch.n8n_last_tested_at = null;
+    patch.health_status = "needs_recheck";
+    patch.health_failure_reason = `${label} workflow converted. Import it and run a fresh technical check before publishing.`;
+    patch.health_failure_details = {
+      workflow_converted: true,
+      source_platform: normalizedPlatform,
+      at: nowIso(),
+    };
+    patch.health_next_check_at = null;
   }
 
   const { error } = await adminClient

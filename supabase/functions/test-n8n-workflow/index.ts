@@ -1004,6 +1004,53 @@ async function updateAutomationTestResult(adminClient: any, automationId: string
     raw_execution: undefined,
     webhook_response: undefined,
   };
+  const now = new Date().toISOString();
+  const status = cleanString(result.status || "");
+  const terminal = isTerminalStatus(status);
+  const passed = isPassingWorkflowTestStatus(status);
+  const failed = terminal && !passed;
+  let automation: any = null;
+
+  try {
+    automation = await loadAutomation(adminClient, automationId);
+  } catch (error) {
+    console.warn("Could not load automation before updating test health:", error instanceof Error ? error.message : error);
+  }
+
+  const healthPatch: Record<string, unknown> = terminal
+    ? passed
+      ? {
+          health_status: "healthy",
+          health_last_checked_at: now,
+          health_last_passed_at: now,
+          health_last_failed_at: null,
+          health_failure_reason: null,
+          health_failure_details: {},
+          health_consecutive_failures: 0,
+          health_next_check_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        }
+      : {
+          health_status: lower(automation?.status) === "live" ? "paused_by_health_check" : "failed",
+          health_last_checked_at: now,
+          health_last_failed_at: now,
+          health_failure_reason: result.error_message || result.message || "Technical workflow check failed.",
+          health_failure_details: storedResult,
+          health_consecutive_failures: Number(automation?.health_consecutive_failures || 0) + 1,
+          health_next_check_at: null,
+        }
+    : {
+        health_status: "needs_recheck",
+        health_failure_reason: "Technical workflow check is running.",
+        health_failure_details: storedResult,
+        health_next_check_at: null,
+      };
+
+  if (failed && lower(automation?.status) === "live") {
+    healthPatch.status = "paused";
+    healthPatch.health_auto_paused_at = now;
+    healthPatch.health_previous_status = "live";
+    healthPatch.internal_notes = `${cleanString(automation?.internal_notes)}${automation?.internal_notes ? "\n\n" : ""}[${now}] Auto-paused after failed technical workflow check: ${healthPatch.health_failure_reason}`;
+  }
 
   const { error } = await adminClient
     .from("automations")
@@ -1011,8 +1058,9 @@ async function updateAutomationTestResult(adminClient: any, automationId: string
       n8n_last_test_status: result.status,
       n8n_last_test_error: result.ok ? null : result.error_message || result.message,
       n8n_last_test_result: storedResult,
-      n8n_last_tested_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      n8n_last_tested_at: now,
+      ...healthPatch,
+      updated_at: now,
     })
     .eq("id", automationId);
 

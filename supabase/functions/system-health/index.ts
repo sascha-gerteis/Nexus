@@ -177,6 +177,61 @@ async function checkScheduledRunner() {
   }
 }
 
+async function checkProductHealthRunner() {
+  const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
+
+  if (!SUPABASE_URL || !runtimeSecret) {
+    return check(
+      "Product health checker",
+      "error",
+      "Missing SUPABASE_URL or NEXUS_RUNTIME_SECRET, so product health checks cannot be called.",
+    );
+  }
+
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/product-health-checker`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-nexus-runtime-secret": runtimeSecret,
+      },
+      body: JSON.stringify({
+        action: "dry_run",
+        limit: 1,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data?.ok === false) {
+      return check(
+        "Product health checker",
+        "error",
+        data?.error || data?.message || `product-health-checker responded with ${response.status}.`,
+        {
+          status: response.status,
+          response: data,
+        },
+      );
+    }
+
+    return check(
+      "Product health checker",
+      "ok",
+      "Product health checker is callable with the runtime secret.",
+      {
+        candidate_count: data?.count || 0,
+      },
+    );
+  } catch (error) {
+    return check(
+      "Product health checker",
+      "error",
+      error instanceof Error ? error.message : "Could not call product-health-checker.",
+    );
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -228,6 +283,7 @@ Deno.serve(async (req) => {
     countTable(adminClient, "reviews"),
     countTable(adminClient, "analytics_events"),
     countTable(adminClient, "workflow_node_mappings"),
+    countTable(adminClient, "automation_health_checks"),
   ]);
 
   const monthlyChecks = await Promise.all([
@@ -243,6 +299,22 @@ Deno.serve(async (req) => {
     checkScheduledRunner(),
   ]);
 
+  const productHealthChecks = await Promise.all([
+    filteredCount(adminClient, "automations", "Live workflow products", (query) =>
+      query.eq("status", "live").neq("listing_type", "custom_request")
+    ),
+    filteredCount(adminClient, "automations", "Products paused by health checker", (query) =>
+      query.eq("status", "paused").eq("health_status", "paused_by_health_check")
+    ),
+    filteredCount(adminClient, "automations", "Products needing fresh workflow checks", (query) =>
+      query.in("health_status", ["failed", "needs_recheck", "unknown"])
+    ),
+    filteredCount(adminClient, "automation_health_checks", "Health checks in last 24 hours", (query) =>
+      query.gte("checked_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    ),
+    checkProductHealthRunner(),
+  ]);
+
   const externalChecks = await Promise.all([
     checkN8n(),
     checkStripe(),
@@ -252,6 +324,7 @@ Deno.serve(async (req) => {
     group("Secrets", secretChecks),
     group("Database", tableChecks),
     group("Monthly runner", monthlyChecks),
+    group("Product workflow health", productHealthChecks),
     group("External services", externalChecks),
   ];
 

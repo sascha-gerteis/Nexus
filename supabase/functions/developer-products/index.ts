@@ -424,6 +424,16 @@ async function autoPauseInvalidLiveProducts(adminClient: any, products: any[], r
     .from("automations")
     .update({
       status: "paused",
+      health_status: "paused_by_health_check",
+      health_last_failed_at: now,
+      health_failure_reason: reason,
+      health_failure_details: {
+        reason,
+        auto_pause_source: "developer_products_list",
+      },
+      health_auto_paused_at: now,
+      health_previous_status: "live",
+      health_next_check_at: null,
       updated_at: now,
     })
     .in("id", ids);
@@ -810,6 +820,14 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
       n8n_last_test_error: null,
       n8n_last_test_result: null,
       n8n_last_tested_at: null,
+      health_status: payload.n8n_workflow_json ? "needs_recheck" : "unknown",
+      health_failure_reason: payload.n8n_workflow_json
+        ? "Workflow changed. Import and run a fresh technical check before this product can go live."
+        : null,
+      health_failure_details: payload.n8n_workflow_json
+        ? { workflow_changed: true, at: nowIso() }
+        : {},
+      health_next_check_at: null,
     });
   }
 

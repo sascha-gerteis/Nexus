@@ -621,6 +621,15 @@ async function markCredentialAutomationsNeedFreshTest(adminClient: any, credenti
       .from("automations")
       .update({
         credential_binding_status: "needs_credentials",
+        health_status: "needs_recheck",
+        health_failure_reason: message,
+        health_failure_details: {
+          credential_changed: true,
+          developer_credential_id: safeCredentialId,
+          message,
+          at: now,
+        },
+        health_next_check_at: null,
         n8n_last_test_status: "not_tested",
         n8n_last_test_error: message,
         n8n_last_test_result: {

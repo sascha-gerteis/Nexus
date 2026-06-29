@@ -25,6 +25,12 @@ verify_jwt = false
 [functions.system-health]
 verify_jwt = false
 
+[functions.run-scheduled-automations]
+verify_jwt = false
+
+[functions.product-health-checker]
+verify_jwt = false
+
 [functions.make-import-assistant]
 verify_jwt = false
 

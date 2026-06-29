@@ -1105,6 +1105,208 @@ const NexusDB = (() => {
       .limit(250);
   }
 
+  async function optionalRuntimeRows(label, primaryFactory, fallbackFactory = null) {
+    try {
+      let result = await primaryFactory();
+
+      if (result?.error && fallbackFactory && isSchemaError(result.error)) {
+        result = await fallbackFactory();
+      }
+
+      if (result?.error) {
+        console.warn(`Admin runtime summary skipped ${label}:`, result.error);
+        return [];
+      }
+
+      return result?.data || [];
+    } catch (error) {
+      console.warn(`Admin runtime summary skipped ${label}:`, error);
+      return [];
+    }
+  }
+
+  function emptyProductRuntimeSummary(automationId) {
+    return {
+      automation_id: automationId,
+      total_customer_automations: 0,
+      monthly_schedules: 0,
+      active_schedules: 0,
+      due_schedules: 0,
+      next_run_at: null,
+      next_run_customer_automation_id: null,
+      last_customer_run_at: null,
+      last_customer_run: null,
+      recent_customer_runs: [],
+      last_technical_run: null,
+      last_health_check: null,
+      warnings: []
+    };
+  }
+
+  function latestDateValue(...values) {
+    return values
+      .map((value) => value ? new Date(value).getTime() : 0)
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .sort((a, b) => b - a)[0] || 0;
+  }
+
+  async function getAdminProductRuntimeSummary(automationIds = []) {
+    const ids = [...new Set((automationIds || []).map(String).filter(Boolean))].slice(0, 250);
+
+    if (!ids.length) {
+      return {
+        data: {},
+        error: null
+      };
+    }
+
+    const summaries = ids.reduce((acc, id) => {
+      acc[id] = emptyProductRuntimeSummary(id);
+      return acc;
+    }, {});
+
+    const customerAutomations = await optionalRuntimeRows(
+      "customer schedules",
+      () => supabase
+        .from("customer_automations")
+        .select(`
+          id,
+          automation_id,
+          name,
+          status,
+          setup_status,
+          runtime_status,
+          run_frequency,
+          schedule_status,
+          next_run_at,
+          last_run_at,
+          last_run_requested_at,
+          created_at
+        `)
+        .in("automation_id", ids)
+        .order("next_run_at", { ascending: true })
+        .limit(1000),
+      () => supabase
+        .from("customer_automations")
+        .select("id, automation_id, name, status, setup_status, created_at")
+        .in("automation_id", ids)
+        .order("created_at", { ascending: false })
+        .limit(1000)
+    );
+
+    const customerRuns = await optionalRuntimeRows(
+      "customer runs",
+      () => supabase
+        .from("automation_runs")
+        .select(`
+          id,
+          automation_id,
+          customer_automation_id,
+          order_id,
+          runtime_type,
+          trigger_type,
+          trigger_source,
+          status,
+          run_key,
+          scheduled_for,
+          n8n_execution_id,
+          error_message,
+          started_at,
+          finished_at,
+          created_at,
+          updated_at
+        `)
+        .in("automation_id", ids)
+        .order("created_at", { ascending: false })
+        .limit(1000)
+    );
+
+    const technicalRuns = await optionalRuntimeRows(
+      "technical runs",
+      () => supabase
+        .from("automation_test_runs")
+        .select("*")
+        .in("automation_id", ids)
+        .order("created_at", { ascending: false })
+        .limit(500)
+    );
+
+    const healthChecks = await optionalRuntimeRows(
+      "health checks",
+      () => supabase
+        .from("automation_health_checks")
+        .select("id, automation_id, check_type, status, reason, details, checked_at, created_at")
+        .in("automation_id", ids)
+        .order("checked_at", { ascending: false })
+        .limit(500)
+    );
+
+    const now = Date.now();
+
+    customerAutomations.forEach((item) => {
+      const summary = summaries[item.automation_id];
+      if (!summary) return;
+
+      const scheduleStatus = String(item.schedule_status || "").toLowerCase();
+      const runFrequency = String(item.run_frequency || "").toLowerCase();
+      const nextRunTime = item.next_run_at ? new Date(item.next_run_at).getTime() : 0;
+      const lastRunTime = latestDateValue(item.last_run_at, item.last_run_requested_at);
+
+      summary.total_customer_automations += 1;
+
+      if (runFrequency === "monthly") {
+        summary.monthly_schedules += 1;
+      }
+
+      if (scheduleStatus === "active") {
+        summary.active_schedules += 1;
+
+        if (nextRunTime && nextRunTime <= now) {
+          summary.due_schedules += 1;
+        }
+
+        if (nextRunTime && (!summary.next_run_at || nextRunTime < new Date(summary.next_run_at).getTime())) {
+          summary.next_run_at = item.next_run_at;
+          summary.next_run_customer_automation_id = item.id;
+        }
+      }
+
+      if (lastRunTime && (!summary.last_customer_run_at || lastRunTime > new Date(summary.last_customer_run_at).getTime())) {
+        summary.last_customer_run_at = new Date(lastRunTime).toISOString();
+      }
+    });
+
+    customerRuns.forEach((run) => {
+      const summary = summaries[run.automation_id];
+      if (!summary) return;
+
+      if (summary.recent_customer_runs.length < 5) {
+        summary.recent_customer_runs.push(run);
+      }
+
+      if (!summary.last_customer_run) {
+        summary.last_customer_run = run;
+      }
+    });
+
+    technicalRuns.forEach((run) => {
+      const summary = summaries[run.automation_id];
+      if (!summary || summary.last_technical_run) return;
+      summary.last_technical_run = run;
+    });
+
+    healthChecks.forEach((check) => {
+      const summary = summaries[check.automation_id];
+      if (!summary || summary.last_health_check) return;
+      summary.last_health_check = check;
+    });
+
+    return {
+      data: summaries,
+      error: null
+    };
+  }
+
   async function createAutomationEvent(payload) {
     return supabase
       .from("automation_events")
@@ -2424,6 +2626,7 @@ async function listMakeImportMappings(payload = {}) {
     createCustomerAutomation,
     listBuyerCustomerAutomations,
     listAllCustomerAutomations,
+    getAdminProductRuntimeSummary,
     createAutomationEvent,
     listBuyerAutomationEvents,
     createAdminNotification,

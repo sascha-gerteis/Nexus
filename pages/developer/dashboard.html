@@ -1381,6 +1381,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
           ${product.guided_install_enabled ? `<span>Guided install enabled</span>` : ""}
           <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
+          ${product.health_status ? `<span>Health: ${NexusUI.escapeHtml(product.health_status)}</span>` : ""}
         </div>
       `;
     }
@@ -1490,6 +1491,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return nodeContext && !hasNodeContext ? `${message} Node: ${nodeContext}` : message;
     }
 
+    function productHealthIssue(product) {
+      const status = String(product?.health_status || "").toLowerCase();
+      if (["failed", "paused_by_health_check", "needs_recheck"].includes(status)) {
+        return product?.health_failure_reason || "Nexus needs a fresh workflow check before this product can go live.";
+      }
+      return "";
+    }
+
     function productReadiness(product) {
       if (product?.listing_type === "custom_request") {
         return {
@@ -1512,6 +1521,15 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           label: "Import needed",
           className: "pill orange",
           detail: "Import the workflow to Nexus n8n before review."
+        };
+      }
+
+      const healthIssue = productHealthIssue(product);
+      if (healthIssue) {
+        return {
+          label: product.health_status === "paused_by_health_check" ? "Paused by health check" : "Needs check",
+          className: "pill red",
+          detail: healthIssue
         };
       }
 
@@ -2016,6 +2034,16 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           className: "workflow-status warning",
           detail: "Nexus is waiting for the latest n8n execution result.",
           sort: 3
+        };
+      }
+
+      const healthIssue = productHealthIssue(product);
+      if (healthIssue) {
+        return {
+          label: product.health_status === "paused_by_health_check" ? "Paused" : "Needs check",
+          className: "workflow-status danger",
+          detail: healthIssue,
+          sort: 4
         };
       }
 
@@ -2963,6 +2991,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
                   <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
                   ${product.guided_install_enabled ? `<span>Guided install</span>` : ""}
                   <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
+                  ${product.health_status ? `<span>${NexusUI.escapeHtml(`Health: ${product.health_status}`)}</span>` : ""}
                 </div>
               </div>
               <div class="developer-product-actions">

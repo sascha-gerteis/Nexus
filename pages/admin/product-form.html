@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260629-admin-runtime">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -69,6 +69,14 @@
     </ul>
   </div>
 </section>
+
+      <section class="admin-product-runtime-panel" id="adminProductRuntimePanel" hidden>
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>Loading this product's run history and next scheduled output...</p>
+        </div>
+      </section>
 
       <form id="automationForm" class="product-editor-shell">
 
@@ -1029,9 +1037,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
-<script src="/assets/js/nexus-db.js?v=20260624-analytics"></script>
-  <script src="/assets/js/nexus-app.js?v=20260624-analytics"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260629-admin-runtime"></script>
+<script src="/assets/js/nexus-db.js?v=20260629-admin-runtime"></script>
+  <script src="/assets/js/nexus-app.js?v=20260629-admin-runtime"></script>
   <script src="/assets/js/nexus-notice.js"></script>
 
  <script>
@@ -1099,6 +1107,121 @@
         document.body.appendChild(fallback);
         setTimeout(() => fallback.remove(), 5000);
       }
+    },
+
+    formatRuntimeDate(value) {
+      if (!value) return "Not scheduled";
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "Not scheduled";
+
+      return date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    },
+
+    runtimePillClass(status) {
+      const value = String(status || "").toLowerCase();
+
+      if (["success", "succeeded", "completed", "passed", "passed_with_expected_test_callback_error", "healthy"].includes(value)) return "pill green";
+      if (["failed", "error", "cancelled", "canceled", "paused_by_health_check"].includes(value)) return "pill red";
+      if (["running", "queued", "warning", "needs_recheck", "paused"].includes(value)) return "pill orange";
+
+      return "pill";
+    },
+
+    runtimeLabel(status, fallback = "No runs") {
+      return String(status || fallback || "No runs")
+        .replaceAll("_", " ")
+        .trim();
+    },
+
+    renderRuntimeSummaryHtml(product, summary = {}) {
+      const latestRun = summary.last_customer_run || null;
+      const latestRunAt = latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || summary.last_customer_run_at || "";
+      const nextRunAt = summary.next_run_at || "";
+      const technicalStatus = product?.n8n_last_test_status || summary.last_technical_run?.status || "not_tested";
+      const technicalAt = product?.n8n_last_tested_at || summary.last_technical_run?.finished_at || summary.last_technical_run?.created_at || "";
+      const healthStatus = product?.health_status || summary.last_health_check?.status || "unknown";
+      const healthAt = product?.health_last_checked_at || summary.last_health_check?.checked_at || "";
+      const activeCount = Number(summary.active_schedules || 0);
+      const monthlyCount = Number(summary.monthly_schedules || 0);
+      const dueCount = Number(summary.due_schedules || 0);
+
+      return `
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>
+            Track this product's customer executions, monthly schedule, technical run, and 30-minute health checks.
+          </p>
+        </div>
+
+        <div class="admin-runtime-summary-grid">
+          <div class="admin-runtime-summary-card">
+            <span>Next monthly run</span>
+            <strong>${this.escapeHtml(nextRunAt ? this.formatRuntimeDate(nextRunAt) : activeCount ? "Waiting for schedule" : "No active schedule")}</strong>
+            <small>${activeCount}/${monthlyCount} active monthly schedules · ${dueCount} due now</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Latest customer run</span>
+            <strong><span class="${this.runtimePillClass(latestRun?.status)}">${this.escapeHtml(this.runtimeLabel(latestRun?.status, "No runs"))}</span></strong>
+            <small>${this.escapeHtml(latestRunAt ? this.formatRuntimeDate(latestRunAt) : "No customer runs yet")}</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Technical check</span>
+            <strong><span class="${this.runtimePillClass(technicalStatus)}">${this.escapeHtml(this.runtimeLabel(technicalStatus, "not tested"))}</span></strong>
+            <small>${this.escapeHtml(technicalAt ? this.formatRuntimeDate(technicalAt) : "Not tested")}</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Health checker</span>
+            <strong><span class="${this.runtimePillClass(healthStatus)}">${this.escapeHtml(this.runtimeLabel(healthStatus, "unknown"))}</span></strong>
+            <small>${this.escapeHtml(healthAt ? this.formatRuntimeDate(healthAt) : "Not checked yet")}</small>
+          </div>
+        </div>
+      `;
+    },
+
+    async renderRuntimeSummary(productId = "", product = null) {
+      const panel = document.getElementById("adminProductRuntimePanel");
+      const id = productId || this.getCurrentProductId();
+
+      if (!panel || !id || typeof NexusDB.getAdminProductRuntimeSummary !== "function") return;
+
+      panel.hidden = false;
+      panel.innerHTML = `
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>Loading this product's run history and next scheduled output...</p>
+        </div>
+      `;
+
+      const [productResult, summaryResult] = await Promise.all([
+        product ? Promise.resolve({ data: product, error: null }) : NexusDB.getAutomationById(id),
+        NexusDB.getAdminProductRuntimeSummary([id])
+      ]);
+
+      if (productResult.error || summaryResult.error) {
+        panel.innerHTML = `
+          <div>
+            <span class="eyebrow">Runtime</span>
+            <h2>Runs and schedule</h2>
+            <p>${this.escapeHtml(productResult.error?.message || summaryResult.error?.message || "Could not load runtime summary.")}</p>
+          </div>
+        `;
+        return;
+      }
+
+      this.currentSavedProduct = productResult.data || this.currentSavedProduct;
+      panel.innerHTML = this.renderRuntimeSummaryHtml(productResult.data || {}, summaryResult.data?.[id] || {});
     },
 
     setAccordionState(section, open) {
@@ -1641,6 +1764,7 @@
       }
 
       this.currentSavedProduct = product;
+      this.renderRuntimeSummary(product.id, product);
 
       const writeJsonField = (name, value) => {
         const element = document.querySelector(`[name="${name}"]`);
@@ -2768,6 +2892,7 @@
     setTimeout(() => {
       NexusAdminUI.inferWorkflowProviderFromRuntime();
       NexusAdminUI.scanWorkflowPlaceholders();
+      NexusAdminUI.renderRuntimeSummary();
     }, 700);
   });
 </script>

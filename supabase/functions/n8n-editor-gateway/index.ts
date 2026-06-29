@@ -447,6 +447,14 @@ async function markWorkflowEdited(adminClient: any, session: SessionRow, extra: 
       n8n_last_test_error: null,
       n8n_last_test_result: null,
       n8n_last_tested_at: null,
+      health_status: "needs_recheck",
+      health_failure_reason: "Workflow was edited in the embedded n8n editor. Run a fresh technical check before publishing.",
+      health_failure_details: {
+        edited_in_embedded_editor: true,
+        workflow_id: session.n8n_workflow_id,
+        at: new Date().toISOString(),
+      },
+      health_next_check_at: null,
       n8n_last_synced_at: new Date().toISOString(),
       n8n_last_import_result: {
         edited_in_embedded_editor: true,
@@ -487,6 +495,14 @@ async function syncWorkflow(req: Request, body: any) {
       n8n_last_test_error: null,
       n8n_last_test_result: null,
       n8n_last_tested_at: null,
+      health_status: "needs_recheck",
+      health_failure_reason: "Workflow was synced from the embedded n8n editor. Run a fresh technical check before publishing.",
+      health_failure_details: {
+        synced_from_embedded_editor: true,
+        workflow_id: product.n8n_workflow_id,
+        at: new Date().toISOString(),
+      },
+      health_next_check_at: null,
       n8n_last_import_result: {
         workflow_id: product.n8n_workflow_id,
         synced_from_embedded_editor: true,
