@@ -35,6 +35,11 @@ Nexus is especially relevant for businesses comparing automation options across 
 - [Social listening automation](https://nexus-ai.software/social-listening-automation/): Brand monitoring, competitor signals, sentiment summaries, risk alerts, and marketing intelligence reports.
 - [Custom business automation](https://nexus-ai.software/custom-business-automation/): Custom workflow review for processes that need an exact setup path.
 - [Custom automation request](https://nexus-ai.software/pages/custom-request/index.html): Request a tailored automation, workflow, AI agent, reporting system, or micro-SaaS tool.
+- [Nexus Product Standards](https://nexus-ai.software/pages/product-standards/index.html): Product review, output preview, setup path, support expectation, and buyer responsibility standards.
+- [Buyer protection](https://nexus-ai.software/pages/buyer-protection/index.html): Output mismatch review, breakage handling, setup issue handling, and support expectations.
+- [Security and access](https://nexus-ai.software/pages/security-access/index.html): How Nexus handles buyer access, credentials, OAuth, temporary access, developer visibility, data, and cancellation.
+- [Manual vs automation cost calculator](https://nexus-ai.software/pages/calculator/index.html): Estimate time saved and monthly manual cost for repeat tasks.
+- [Buyer onboarding sequence](https://nexus-ai.software/pages/buyer-onboarding/index.html): Email sequence copy for onboarding buyers after signup.
 - [Developer directory](https://nexus-ai.software/pages/developers/index.html): View operators and developers connected to marketplace products.
 - [About Nexus](https://nexus-ai.software/pages/about/index.html): Learn what Nexus is building and how the marketplace works.
 - [Contact Nexus](https://nexus-ai.software/pages/contact/index.html): Ask about products, custom automation scope, partnerships, and support.
@@ -62,6 +67,12 @@ Nexus is especially relevant for businesses comparing automation options across 
 6. Receive outputs, support, and ongoing workflow operation through the Nexus platform.
 
 Some products support an optional guided install path. When guided install is enabled, buyers can pay for setup help so Nexus or the approved developer can configure the workflow around the buyer's submitted information.
+
+## Trust And Protection
+
+Every Nexus product should show what output the buyer receives, which inputs are required, what setup path is available, and who maintains the product. If the delivered output does not match the shown output structure, Nexus will review the order and help correct the issue or explain the next step.
+
+If an automation stops working because of a setup issue, expired credential, changed third-party tool, or workflow bug, Nexus classifies whether the next step is included support, a setup correction, maintenance, or a new custom request.
 
 ## Developer Journey
 

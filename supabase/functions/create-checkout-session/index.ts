@@ -789,6 +789,343 @@ async function ensureStripePrice(adminClient: any, product: any, currency: Suppo
   };
 }
 
+async function convertStandaloneAmountForCurrency(
+  amount: number,
+  fromCurrency: SupportedCheckoutCurrency,
+  toCurrency: SupportedCheckoutCurrency,
+) {
+  const fx = await getLiveFxRates();
+  return {
+    amount: roundMoney(convertCurrencyAmount(amount, fromCurrency, toCurrency, fx.rates), toCurrency),
+    fxRate: fromCurrency === toCurrency ? null : fx.rates[toCurrency],
+    fxSource: fromCurrency === toCurrency ? null : fx.source,
+    fxDate: fromCurrency === toCurrency ? null : fx.date,
+  };
+}
+
+function bundleCheckoutMode(products: any[]): "payment" | "subscription" {
+  return products.some((product) => getStripeMode(product) === "subscription")
+    ? "subscription"
+    : "payment";
+}
+
+async function loadBundleCheckout(adminClient: any, bundleId: string, currency: SupportedCheckoutCurrency) {
+  const { data: bundle, error } = await adminClient
+    .from("automation_bundles")
+    .select("*, automation_bundle_items(*, automations!automation_bundle_items_automation_id_fkey(*, developers(*)))")
+    .eq("id", bundleId)
+    .maybeSingle();
+
+  if (error || !bundle) {
+    throw new Error(error?.message || "Bundle not found");
+  }
+
+  if (bundle.status !== "active") {
+    throw new Error("This bundle is not active.");
+  }
+
+  const items = (bundle.automation_bundle_items || [])
+    .filter((item: any) => item?.status === "active" && item?.automations)
+    .sort((a: any, b: any) => Number(a.position || 0) - Number(b.position || 0));
+
+  const products = items
+    .map((item: any) => item.automations)
+    .filter((product: any) => product?.status === "live");
+
+  if (products.length < Number(bundle.min_active_items || 1)) {
+    throw new Error("This bundle does not have enough active workflows available right now.");
+  }
+
+  for (const product of products) {
+    if (product.pricing_type === "custom_quote" || product.pricing_type === "free_demo") {
+      throw new Error(`${product.title || "One included product"} is not available for direct checkout.`);
+    }
+
+    if (!hasAttachedCheckoutFlow(product)) {
+      await pauseInvalidCheckoutProduct(adminClient, product);
+      throw new Error(`${product.title || "One included product"} was paused because it has no workflow attached.`);
+    }
+
+    const readinessIssue = checkoutRuntimeReadinessIssue(product);
+    if (readinessIssue) {
+      throw new Error(`${product.title || "One included product"} is not ready for checkout: ${readinessIssue}`);
+    }
+  }
+
+  const itemPrices = [];
+  let subtotal = 0;
+
+  for (const product of products) {
+    const resolved = await resolveCheckoutAmountForCurrency(product, currency);
+
+    if (!resolved.amount || resolved.amount <= 0) {
+      throw new Error(getMissingPriceMessage(product, currency));
+    }
+
+    subtotal += Number(resolved.amount || 0);
+    itemPrices.push({
+      automation_id: product.id,
+      developer_id: product.developer_id || product.developers?.id || null,
+      title: product.title || "Automation",
+      slug: product.slug || "",
+      gross_amount: roundMoney(resolved.amount, currency),
+      price_source: resolved.source,
+      derived_price: resolved.derived,
+    });
+  }
+
+  const discountPercent = Math.max(0, Math.min(Number(bundle.discount_percent || 0), 95));
+  let amount = roundMoney(subtotal * (1 - discountPercent / 100), currency);
+  let priceSource = "bundle_discounted_items";
+  let fxRate: number | null = null;
+  let fxSource: string | null = null;
+  let fxDate: string | null = null;
+
+  if (Number(bundle.price_override || 0) > 0) {
+    const overrideCurrency = normalizeCurrency(bundle.currency || "USD");
+    const converted = await convertStandaloneAmountForCurrency(Number(bundle.price_override || 0), overrideCurrency, currency);
+    amount = converted.amount;
+    fxRate = converted.fxRate;
+    fxSource = converted.fxSource;
+    fxDate = converted.fxDate;
+    priceSource = "bundle_price_override";
+  }
+
+  if (!amount || amount <= 0) {
+    throw new Error("This bundle does not have a valid checkout price.");
+  }
+
+  const discountAmount = roundMoney(Math.max(0, subtotal - amount), currency);
+  const mode = bundleCheckoutMode(products);
+
+  return {
+    bundle,
+    items,
+    products,
+    itemPrices,
+    subtotal: roundMoney(subtotal, currency),
+    discountAmount,
+    amount,
+    mode,
+    priceSource,
+    fxRate,
+    fxSource,
+    fxDate,
+  };
+}
+
+async function createBundleCheckoutSession(options: {
+  adminClient: any;
+  user: any;
+  bundleId: string;
+  installType: string;
+  currency: SupportedCheckoutCurrency;
+  buyerName: string;
+  buyerEmail: string;
+  buyerCompany: string;
+  buyerWebsite: string;
+  setupNotes: string;
+}) {
+  const {
+    adminClient,
+    user,
+    bundleId,
+    currency,
+    buyerName,
+    buyerEmail,
+    buyerCompany,
+    buyerWebsite,
+    setupNotes,
+  } = options;
+  const checkout = await loadBundleCheckout(adminClient, bundleId, currency);
+  const primaryProduct = checkout.products[0];
+  const priceDisplay = formatCheckoutPriceDisplay(checkout.amount, currency, checkout.mode);
+  const bundleSnapshot = {
+    bundle_id: checkout.bundle.id,
+    bundle_slug: checkout.bundle.slug,
+    bundle_title: checkout.bundle.title,
+    discount_percent: checkout.bundle.discount_percent || 0,
+    subtotal: checkout.subtotal,
+    discount_amount: checkout.discountAmount,
+    amount: checkout.amount,
+    currency,
+    item_prices: checkout.itemPrices,
+  };
+
+  const { data: existingProfile, error: existingProfileError } = await adminClient
+    .from("profiles")
+    .select("id, full_name, role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (existingProfileError) throw new Error(existingProfileError.message);
+
+  await adminClient.from("profiles").upsert(
+    {
+      id: user.id,
+      email: buyerEmail,
+      full_name: existingProfile?.full_name || buyerName,
+      role: existingProfile?.role || "buyer",
+    },
+    { onConflict: "id" },
+  );
+
+  await adminClient.from("buyer_profiles").upsert(
+    {
+      user_id: user.id,
+      name: buyerName,
+      email: buyerEmail,
+      company: buyerCompany,
+      website: buyerWebsite,
+    },
+    { onConflict: "user_id" },
+  );
+
+  const { data: order, error: orderError } = await adminClient
+    .from("orders")
+    .insert({
+      buyer_id: user.id,
+      automation_id: primaryProduct.id,
+      developer_id: null,
+      bundle_id: checkout.bundle.id,
+      order_type: "bundle",
+      bundle_snapshot: bundleSnapshot,
+      automation_title: checkout.bundle.title,
+      install_type: "self_serve",
+      selected_customization: "",
+      currency: currency.toUpperCase(),
+      price_display: priceDisplay,
+      payment_status: "pending",
+      order_status: "checkout_started",
+      buyer_name: buyerName,
+      buyer_email: buyerEmail,
+      buyer_company: buyerCompany,
+      buyer_website: buyerWebsite,
+      setup_notes: setupNotes,
+      stripe_mode: checkout.mode,
+      stripe_currency: currency,
+      stripe_amount_total: checkout.amount,
+      stripe_unit_amount: toStripeUnitAmount(checkout.amount, currency),
+      price_source: checkout.priceSource,
+      derived_price: checkout.priceSource !== "bundle_price_override",
+      fx_rate: checkout.fxRate,
+      fx_source: checkout.fxSource,
+      fx_date: checkout.fxDate,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    })
+    .select()
+    .single();
+
+  if (orderError) throw new Error(orderError.message);
+
+  const orderItemRows = checkout.itemPrices.map((item: any) => {
+    const share = checkout.subtotal > 0 ? item.gross_amount / checkout.subtotal : 0;
+    const itemDiscount = roundMoney(checkout.discountAmount * share, currency);
+    return {
+      order_id: order.id,
+      bundle_id: checkout.bundle.id,
+      automation_id: item.automation_id,
+      developer_id: item.developer_id,
+      title: item.title,
+      item_type: "bundle_automation",
+      currency: currency.toUpperCase(),
+      gross_amount: item.gross_amount,
+      discount_amount: itemDiscount,
+      net_amount: roundMoney(Math.max(0, item.gross_amount - itemDiscount), currency),
+      status: "active",
+      metadata: item,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    };
+  });
+
+  if (orderItemRows.length) {
+    await adminClient.from("order_items").insert(orderItemRows);
+  }
+
+  const metadata = {
+    order_id: order.id,
+    buyer_id: user.id,
+    bundle_id: checkout.bundle.id,
+    bundle_slug: checkout.bundle.slug || "",
+    order_type: "bundle",
+    install_type: "self_serve",
+    currency,
+    amount: String(checkout.amount),
+    subtotal_amount: String(checkout.subtotal),
+    discount_amount: String(checkout.discountAmount),
+    price_source: checkout.priceSource,
+    source: "nexus",
+  };
+
+  const priceData: any = {
+    currency,
+    unit_amount: toStripeUnitAmount(checkout.amount, currency),
+    product_data: {
+      name: checkout.bundle.title || "Nexus automation bundle",
+      description: checkout.bundle.short_description || "",
+      metadata: {
+        bundle_id: checkout.bundle.id,
+        bundle_slug: checkout.bundle.slug || "",
+        source: "nexus_bundle",
+      },
+    },
+  };
+
+  if (checkout.mode === "subscription") {
+    priceData.recurring = { interval: "month" };
+  }
+
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    mode: checkout.mode,
+    customer_email: buyerEmail || undefined,
+    line_items: [
+      {
+        price_data: priceData,
+        quantity: 1,
+      },
+    ],
+    success_url: `${SITE_URL}/pages/checkout/success.html?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${SITE_URL}/pages/checkout/index.html?bundle=${encodeURIComponent(checkout.bundle.slug || "")}&step=setup&checkout=cancelled&order_id=${order.id}`,
+    metadata,
+  };
+
+  if (checkout.mode === "payment") {
+    sessionParams.payment_intent_data = { metadata };
+  }
+
+  if (checkout.mode === "subscription") {
+    sessionParams.subscription_data = { metadata };
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionParams);
+
+  await adminClient
+    .from("orders")
+    .update({
+      stripe_checkout_session_id: session.id,
+      stripe_customer_id: typeof session.customer === "string" ? session.customer : null,
+      updated_at: nowIso(),
+    })
+    .eq("id", order.id);
+
+  return jsonResponse({
+    ok: true,
+    checkout_url: session.url,
+    session_id: session.id,
+    order_id: order.id,
+    bundle_id: checkout.bundle.id,
+    currency: currency.toUpperCase(),
+    amount: checkout.amount,
+    subtotal_amount: checkout.subtotal,
+    discount_amount: checkout.discountAmount,
+    unit_amount: toStripeUnitAmount(checkout.amount, currency),
+    price_display: priceDisplay,
+    price_source: checkout.priceSource,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -808,6 +1145,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     const automationId = body.automation_id;
+    const bundleId = cleanString(body.bundle_id);
     const installType = normalizeInstallType(body.install_type || "self_serve");
     const selectedCustomization = String(body.selected_customization || "");
     const currency = normalizeCurrency(body.currency || "THB");
@@ -818,11 +1156,26 @@ Deno.serve(async (req) => {
     const buyerWebsite = String(body.buyer_website || "");
     const setupNotes = String(body.setup_notes || "");
 
-    if (!automationId) {
-      return errorResponse("automation_id is required", 400);
+    if (!automationId && !bundleId) {
+      return errorResponse("automation_id or bundle_id is required", 400);
     }
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    if (bundleId) {
+      return await createBundleCheckoutSession({
+        adminClient,
+        user,
+        bundleId,
+        installType,
+        currency,
+        buyerName,
+        buyerEmail,
+        buyerCompany,
+        buyerWebsite,
+        setupNotes,
+      });
+    }
 
     const { data: product, error: productError } = await adminClient
       .from("automations")

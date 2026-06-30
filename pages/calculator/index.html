@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260629-trust-pages">
+  <title>Manual vs Automated Cost Calculator | Nexus</title>
+  <meta name="description" content="Estimate how many hours a repetitive manual task costs each month and compare it with a Nexus automation product or custom workflow review.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nexus-ai.software/pages/calculator/index.html">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+</head>
+<body data-page="calculator-page">
+  <header class="site-header" id="globalNav" data-active="marketplace"></header>
+  <main>
+    <section class="home-hero"><div class="container"><div class="home-hero-content"><h1>Manual vs automated cost calculator.</h1><p>Estimate how much time a repeated task costs every month, then compare that with a ready-made automation or workflow review.</p><div class="home-hero-actions"><a class="btn btn-primary" href="/pages/marketplace/index.html">Browse automations</a><a class="btn btn-secondary" href="/pages/contact/index.html">Request workflow review</a></div></div></div></section>
+
+    <section class="section solution-rich-section"><div class="container"><div class="solution-calculator-grid"><div class="solution-calculator-card"><h2>Estimate the monthly cost</h2><div class="form-grid"><label>Task name<input class="input" id="calcTask" value="Weekly reporting"></label><label>Times per month<input class="input" id="calcTimes" type="number" min="1" value="8"></label><label>Minutes each time<input class="input" id="calcMinutes" type="number" min="1" value="45"></label><label>Hourly cost<input class="input" id="calcRate" type="number" min="1" value="25"></label></div><button class="btn btn-primary" style="margin-top:1rem" type="button" onclick="NexusCostCalculator()">Calculate savings</button></div><div class="solution-calculator-result" id="calcResult"><span>Estimated manual cost</span><strong>$150/mo</strong><p>If this task takes 6 hours per month, even a small automation can pay for itself quickly.</p></div></div></div></section>
+
+    <section class="section"><div class="container"><div class="section-head left"><h2>How to use this number</h2><p>The calculator is a rough decision helper. If the task is repeated, structured, and has a clear output, it may be a strong candidate for automation.</p></div><div class="solution-policy-grid"><article class="solution-policy-card"><h3>Good fit</h3><p>Reports, summaries, alerts, follow-up, routing, checks, and repeat data movement.</p></article><article class="solution-policy-card"><h3>Needs review</h3><p>Tasks involving judgment, unclear inputs, sensitive data, or several third-party accounts.</p></article><article class="solution-policy-card"><h3>Next step</h3><p>Browse products first. If no exact product exists, request a workflow review.</p></article></div></div></section>
+  </main>
+  <footer class="footer"><div class="container footer-row"><div><strong>Nexus</strong><br><span>The trusted marketplace layer for business automation.</span></div><div class="footer-links"><a href="/pages/marketplace/index.html">Marketplace</a><a href="/pages/product-standards/index.html">Standards</a><a href="/pages/buyer-protection/index.html">Protection</a><a href="/pages/security-access/index.html">Security</a><a href="/pages/contact/index.html">Contact</a><a href="/pages/legal/privacy.html">Privacy</a></div></div></footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script defer src="/assets/js/config.js"></script><script defer src="/assets/js/nexus-db.js?v=20260629-trust-pages"></script><script defer src="/assets/js/nexus-ui.js?v=20260629-trust-pages"></script><script defer src="/assets/js/nexus-buyer-nav.js"></script>
+  <script>
+    function NexusCostCalculator() {
+      const times = Math.max(0, Number(document.getElementById("calcTimes")?.value || 0));
+      const minutes = Math.max(0, Number(document.getElementById("calcMinutes")?.value || 0));
+      const rate = Math.max(0, Number(document.getElementById("calcRate")?.value || 0));
+      const hours = times * minutes / 60;
+      const cost = hours * rate;
+      const result = document.getElementById("calcResult");
+      if (!result) return;
+      result.innerHTML = `<span>Estimated manual cost</span><strong>$${Math.round(cost).toLocaleString()}/mo</strong><p>If this saves ${hours.toFixed(1)} hours per month, even a small automation can pay for itself quickly.</p>`;
+    }
+    document.addEventListener("DOMContentLoaded", NexusCostCalculator);
+  </script>
+</body>
+</html>

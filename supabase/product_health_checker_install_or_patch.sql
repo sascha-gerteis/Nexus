@@ -67,9 +67,33 @@ create index if not exists idx_automation_health_checks_automation_checked
 create index if not exists idx_automation_health_checks_developer_checked
   on public.automation_health_checks (developer_id, checked_at desc);
 
-create index if not exists idx_automations_health_due
+drop index if exists public.idx_automations_health_due;
+
+create index idx_automations_health_due
   on public.automations (status, health_next_check_at, health_last_checked_at)
-  where status = 'live';
+  where status in ('live', 'active', 'published');
+
+-- Backfill existing launch products into the new checker cycle.
+-- This makes older products due immediately instead of waiting for only newly-created
+-- products that already have health metadata.
+update public.automations
+set
+  health_next_check_at = null,
+  health_last_checked_at = null,
+  health_status = case
+    when health_status in ('unknown', 'healthy', 'warning', 'skipped') then 'needs_recheck'
+    else health_status
+  end,
+  health_failure_reason = case
+    when health_status in ('unknown', 'healthy', 'warning', 'skipped') then 'Queued for full technical health check.'
+    else health_failure_reason
+  end,
+  health_failure_details = case
+    when health_status in ('unknown', 'healthy', 'warning', 'skipped') then jsonb_build_object('queued_by', 'product_health_checker_backfill', 'queued_at', now())
+    else health_failure_details
+  end
+where status in ('live', 'active', 'published')
+  and coalesce(listing_type, 'standard') <> 'custom_request';
 
 alter table public.automation_health_checks enable row level security;
 
@@ -126,7 +150,9 @@ grant select on public.automation_health_checks to authenticated;
 
 select pg_notify('pgrst', 'reload schema');
 
--- Optional Supabase Cron job after product-health-checker is deployed.
+-- Optional Supabase Cron job after product-health-checker and test-n8n-workflow are deployed.
+-- This now starts/continues full technical workflow tests for every due live/active/published
+-- standard product, including older products with no previous health checker rows.
 -- Replace <PROJECT_REF> and <NEXUS_RUNTIME_SECRET>, then run once:
 --
 -- select cron.schedule(

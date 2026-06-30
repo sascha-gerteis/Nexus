@@ -613,6 +613,104 @@ function money(product) {
 
   return amountText;
 }
+
+function productMonth(value, fallback = "June 2026") {
+  if (!value) return fallback;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric"
+  });
+}
+
+function productMaintainer(product) {
+  const developer = product?.developers || {};
+  const displayName = developer.display_name || "";
+  const handle = String(developer.handle || "").toLowerCase();
+
+  if (!product?.developer_id || handle === "nexus" || handle === "nexus-internal" || displayName.toLowerCase() === "nexus") {
+    return "Nexus Verified Operator";
+  }
+
+  return displayName ? `${displayName} · Approved developer` : "Approved Nexus developer";
+}
+
+function productFreshness(product) {
+  return {
+    tested: productMonth(product?.health_last_checked_at || product?.n8n_last_tested_at || product?.updated_at),
+    updated: productMonth(product?.updated_at || product?.n8n_last_tested_at || product?.health_last_checked_at),
+    maintainer: productMaintainer(product)
+  };
+}
+
+function workflowHealthStatus(product = {}, summary = {}) {
+  const rawHealth = String(product?.health_status || summary?.last_health_check?.status || "").toLowerCase().trim();
+  const rawTechnical = String(product?.n8n_last_test_status || summary?.last_technical_run?.status || "").toLowerCase().trim();
+  const workflowId = product?.n8n_workflow_id || product?.n8n_workflow_json || product?.runtime_webhook_url || "";
+  const listingType = String(product?.listing_type || "").toLowerCase();
+  const pricingType = String(product?.pricing_type || "").toLowerCase();
+
+  if (["healthy", "warning", "failed", "paused_by_health_check", "skipped"].includes(rawHealth)) {
+    return rawHealth;
+  }
+
+  if (listingType === "custom_request" || pricingType === "custom_quote") {
+    return rawHealth && rawHealth !== "unknown" ? rawHealth : "not_applicable";
+  }
+
+  if (["passed", "passed_with_expected_test_callback_error", "success", "succeeded", "completed"].includes(rawTechnical)) {
+    return "healthy";
+  }
+
+  if (rawHealth === "needs_recheck") {
+    return "needs_recheck";
+  }
+
+  if (["failed", "error", "cancelled", "canceled"].includes(rawTechnical)) {
+    return "failed";
+  }
+
+  if (["running", "queued", "not_tested", "not tested", "needs_recheck"].includes(rawTechnical)) {
+    return "needs_recheck";
+  }
+
+  if (workflowId) return "needs_recheck";
+
+  return rawHealth || "unknown";
+}
+
+function workflowHealthLabel(status, fallback = "unknown") {
+  const value = String(status || fallback || "unknown").toLowerCase();
+
+  if (value === "healthy") return "Healthy";
+  if (value === "needs_recheck") return "Needs recheck";
+  if (value === "paused_by_health_check") return "Paused by health check";
+  if (value === "not_applicable") return "Not applicable";
+  if (value === "not_configured") return "Not configured";
+
+  return String(status || fallback || "unknown").replaceAll("_", " ").trim() || fallback;
+}
+
+function recommendedProductLabel(product) {
+  const text = [
+    product?.title,
+    product?.category,
+    product?.badge,
+    product?.short_description,
+    product?.best_for
+  ].join(" ").toLowerCase();
+
+  if (String(product?.listing_type || "").toLowerCase() === "custom_request") return "Custom fit";
+  if (text.includes("social") || text.includes("marketing") || text.includes("competitor")) return "Best for marketing teams";
+  if (text.includes("support") || text.includes("ticket") || text.includes("inquiry")) return "Best for customer support";
+  if (text.includes("lead") || text.includes("sales") || text.includes("crm")) return "Best first automation";
+  if (text.includes("report") || text.includes("kpi") || text.includes("founder")) return "Most useful for founders";
+
+  return "Easy setup";
+}
   function colorClass(color) {
   const safeColor = String(color || "blue").toLowerCase();
 
@@ -1006,18 +1104,35 @@ function productColorTheme(color) {
   function productCard(product, options = {}) {
     const cardOptions = options && typeof options === "object" && !Array.isArray(options) ? options : {};
     const developer = product.developers || {};
+    const isBundle = product.is_bundle || product.item_type === "bundle" || product.listing_type === "bundle";
+    const bundleProducts = Array.isArray(product.bundle_products) ? product.bundle_products : [];
     const slug = encodeURIComponent(product.slug || "");
     const rawSlug = String(product.slug || "");
     const isCustomRequest =
+      !isBundle && (
       Boolean(product.is_demo) ||
       product.listing_type === "custom_request" ||
-      product.pricing_type === "custom_quote";
-    const showCompare = Boolean(cardOptions.showCompare);
+      product.pricing_type === "custom_quote"
+      );
+    const showCompare = Boolean(cardOptions.showCompare) && !isBundle;
     const compareSelected = Boolean(cardOptions.compareSelected);
-    const ctaHref = isCustomRequest
+    const ctaHref = isBundle
+      ? `/pages/checkout/index.html?bundle=${slug}&step=setup`
+      : isCustomRequest
       ? `/pages/custom-request/index.html?slug=${slug}`
       : `/pages/checkout/index.html?slug=${slug}&step=setup`;
     const ctaLabel = isCustomRequest ? t("common_request_custom_automation") : t("common_buy");
+    const guideLabel = recommendedProductLabel(product);
+    const openAction = isBundle
+      ? `NexusApp.openBundle('${escapeAttribute(product.slug || "")}')`
+      : `NexusApp.openProduct('${escapeAttribute(product.slug || "")}')`;
+    const developerClick = isBundle
+      ? ""
+      : `onclick="event.stopPropagation(); location.href='/pages/developers/profile.html?id=${developer.id || ""}'"`;
+    const developerCursor = isBundle ? "" : "cursor:pointer";
+    const bundleIncludedText = isBundle
+      ? `${bundleProducts.length || product.active_item_count || 0} included workflows`
+      : `${escapeHtml(l(localizeRecord(developer, "type", "Verified Operator")))} &middot; &#9733; ${escapeHtml(l(developer.rating || "New"))}`;
 
     return `
       <article class="product-card color-${colorClass(product.color)}">
@@ -1031,14 +1146,16 @@ function productColorTheme(color) {
           </span>
         </div>
 
+        <span class="product-guide-label">${escapeHtml(l(guideLabel))}</span>
+
         <h3>${escapeHtml(l(localizeRecord(product, "title")))}</h3>
 
         <p>${escapeHtml(l(localizeRecord(product, "short_description")))}</p>
 
         <div
           class="developer-mini"
-          onclick="event.stopPropagation(); location.href='/pages/developers/profile.html?id=${developer.id || ""}'"
-          style="cursor:pointer"
+          ${developerClick}
+          style="${developerCursor}"
         >
           <div class="avatar">
             ${escapeHtml(developer.avatar_letter || "N")}
@@ -1046,7 +1163,7 @@ function productColorTheme(color) {
 
           <div>
             <strong>${escapeHtml(developer.display_name || "Nexus Internal")}</strong>
-            <span>${escapeHtml(l(localizeRecord(developer, "type", "Verified Operator")))} &middot; &#9733; ${escapeHtml(l(developer.rating || "New"))}</span>
+            <span>${bundleIncludedText}</span>
           </div>
         </div>
 
@@ -1090,9 +1207,9 @@ function productColorTheme(color) {
           <button
             type="button"
             class="btn btn-secondary btn-small"
-            onclick="event.stopPropagation(); NexusApp.openProduct('${escapeAttribute(product.slug || "")}')"
+            onclick="event.stopPropagation(); ${openAction}"
           >
-            ${t("common_preview")}</button>
+            View output</button>
 
           <a
             class="btn btn-primary btn-small"
@@ -1594,7 +1711,7 @@ const I18N = {
     common_browse_automations: "Browse automations",
     common_get_support: "Get support",
     common_buy: "Buy",
-    common_preview: "Preview",
+    common_preview: "View output",
     common_view: "View",
     common_view_setup: "View setup",
     common_view_output: "View output",
@@ -1626,7 +1743,7 @@ const I18N = {
     common_browse_automations: "à¸”à¸¹à¸£à¸°à¸šà¸šà¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´",
     common_get_support: "à¸•à¸´à¸”à¸•à¹ˆà¸­à¸—à¸µà¸¡à¸‹à¸±à¸žà¸žà¸­à¸£à¹Œà¸•",
     common_buy: "à¸‹à¸·à¹‰à¸­",
-    common_preview: "à¸”à¸¹à¸•à¸±à¸§à¸­à¸¢à¹ˆà¸²à¸‡",
+    common_preview: "ดูผลลัพธ์",
     common_view: "à¸”à¸¹",
     common_view_setup: "à¸”à¸¹à¸à¸²à¸£à¸•à¸±à¹‰à¸‡à¸„à¹ˆà¸²",
     common_view_output: "à¸”à¸¹à¸œà¸¥à¸¥à¸±à¸žà¸˜à¹Œ",
@@ -1688,7 +1805,7 @@ Object.assign(I18N.th, {
   common_join_developer_waitlist: "à¹€à¸‚à¹‰à¸²à¸£à¹ˆà¸§à¸¡à¹€à¸§à¸•à¸¥à¸´à¸ªà¸•à¹Œà¸”à¸µà¹€à¸§à¸¥à¸¥à¸­à¸›à¹€à¸›à¸­à¸£à¹Œ",
   common_get_support: "à¸•à¸´à¸”à¸•à¹ˆà¸­à¸‹à¸±à¸žà¸žà¸­à¸£à¹Œà¸•",
   common_buy: "à¸‹à¸·à¹‰à¸­",
-  common_preview: "à¸žà¸£à¸µà¸§à¸´à¸§",
+  common_preview: "ดูผลลัพธ์",
   common_view: "à¸”à¸¹",
   common_message_developer: "à¸ªà¹ˆà¸‡à¸‚à¹‰à¸­à¸„à¸§à¸²à¸¡à¸–à¸¶à¸‡à¸”à¸µà¹€à¸§à¸¥à¸¥à¸­à¸›à¹€à¸›à¸­à¸£à¹Œ",
   common_message_nexus: "à¸ªà¹ˆà¸‡à¸‚à¹‰à¸­à¸„à¸§à¸²à¸¡à¸–à¸¶à¸‡ Nexus",
@@ -1711,7 +1828,7 @@ const LITERAL_TRANSLATIONS_TH = {
   "Explore marketplace": "à¸”à¸¹à¸¡à¸²à¸£à¹Œà¹€à¸à¹‡à¸•à¹€à¸žà¸¥à¸ª",
   "How Nexus works": "Nexus à¸—à¸³à¸‡à¸²à¸™à¸­à¸¢à¹ˆà¸²à¸‡à¹„à¸£",
   "Browse": "à¹€à¸¥à¸·à¸­à¸à¸”à¸¹",
-  "Preview": "à¸žà¸£à¸µà¸§à¸´à¸§",
+  "Preview": "ดูผลลัพธ์",
   "Customize": "à¸›à¸£à¸±à¸šà¹ƒà¸«à¹‰à¹€à¸«à¸¡à¸²à¸°à¸à¸±à¸šà¸„à¸¸à¸“",
   "Deploy": "à¸™à¸³à¹„à¸›à¹ƒà¸Šà¹‰à¸‡à¸²à¸™",
   "The problem": "à¸›à¸±à¸à¸«à¸²",
@@ -2010,7 +2127,7 @@ const EXTRA_I18N = {
     common_join_developer_waitlist: "เข้าร่วมเวตลิสต์นักพัฒนา",
     common_get_support: "ติดต่อซัพพอร์ต",
     common_buy: "ซื้อ",
-    common_preview: "พรีวิว",
+    common_preview: "ดูผลลัพธ์",
     common_view: "ดู",
     common_view_setup: "ดูการตั้งค่า",
     common_view_output: "ดูเอาต์พุต",
@@ -2046,7 +2163,7 @@ const EXTRA_I18N = {
     common_explore_marketplace: "浏览市场",
     common_request_custom_automation: "请求定制自动化",
     common_buy: "购买",
-    common_preview: "预览",
+    common_preview: "查看输出",
     common_view: "查看",
     dashboard_messages: "消息"
   },
@@ -2070,7 +2187,7 @@ const EXTRA_I18N = {
     common_explore_marketplace: "Explorar marketplace",
     common_request_custom_automation: "Solicitar automatización personalizada",
     common_buy: "Comprar",
-    common_preview: "Vista previa",
+    common_preview: "Ver resultado",
     common_view: "Ver",
     dashboard_messages: "Mensajes"
   },
@@ -2094,7 +2211,7 @@ const EXTRA_I18N = {
     common_explore_marketplace: "मार्केटप्लेस देखें",
     common_request_custom_automation: "कस्टम ऑटोमेशन का अनुरोध करें",
     common_buy: "खरीदें",
-    common_preview: "प्रीव्यू",
+    common_preview: "आउटपुट देखें",
     common_view: "देखें",
     dashboard_messages: "संदेश"
   },
@@ -2118,7 +2235,7 @@ const EXTRA_I18N = {
     common_explore_marketplace: "تصفح السوق",
     common_request_custom_automation: "اطلب أتمتة مخصصة",
     common_buy: "شراء",
-    common_preview: "معاينة",
+    common_preview: "عرض الناتج",
     common_view: "عرض",
     dashboard_messages: "الرسائل"
   },
@@ -2142,7 +2259,7 @@ const EXTRA_I18N = {
     common_explore_marketplace: "Explorer le marketplace",
     common_request_custom_automation: "Demander une automatisation personnalisée",
     common_buy: "Acheter",
-    common_preview: "Aperçu",
+    common_preview: "Voir le résultat",
     common_view: "Voir",
     dashboard_messages: "Messages"
   }
@@ -4034,6 +4151,7 @@ function adminSidebarSections(active = "") {
       label: "Marketplace",
       items: [
         { id: "automations", label: "Products", href: "/pages/admin/automations.html" },
+        { id: "bundles", label: "Bundles", href: "/pages/admin/bundles.html" },
         { id: "product-reviews", label: "Review Queue", href: "/pages/admin/product-reviews.html" },
         { id: "automation-form", label: "Create Product", href: "/pages/admin/product-form.html" },
         { id: "customer-automations", label: "Customer Automations", href: "/pages/admin/customer-automations.html" },
@@ -4123,6 +4241,10 @@ function mountAdminSidebar(options = {}) {
   productAllowsGuidedInstall,
   guidedInstallFeeAmount,
   guidedInstallFeeMoney,
+  productFreshness,
+  workflowHealthStatus,
+  workflowHealthLabel,
+  recommendedProductLabel,
   money,
   productCard,
   infoBlock,
@@ -4133,6 +4255,7 @@ function mountAdminSidebar(options = {}) {
   closeModal,
   wireModal,
   arrayList,
+  colorClass,
   pillClass,
   escapeHtml,
   escapeAttribute,

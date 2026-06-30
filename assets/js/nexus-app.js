@@ -1,5 +1,6 @@
 const NexusApp = (() => {
   let liveAutomations = [];
+  let liveBundles = [];
   let activeProduct = null;
   let checkoutSetupProduct = null;
   let selectedCustomizationName = "";
@@ -15,6 +16,58 @@ const NexusApp = (() => {
     "give", "gives", "create", "creates", "take", "takes", "put", "puts", "copy", "copies", "data", "info",
     "information", "something", "anything", "also", "just", "like", "help", "please", "maybe"
   ]);
+  const RECOMMENDATION_DOMAIN_GROUPS = [
+    {
+      key: "reporting",
+      label: "Reporting",
+      terms: [
+        "report", "reports", "reporting", "dashboard", "dashboards", "kpi", "metrics", "analytics",
+        "summary", "summaries", "weekly report", "monthly report", "performance", "insight", "insights"
+      ]
+    },
+    {
+      key: "competitor",
+      label: "Competitor intelligence",
+      terms: [
+        "competitor", "competitors", "competition", "market", "pricing", "price", "benchmark",
+        "tracking", "monitor", "monitoring", "signals", "market intelligence", "competitive"
+      ]
+    },
+    {
+      key: "social",
+      label: "Social and brand monitoring",
+      terms: [
+        "social", "instagram", "facebook", "tiktok", "linkedin", "youtube", "twitter", "x",
+        "brand", "sentiment", "mentions", "comments", "engagement", "followers", "content"
+      ]
+    },
+    {
+      key: "support",
+      label: "Customer support",
+      terms: [
+        "support", "ticket", "tickets", "inquiry", "inquiries", "customer", "customers",
+        "reply", "replies", "response", "responses", "inbox", "email", "complaint", "faq", "chat"
+      ]
+    },
+    {
+      key: "sales",
+      label: "Sales and leads",
+      terms: [
+        "lead", "leads", "sales", "crm", "follow up", "followup", "handoff", "pipeline",
+        "prospect", "prospects", "quote", "booking", "bookings", "appointment", "appointments"
+      ]
+    },
+    {
+      key: "operations",
+      label: "Operations",
+      terms: [
+        "operations", "approval", "approvals", "invoice", "invoices", "task", "tasks", "handover",
+        "inventory", "stock", "order", "orders", "fulfillment", "reconciliation", "admin"
+      ]
+    }
+  ];
+  const MIN_RECOMMENDATION_SCORE = 12;
+  const MIN_RECOMMENDATION_SCORE_WITH_DOMAIN = 8;
 
   async function init() {
     NexusUI.wireModal();
@@ -287,7 +340,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
                   return `
                     <td>
                       <div class="compare-action-stack">
-                        <button class="btn btn-secondary btn-small" type="button" onclick="NexusApp.closeCompare(); NexusApp.openProduct('${NexusUI.escapeAttribute(product.slug || "")}')">Preview</button>
+                        <button class="btn btn-secondary btn-small" type="button" onclick="NexusApp.closeCompare(); NexusApp.openProduct('${NexusUI.escapeAttribute(product.slug || "")}')">View output</button>
                         <a class="btn btn-primary btn-small" href="${href}">${label}</a>
                       </div>
                     </td>
@@ -389,7 +442,12 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   }
 
   async function renderMarketplace() {
-    const { data, error } = await NexusDB.listLiveAutomations();
+    const [{ data, error }, bundleResult] = await Promise.all([
+      NexusDB.listLiveAutomations(),
+      typeof NexusDB.listLiveBundles === "function"
+        ? NexusDB.listLiveBundles()
+        : Promise.resolve({ data: [], error: null })
+    ]);
     const grid = document.getElementById("marketplaceGrid");
 
     if (!grid) return;
@@ -401,7 +459,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     }
 
     liveAutomations = data || [];
-    window.NexusMarketplaceProducts = liveAutomations;
+    liveBundles = bundleResult?.data || [];
+    window.NexusMarketplaceProducts = [...liveBundles, ...liveAutomations];
 
     const currency = document.getElementById("marketCurrency");
     if (currency) currency.innerHTML = NexusUI.currencySwitch();
@@ -420,7 +479,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const grid = document.getElementById("marketplaceGrid");
     if (!grid) return;
 
-    let items = [...liveAutomations];
+    let items = [...liveBundles, ...liveAutomations];
 
     const search = (document.getElementById("searchInput")?.value || "").toLowerCase();
     const category = document.getElementById("categoryFilter")?.value || "all";
@@ -429,7 +488,10 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
     if (search) {
       items = items.filter((product) => {
-        return `${product.title} ${product.short_description} ${product.category} ${product.best_for} ${product.developers?.display_name}`
+        const bundledTitles = Array.isArray(product.bundle_products)
+          ? product.bundle_products.map((item) => item.title).join(" ")
+          : "";
+        return `${product.title} ${product.short_description} ${product.category} ${product.best_for} ${product.developers?.display_name} ${bundledTitles}`
           .toLowerCase()
           .includes(search);
       });
@@ -462,7 +524,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     grid.innerHTML =
       items
         .map((product) => NexusUI.productCard(product, {
-          showCompare: true,
+          showCompare: !product.is_bundle,
           compareSelected: compareSlugs.has(String(product.slug || "")),
         }))
         .join("") ||
@@ -500,54 +562,54 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       return false;
     }
 
-    const products = liveAutomations.length ? liveAutomations : marketplaceRecommendationFallbackProducts();
+    const currentItems = [...liveBundles, ...liveAutomations];
+    const products = currentItems.length ? currentItems : marketplaceRecommendationFallbackProducts();
     const scored = products
       .map((product) => scoreMarketplaceRecommendationProduct(product, buyerInput))
-      .filter((item) => item.score > 0)
+      .filter(isConfidentRecommendation)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
-    const recommendations = scored.length
-      ? scored
-      : products
-          .map((product) => ({
-            product,
-            score: Number(product.rating || 0) + (product.featured ? 2 : 0),
-            matchedTerms: []
-          }))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3);
+    if (!scored.length) {
+      result.hidden = false;
+      result.innerHTML = customRecommendationResultHtml(buyerInput);
 
-    const bestScore = recommendations[0]?.score || 0;
-    const customRecommended = bestScore < 3.5;
+      NexusDB.trackAnalyticsEvent?.("marketplace_recommendation", {
+        metadata: {
+          input_length: buyerInput.length,
+          top_slug: "",
+          matched_count: 0,
+          outcome: "custom_recommended"
+        }
+      }).catch((error) => console.warn("Could not track recommendation:", error));
+
+      result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return false;
+    }
 
     result.hidden = false;
     result.innerHTML = `
       <div class="marketplace-recommendation-result-head">
         <div>
-          <h3>${customRecommended ? "Closest products and custom path" : "Best matches from current products"}</h3>
+          <h3>Best matches from current products</h3>
           <p>
-            Nexus scored the available marketplace products against your manual process, desired output, tools, and frequency.
+            Nexus found products with a meaningful match to your manual process, desired output, tools, and frequency.
             New approved developer products are included automatically when they match.
           </p>
         </div>
-        <a class="btn btn-primary btn-small" href="/pages/contact/index.html">Get a workflow recommendation</a>
+        <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom automation</a>
       </div>
       <div class="marketplace-recommendation-grid">
-        ${recommendations.map(marketplaceRecommendationCard).join("")}
+        ${scored.map(marketplaceRecommendationCard).join("")}
       </div>
-      ${customRecommended ? `
-        <div class="success" style="margin-top:1rem">
-          This looks specific enough that a custom setup review may be useful. Send Nexus the process if none of the matches feel right.
-        </div>
-      ` : ""}
     `;
 
     NexusDB.trackAnalyticsEvent?.("marketplace_recommendation", {
       metadata: {
         input_length: buyerInput.length,
-        top_slug: recommendations[0]?.product?.slug || "",
-        matched_count: scored.length
+        top_slug: scored[0]?.product?.slug || "",
+        matched_count: scored.length,
+        outcome: "product_recommended"
       }
     }).catch((error) => console.warn("Could not track recommendation:", error));
 
@@ -587,9 +649,31 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     ];
   }
 
+  function customRecommendationResultHtml(buyerInput = "") {
+    const summary = buyerInput.length > 180 ? `${buyerInput.slice(0, 180)}...` : buyerInput;
+
+    return `
+      <div class="marketplace-recommendation-result-head">
+        <div>
+          <h3>No close marketplace match yet.</h3>
+          <p>
+            Nexus did not find a current product with enough domain fit for this process.
+            The best next step is a custom automation review instead of guessing with a weak match.
+          </p>
+          ${summary ? `<small>Request context: ${NexusUI.escapeHtml(summary)}</small>` : ""}
+        </div>
+        <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom automation</a>
+      </div>
+      <div class="success" style="margin-top:1rem">
+        Describe the process once. Nexus will recommend an existing product if one truly fits, or route it as a custom workflow request.
+      </div>
+    `;
+  }
+
   function scoreMarketplaceRecommendationProduct(product, buyerInput) {
     const tokens = recommendationTokens(buyerInput);
     const phrases = recommendationPhrases(buyerInput);
+    const inputDomains = recommendationDomainMatches(buyerInput);
     const matched = new Map();
     let score = 0;
 
@@ -613,6 +697,10 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       { value: product.developers?.type, weight: 1 },
       { value: product.developers?.skills, weight: 2 }
     ];
+    const productText = fields.map(({ value }) => recommendationValueToText(value)).join(" ");
+    const productDomains = recommendationDomainMatches(productText);
+    const productDomainKeys = new Set(productDomains.map((domain) => domain.key));
+    let domainOverlap = 0;
 
     fields.forEach(({ value, weight }) => {
       const text = normalizeRecommendationText(recommendationValueToText(value));
@@ -631,17 +719,51 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       });
     });
 
+    inputDomains.forEach((domain) => {
+      if (!productDomainKeys.has(domain.key)) return;
+      const domainScore = 10 + Math.min(domain.matches.length, 4) * 2;
+      score += domainScore;
+      domainOverlap += 1;
+      matched.set(domain.label, (matched.get(domain.label) || 0) + domainScore);
+    });
+
     score += Math.min(Number(product.rating || 0), 5) * 0.15;
     if (product.featured) score += 0.4;
 
     return {
       product,
       score,
+      domainOverlap,
+      inputDomains,
       matchedTerms: Array.from(matched.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(([term]) => term)
     };
+  }
+
+  function isConfidentRecommendation(item) {
+    if (!item || !item.product) return false;
+    if (item.domainOverlap > 0 && item.score >= MIN_RECOMMENDATION_SCORE_WITH_DOMAIN) return true;
+    return item.score >= MIN_RECOMMENDATION_SCORE && (item.matchedTerms || []).length >= 2;
+  }
+
+  function recommendationDomainMatches(value) {
+    const text = normalizeRecommendationText(value);
+    if (!text) return [];
+
+    return RECOMMENDATION_DOMAIN_GROUPS
+      .map((group) => ({
+        ...group,
+        matches: group.terms.filter((term) => recommendationTextIncludesTerm(text, term))
+      }))
+      .filter((group) => group.matches.length);
+  }
+
+  function recommendationTextIncludesTerm(normalizedText, term) {
+    const cleanTerm = normalizeRecommendationText(term);
+    if (!cleanTerm) return false;
+    return ` ${normalizedText} `.includes(` ${cleanTerm} `);
   }
 
   function recommendationTokens(value) {
@@ -716,7 +838,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
         <p>${NexusUI.escapeHtml(product.short_description || product.outcome || product.problem || "Review this product to see setup requirements and expected output.")}</p>
         <div class="match-terms">${NexusUI.escapeHtml(matchText)}</div>
         <div class="marketplace-recommendation-match-actions">
-          <button type="button" class="btn btn-secondary btn-small" onclick="NexusApp.openProduct(decodeURIComponent('${encodedSlug}'))">Preview</button>
+          <button type="button" class="btn btn-secondary btn-small" onclick="NexusApp.openProduct(decodeURIComponent('${encodedSlug}'))">View output</button>
           <a class="btn btn-primary btn-small" href="${NexusUI.escapeHtml(actionHref)}">${actionLabel}</a>
         </div>
       </article>
@@ -742,6 +864,11 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (!product) return;
 
     const developer = product.developers || {};
+    const freshness = NexusUI.productFreshness?.(product) || {
+      tested: "June 2026",
+      updated: "June 2026",
+      maintainer: developer.display_name || "Nexus Verified Operator"
+    };
     NexusDB.trackAnalyticsEvent?.("product_view", {
       automation_id: product.id,
       product_slug: product.slug,
@@ -799,6 +926,21 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
         ${productAllowsGuidedInstall(product) && NexusUI.guidedInstallFeeMoney?.(product) ? `
           <small>Guided install: + ${NexusUI.guidedInstallFeeMoney(product)}</small>
         ` : ""}
+      </div>
+
+      <div class="product-maintenance-panel">
+        <div>
+          <span>Last tested</span>
+          <strong>${NexusUI.escapeHtml(freshness.tested)}</strong>
+        </div>
+        <div>
+          <span>Last updated</span>
+          <strong>${NexusUI.escapeHtml(freshness.updated)}</strong>
+        </div>
+        <div>
+          <span>Maintained by</span>
+          <strong>${NexusUI.escapeHtml(freshness.maintainer)}</strong>
+        </div>
       </div>
 
       ${NexusUI.infoBlock("Problem it solves", [NexusUI.localizeRecord(product, "problem")])}
@@ -860,6 +1002,252 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
     NexusUI.openModal(side, main);
     NexusUI.applyTranslations?.(document.getElementById("productModal"));
+  }
+
+  async function openBundle(slug) {
+    if (typeof NexusDB.getBundleBySlug !== "function") {
+      NexusUI.toast("Bundle support is not loaded yet.");
+      return;
+    }
+
+    const { data: bundle, error } = await NexusDB.getBundleBySlug(slug);
+
+    if (error || !bundle) {
+      NexusUI.toast(error?.message || "Bundle not found.");
+      return;
+    }
+
+    activeProduct = bundle;
+
+    const products = Array.isArray(bundle.bundle_products) ? bundle.bundle_products : [];
+    const bundleHealthStatus = NexusUI.workflowHealthStatus?.(bundle) || bundle.health_status || "unknown";
+    const bundleHealthLabel = NexusUI.workflowHealthLabel?.(bundleHealthStatus) || bundleHealthStatus;
+    const includedHtml = products.length
+      ? products.map((product, index) => `
+          <article class="bundle-included-item" data-bundle-preview-item="${index}">
+            <div class="product-icon ${NexusUI.colorClass?.(product.color) || "blue"}">
+              ${NexusUI.escapeHtml(product.icon || "AI")}
+            </div>
+            <div>
+              <strong>${NexusUI.escapeHtml(product.title || "Automation")}</strong>
+              <p>${NexusUI.escapeHtml(product.short_description || product.outcome || "")}</p>
+              <div class="tags">
+                <span class="tag">${NexusUI.escapeHtml(product.category || "Automation")}</span>
+                <span class="tag">${NexusUI.money(product)}</span>
+              </div>
+              <button
+                class="btn btn-secondary btn-small bundle-preview-toggle"
+                type="button"
+                data-bundle-preview-button="${index}"
+                aria-expanded="false"
+                onclick="NexusApp.toggleBundleWorkflowPreview(${index})"
+              >
+                View output
+              </button>
+              <div class="bundle-workflow-preview" id="bundleWorkflowPreview-${index}" hidden></div>
+            </div>
+          </article>
+        `).join("")
+      : `<div class="card"><h3>No active workflows</h3><p>This bundle needs active products before it can be purchased.</p></div>`;
+
+    const side = `
+      <div class="modal-head">
+        <div>
+          <span class="${NexusUI.pillClass(bundle.color)}">${NexusUI.escapeHtml(bundle.badge || "Bundle")}</span>
+          <h2>${NexusUI.escapeHtml(bundle.title || "Automation bundle")}</h2>
+          <p>${NexusUI.escapeHtml(bundle.long_description || bundle.short_description || "")}</p>
+        </div>
+        <button class="close" onclick="NexusUI.closeModal()">Close</button>
+      </div>
+
+      <div class="price-box">
+        <span>Bundle price</span>
+        <strong>${NexusUI.money(bundle)}</strong>
+        <small>${Number(bundle.discount_percent || 0)}% bundle discount applied to active included workflows.</small>
+      </div>
+
+      <div class="product-maintenance-panel">
+        <div>
+          <span>Included</span>
+          <strong>${products.length} workflows</strong>
+        </div>
+        <div>
+          <span>Health</span>
+          <strong>${NexusUI.escapeHtml(bundleHealthLabel || "Active")}</strong>
+        </div>
+        <div>
+          <span>Curated by</span>
+          <strong>Nexus</strong>
+        </div>
+      </div>
+
+      ${NexusUI.infoBlock("Business outcome", [bundle.outcome])}
+      ${NexusUI.infoBlock("What you receive", products.map((product) => product.title))}
+    `;
+
+    const main = `
+      <div class="bundle-modal-main">
+        <div class="card">
+          <h3>Included workflows</h3>
+          <p>Each workflow stays visible in your buyer dashboard after purchase, with its own setup and output history.</p>
+          <div class="bundle-included-list">${includedHtml}</div>
+        </div>
+
+        <div class="card">
+          <h3>Ready to use this bundle?</h3>
+          <p>
+            Checkout creates one bundle order and unlocks the included workflow setup forms in your buyer dashboard.
+            If one included workflow is paused later, Nexus keeps the bundle live with the remaining active workflows and adjusts future pricing.
+          </p>
+          <div class="hero-actions" style="justify-content:flex-start">
+            <a class="btn btn-primary" href="/pages/checkout/index.html?bundle=${encodeURIComponent(bundle.slug || "")}&step=setup">Buy bundle</a>
+            <a class="btn btn-secondary" href="/pages/contact/index.html">Ask Nexus</a>
+          </div>
+        </div>
+      </div>
+    `;
+
+    NexusDB.trackAnalyticsEvent?.("bundle_view", {
+      metadata: {
+        bundle_id: bundle.id,
+        bundle_slug: bundle.slug,
+        included_count: products.length
+      }
+    }).catch((analyticsError) => console.warn("Could not track bundle view:", analyticsError));
+
+    NexusUI.openModal(side, main);
+    NexusUI.applyTranslations?.(document.getElementById("productModal"));
+  }
+
+  function closeBundleWorkflowPreviews(exceptIndex = null) {
+    const modal = document.getElementById("productModal");
+    if (!modal) return;
+
+    modal.querySelectorAll(".bundle-workflow-preview").forEach((preview) => {
+      const index = preview.id.replace("bundleWorkflowPreview-", "");
+      if (exceptIndex !== null && String(exceptIndex) === index) return;
+
+      preview.hidden = true;
+      preview.innerHTML = "";
+    });
+
+    modal.querySelectorAll("[data-bundle-preview-button]").forEach((button) => {
+      const index = button.getAttribute("data-bundle-preview-button");
+      if (exceptIndex !== null && String(exceptIndex) === index) return;
+
+      button.setAttribute("aria-expanded", "false");
+      button.textContent = "View output";
+    });
+
+    modal.querySelectorAll("[data-bundle-preview-item]").forEach((item) => {
+      const index = item.getAttribute("data-bundle-preview-item");
+      if (exceptIndex !== null && String(exceptIndex) === index) return;
+
+      item.classList.remove("active");
+    });
+  }
+
+  async function loadBundleWorkflowPreviewProduct(product) {
+    if (!product) return null;
+
+    if (activeProduct && !activeProduct._bundlePreviewProducts) {
+      activeProduct._bundlePreviewProducts = {};
+    }
+
+    const cache = activeProduct?._bundlePreviewProducts || {};
+    const cacheKey = product.id || product.slug || product.title || "";
+
+    if (cacheKey && cache[cacheKey]) {
+      return cache[cacheKey];
+    }
+
+    let fullProduct = null;
+
+    if (product.slug && typeof NexusDB.getAutomationBySlug === "function") {
+      const result = await NexusDB.getAutomationBySlug(product.slug);
+      if (!result?.error && result?.data) {
+        fullProduct = result.data;
+      }
+    }
+
+    if (!fullProduct && product.id && typeof NexusDB.getAutomationById === "function") {
+      const result = await NexusDB.getAutomationById(product.id);
+      if (!result?.error && result?.data) {
+        fullProduct = result.data;
+      }
+    }
+
+    const previewProduct = fullProduct || product;
+    if (cacheKey && activeProduct?._bundlePreviewProducts) {
+      activeProduct._bundlePreviewProducts[cacheKey] = previewProduct;
+    }
+
+    return previewProduct;
+  }
+
+  async function toggleBundleWorkflowPreview(index) {
+    const products = Array.isArray(activeProduct?.bundle_products) ? activeProduct.bundle_products : [];
+    const product = products[Number(index)];
+    const preview = document.getElementById(`bundleWorkflowPreview-${index}`);
+    const button = document.querySelector(`[data-bundle-preview-button="${index}"]`);
+    const item = document.querySelector(`[data-bundle-preview-item="${index}"]`);
+
+    if (!product || !preview) {
+      NexusUI.toast("Could not open this workflow preview.");
+      return;
+    }
+
+    const isOpen = !preview.hidden;
+    closeBundleWorkflowPreviews();
+
+    if (isOpen) return;
+
+    const bundleContext = activeProduct;
+    preview.hidden = false;
+    preview.innerHTML = `
+      <div class="bundle-preview-loading">
+        Loading saved output preview...
+      </div>
+    `;
+    button?.setAttribute("aria-expanded", "true");
+    if (button) button.textContent = "Hide output";
+    item?.classList.add("active");
+    preview.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    let previewProduct = product;
+    try {
+      previewProduct = await loadBundleWorkflowPreviewProduct(product);
+    } catch (error) {
+      console.warn("Could not load full bundle workflow preview:", error);
+    }
+
+    if (activeProduct !== bundleContext || preview.hidden) {
+      return;
+    }
+
+    preview.innerHTML = `
+      <div class="preview-shell bundle-preview-shell">
+        <div class="browser-bar">
+          <span class="browser-dot red"></span>
+          <span class="browser-dot yellow"></span>
+          <span class="browser-dot green-dot"></span>
+          <span>${NexusUI.escapeHtml(previewProduct?.title || product.title || "Output preview")}</span>
+        </div>
+        <div class="preview-window">
+          ${NexusUI.renderPreview(previewProduct || product)}
+        </div>
+      </div>
+    `;
+
+    NexusDB.trackAnalyticsEvent?.("bundle_workflow_preview", {
+      automation_id: product.id,
+      product_slug: product.slug,
+      product_title: product.title,
+      metadata: {
+        bundle_id: activeProduct?.id || "",
+        bundle_slug: activeProduct?.slug || ""
+      }
+    }).catch((analyticsError) => console.warn("Could not track bundle workflow preview:", analyticsError));
   }
 
   async function openSetupChoice(slug) {
@@ -984,6 +1372,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
  async function renderCheckout() {
   const slug = NexusUI.q("slug");
+  const bundleSlug = NexusUI.q("bundle");
   const root = document.getElementById("checkoutRoot");
 
   if (!root) return;
@@ -996,13 +1385,15 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
   if (!user) return;
 
-  const { data: product, error } = await NexusDB.getAutomationBySlug(slug);
+  const { data: product, error } = bundleSlug
+    ? await NexusDB.getBundleBySlug(bundleSlug)
+    : await NexusDB.getAutomationBySlug(slug);
 
   if (error || !product) {
     root.innerHTML = `
       <div class="card">
-        <h2>Product not found</h2>
-        <p>Return to the marketplace and choose a product again.</p>
+        <h2>${bundleSlug ? "Bundle" : "Product"} not found</h2>
+        <p>Return to the marketplace and choose again.</p>
         <a class="btn btn-primary" href="/pages/marketplace/index.html">Back to marketplace</a>
       </div>
     `;
@@ -1128,6 +1519,15 @@ function renderSetupChoicePage(root, product) {
               <span class="tag">${product.delivery_time || "Custom"}</span>
               <span class="tag">${NexusUI.getCurrency()}</span>
             </div>
+
+            ${product.is_bundle && Array.isArray(product.bundle_products) ? `
+              <div class="bundle-checkout-includes">
+                <strong>Included workflows</strong>
+                ${product.bundle_products.map((item) => `
+                  <span>${NexusUI.escapeHtml(item.title || "Automation")}</span>
+                `).join("")}
+              </div>
+            ` : ""}
           </div>
 
           ${NexusUI.renderCustomizations(product, "checkout")}
@@ -1210,7 +1610,8 @@ function renderSetupChoicePage(root, product) {
       "";
 
     const payload = {
-      automation_id: product.id,
+      automation_id: product.is_bundle ? "" : product.id,
+      bundle_id: product.is_bundle ? product.id : "",
       install_type: installType,
       selected_customization: customization,
       currency: NexusUI.getCurrency(),
@@ -1222,11 +1623,13 @@ function renderSetupChoicePage(root, product) {
     };
 
     NexusDB.trackAnalyticsEvent?.("checkout_start", {
-      automation_id: product.id,
+      automation_id: product.is_bundle ? "" : product.id,
       product_slug: product.slug,
       product_title: product.title,
       developer_id: product.developer_id || "",
       metadata: {
+        item_type: product.is_bundle ? "bundle" : "automation",
+        bundle_id: product.is_bundle ? product.id : "",
         install_type: installType,
         selected_customization: customization,
         currency: payload.currency,
@@ -2400,8 +2803,8 @@ async function submitCheckoutIntent(event) {
     const nextRunAt = summary?.next_run_at || "";
     const technicalStatus = product?.n8n_last_test_status || summary?.last_technical_run?.status || "not_tested";
     const technicalAt = product?.n8n_last_tested_at || summary?.last_technical_run?.finished_at || summary?.last_technical_run?.created_at || "";
-    const healthStatus = product?.health_status || summary?.last_health_check?.status || "unknown";
-    const healthAt = product?.health_last_checked_at || summary?.last_health_check?.checked_at || "";
+    const healthStatus = NexusUI.workflowHealthStatus?.(product, summary) || product?.health_status || summary?.last_health_check?.status || "unknown";
+    const healthAt = product?.health_last_checked_at || summary?.last_health_check?.checked_at || product?.n8n_last_tested_at || summary?.last_technical_run?.finished_at || "";
     const dueCount = Number(summary?.due_schedules || 0);
     const activeCount = Number(summary?.active_schedules || 0);
     const monthlyCount = Number(summary?.monthly_schedules || 0);
@@ -2443,7 +2846,7 @@ async function submitCheckoutIntent(event) {
         <div class="admin-runtime-row compact">
           <span>Health</span>
           <strong>
-            <span class="${runtimeStatusPill(healthStatus)}">${NexusUI.escapeHtml(runtimeStatusLabel(healthStatus, "unknown"))}</span>
+            <span class="${runtimeStatusPill(healthStatus)}">${NexusUI.escapeHtml(NexusUI.workflowHealthLabel?.(healthStatus) || runtimeStatusLabel(healthStatus, "unknown"))}</span>
             <small>${NexusUI.escapeHtml(healthAt ? formatAdminRuntimeDate(healthAt) : "Not checked")}</small>
           </strong>
         </div>
@@ -3992,6 +4395,8 @@ if (shouldImportN8n) {
  return {
   init,
   openProduct,
+  openBundle,
+  toggleBundleWorkflowPreview,
   toggleCompare,
   clearCompare,
   openCompare,

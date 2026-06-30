@@ -272,6 +272,23 @@ async function getUserFromRequest(req: Request, supabaseUrl: string, anonKey: st
   return data.user;
 }
 
+function getRuntimeOperatorFromRequest(req: Request) {
+  const runtimeSecret = cleanString(req.headers.get("x-nexus-runtime-secret"));
+  if (!runtimeSecret || runtimeSecret !== env("NEXUS_RUNTIME_SECRET")) return null;
+
+  return {
+    userId: null,
+    operator: {
+      profile: {
+        id: null,
+        role: "admin",
+      },
+      developer: null,
+      runtime: true,
+    },
+  };
+}
+
 async function getOperatorContext(adminClient: any, userId: string) {
   const { data, error } = await adminClient
     .from("profiles")
@@ -1226,7 +1243,7 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
       started_at: now,
       last_checked_at: now,
       elapsed_seconds: 0,
-      created_by: userId,
+      created_by: userId || null,
       created_at: now,
       updated_at: now,
     })
@@ -1489,13 +1506,14 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const user = await getUserFromRequest(req, supabaseUrl, anonKey);
+    const runtimeContext = getRuntimeOperatorFromRequest(req);
+    const user = runtimeContext ? null : await getUserFromRequest(req, supabaseUrl, anonKey);
 
-    if (!user) {
+    if (!runtimeContext && !user) {
       return errorResponse("Admin login required.", 401);
     }
 
-    const operator = await getOperatorContext(adminClient, user.id);
+    const operator = runtimeContext?.operator || await getOperatorContext(adminClient, user!.id);
 
     if (!operator) {
       return errorResponse("Admin or developer access required.", 403);
@@ -1514,7 +1532,7 @@ Deno.serve(async (req) => {
       if (!canAccessAutomation(operator, automation)) {
         return errorResponse("Developer can only test their own products.", 403);
       }
-      const result = await startTestRun(adminClient, automation, user.id, body);
+      const result = await startTestRun(adminClient, automation, runtimeContext ? "" : user!.id, body);
       return jsonResponse(result, 200);
     }
 

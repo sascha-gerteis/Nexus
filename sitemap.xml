@@ -12,27 +12,27 @@
   </url>
   <url>
     <loc>https://nexus-ai.software/lead-automation/</loc>
-    <lastmod>2026-06-27</lastmod>
+    <lastmod>2026-06-29</lastmod>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://nexus-ai.software/reporting-automation/</loc>
-    <lastmod>2026-06-27</lastmod>
+    <lastmod>2026-06-29</lastmod>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://nexus-ai.software/customer-support-automation/</loc>
-    <lastmod>2026-06-27</lastmod>
+    <lastmod>2026-06-29</lastmod>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://nexus-ai.software/social-listening-automation/</loc>
-    <lastmod>2026-06-27</lastmod>
+    <lastmod>2026-06-29</lastmod>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://nexus-ai.software/custom-business-automation/</loc>
-    <lastmod>2026-06-27</lastmod>
+    <lastmod>2026-06-29</lastmod>
     <priority>0.85</priority>
   </url>
   <url>
@@ -44,6 +44,31 @@
     <loc>https://nexus-ai.software/pages/custom-request/index.html</loc>
     <lastmod>2026-06-23</lastmod>
     <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/pages/product-standards/index.html</loc>
+    <lastmod>2026-06-29</lastmod>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/pages/buyer-protection/index.html</loc>
+    <lastmod>2026-06-29</lastmod>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/pages/security-access/index.html</loc>
+    <lastmod>2026-06-29</lastmod>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/pages/calculator/index.html</loc>
+    <lastmod>2026-06-29</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://nexus-ai.software/pages/buyer-onboarding/index.html</loc>
+    <lastmod>2026-06-29</lastmod>
+    <priority>0.45</priority>
   </url>
   <url>
     <loc>https://nexus-ai.software/pages/developers/index.html</loc>

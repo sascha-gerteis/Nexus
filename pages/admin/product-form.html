@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260629-admin-runtime">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260701-preview-balance">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -1037,9 +1037,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260629-admin-runtime"></script>
-<script src="/assets/js/nexus-db.js?v=20260629-admin-runtime"></script>
-  <script src="/assets/js/nexus-app.js?v=20260629-admin-runtime"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260701-preview-balance"></script>
+<script src="/assets/js/nexus-db.js?v=20260701-preview-balance"></script>
+  <script src="/assets/js/nexus-app.js?v=20260701-preview-balance"></script>
   <script src="/assets/js/nexus-notice.js"></script>
 
  <script>
@@ -1146,8 +1146,8 @@
       const nextRunAt = summary.next_run_at || "";
       const technicalStatus = product?.n8n_last_test_status || summary.last_technical_run?.status || "not_tested";
       const technicalAt = product?.n8n_last_tested_at || summary.last_technical_run?.finished_at || summary.last_technical_run?.created_at || "";
-      const healthStatus = product?.health_status || summary.last_health_check?.status || "unknown";
-      const healthAt = product?.health_last_checked_at || summary.last_health_check?.checked_at || "";
+      const healthStatus = NexusUI.workflowHealthStatus?.(product, summary) || product?.health_status || summary.last_health_check?.status || "unknown";
+      const healthAt = product?.health_last_checked_at || summary.last_health_check?.checked_at || product?.n8n_last_tested_at || summary.last_technical_run?.finished_at || "";
       const activeCount = Number(summary.active_schedules || 0);
       const monthlyCount = Number(summary.monthly_schedules || 0);
       const dueCount = Number(summary.due_schedules || 0);
@@ -1182,7 +1182,7 @@
 
           <div class="admin-runtime-summary-card">
             <span>Health checker</span>
-            <strong><span class="${this.runtimePillClass(healthStatus)}">${this.escapeHtml(this.runtimeLabel(healthStatus, "unknown"))}</span></strong>
+            <strong><span class="${this.runtimePillClass(healthStatus)}">${this.escapeHtml(NexusUI.workflowHealthLabel?.(healthStatus) || this.runtimeLabel(healthStatus, "unknown"))}</span></strong>
             <small>${this.escapeHtml(healthAt ? this.formatRuntimeDate(healthAt) : "Not checked yet")}</small>
           </div>
         </div>

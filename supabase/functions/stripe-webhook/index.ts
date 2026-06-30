@@ -597,6 +597,174 @@ async function activateScheduleIfReady(order: any, subscriptionStatus = "") {
   });
 }
 
+async function loadBundleOrderProducts(order: any) {
+  const { data: orderItems, error: itemError } = await adminClient
+    .from("order_items")
+    .select("*, automations!order_items_automation_id_fkey(*)")
+    .eq("order_id", order.id)
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
+
+  if (!itemError && Array.isArray(orderItems) && orderItems.length) {
+    return orderItems
+      .map((item: any) => ({
+        item,
+        product: one(item.automations),
+      }))
+      .filter((entry: any) => entry.product?.id);
+  }
+
+  if (itemError) {
+    console.warn("Could not load bundle order_items:", itemError.message);
+  }
+
+  const bundleId = cleanString(order.bundle_id);
+  if (!bundleId) return [];
+
+  const { data: bundleItems, error } = await adminClient
+    .from("automation_bundle_items")
+    .select("*, automations!automation_bundle_items_automation_id_fkey(*)")
+    .eq("bundle_id", bundleId)
+    .eq("status", "active")
+    .order("position", { ascending: true });
+
+  if (error) {
+    console.warn("Could not load bundle items:", error.message);
+    return [];
+  }
+
+  return (bundleItems || [])
+    .map((item: any) => ({
+      item,
+      product: one(item.automations),
+    }))
+    .filter((entry: any) => entry.product?.id);
+}
+
+async function handlePaidBundleOrder(order: any, isPaid: boolean, isSubscription: boolean, subscriptionStatus = "") {
+  if (!isPaid) return;
+
+  const { data: existing } = await adminClient
+    .from("customer_automations")
+    .select("id")
+    .eq("order_id", order.id)
+    .limit(1);
+
+  if (existing?.length) {
+    if (isSubscription) {
+      await activateBundleSchedulesIfReady(
+        { ...order, stripe_subscription_status: subscriptionStatus || "active" },
+        subscriptionStatus || "active",
+      );
+    }
+    return;
+  }
+
+  const entries = await loadBundleOrderProducts(order);
+
+  for (const entry of entries) {
+    const product = entry.product || {};
+    const runtimeType = product.runtime_type || "manual";
+    const runtimeWebhookUrl = product.runtime_webhook_url || product.n8n_webhook_url || null;
+    const runtimeWebhookPath = product.runtime_webhook_path || null;
+
+    const { data: customerAutomation, error: automationError } = await safeInsertCustomerAutomation({
+      order_id: order.id,
+      buyer_id: order.buyer_id,
+      automation_id: product.id,
+      developer_id: product.developer_id || null,
+      bundle_id: order.bundle_id || null,
+      name: product.title || "Bundle automation",
+      status: "pending_setup",
+      install_type: "self_serve",
+      setup_status: "setup_required",
+      runtime_type: runtimeType,
+      runtime_webhook_url: runtimeWebhookUrl,
+      runtime_webhook_path: runtimeWebhookPath,
+      runtime_output_mode: product.runtime_output_mode || "standard",
+      n8n_workflow_id: product.n8n_workflow_id || null,
+      n8n_workflow_name: product.n8n_workflow_name || null,
+      runtime_status: "not_started",
+      run_frequency: isSubscription ? "monthly" : "manual",
+      schedule_status: "inactive",
+      schedule_anchor_at: null,
+      next_run_at: null,
+      health_status: "not_configured",
+      failure_count: 0,
+      last_error_message: null,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
+
+    if (automationError) {
+      console.error("Could not create bundle customer automation:", automationError.message);
+      continue;
+    }
+
+    if (!customerAutomation) continue;
+
+    await adminClient.from("automation_events").insert({
+      customer_automation_id: customerAutomation.id,
+      buyer_id: order.buyer_id,
+      automation_id: product.id,
+      order_id: order.id,
+      event_type: "bundle_payment_completed",
+      title: "Bundle workflow unlocked",
+      message: `${product.title || "This workflow"} is included in ${order.automation_title || "your bundle"}. Complete setup to start it.`,
+      created_by: "system",
+      created_at: nowIso(),
+    });
+  }
+
+  await adminClient.from("admin_notifications").insert({
+    notification_type: "paid_bundle_order",
+    title: "New paid bundle order",
+    message: `${order.buyer_name || order.buyer_email || "A buyer"} purchased ${order.automation_title || "a bundle"}.`,
+    related_order_id: order.id,
+    status: "unread",
+    created_at: nowIso(),
+  });
+}
+
+async function activateBundleSchedulesIfReady(order: any, subscriptionStatus = "") {
+  const status = cleanString(subscriptionStatus || order?.stripe_subscription_status).toLowerCase();
+
+  if (!subscriptionIsActiveStatus(status) && status) {
+    await safeUpdateCustomerAutomationsByOrder(order.id, {
+      schedule_status: "paused",
+      updated_at: nowIso(),
+    });
+    return;
+  }
+
+  const { data: rows, error } = await adminClient
+    .from("customer_automations")
+    .select("*, automations(runtime_webhook_url, n8n_webhook_url)")
+    .eq("order_id", order.id);
+
+  if (error) {
+    console.warn("Could not load bundle customer automations:", error.message);
+    return;
+  }
+
+  for (const customerAutomation of rows || []) {
+    const automationProduct = one(customerAutomation.automations) || {};
+    const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automationProduct, order);
+    const ready = setupIsReady(customerAutomation) && Boolean(webhookUrl);
+
+    await adminClient
+      .from("customer_automations")
+      .update({
+        run_frequency: "monthly",
+        schedule_status: ready ? "active" : "inactive",
+        schedule_anchor_at: customerAutomation.schedule_anchor_at || null,
+        next_run_at: ready ? customerAutomation.next_run_at || nowIso() : customerAutomation.next_run_at || null,
+        updated_at: nowIso(),
+      })
+      .eq("id", customerAutomation.id);
+  }
+}
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const orderId = session.metadata?.order_id;
 
@@ -657,6 +825,20 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     paid_at: isPaid ? nowIso() : null,
     updated_at: nowIso(),
   });
+
+  if (order.order_type === "bundle" || order.bundle_id) {
+    await handlePaidBundleOrder(
+      {
+        ...order,
+        payment_status: isPaid ? "paid" : "pending",
+        stripe_subscription_status: subscriptionSnapshot.status || (isSubscription ? "active" : ""),
+      },
+      isPaid,
+      isSubscription,
+      subscriptionSnapshot.status || "active",
+    );
+    return;
+  }
 
   if (!isSubscription && isPaid) {
     await recordDeveloperEarningForOrder(
@@ -857,6 +1039,14 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     last_invoice_paid_at: nowIso(),
     updated_at: nowIso(),
   });
+
+  if (order.order_type === "bundle" || order.bundle_id) {
+    await activateBundleSchedulesIfReady(
+      { ...order, payment_status: "paid", stripe_subscription_status: subscriptionSnapshot.status || "active" },
+      subscriptionSnapshot.status || "active",
+    );
+    return;
+  }
 
   const invoicePaymentIntentId =
     typeof (invoice as any).payment_intent === "string" ? (invoice as any).payment_intent : "";

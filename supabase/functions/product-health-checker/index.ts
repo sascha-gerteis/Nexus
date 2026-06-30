@@ -11,6 +11,8 @@ const N8N_API_KEY = Deno.env.get("N8N_API_KEY") || "";
 const NEXUS_RUNTIME_SECRET = Deno.env.get("NEXUS_RUNTIME_SECRET") || "";
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
+const PASSING_TECHNICAL_STATUSES = new Set(["passed", "passed_with_expected_test_callback_error"]);
+const CHECKABLE_PRODUCT_STATUSES = ["live", "active", "published"];
 
 function cleanString(value: unknown) {
   return String(value ?? "").trim();
@@ -38,7 +40,7 @@ function nextCheckIso(from = new Date()) {
 }
 
 function isPassingWorkflowTest(value: unknown) {
-  return ["passed", "passed_with_expected_test_callback_error"].includes(lower(value));
+  return PASSING_TECHNICAL_STATUSES.has(lower(value));
 }
 
 function isDue(product: any) {
@@ -111,6 +113,114 @@ async function n8nRequest(path: string) {
   }
 
   return data;
+}
+
+async function callTechnicalTest(automationId: string, mode: "start" | "latest", forceNew = false) {
+  if (!SUPABASE_URL || !NEXUS_RUNTIME_SECRET) {
+    throw new Error("Missing SUPABASE_URL or NEXUS_RUNTIME_SECRET, so Nexus cannot start the full technical test.");
+  }
+
+  const response = await fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/test-n8n-workflow`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nexus-runtime-secret": NEXUS_RUNTIME_SECRET,
+    },
+    body: JSON.stringify({
+      mode,
+      automation_id: automationId,
+      force_new: forceNew,
+      source: "product_health_checker",
+    }),
+  });
+
+  const text = await response.text();
+  let data: any = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    const message = data?.error || data?.message || data?.raw || `test-n8n-workflow responded with ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+async function runFullTechnicalCheck(product: any, dryRun = false) {
+  if (dryRun) {
+    return {
+      ok: true,
+      status: "warning",
+      reason: "Dry run only. A due live product would start or continue a full technical workflow test.",
+      details: {
+        dry_run: true,
+        n8n_last_test_status: product?.n8n_last_test_status || null,
+        n8n_last_tested_at: product?.n8n_last_tested_at || null,
+      },
+    };
+  }
+
+  try {
+    const currentlyRunning = lower(product?.n8n_last_test_status) === "running";
+    let data: any;
+    let mode: "start" | "latest" = currentlyRunning ? "latest" : "start";
+
+    try {
+      data = await callTechnicalTest(product.id, mode, mode === "start");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (mode === "latest" && /no test run found/i.test(message)) {
+        mode = "start";
+        data = await callTechnicalTest(product.id, mode, true);
+      } else {
+        throw error;
+      }
+    }
+
+    const status = lower(data?.status || data?.run_status);
+    const ok = PASSING_TECHNICAL_STATUSES.has(status);
+
+    if (status === "running") {
+      return {
+        ok: true,
+        status: "warning",
+        reason: data?.message || "Full technical workflow test is running.",
+        details: {
+          mode,
+          test_run_id: data?.test_run_id || null,
+          execution_id: data?.execution_id || null,
+          status,
+          response: data,
+        },
+      };
+    }
+
+    return {
+      ok,
+      status: ok ? "passed" : "failed",
+      reason: data?.error_message || data?.message || (ok ? "Full technical workflow test passed." : "Full technical workflow test failed."),
+      details: {
+        mode,
+        test_run_id: data?.test_run_id || null,
+        execution_id: data?.execution_id || null,
+        status,
+        response: data,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: "failed",
+      reason: error instanceof Error ? error.message : "Full technical workflow test could not be started.",
+      details: {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    };
+  }
 }
 
 async function loadN8nWorkflow(product: any) {
@@ -232,30 +342,6 @@ function structuralStatus(product: any, workflow: any) {
     warnings.push("Nexus output callback node was not detected. Keep the final Nexus output node in the workflow.");
   }
 
-  if (lower(product?.n8n_last_test_status) === "running") {
-    return {
-      ok: true,
-      status: "warning",
-      reason: "A full technical check is currently running.",
-      details: {
-        n8n_last_test_status: product?.n8n_last_test_status || null,
-        n8n_last_tested_at: product?.n8n_last_tested_at || null,
-      },
-    };
-  }
-
-  if (!isPassingWorkflowTest(product?.n8n_last_test_status)) {
-    return {
-      ok: false,
-      status: "failed",
-      reason: product?.n8n_last_test_error || "Latest full technical test is not passing.",
-      details: {
-        n8n_last_test_status: product?.n8n_last_test_status || null,
-        n8n_last_tested_at: product?.n8n_last_tested_at || null,
-      },
-    };
-  }
-
   if (warnings.length) {
     return {
       ok: true,
@@ -271,11 +357,9 @@ function structuralStatus(product: any, workflow: any) {
   return {
     ok: true,
     status: "passed",
-    reason: "Hosted workflow structure and latest technical test look healthy.",
+    reason: "Hosted workflow structure looks healthy.",
     details: {
       node_count: workflow.nodes.length,
-      n8n_last_test_status: product?.n8n_last_test_status || null,
-      n8n_last_tested_at: product?.n8n_last_tested_at || null,
     },
   };
 }
@@ -288,7 +372,7 @@ async function insertHealthCheck(adminClient: any, product: any, result: any) {
   await adminClient.from("automation_health_checks").insert({
     automation_id: product.id,
     developer_id: product.developer_id || null,
-    check_type: "structural",
+    check_type: "technical",
     status: result.check_status,
     reason: result.reason,
     details: result.details || {},
@@ -308,12 +392,70 @@ async function notifyHealthFailure(adminClient: any, product: any, reason: strin
   });
 }
 
+async function recalculateBundlesForAutomation(adminClient: any, product: any, reason: string) {
+  const { data: affectedItems, error: itemError } = await adminClient
+    .from("automation_bundle_items")
+    .update({
+      status: "removed_by_health",
+      inactive_reason: reason || "Product failed automated health check.",
+      updated_at: nowIso(),
+    })
+    .eq("automation_id", product.id)
+    .eq("status", "active")
+    .select("bundle_id");
+
+  if (itemError) {
+    const message = String(itemError.message || "");
+    if (!/automation_bundle_items|schema cache|relation/i.test(message)) {
+      console.warn("Could not update bundle items after product health failure:", message);
+    }
+    return;
+  }
+
+  const bundleIds = [...new Set((affectedItems || []).map((item: any) => item.bundle_id).filter(Boolean))];
+
+  for (const bundleId of bundleIds) {
+    const { data: bundle } = await adminClient
+      .from("automation_bundles")
+      .select("id, status, min_active_items")
+      .eq("id", bundleId)
+      .maybeSingle();
+
+    if (!bundle) continue;
+
+    const { data: allItems } = await adminClient
+      .from("automation_bundle_items")
+      .select("status")
+      .eq("bundle_id", bundleId);
+
+    const includedCount = (allItems || []).length;
+    const activeItemCount = (allItems || []).filter((item: any) => item.status === "active").length;
+    const shouldPauseBundle = activeItemCount < Number(bundle.min_active_items || 1);
+
+    await adminClient
+      .from("automation_bundles")
+      .update({
+        included_count: includedCount,
+        active_item_count: activeItemCount,
+        status: shouldPauseBundle ? "paused" : bundle.status,
+        health_status: shouldPauseBundle ? "paused_by_health_check" : "warning",
+        health_last_failed_at: nowIso(),
+        health_failure_reason: shouldPauseBundle
+          ? "Bundle has fewer active workflows than the configured minimum."
+          : `${product.title || "An included workflow"} was removed from the bundle by health check.`,
+        last_recalculated_at: nowIso(),
+        updated_at: nowIso(),
+      })
+      .eq("id", bundleId);
+  }
+}
+
 async function persistHealthResult(adminClient: any, product: any, result: any, dryRun = false) {
   const checkedAt = result.checked_at || nowIso();
   const previousFailures = Number(product?.health_consecutive_failures || 0);
   const isFailure = result.check_status === "failed";
   const consecutiveFailures = isFailure ? previousFailures + 1 : 0;
-  const shouldPause = isFailure && lower(product?.status) === "live";
+  const shouldPause = isFailure && CHECKABLE_PRODUCT_STATUSES.includes(lower(product?.status));
   const healthStatus = shouldPause
     ? "paused_by_health_check"
     : result.check_status === "passed"
@@ -368,6 +510,12 @@ async function persistHealthResult(adminClient: any, product: any, result: any, 
       await notifyHealthFailure(adminClient, product, result.reason);
     } catch (error) {
       console.warn("Could not create product health notification:", error instanceof Error ? error.message : error);
+    }
+
+    try {
+      await recalculateBundlesForAutomation(adminClient, product, result.reason);
+    } catch (error) {
+      console.warn("Could not recalculate product bundles:", error instanceof Error ? error.message : error);
     }
   }
 
@@ -430,8 +578,17 @@ async function checkProduct(adminClient: any, product: any, dryRun = false) {
 
   const structure = structuralStatus(product, hosted.workflow);
   const credentials = credentialStatus(product, hosted.workflow);
-  const failed = [structure, credentials].find((item) => !item.ok);
-  const warning = [structure, credentials].find((item) => item.status === "warning");
+  const preflightFailed = [structure, credentials].find((item) => !item.ok);
+  const technical = preflightFailed
+    ? {
+      ok: false,
+      status: "skipped",
+      reason: "Full technical workflow test skipped because the product failed preflight checks.",
+      details: { preflight_failure: preflightFailed.reason },
+    }
+    : await runFullTechnicalCheck(product, dryRun);
+  const failed = [structure, credentials, technical].find((item) => !item.ok && item.status !== "skipped");
+  const warning = [structure, credentials, technical].find((item) => item.status === "warning");
   const status = failed ? "failed" : warning ? "warning" : "passed";
   const reason = failed?.reason || warning?.reason || "Product workflow health check passed.";
 
@@ -439,6 +596,7 @@ async function checkProduct(adminClient: any, product: any, dryRun = false) {
     { workflow_id: product.n8n_workflow_id },
     structure,
     credentials,
+    technical,
   );
   const result = {
     product_id: product.id,
@@ -458,7 +616,7 @@ async function loadDueProducts(adminClient: any, limit: number) {
   const { data, error } = await adminClient
     .from("automations")
     .select("*, developers(display_name, handle)")
-    .eq("status", "live")
+    .in("status", CHECKABLE_PRODUCT_STATUSES)
     .order("health_last_checked_at", { ascending: true, nullsFirst: true })
     .limit(limit);
 

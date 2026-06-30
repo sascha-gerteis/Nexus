@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260701-preview-balance">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -33,11 +33,13 @@
   <a href="/pages/admin/orders.html">Orders</a>
   <a href="/pages/admin/automations.html">Products</a>
   <a class="active" href="/pages/admin/product-form.html">Create Product</a>
+  <a href="/pages/admin/credentials.html">Credentials</a>
+  <a href="/pages/admin/make-imports.html">Import Assistant</a>
   <a href="/pages/admin/customer-automations.html">Cancellation Requests</a>
   <a href="/pages/admin/messages.html">Inquiries</a>
   <a href="/pages/admin/notifications.html">Notifications</a>
   <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
-  <a href="/pages/admin/waitlist.html">Developer Waitlist</a>
+  <a href="/pages/admin/waitlist.html">Developer Intake</a>
   <a href="/pages/admin/reviews.html">Reviews</a>
   <a href="/pages/admin/developer-profile.html">Developer Profile</a>
   <a href="/pages/marketplace/index.html">View Marketplace</a>
@@ -68,6 +70,14 @@
   </div>
 </section>
 
+      <section class="admin-product-runtime-panel" id="adminProductRuntimePanel" hidden>
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>Loading this product's run history and next scheduled output...</p>
+        </div>
+      </section>
+
       <form id="automationForm" class="product-editor-shell">
 
         <!-- =====================================================
@@ -88,6 +98,17 @@
               <div class="full">
                 <label>Developer / operator</label>
                 <select class="select" name="developer_id" id="developer_id" required></select>
+              </div>
+
+              <div class="full">
+                <label>Listing type</label>
+                <select class="select" name="listing_type" id="listingType" onchange="NexusAdminUI.syncListingType && NexusAdminUI.syncListingType()">
+                  <option value="standard">Standard product</option>
+                  <option value="custom_request">Custom automation request</option>
+                </select>
+                <small>
+                  Custom request listings skip checkout and send buyers to the intake form.
+                </small>
               </div>
 
               <div>
@@ -140,6 +161,7 @@
                 <label>Status</label>
                 <select class="select" name="status">
                   <option value="draft">Draft</option>
+                  <option value="pending_review">Pending review</option>
                   <option value="live">Live</option>
                   <option value="paused">Paused</option>
                   <option value="archived">Archived</option>
@@ -162,6 +184,16 @@
               <div>
                 <label>Setup type label</label>
                 <input class="input" name="setup_type" placeholder="Self-serve or guided">
+              </div>
+
+              <div class="full">
+                <label class="clean-checkbox">
+                  <input type="checkbox" name="guided_install_enabled">
+                  <span>Offer guided install at checkout</span>
+                </label>
+                <small>
+                  Nexus-owned products can offer guided install automatically. Enable this for operator/developer products when setup help is available. The optional setup fee below is charged only when the buyer chooses guided install.
+                </small>
               </div>
 
               <div>
@@ -204,7 +236,7 @@
       <span class="eyebrow">Step 2</span>
       <h2>Pricing</h2>
       <p>
-        Choose one currency and one price. Nexus handles USD/THB conversion and Stripe sync automatically.
+        Choose one currency and one price. Nexus handles currency conversion and Stripe sync automatically.
       </p>
     </div>
     <span class="accordion-icon">+</span>
@@ -232,15 +264,18 @@
             <option value="free_demo">Free demo</option>
           </select>
           <small>
-            Use â€œSetup fee onlyâ€ if this product is sold as a one-time setup/install service.
+            Use "Setup fee only" if this product is sold as a one-time setup/install service.
           </small>
         </div>
 
         <div>
           <label>Main currency</label>
           <select class="select" name="currency" id="simpleCurrency" onchange="NexusAdminUI.syncSimplePricingToHiddenFields()">
-            <option value="USD">USD</option>
             <option value="THB">THB</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="JPY">JPY</option>
           </select>
           <small>
             Buyers can still switch currency in checkout. Nexus converts automatically.
@@ -395,9 +430,6 @@
           </div>
         </section>
 
-       <!-- =====================================================
-     SECTION 4: CUSTOMER SETUP + CREDENTIALS
-====================================================== -->
 <!-- =====================================================
      SECTION 4: CUSTOMER SETUP + CREDENTIALS
 ====================================================== -->
@@ -416,7 +448,7 @@
   <div class="admin-accordion-body">
     <div class="product-editor-explain-card">
       <span class="pill blue">How this works</span>
-      <h3>Setup fields become the buyerâ€™s setup form.</h3>
+      <h3>Setup fields become the buyer's setup form.</h3>
       <p>
         These fields are shown after checkout for self-serve products. For Nexus Guided Install,
         use these fields only for non-sensitive business information. Do not ask buyers to paste passwords here.
@@ -602,13 +634,13 @@
         <label>Workflow platform</label>
         <select class="select" id="workflowProvider" onchange="NexusAdminUI.handleWorkflowProviderChange()">
           <option value="n8n">n8n - available now</option>
-          <option value="make" disabled>Make.com - coming soon</option>
-          <option value="zapier" disabled>Zapier - coming soon</option>
+          <option value="make">Make.com - beta import assistant</option>
+          <option value="zapier">Zapier - beta import assistant</option>
           <option value="pipedream" disabled>Pipedream - coming soon</option>
           <option value="manual">Manual / Nexus fulfilled</option>
         </select>
         <small>
-          n8n is active for launch. Make.com, Zapier, and other platforms are shown for roadmap clarity but are not enabled yet.
+          n8n is the hosted runtime. Make.com and Zapier workflows can be scanned and converted into n8n JSON before import.
         </small>
         <div id="workflowProviderNotice" class="runtime-import-result" style="margin-top:.75rem"></div>
       </div>
@@ -625,7 +657,38 @@
         </small>
       </div>
 
-      <div class="full">
+      <div class="full workflow-source-panel workflow-source-make hidden">
+        <div class="make-import-assistant">
+          <div class="make-import-head">
+            <div>
+              <h3 id="adminSourceImportAssistantTitle">Make.com import assistant</h3>
+              <p id="adminSourceImportAssistantCopy">Scan a Make blueprint, resolve unsupported module groups with HTTP substitutes, then import the generated n8n workflow.</p>
+            </div>
+            <span class="pill blue">Beta</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="full">
+              <label id="adminSourceBlueprintUploadLabel">Upload Make blueprint JSON</label>
+              <input class="input" type="file" id="adminMakeBlueprintFile" accept=".json,application/json">
+            </div>
+            <div class="full">
+              <label id="adminSourceBlueprintJsonLabel">Make blueprint JSON</label>
+              <textarea class="textarea code-textarea" id="adminMakeBlueprintJson" rows="7" placeholder="Paste exported Make.com blueprint JSON here..."></textarea>
+            </div>
+          </div>
+
+          <button class="btn btn-secondary btn-small" id="adminScanMakeBlueprintButton" type="button" onclick="NexusAdminUI.scanMakeBlueprint(this)">
+            Scan Make blueprint
+          </button>
+
+          <div id="adminMakeImportResult" class="runtime-import-result">
+            Optional for Make products. Resolved blueprints will fill the n8n workflow JSON field below.
+          </div>
+        </div>
+      </div>
+
+      <div class="full workflow-source-panel workflow-source-n8n">
         <label>Upload n8n workflow JSON file</label>
         <input
           class="input"
@@ -639,7 +702,7 @@
         </small>
       </div>
 
-      <div class="full">
+      <div class="full workflow-source-panel workflow-source-n8n">
         <label>n8n workflow JSON</label>
 
         <textarea
@@ -653,7 +716,7 @@
         </small>
       </div>
 
-      <div class="full">
+      <div class="full workflow-source-panel workflow-source-n8n">
         <div class="placeholder-scan-card product-editor-scan-card">
           <div>
             <h3>Scan workflow placeholders</h3>
@@ -689,6 +752,9 @@
           <button id="importN8nWorkflowButton" class="btn btn-primary btn-small" type="button" onclick="NexusAdminUI.importWorkflowToN8n()">
             Import / update n8n workflow
           </button>
+          <a class="btn btn-secondary btn-small" href="/pages/admin/credentials.html">
+            Manage credentials
+          </a>
 
           <div id="n8nImportResult" class="runtime-import-result">
             Ready. Upload/paste a workflow, then click Import. Nexus will save first if needed.
@@ -971,9 +1037,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
-  <script src="/assets/js/nexus-db.js?v=20260624-analytics"></script>
-  <script src="/assets/js/nexus-app.js?v=20260624-analytics"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260701-preview-balance"></script>
+<script src="/assets/js/nexus-db.js?v=20260701-preview-balance"></script>
+  <script src="/assets/js/nexus-app.js?v=20260701-preview-balance"></script>
   <script src="/assets/js/nexus-notice.js"></script>
 
  <script>
@@ -1008,6 +1074,20 @@
       }
     },
 
+    workflowEditorUrl(productId) {
+      const returnPath = `${location.pathname}${location.search}${location.hash}`;
+      return `/pages/workflow-editor/index.html?automation_id=${encodeURIComponent(productId)}&return=${encodeURIComponent(returnPath)}`;
+    },
+
+    openWorkflowEditor(productId = "") {
+      const id = productId || this.getCurrentProductId();
+      if (!id) {
+        this.toast("Import the workflow before opening the editor.");
+        return;
+      }
+      window.open(this.workflowEditorUrl(id), "_blank", "noopener");
+    },
+
     setResult(elementId, html) {
       const element = document.getElementById(elementId);
       if (element) element.innerHTML = html;
@@ -1017,8 +1097,131 @@
       if (window.NexusUI && typeof NexusUI.toast === "function") {
         NexusUI.toast(message);
       } else {
-        console.log(message);
+        const fallback = document.createElement("div");
+        fallback.className = "notice notice-warning";
+        fallback.textContent = message;
+        fallback.style.position = "fixed";
+        fallback.style.right = "18px";
+        fallback.style.bottom = "18px";
+        fallback.style.zIndex = "9999";
+        document.body.appendChild(fallback);
+        setTimeout(() => fallback.remove(), 5000);
       }
+    },
+
+    formatRuntimeDate(value) {
+      if (!value) return "Not scheduled";
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "Not scheduled";
+
+      return date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    },
+
+    runtimePillClass(status) {
+      const value = String(status || "").toLowerCase();
+
+      if (["success", "succeeded", "completed", "passed", "passed_with_expected_test_callback_error", "healthy"].includes(value)) return "pill green";
+      if (["failed", "error", "cancelled", "canceled", "paused_by_health_check"].includes(value)) return "pill red";
+      if (["running", "queued", "warning", "needs_recheck", "paused"].includes(value)) return "pill orange";
+
+      return "pill";
+    },
+
+    runtimeLabel(status, fallback = "No runs") {
+      return String(status || fallback || "No runs")
+        .replaceAll("_", " ")
+        .trim();
+    },
+
+    renderRuntimeSummaryHtml(product, summary = {}) {
+      const latestRun = summary.last_customer_run || null;
+      const latestRunAt = latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || summary.last_customer_run_at || "";
+      const nextRunAt = summary.next_run_at || "";
+      const technicalStatus = product?.n8n_last_test_status || summary.last_technical_run?.status || "not_tested";
+      const technicalAt = product?.n8n_last_tested_at || summary.last_technical_run?.finished_at || summary.last_technical_run?.created_at || "";
+      const healthStatus = NexusUI.workflowHealthStatus?.(product, summary) || product?.health_status || summary.last_health_check?.status || "unknown";
+      const healthAt = product?.health_last_checked_at || summary.last_health_check?.checked_at || product?.n8n_last_tested_at || summary.last_technical_run?.finished_at || "";
+      const activeCount = Number(summary.active_schedules || 0);
+      const monthlyCount = Number(summary.monthly_schedules || 0);
+      const dueCount = Number(summary.due_schedules || 0);
+
+      return `
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>
+            Track this product's customer executions, monthly schedule, technical run, and 30-minute health checks.
+          </p>
+        </div>
+
+        <div class="admin-runtime-summary-grid">
+          <div class="admin-runtime-summary-card">
+            <span>Next monthly run</span>
+            <strong>${this.escapeHtml(nextRunAt ? this.formatRuntimeDate(nextRunAt) : activeCount ? "Waiting for schedule" : "No active schedule")}</strong>
+            <small>${activeCount}/${monthlyCount} active monthly schedules · ${dueCount} due now</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Latest customer run</span>
+            <strong><span class="${this.runtimePillClass(latestRun?.status)}">${this.escapeHtml(this.runtimeLabel(latestRun?.status, "No runs"))}</span></strong>
+            <small>${this.escapeHtml(latestRunAt ? this.formatRuntimeDate(latestRunAt) : "No customer runs yet")}</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Technical check</span>
+            <strong><span class="${this.runtimePillClass(technicalStatus)}">${this.escapeHtml(this.runtimeLabel(technicalStatus, "not tested"))}</span></strong>
+            <small>${this.escapeHtml(technicalAt ? this.formatRuntimeDate(technicalAt) : "Not tested")}</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Health checker</span>
+            <strong><span class="${this.runtimePillClass(healthStatus)}">${this.escapeHtml(NexusUI.workflowHealthLabel?.(healthStatus) || this.runtimeLabel(healthStatus, "unknown"))}</span></strong>
+            <small>${this.escapeHtml(healthAt ? this.formatRuntimeDate(healthAt) : "Not checked yet")}</small>
+          </div>
+        </div>
+      `;
+    },
+
+    async renderRuntimeSummary(productId = "", product = null) {
+      const panel = document.getElementById("adminProductRuntimePanel");
+      const id = productId || this.getCurrentProductId();
+
+      if (!panel || !id || typeof NexusDB.getAdminProductRuntimeSummary !== "function") return;
+
+      panel.hidden = false;
+      panel.innerHTML = `
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>Loading this product's run history and next scheduled output...</p>
+        </div>
+      `;
+
+      const [productResult, summaryResult] = await Promise.all([
+        product ? Promise.resolve({ data: product, error: null }) : NexusDB.getAutomationById(id),
+        NexusDB.getAdminProductRuntimeSummary([id])
+      ]);
+
+      if (productResult.error || summaryResult.error) {
+        panel.innerHTML = `
+          <div>
+            <span class="eyebrow">Runtime</span>
+            <h2>Runs and schedule</h2>
+            <p>${this.escapeHtml(productResult.error?.message || summaryResult.error?.message || "Could not load runtime summary.")}</p>
+          </div>
+        `;
+        return;
+      }
+
+      this.currentSavedProduct = productResult.data || this.currentSavedProduct;
+      panel.innerHTML = this.renderRuntimeSummaryHtml(productResult.data || {}, summaryResult.data?.[id] || {});
     },
 
     setAccordionState(section, open) {
@@ -1034,7 +1237,7 @@
       }
 
       if (icon) {
-        icon.textContent = open ? "âˆ’" : "+";
+        icon.textContent = open ? "-" : "+";
       }
     },
 
@@ -1246,7 +1449,7 @@
       if (model === "setup_fee") {
         if (selectedCurrency === "THB") {
           if (setupThb) setupThb.value = price || "";
-        } else {
+        } else if (selectedCurrency === "USD") {
           if (setupUsd) setupUsd.value = price || "";
         }
 
@@ -1264,7 +1467,7 @@
       if (selectedCurrency === "THB") {
         if (priceThb) priceThb.value = price || "";
         if (setupThb) setupThb.value = setupFee || "";
-      } else {
+      } else if (selectedCurrency === "USD") {
         if (priceUsd) priceUsd.value = price || "";
         if (setupUsd) setupUsd.value = setupFee || "";
       }
@@ -1279,6 +1482,18 @@
         summary.textContent = price
           ? `Nexus will save a ${selectedCurrency} ${price} ${modelLabel}.${setupText}`
           : "Enter the main price amount.";
+      }
+    },
+
+    syncListingType() {
+      const listingType = document.getElementById("listingType");
+      const pricingType = document.getElementById("simplePricingType");
+
+      if (!listingType || !pricingType) return;
+
+      if (listingType.value === "custom_request") {
+        pricingType.value = "custom_quote";
+        this.syncSimplePricingToHiddenFields();
       }
     },
 
@@ -1387,7 +1602,7 @@
       const runtimeTypeElement = document.querySelector("[name='runtime_type']");
       const workflowProvider = String(document.getElementById("workflowProvider")?.value || "n8n");
 
-      if (workflowProvider === "n8n" && runtimeTypeElement) {
+      if ((workflowProvider === "n8n" || workflowProvider === "make" || workflowProvider === "zapier") && runtimeTypeElement) {
         runtimeTypeElement.value = "n8n_managed";
       }
 
@@ -1397,6 +1612,7 @@
 
         title,
         slug,
+        listing_type: String(formData.get("listing_type") || "standard"),
         category: String(formData.get("category") || ""),
         badge: String(formData.get("badge") || ""),
         icon: String(formData.get("icon") || "AI").slice(0, 3).toUpperCase(),
@@ -1405,7 +1621,10 @@
         featured: formData.get("featured") === "on",
 
         pricing_type: String(formData.get("pricing_type") || "custom_quote"),
-        currency: String(formData.get("currency") || "USD"),
+        currency: String(formData.get("currency") || "THB"),
+        guided_install_enabled:
+          String(formData.get("listing_type") || "standard") === "standard" &&
+          formData.get("guided_install_enabled") === "on",
 
         price: Number(formData.get("price") || 0),
         price_usd: Number(formData.get("price_usd") || 0),
@@ -1445,6 +1664,7 @@
         customizations: this.collectCustomizations(formData),
 
         runtime_type: String(formData.get("runtime_type") || existingProduct.runtime_type || "manual"),
+        workflow_source_platform: workflowProvider,
 
         runtime_webhook_url: existingProduct.runtime_webhook_url || "",
         runtime_webhook_path: existingProduct.runtime_webhook_path || "",
@@ -1544,6 +1764,7 @@
       }
 
       this.currentSavedProduct = product;
+      this.renderRuntimeSummary(product.id, product);
 
       const writeJsonField = (name, value) => {
         const element = document.querySelector(`[name="${name}"]`);
@@ -1558,9 +1779,29 @@
       writeJsonField("placeholder_validation_errors", product.placeholder_validation_errors || []);
       writeJsonField("n8n_workflow_json", product.n8n_workflow_json || null);
 
+      const makeBlueprint = document.getElementById("adminMakeBlueprintJson");
+      if (makeBlueprint) {
+        makeBlueprint.value = product.make_blueprint ? JSON.stringify(product.make_blueprint, null, 2) : makeBlueprint.value;
+      }
+
       const placeholderStatus = document.querySelector("[name='placeholder_validation_status']");
       if (placeholderStatus) {
         placeholderStatus.value = product.placeholder_validation_status || "not_checked";
+      }
+
+      if (product.n8n_import_status === "imported" && product.n8n_workflow_id) {
+        this.setResult("n8nImportResult", `
+          <div class="success">
+            <strong>Workflow imported.</strong><br>
+            Workflow ID: ${this.escapeHtml(product.n8n_workflow_id)}<br>
+            ${product.runtime_webhook_url || product.n8n_webhook_url ? `Webhook URL: ${this.escapeHtml(product.runtime_webhook_url || product.n8n_webhook_url)}` : "Webhook URL saved to product."}
+            <div style="margin-top:.75rem">
+              <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openWorkflowEditor('${this.escapeHtml(product.id || "")}')">
+                Edit workflow
+              </button>
+            </div>
+          </div>
+        `);
       }
 
       this.scanWorkflowPlaceholders();
@@ -1575,7 +1816,7 @@
 
       const provider = String(document.getElementById("workflowProvider")?.value || "n8n");
 
-      if (provider !== "n8n") {
+      if (provider !== "n8n" && provider !== "make") {
         this.toast("This workflow platform is coming soon.");
         if (result) {
           result.innerHTML = `
@@ -1652,11 +1893,19 @@
           : "";
 
         if (result) {
+          const workflowId = data?.workflow_id || data?.n8n_workflow_id || "";
           result.innerHTML = `
             <div class="success">
               <strong>Workflow imported.</strong><br>
-              Workflow ID: ${this.escapeHtml(data?.workflow_id || data?.n8n_workflow_id || "created/updated")}<br>
+              Workflow ID: ${this.escapeHtml(workflowId || "created/updated")}<br>
               Webhook URL: ${this.escapeHtml(data?.webhook_url || data?.runtime_webhook_url || "saved to product")}
+              ${workflowId ? `
+                <div style="margin-top:.75rem">
+                  <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openWorkflowEditor('${this.escapeHtml(savedProduct.id || "")}')">
+                    Edit workflow
+                  </button>
+                </div>
+              ` : ""}
             </div>
             ${warningHtml}
           `;
@@ -1697,13 +1946,256 @@
       }
     },
 
+    currentSourceImportPlatform() {
+      const provider = String(document.getElementById("workflowProvider")?.value || "make").toLowerCase();
+      return provider === "zapier" ? "zapier" : "make";
+    },
+
+    sourceImportLabel(platform = this.currentSourceImportPlatform()) {
+      return platform === "zapier" ? "Zapier workflow" : "Make blueprint";
+    },
+
+    readMakeBlueprint() {
+      const label = this.sourceImportLabel();
+      const raw = String(document.getElementById("adminMakeBlueprintJson")?.value || "").trim();
+      if (!raw) throw new Error(`Paste or upload a ${label} JSON first.`);
+
+      try {
+        return JSON.parse(raw);
+      } catch {
+        throw new Error(`${label} JSON is invalid.`);
+      }
+    },
+
+    makeImportSummaryHtml(data) {
+      const summary = data?.summary || {};
+      if (!summary || !Object.keys(summary).length) return "";
+
+      return `
+        <div class="make-import-summary-grid">
+          <article><span>Modules</span><strong>${this.escapeHtml(summary.module_count || 0)}</strong></article>
+          <article><span>Groups</span><strong>${this.escapeHtml(summary.group_count || 0)}</strong></article>
+          <article><span>Resolved</span><strong>${this.escapeHtml(summary.resolved_count || 0)}</strong></article>
+          <article class="${Number(summary.unresolved_count || 0) ? "attention" : ""}"><span>Needs substitute</span><strong>${this.escapeHtml(summary.unresolved_count || 0)}</strong></article>
+          <article><span>Confidence</span><strong>${this.escapeHtml(summary.confidence_percent || 0)}%</strong></article>
+        </div>
+      `;
+    },
+
+    makeUnresolvedGroupHtml(group, sessionId) {
+      const key = this.escapeHtml(group.source_module_key || "");
+
+      return `
+        <article class="make-module-card" data-admin-make-module-card="${key}">
+          <div class="make-module-card-head">
+            <div>
+              <strong>${this.escapeHtml(group.source_module_label || group.source_module || "Unsupported source step")}</strong>
+              <p>${this.escapeHtml(group.source_app || "Make")} ${group.source_action ? `| ${this.escapeHtml(group.source_action)}` : ""} | used ${this.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</p>
+            </div>
+            <span class="pill orange">HTTP substitute needed</span>
+          </div>
+          <details>
+            <summary><strong>Add HTTP substitute</strong></summary>
+            <div class="make-http-grid">
+              <input type="hidden" data-admin-make-field="session_id" value="${this.escapeHtml(sessionId)}">
+              <input type="hidden" data-admin-make-field="source_module_key" value="${key}">
+              <div><label>Method</label><select class="select" data-admin-make-field="method"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select></div>
+              <div><label>Credential provider</label><input class="input" data-admin-make-field="credential_provider" value="${this.escapeHtml(group.source_app || "custom")}"></div>
+              <div class="full"><label>HTTPS URL</label><input class="input" data-admin-make-field="url" placeholder="https://api.service.com/v1/resource"></div>
+              <div><label>Auth type</label><select class="select" data-admin-make-field="auth_type"><option value="bearer">Bearer credential</option><option value="none">No credential</option></select></div>
+              <div><label>n8n credential type</label><input class="input" data-admin-make-field="n8n_credential_type" value="httpBearerAuth"></div>
+              <div class="full"><label>Headers JSON</label><textarea class="textarea code-textarea" data-admin-make-field="headers" rows="3" placeholder='{"Accept":"application/json"}'></textarea></div>
+              <div class="full"><label>Body JSON</label><textarea class="textarea code-textarea" data-admin-make-field="body_json" rows="5" placeholder='{"example":"{{NEXUS_SETUP.field_name}}"}'></textarea></div>
+              <div class="full"><label>Notes</label><textarea class="textarea" data-admin-make-field="notes" rows="2"></textarea></div>
+            </div>
+            <div class="credential-action-row">
+              <button class="btn btn-primary btn-small" type="button" onclick="NexusAdminUI.saveMakeHttpSubstitute('${key}')">Save substitute & rescan</button>
+              <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.requestMakeSupport('${key}')">Request support</button>
+            </div>
+          </details>
+        </article>
+      `;
+    },
+
+    renderMakeImportResult(data) {
+      const root = document.getElementById("adminMakeImportResult");
+      if (!root) return;
+
+      if (!data) {
+        root.innerHTML = "Optional for Make products. Resolved blueprints will fill the n8n workflow JSON field below.";
+        return;
+      }
+
+      const unresolved = Array.isArray(data.unresolved) ? data.unresolved : [];
+      const resolved = Array.isArray(data.resolved) ? data.resolved : [];
+      const sessionId = data.session?.id || data.session_id || "";
+
+      root.innerHTML = `
+        <div class="${unresolved.length ? "runtime-import-result" : "success"}">
+          <strong>${data.generated_workflow_json || data.status === "converted" ? `${this.sourceImportLabel(data.source_platform || this.currentSourceImportPlatform())} converted.` : `${this.sourceImportLabel(data.source_platform || this.currentSourceImportPlatform())} scanned.`}</strong>
+          <p>${this.escapeHtml(data.message || "Review the Make conversion result below.")}</p>
+        </div>
+        ${this.makeImportSummaryHtml(data)}
+        ${resolved.length ? `
+          <details class="make-import-details">
+            <summary><strong>${resolved.length} resolved group${resolved.length === 1 ? "" : "s"}</strong></summary>
+            <div class="make-module-list compact">
+              ${resolved.map((group) => `<article><strong>${this.escapeHtml(group.source_module_label || group.source_module)}</strong><span>${this.escapeHtml(group.target_strategy || "mapped")} | used ${this.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</span></article>`).join("")}
+            </div>
+          </details>
+        ` : ""}
+        ${unresolved.length ? `<div class="make-module-list">${unresolved.map((group) => this.makeUnresolvedGroupHtml(group, sessionId)).join("")}</div>` : ""}
+      `;
+    },
+
+    async scanMakeBlueprint(button = null) {
+      const originalText = button?.textContent || "";
+      const sourcePlatform = this.currentSourceImportPlatform();
+      const sourceLabel = this.sourceImportLabel(sourcePlatform);
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Scanning...";
+      }
+
+      try {
+        const blueprint = this.readMakeBlueprint();
+        const runtimeType = document.querySelector("[name='runtime_type']");
+        if (runtimeType) runtimeType.value = "n8n_managed";
+
+        const savedProduct = await this.saveProductFromEditor({
+          silent: true,
+          syncStripe: false,
+          statusMessage: "Saving product before Make scan..."
+        });
+
+        const { data, error } = await NexusDB.scanMakeImport({
+          automation_id: savedProduct.id,
+          blueprint,
+          source_platform: sourcePlatform
+        });
+        if (error) throw new Error(error.message || `Could not scan ${sourceLabel}.`);
+
+        this.renderMakeImportResult(data);
+        if (data?.generated_workflow_json) {
+          document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
+          this.toast(`${sourceLabel} converted. Next: import/update hosted n8n workflow.`);
+        } else {
+          this.toast(data?.message || `${sourceLabel} scanned.`);
+        }
+
+        await this.refreshProductWorkflowFields(savedProduct.id);
+      } catch (error) {
+        this.toast(error.message || `Could not scan ${sourceLabel}.`);
+        this.renderMakeImportResult({ status: "failed", message: error.message || `Could not scan ${sourceLabel}.`, summary: {}, unresolved: [] });
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || `Scan ${sourceLabel}`;
+        }
+      }
+    },
+
+    collectMakeSubstitutePayload(sourceModuleKey) {
+      const card = document.querySelector(`[data-admin-make-module-card="${CSS.escape(sourceModuleKey)}"]`);
+      if (!card) throw new Error("Source step card was not found.");
+
+      const field = (name) => card.querySelector(`[data-admin-make-field="${name}"]`)?.value || "";
+      const parseJson = (name, fallback) => {
+        const raw = String(field(name) || "").trim();
+        if (!raw) return fallback;
+        try {
+          return JSON.parse(raw);
+        } catch {
+          throw new Error(`${name.replaceAll("_", " ")} must be valid JSON.`);
+        }
+      };
+
+      return {
+        session_id: field("session_id"),
+        source_module_key: field("source_module_key"),
+        source_platform: this.currentSourceImportPlatform(),
+        http_template: {
+          method: field("method"),
+          url: field("url"),
+          auth_type: field("auth_type"),
+          credential_provider: field("credential_provider"),
+          n8n_credential_type: field("n8n_credential_type"),
+          headers: parseJson("headers", {}),
+          body_json: parseJson("body_json", {})
+        },
+        notes: field("notes")
+      };
+    },
+
+    async saveMakeHttpSubstitute(sourceModuleKey) {
+      try {
+        const { data, error } = await NexusDB.saveMakeHttpSubstitute(this.collectMakeSubstitutePayload(sourceModuleKey));
+        if (error) throw new Error(error.message || "Could not save HTTP substitute.");
+
+        this.renderMakeImportResult(data);
+        if (data?.generated_workflow_json) {
+          document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
+        }
+        this.toast(data?.message || "HTTP substitute saved.");
+      } catch (error) {
+        this.toast(error.message || "Could not save HTTP substitute.");
+      }
+    },
+
+    async requestMakeSupport(sourceModuleKey) {
+      const card = document.querySelector(`[data-admin-make-module-card="${CSS.escape(sourceModuleKey)}"]`);
+      const sessionId = card?.querySelector(`[data-admin-make-field="session_id"]`)?.value || "";
+      const notes = card?.querySelector(`[data-admin-make-field="notes"]`)?.value || "";
+
+      try {
+        const { data, error } = await NexusDB.requestMakeImportSupport({
+          session_id: sessionId,
+          source_module_key: sourceModuleKey,
+          notes,
+          source_platform: this.currentSourceImportPlatform()
+        });
+        if (error) throw new Error(error.message || "Could not request support.");
+        this.toast(data?.message || "Support request created.");
+      } catch (error) {
+        this.toast(error.message || "Could not request support.");
+      }
+    },
+
     handleWorkflowProviderChange() {
       const provider = String(document.getElementById("workflowProvider")?.value || "n8n");
       const runtimeType = document.querySelector("[name='runtime_type']");
       const notice = document.getElementById("workflowProviderNotice");
       const importButton = document.getElementById("importN8nWorkflowButton");
       const upload = document.getElementById("n8nWorkflowFile");
+      const makeUpload = document.getElementById("adminMakeBlueprintFile");
       const workflowTextarea = document.querySelector("[name='n8n_workflow_json']");
+      const makeSections = document.querySelectorAll(".workflow-source-make");
+      const n8nSections = document.querySelectorAll(".workflow-source-n8n");
+      const sourcePlatform = provider === "zapier" ? "zapier" : "make";
+      const sourceLabel = sourcePlatform === "zapier" ? "Zapier workflow" : "Make blueprint";
+      const sourceTitle = sourcePlatform === "zapier" ? "Zapier import assistant" : "Make.com import assistant";
+      const sourceCopy = sourcePlatform === "zapier"
+        ? "Scan a Zapier-style workflow JSON, resolve unsupported app/action groups with HTTP substitutes, then import the generated n8n workflow."
+        : "Scan a Make blueprint, resolve unsupported module groups with HTTP substitutes, then import the generated n8n workflow.";
+      const sourceTitleNode = document.getElementById("adminSourceImportAssistantTitle");
+      const sourceCopyNode = document.getElementById("adminSourceImportAssistantCopy");
+      const sourceUploadLabel = document.getElementById("adminSourceBlueprintUploadLabel");
+      const sourceJsonLabel = document.getElementById("adminSourceBlueprintJsonLabel");
+      const sourceJson = document.getElementById("adminMakeBlueprintJson");
+      const sourceScanButton = document.getElementById("adminScanMakeBlueprintButton");
+
+      const showMake = provider === "make" || provider === "zapier";
+      const showN8n = provider === "n8n";
+      makeSections.forEach((section) => section.classList.toggle("hidden", !showMake));
+      n8nSections.forEach((section) => section.classList.toggle("hidden", !showN8n));
+      if (sourceTitleNode) sourceTitleNode.textContent = sourceTitle;
+      if (sourceCopyNode) sourceCopyNode.textContent = sourceCopy;
+      if (sourceUploadLabel) sourceUploadLabel.textContent = `Upload ${sourceLabel} JSON`;
+      if (sourceJsonLabel) sourceJsonLabel.textContent = `${sourceLabel} JSON`;
+      if (sourceJson) sourceJson.placeholder = provider === "zapier"
+        ? "Paste Zapier workflow JSON with trigger and steps here..."
+        : "Paste exported Make.com blueprint JSON here...";
+      if (sourceScanButton) sourceScanButton.textContent = `Scan ${sourceLabel}`;
 
       if (provider === "n8n") {
         if (runtimeType) runtimeType.value = "n8n_managed";
@@ -1716,6 +2208,23 @@
         }
         if (importButton) importButton.disabled = false;
         if (upload) upload.disabled = false;
+        if (makeUpload) makeUpload.disabled = true;
+        if (workflowTextarea) workflowTextarea.disabled = false;
+        return;
+      }
+
+      if (provider === "make" || provider === "zapier") {
+        if (runtimeType) runtimeType.value = "n8n_managed";
+        if (notice) {
+          notice.innerHTML = `
+            <div class="runtime-import-result">
+              <strong>${this.escapeHtml(provider === "zapier" ? "Zapier assistant enabled." : "Make assistant enabled.")}</strong> Scan a ${this.escapeHtml(sourceLabel)} below. Nexus will generate n8n JSON only after every source step group is resolved.
+            </div>
+          `;
+        }
+        if (importButton) importButton.disabled = false;
+        if (upload) upload.disabled = true;
+        if (makeUpload) makeUpload.disabled = false;
         if (workflowTextarea) workflowTextarea.disabled = false;
         return;
       }
@@ -1731,6 +2240,7 @@
         }
         if (importButton) importButton.disabled = true;
         if (upload) upload.disabled = true;
+        if (makeUpload) makeUpload.disabled = true;
         if (workflowTextarea) workflowTextarea.disabled = true;
         return;
       }
@@ -1745,6 +2255,7 @@
       }
       if (importButton) importButton.disabled = true;
       if (upload) upload.disabled = true;
+      if (makeUpload) makeUpload.disabled = true;
       if (workflowTextarea) workflowTextarea.disabled = true;
     },
 
@@ -1754,7 +2265,11 @@
 
       if (!workflowProvider) return;
 
-      if (runtimeType === "n8n_managed") {
+      if (this.currentSavedProduct?.workflow_source_platform === "zapier") {
+        workflowProvider.value = "zapier";
+      } else if (this.currentSavedProduct?.workflow_source_platform === "make" || this.currentSavedProduct?.make_blueprint) {
+        workflowProvider.value = "make";
+      } else if (runtimeType === "n8n_managed") {
         workflowProvider.value = "n8n";
       } else {
         workflowProvider.value = "manual";
@@ -2086,7 +2601,7 @@
         else if (source === "secret") this.addUnique(detected.secret, key);
         else if (source === "customer") this.addUnique(detected.customer, key);
         else if (source === "system") this.addUnique(detected.system, key);
-        else this.addUnique(detected.unknown, `${placeholder} â†’ ${source}.${key}`);
+        else this.addUnique(detected.unknown, `${placeholder} -> ${source}.${key}`);
 
         detected.custom = detected.custom.filter(item => item !== placeholder);
       }
@@ -2303,8 +2818,31 @@
       runtimeType.addEventListener("change", () => {
         const provider = document.getElementById("workflowProvider");
         if (!provider) return;
-        provider.value = runtimeType.value === "n8n_managed" ? "n8n" : "manual";
+        if (runtimeType.value !== "n8n_managed") {
+          provider.value = "manual";
+        } else if (!["make", "zapier"].includes(provider.value)) {
+          provider.value = "n8n";
+        }
         NexusAdminUI.handleWorkflowProviderChange();
+      });
+    }
+
+    const makeUpload = document.getElementById("adminMakeBlueprintFile");
+    const makeTextarea = document.getElementById("adminMakeBlueprintJson");
+
+    if (makeUpload && makeTextarea) {
+      makeUpload.addEventListener("change", async function () {
+        const file = makeUpload.files && makeUpload.files[0];
+        if (!file) return;
+
+        try {
+          makeTextarea.value = JSON.stringify(JSON.parse(await file.text()), null, 2);
+          NexusAdminUI.handleWorkflowProviderChange();
+          NexusUI.toast(`${NexusAdminUI.sourceImportLabel()} loaded. Scan it next.`);
+        } catch (error) {
+          NexusUI.toast(`Invalid JSON file. Please export or prepare the ${NexusAdminUI.sourceImportLabel()} again.`);
+          makeUpload.value = "";
+        }
       });
     }
 
@@ -2354,6 +2892,7 @@
     setTimeout(() => {
       NexusAdminUI.inferWorkflowProviderFromRuntime();
       NexusAdminUI.scanWorkflowPlaceholders();
+      NexusAdminUI.renderRuntimeSummary();
     }, 700);
   });
 </script>

@@ -53,6 +53,8 @@ const NexusDB = (() => {
   const QUERY_CACHE_TTL_MS = 20 * 1000;
   const PUBLIC_AUTOMATION_CARD_SELECT = `
     id,
+    created_at,
+    updated_at,
     title,
     slug,
     category,
@@ -79,11 +81,23 @@ const NexusDB = (() => {
     n8n_workflow_id,
     n8n_import_status,
     n8n_last_test_status,
+    n8n_last_tested_at,
+    health_status,
+    health_last_checked_at,
     best_for,
     outputs,
     required_tools,
     developer_id,
     developers(id, display_name, avatar_letter, type, rating, handle)
+  `;
+  const PUBLIC_BUNDLE_SELECT = `
+    *,
+    automation_bundle_items(
+      *,
+      automations!automation_bundle_items_automation_id_fkey(
+        ${PUBLIC_AUTOMATION_CARD_SELECT}
+      )
+    )
   `;
   let sessionCache = { result: null, promise: null, expiresAt: 0 };
   const profileCache = new Map();
@@ -617,6 +631,370 @@ const NexusDB = (() => {
 
       return filterPublicAutomationsResult(fallbackResult);
     }, 30 * 1000);
+  }
+
+  function normalizeBundleResult(result) {
+    if (!result || result.error) return result;
+
+    const single = (value) => Array.isArray(value) ? value[0] : value;
+    const derivedHealth = (product) => {
+      const health = String(product?.health_status || "").toLowerCase();
+      const test = String(product?.n8n_last_test_status || "").toLowerCase();
+
+      if (["healthy", "warning", "failed", "paused_by_health_check", "skipped"].includes(health)) {
+        return health;
+      }
+
+      if (["passed", "passed_with_expected_test_callback_error", "success", "succeeded", "completed"].includes(test)) {
+        return "healthy";
+      }
+
+      if (health === "needs_recheck") return "needs_recheck";
+
+      if (["failed", "error", "cancelled", "canceled"].includes(test)) {
+        return "failed";
+      }
+
+      if (product?.n8n_workflow_id || product?.n8n_workflow_json) return "needs_recheck";
+
+      return health || "unknown";
+    };
+    const bundleHealth = (bundle, products) => {
+      if (!products.length) return bundle.health_status || "unknown";
+
+      const statuses = products.map(derivedHealth);
+      if (statuses.some((status) => ["paused_by_health_check", "failed"].includes(status))) return "warning";
+      if (statuses.some((status) => status === "needs_recheck")) return "needs_recheck";
+      if (statuses.every((status) => status === "healthy")) return "healthy";
+
+      return bundle.health_status || statuses[0] || "unknown";
+    };
+
+    const rows = Array.isArray(result.data)
+      ? result.data
+      : result.data
+        ? [result.data]
+        : [];
+
+    const data = rows.map((bundle) => {
+      const items = Array.isArray(bundle.automation_bundle_items)
+        ? bundle.automation_bundle_items
+            .map((item) => ({
+              ...item,
+              automations: single(item.automations)
+            }))
+            .filter((item) => item && item.status === "active" && item.automations)
+            .filter((item) => ["live", "active", "published"].includes(String(item.automations.status || "").toLowerCase()))
+            .sort((a, b) => Number(a.position || 0) - Number(b.position || 0))
+        : [];
+
+      const products = items.map((item) => item.automations).filter(Boolean);
+      const firstProduct = products[0] || {};
+      const developers = {
+        id: "",
+        display_name: "Nexus bundle",
+        avatar_letter: "NX",
+        type: "Curated product pack",
+        rating: bundle.rating || 5,
+        handle: "nexus"
+      };
+
+      const discountMultiplier = 1 - Math.max(0, Math.min(Number(bundle.discount_percent || 0), 95)) / 100;
+      const summedUsd = products.reduce((total, product) => {
+        const currency = String(product.currency || "USD").toUpperCase();
+        const amount = Number(product.price_usd || (currency === "USD" ? product.price : 0) || 0);
+        return total + amount;
+      }, 0);
+      const summedThb = products.reduce((total, product) => {
+        const currency = String(product.currency || "").toUpperCase();
+        const amount = Number(product.price_thb || (currency === "THB" ? product.price : 0) || 0);
+        return total + amount;
+      }, 0);
+      const priceUsd = Number(bundle.price_usd || bundle.discounted_amount_usd || 0) || Math.round(summedUsd * discountMultiplier * 100) / 100;
+      const priceThb = Number(bundle.price_thb || 0) || Math.round(summedThb * discountMultiplier);
+      const price = Number(bundle.price_override || bundle.price || 0) || priceUsd || priceThb || 0;
+
+      return {
+        ...bundle,
+        is_bundle: true,
+        item_type: "bundle",
+        automation_bundle_items: items,
+        bundle_products: products,
+        developers,
+        developer_id: "",
+        listing_type: "bundle",
+        pricing_type: bundle.pricing_type || firstProduct.pricing_type || "monthly",
+        price,
+        price_usd: priceUsd,
+        price_thb: priceThb,
+        currency: bundle.currency || "USD",
+        delivery_time: `${products.length || bundle.active_item_count || 0} included workflows`,
+        required_tools: products.flatMap((product) => Array.isArray(product.required_tools) ? product.required_tools : []),
+        outputs: products.flatMap((product) => Array.isArray(product.outputs) ? product.outputs : []),
+        who_it_is_for: products.flatMap((product) => Array.isArray(product.who_it_is_for) ? product.who_it_is_for : []),
+        guided_install_enabled: false,
+        health_status: bundleHealth(bundle, products)
+      };
+    });
+
+    return Array.isArray(result.data)
+      ? { ...result, data }
+      : { ...result, data: data[0] || null };
+  }
+
+  async function hydrateBundleProducts(bundle) {
+    if (!bundle?.id) return bundle;
+
+    const hasProducts = Array.isArray(bundle.bundle_products) && bundle.bundle_products.length > 0;
+    if (hasProducts) return bundle;
+
+    const normalizeWithItems = (items) => {
+      const normalized = normalizeBundleResult({
+        data: {
+          ...bundle,
+          automation_bundle_items: items
+        },
+        error: null
+      });
+
+      return normalized.data || bundle;
+    };
+
+    const result = await supabase
+      .from("automation_bundle_items")
+      .select(`
+        *,
+        automations!automation_bundle_items_automation_id_fkey(
+          ${PUBLIC_AUTOMATION_CARD_SELECT}
+        )
+      `)
+      .eq("bundle_id", bundle.id)
+      .eq("status", "active")
+      .order("position", { ascending: true });
+
+    if (!result.error && Array.isArray(result.data) && result.data.some((item) => item?.automations)) {
+      return normalizeWithItems(result.data);
+    }
+
+    const rawItemsResult = await supabase
+      .from("automation_bundle_items")
+      .select("*")
+      .eq("bundle_id", bundle.id)
+      .eq("status", "active")
+      .order("position", { ascending: true });
+
+    if (rawItemsResult.error || !Array.isArray(rawItemsResult.data) || !rawItemsResult.data.length) {
+      return bundle;
+    }
+
+    const automationIds = rawItemsResult.data
+      .map((item) => item.automation_id)
+      .filter(Boolean);
+
+    if (!automationIds.length) return bundle;
+
+    const productsResult = await supabase
+      .from("automations")
+      .select(PUBLIC_AUTOMATION_CARD_SELECT)
+      .in("id", automationIds);
+
+    if (productsResult.error || !Array.isArray(productsResult.data) || !productsResult.data.length) {
+      return bundle;
+    }
+
+    const productById = new Map(productsResult.data.map((product) => [product.id, product]));
+    const hydratedItems = rawItemsResult.data
+      .map((item) => ({
+        ...item,
+        automations: productById.get(item.automation_id) || null
+      }))
+      .filter((item) => item.automations);
+
+    return normalizeWithItems(hydratedItems);
+  }
+
+  async function listLiveBundles() {
+    return cachedQuery("bundles:live:cards", async () => {
+      const functionResult = await callNexusFunction("admin-bundles", {
+        action: "list_public_bundles"
+      });
+
+      if (!functionResult.error && Array.isArray(functionResult.data?.bundles)) {
+        const functionNormalized = normalizeBundleResult({
+          data: functionResult.data.bundles,
+          error: null
+        });
+
+        return {
+          data: Array.isArray(functionNormalized.data) ? functionNormalized.data : [],
+          error: null
+        };
+      }
+
+      const result = await supabase
+        .from("automation_bundles")
+        .select(PUBLIC_BUNDLE_SELECT)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (result.error && isSchemaError(result.error)) {
+        return { data: [], error: null, missingSchema: true };
+      }
+
+      const normalized = normalizeBundleResult(result);
+      const bundles = Array.isArray(normalized.data)
+        ? await Promise.all(normalized.data.map((bundle) => hydrateBundleProducts(bundle)))
+        : [];
+
+      return { ...normalized, data: bundles };
+    }, 30 * 1000);
+  }
+
+  async function getBundleBySlug(slug) {
+    return cachedQuery(`bundle:slug:${slug}`, async () => {
+      const functionResult = await callNexusFunction("admin-bundles", {
+        action: "get_public_bundle",
+        slug
+      });
+
+      if (!functionResult.error && functionResult.data?.bundle) {
+        const functionNormalized = normalizeBundleResult({
+          data: functionResult.data.bundle,
+          error: null
+        });
+
+        return {
+          data: functionNormalized.data || functionResult.data.bundle,
+          error: null
+        };
+      }
+
+      const result = await supabase
+        .from("automation_bundles")
+        .select(PUBLIC_BUNDLE_SELECT)
+        .eq("slug", slug)
+        .maybeSingle();
+
+      if (result.error && isSchemaError(result.error)) {
+        return { data: null, error: result.error, missingSchema: true };
+      }
+
+      const normalized = normalizeBundleResult(result);
+      const hydrated = await hydrateBundleProducts(normalized.data);
+
+      return { ...normalized, data: hydrated };
+    }, 30 * 1000);
+  }
+
+  async function listAllBundles() {
+    const result = await supabase
+      .from("automation_bundles")
+      .select(PUBLIC_BUNDLE_SELECT)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    const normalized = normalizeBundleResult(result);
+    const bundles = Array.isArray(normalized.data)
+      ? await Promise.all(normalized.data.map((bundle) => hydrateBundleProducts(bundle)))
+      : [];
+
+    return { ...normalized, data: bundles };
+  }
+
+  async function upsertBundle(payload) {
+    clearQueryCache();
+
+    return supabase
+      .from("automation_bundles")
+      .upsert(payload, { onConflict: "id" })
+      .select()
+      .single();
+  }
+
+  async function saveBundleItems(bundleId, automationIds = []) {
+    clearQueryCache();
+
+    const { error: deleteError } = await supabase
+      .from("automation_bundle_items")
+      .delete()
+      .eq("bundle_id", bundleId);
+
+    if (deleteError) return { data: null, error: deleteError };
+
+    const rows = automationIds
+      .filter(Boolean)
+      .map((automationId, index) => ({
+        bundle_id: bundleId,
+        automation_id: automationId,
+        position: index + 1,
+        status: "active",
+        include_in_price: true
+      }));
+
+    if (!rows.length) return { data: [], error: null };
+
+    const insertResult = await supabase
+      .from("automation_bundle_items")
+      .insert(rows)
+      .select();
+
+    if (insertResult.error) return insertResult;
+
+    const verifyResult = await supabase
+      .from("automation_bundle_items")
+      .select("automation_id,status")
+      .eq("bundle_id", bundleId)
+      .eq("status", "active");
+
+    if (verifyResult.error) return verifyResult;
+
+    const expected = new Set(automationIds.filter(Boolean));
+    const actual = new Set((verifyResult.data || []).map((item) => item.automation_id).filter(Boolean));
+    const missing = [...expected].filter((id) => !actual.has(id));
+
+    if (missing.length) {
+      return {
+        data: verifyResult.data || [],
+        error: {
+          message: `Bundle item save did not persist ${missing.length} selected product${missing.length === 1 ? "" : "s"}.`
+        }
+      };
+    }
+
+    return insertResult;
+  }
+
+  async function saveAdminBundle(bundle, automationIds = []) {
+    clearQueryCache();
+
+    return callNexusFunction("admin-bundles", {
+      action: "save_bundle",
+      bundle,
+      automation_ids: automationIds
+    });
+  }
+
+  async function listAdminBundles() {
+    const result = await callNexusFunction("admin-bundles", {
+      action: "list_bundles"
+    });
+
+    if (result.error) return result;
+
+    return {
+      data: result.data?.bundles || [],
+      error: null
+    };
+  }
+
+  async function listBundleCandidateAutomations() {
+    return supabase
+      .from("automations")
+      .select(PUBLIC_AUTOMATION_CARD_SELECT)
+      .eq("status", "live")
+      .order("title", { ascending: true })
+      .limit(100);
   }
 
   async function countRows(table, configureQuery, cacheKey = table) {
@@ -2594,6 +2972,14 @@ async function listMakeImportMappings(payload = {}) {
     updateAutomation,
     rejectAutomationForEdits,
     deleteAutomation,
+    listLiveBundles,
+    getBundleBySlug,
+    listAllBundles,
+    upsertBundle,
+    saveBundleItems,
+    saveAdminBundle,
+    listAdminBundles,
+    listBundleCandidateAutomations,
 
     listDevelopers,
     listAllDevelopers,

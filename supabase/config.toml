@@ -31,6 +31,9 @@ verify_jwt = false
 [functions.product-health-checker]
 verify_jwt = false
 
+[functions.test-n8n-workflow]
+verify_jwt = false
+
 [functions.make-import-assistant]
 verify_jwt = false
 

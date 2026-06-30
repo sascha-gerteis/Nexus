@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://vzgblkghicyozoxkljga.supabase.co">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260628-recommendation-bottom">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260701-preview-balance">
 
   <title>Nexus | Business Automation Marketplace for Workflows and AI Agents</title>
   <meta name="description" content="Nexus helps businesses solve operational bottlenecks with ready-made workflow automations, AI agents, reporting systems, guided setup, and custom automation requests.">
@@ -243,6 +243,47 @@
       </div>
     </section>
 
+    <!-- BUNDLES -->
+    <section class="section home-bundles-section">
+      <div class="container">
+        <div class="section-head">
+          <h2>Use bundles when one workflow is not enough.</h2>
+          <p>
+            Some business problems need a connected set of automations. Nexus bundles group related products
+            into one clear package so buyers can choose an outcome instead of hunting for every workflow manually.
+          </p>
+        </div>
+
+        <div class="grid-3">
+          <article class="card">
+            <span class="eyebrow">Packaged outcome</span>
+            <h3>Buy the complete workflow set</h3>
+            <p>
+              A bundle can include reports, monitoring, competitor tracking, and follow-up workflows that work
+              toward the same business goal.
+            </p>
+          </article>
+
+          <article class="card">
+            <span class="eyebrow">Clear contents</span>
+            <h3>See every included automation</h3>
+            <p>
+              Bundle pages show the included products, their setup paths, and what each workflow adds to the package.
+            </p>
+          </article>
+
+          <article class="card">
+            <span class="eyebrow">Maintained package</span>
+            <h3>Broken workflows do not sink the pack</h3>
+            <p>
+              If one included workflow is paused by health checks, Nexus can remove that item and keep the bundle
+              usable with the remaining active automations.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <!-- MARKET PROBLEM -->
     <section class="section home-problem-section">
       <div class="container">
@@ -417,7 +458,7 @@
               <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
             </div>
             <div class="card-actions">
-              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('ai-social-media-reports') : location.href='/pages/checkout/index.html?slug=ai-social-media-reports&step=setup'">Preview</button>
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('ai-social-media-reports') : location.href='/pages/checkout/index.html?slug=ai-social-media-reports&step=setup'">View output</button>
               <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=ai-social-media-reports&step=setup">Buy</a>
             </div>
           </article>
@@ -446,7 +487,7 @@
               <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
             </div>
             <div class="card-actions">
-              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('competitor-report') : location.href='/pages/checkout/index.html?slug=competitor-report&step=setup'">Preview</button>
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('competitor-report') : location.href='/pages/checkout/index.html?slug=competitor-report&step=setup'">View output</button>
               <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=competitor-report&step=setup">Buy</a>
             </div>
           </article>
@@ -475,7 +516,7 @@
               <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
             </div>
             <div class="card-actions">
-              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('inquiry-report') : location.href='/pages/checkout/index.html?slug=inquiry-report&step=setup'">Preview</button>
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('inquiry-report') : location.href='/pages/checkout/index.html?slug=inquiry-report&step=setup'">View output</button>
               <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=inquiry-report&step=setup">Buy</a>
             </div>
           </article>
@@ -549,7 +590,7 @@
                 </div>
               </div>
               <div class="home-product-actions">
-                <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('social-listening-intelligence') : location.href='/pages/checkout/index.html?slug=social-listening-intelligence&step=setup'">Preview</button>
+                <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('social-listening-intelligence') : location.href='/pages/checkout/index.html?slug=social-listening-intelligence&step=setup'">View output</button>
                 <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=social-listening-intelligence&step=setup">Buy</a>
               </div>
             </div>
@@ -817,6 +858,10 @@
         <a href="/pages/marketplace/index.html">Marketplace</a>
         <a href="/pages/developers/index.html">Developers</a>
         <a href="/pages/developers/waitlist.html">Apply as developer</a>
+        <a href="/pages/product-standards/index.html">Standards</a>
+        <a href="/pages/buyer-protection/index.html">Protection</a>
+        <a href="/pages/security-access/index.html">Security</a>
+        <a href="/pages/calculator/index.html">Calculator</a>
         <a href="/pages/about/index.html">About</a>
         <a href="/pages/contact/index.html">Contact</a>
         <a href="/pages/legal/privacy.html">Privacy</a>
@@ -833,11 +878,22 @@
 
   <div class="toast" id="toast"></div>
 
-  <script defer src="/assets/js/nexus-ui.js?v=20260628-recommendation-bottom"></script>
-<script defer src="/assets/js/nexus-db.js?v=20260628-recommendation-bottom"></script>
+  <script defer src="/assets/js/nexus-ui.js?v=20260701-preview-balance"></script>
+<script defer src="/assets/js/nexus-db.js?v=20260701-preview-balance"></script>
 <script defer src="/assets/js/nexus-buyer-nav.js"></script>
-<script defer src="/assets/js/nexus-app.js?v=20260628-recommendation-bottom"></script>
+<script defer src="/assets/js/nexus-app.js?v=20260701-preview-balance"></script>
 <script>
+  const HOME_RECOMMENDATION_MIN_SCORE = 12;
+  const HOME_RECOMMENDATION_MIN_SCORE_WITH_DOMAIN = 8;
+  const HOME_RECOMMENDATION_DOMAINS = [
+    { key: "reporting", label: "Reporting", terms: ["report", "reports", "reporting", "dashboard", "dashboards", "kpi", "metrics", "analytics", "summary", "summaries", "weekly report", "monthly report", "performance", "insight", "insights"] },
+    { key: "competitor", label: "Competitor intelligence", terms: ["competitor", "competitors", "competition", "market", "pricing", "price", "benchmark", "tracking", "monitor", "monitoring", "signals", "market intelligence", "competitive"] },
+    { key: "social", label: "Social and brand monitoring", terms: ["social", "instagram", "facebook", "tiktok", "linkedin", "youtube", "twitter", "brand", "sentiment", "mentions", "comments", "engagement", "followers", "content"] },
+    { key: "support", label: "Customer support", terms: ["support", "ticket", "tickets", "inquiry", "inquiries", "customer", "customers", "reply", "replies", "response", "responses", "inbox", "email", "complaint", "faq", "chat"] },
+    { key: "sales", label: "Sales and leads", terms: ["lead", "leads", "sales", "crm", "follow up", "followup", "handoff", "pipeline", "prospect", "prospects", "quote", "booking", "bookings", "appointment", "appointments"] },
+    { key: "operations", label: "Operations", terms: ["operations", "approval", "approvals", "invoice", "invoices", "task", "tasks", "handover", "inventory", "stock", "order", "orders", "fulfillment", "reconciliation", "admin"] }
+  ];
+
   function NexusHomeQuiz(event, type) {
     if (event) event.preventDefault();
 
@@ -995,14 +1051,12 @@
 
     const matched = products
       .map((product) => ({ product, score: scoreHomeQuizProduct(product, profile, type) }))
-      .filter((item) => item.score > 0)
+      .filter((item) => item.score >= HOME_RECOMMENDATION_MIN_SCORE_WITH_DOMAIN)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
       .map((item) => item.product);
 
-    const recommendedProducts = matched.length
-      ? matched
-      : fallbackProducts.filter((product) => scoreHomeQuizProduct(product, profile, type) > 0).slice(0, 3);
+    const recommendedProducts = matched;
 
     root.hidden = false;
     root.innerHTML = `
@@ -1015,7 +1069,14 @@
         </div>
       </div>
       <div class="home-quiz-result-products">
-        ${recommendedProducts.map(homeQuizProductCard).join("")}
+        ${recommendedProducts.length ? recommendedProducts.map(homeQuizProductCard).join("") : `
+          <article class="home-quiz-product-card">
+            <span>Custom path</span>
+            <strong>No close marketplace match yet.</strong>
+            <p>This process may need a custom automation review instead of forcing a weak product match.</p>
+            <a href="/pages/custom-request/index.html">Request custom automation</a>
+          </article>
+        `}
       </div>
     `;
     root.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -1073,38 +1134,49 @@
       }
     ];
     const scored = products
-      .map((product) => scoreHomeRecommendationProduct(product, terms))
-      .filter((item) => item.score > 0)
+      .map((product) => scoreHomeRecommendationProduct(product, terms, buyerInput))
+      .filter(isConfidentHomeRecommendation)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
-    const recommendations = scored.length
-      ? scored.map((item) => item.product)
-      : products.slice(0, 3);
-    const customRecommended = (scored[0]?.score || 0) < 4;
+
+    if (!scored.length) {
+      output.hidden = false;
+      output.innerHTML = `
+        <div class="home-quiz-calc-output-head">
+          <div>
+            <strong>No close marketplace match yet.</strong>
+            <span>Nexus did not find enough product/domain fit to recommend a ready-made automation confidently.</span>
+          </div>
+          <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom automation</a>
+        </div>
+        <div class="success">
+          Send the process to Nexus. If an existing product truly fits, Nexus can point you to it; otherwise this should become a custom setup path.
+        </div>
+      `;
+      output.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return false;
+    }
+
+    const recommendations = scored.map((item) => item.product);
 
     output.hidden = false;
     output.innerHTML = `
       <div class="home-quiz-calc-output-head">
         <div>
-          <strong>${customRecommended ? "Closest matches plus custom path" : "Best product matches"}</strong>
-          <span>Matched from your manual process, desired output, tools, and frequency.</span>
+          <strong>Best product matches</strong>
+          <span>Matched with enough domain fit from your manual process, desired output, tools, and frequency.</span>
         </div>
         <a class="btn btn-secondary btn-small" href="/pages/marketplace/index.html#marketplace-recommendation">Open full matcher</a>
       </div>
       <div class="home-quiz-result-products">
         ${recommendations.map(homeQuizProductCard).join("")}
       </div>
-      ${customRecommended ? `
-        <div class="success">
-          This may need a custom setup review if none of these products feel exact.
-        </div>
-      ` : ""}
     `;
     output.scrollIntoView({ behavior: "smooth", block: "nearest" });
     return false;
   }
 
-  function scoreHomeRecommendationProduct(product, terms) {
+  function scoreHomeRecommendationProduct(product, terms, buyerInput = "") {
     const weightedFields = [
       [product?.title, 7],
       [product?.category, 6],
@@ -1123,7 +1195,11 @@
       [product?.developers?.type, 1],
       [product?.developers?.skills, 2]
     ];
+    const inputDomains = homeRecommendationDomainMatches(buyerInput);
+    const productDomains = homeRecommendationDomainMatches(weightedFields.map(([value]) => homeQuizValueToText(value)).join(" "));
+    const productDomainKeys = new Set(productDomains.map((domain) => domain.key));
     let score = 0;
+    let domainOverlap = 0;
 
     weightedFields.forEach(([value, weight]) => {
       const text = normalizeHomeRecommendationText(homeQuizValueToText(value));
@@ -1134,10 +1210,41 @@
       });
     });
 
+    inputDomains.forEach((domain) => {
+      if (!productDomainKeys.has(domain.key)) return;
+      const domainScore = 10 + Math.min(domain.matches.length, 4) * 2;
+      score += domainScore;
+      domainOverlap += 1;
+    });
+
     if (product?.featured) score += 0.4;
     if (Number(product?.rating) >= 4.7) score += 0.3;
 
-    return { product, score };
+    return { product, score, domainOverlap };
+  }
+
+  function isConfidentHomeRecommendation(item) {
+    if (!item || !item.product) return false;
+    if (item.domainOverlap > 0 && item.score >= HOME_RECOMMENDATION_MIN_SCORE_WITH_DOMAIN) return true;
+    return item.score >= HOME_RECOMMENDATION_MIN_SCORE;
+  }
+
+  function homeRecommendationDomainMatches(value) {
+    const text = normalizeHomeRecommendationText(value);
+    if (!text) return [];
+
+    return HOME_RECOMMENDATION_DOMAINS
+      .map((group) => ({
+        ...group,
+        matches: group.terms.filter((term) => homeRecommendationTextIncludesTerm(text, term))
+      }))
+      .filter((group) => group.matches.length);
+  }
+
+  function homeRecommendationTextIncludesTerm(normalizedText, term) {
+    const cleanTerm = normalizeHomeRecommendationText(term);
+    if (!cleanTerm) return false;
+    return ` ${normalizedText} `.includes(` ${cleanTerm} `);
   }
 
   function homeRecommendationTerms(value) {
@@ -1266,7 +1373,7 @@
         <strong>${escapeHomeQuiz(title)}</strong>
         <p>${escapeHomeQuiz(description)}</p>
         <div class="home-quiz-product-actions">
-          <button type="button" class="btn btn-secondary btn-small" onclick="${previewAction}">Preview</button>
+          <button type="button" class="btn btn-secondary btn-small" onclick="${previewAction}">View output</button>
           <a class="btn btn-primary btn-small" href="${escapeHomeQuiz(actionHref)}">${requestOnly ? "Request" : "Buy"}</a>
         </div>
       </article>
