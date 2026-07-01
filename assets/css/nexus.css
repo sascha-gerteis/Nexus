@@ -14639,12 +14639,46 @@ iframe {
 }
 
 #productModal .modal-main .image-preview {
+  width: 100% !important;
+  min-height: clamp(360px, 54svh, 620px) !important;
   max-height: none !important;
+  object-fit: cover !important;
+  object-position: top center !important;
 }
 
 #productModal .bundle-preview-shell .preview-window {
   min-height: clamp(380px, 56svh, 640px) !important;
   max-height: none !important;
+  padding: .4rem !important;
+  overflow: auto !important;
+}
+
+#productModal .bundle-workflow-preview .preview-shell {
+  width: 100% !important;
+  padding: .45rem !important;
+  border-radius: 18px !important;
+}
+
+#productModal .bundle-workflow-preview .custom-preview,
+#productModal .bundle-workflow-preview .html-preview-wrap {
+  padding: .35rem !important;
+}
+
+#productModal .bundle-workflow-preview .html-preview-header {
+  margin-bottom: .5rem;
+}
+
+#productModal .bundle-workflow-preview .html-preview-device {
+  height: clamp(420px, 58svh, 660px) !important;
+  max-height: none !important;
+}
+
+#productModal .bundle-workflow-preview .image-preview {
+  width: 100% !important;
+  min-height: clamp(360px, 54svh, 620px) !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: top center !important;
 }
 
 @media (max-width: 1180px) {
@@ -14697,6 +14731,36 @@ iframe {
 
   #productModal .modal-main .html-preview-frame {
     border-radius: 12px !important;
+  }
+
+  #productModal .modal-main .image-preview {
+    min-height: 70svh !important;
+    object-fit: cover !important;
+    object-position: top center !important;
+  }
+
+  #productModal .bundle-preview-shell .preview-window {
+    min-height: 68svh !important;
+    padding: .25rem !important;
+  }
+
+  #productModal .bundle-workflow-preview .preview-shell {
+    padding: .3rem !important;
+  }
+
+  #productModal .bundle-workflow-preview .custom-preview,
+  #productModal .bundle-workflow-preview .html-preview-wrap {
+    padding: .25rem !important;
+  }
+
+  #productModal .bundle-workflow-preview .html-preview-header {
+    display: none;
+  }
+
+  #productModal .bundle-workflow-preview .html-preview-device,
+  #productModal .bundle-workflow-preview .image-preview {
+    height: 68svh !important;
+    min-height: 68svh !important;
   }
 }
 

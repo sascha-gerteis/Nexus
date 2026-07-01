@@ -1027,6 +1027,7 @@ function productColorTheme(color) {
 
     if (!source) return "";
 
+    const viewportMeta = `<meta name="viewport" content="width=device-width, initial-scale=1.0">`;
     const responsiveStyle = `
       <style>
         html,
@@ -1040,11 +1041,16 @@ function productColorTheme(color) {
           background: #ffffff;
         }
 
+        body {
+          min-width: 0 !important;
+        }
+
         *,
         *::before,
         *::after {
           box-sizing: border-box !important;
           max-width: 100% !important;
+          min-width: 0 !important;
         }
 
         img,
@@ -1068,6 +1074,53 @@ function productColorTheme(color) {
           max-width: 100% !important;
         }
 
+        body > *,
+        main,
+        section,
+        article,
+        .wrap,
+        .wrapper,
+        .container,
+        .page,
+        .report,
+        .report-wrap,
+        .report-wrapper,
+        .dashboard,
+        .dashboard-wrap,
+        .content,
+        .content-wrap,
+        .card,
+        .panel {
+          width: 100% !important;
+          max-width: 100% !important;
+          margin-left: auto !important;
+          margin-right: auto !important;
+        }
+
+        .wrap,
+        .wrapper,
+        .container,
+        .page,
+        .report,
+        .report-wrap,
+        .report-wrapper,
+        .dashboard,
+        .dashboard-wrap,
+        .content,
+        .content-wrap {
+          padding-left: clamp(10px, 2.4vw, 22px) !important;
+          padding-right: clamp(10px, 2.4vw, 22px) !important;
+        }
+
+        [class*="grid"],
+        [class*="row"],
+        [class*="columns"],
+        [class*="cards"],
+        [class*="metrics"],
+        [class*="kpis"] {
+          max-width: 100% !important;
+        }
+
         @media (max-width: 900px) {
           body {
             font-size: 14px !important;
@@ -1077,13 +1130,61 @@ function productColorTheme(color) {
         @media (max-width: 640px) {
           body {
             font-size: 13px !important;
+            padding: 0 !important;
+          }
+
+          .wrap,
+          .wrapper,
+          .container,
+          .page,
+          .report,
+          .report-wrap,
+          .report-wrapper,
+          .dashboard,
+          .dashboard-wrap,
+          .content,
+          .content-wrap {
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+          }
+
+          [class*="grid"],
+          [class*="columns"],
+          [class*="cards"],
+          [class*="metrics"],
+          [class*="kpis"] {
+            display: grid !important;
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+
+          [class*="row"] {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 10px !important;
+          }
+
+          h1 {
+            font-size: clamp(26px, 9vw, 42px) !important;
+            line-height: 1.05 !important;
+          }
+
+          h2 {
+            font-size: clamp(22px, 7vw, 32px) !important;
+            line-height: 1.1 !important;
+          }
+
+          h3 {
+            font-size: clamp(18px, 5.5vw, 24px) !important;
+            line-height: 1.15 !important;
           }
         }
       </style>
     `;
 
     if (source.toLowerCase().includes("</head>")) {
-      return source.replace("</head>", `${responsiveStyle}</head>`);
+      const hasViewport = /<meta[^>]+name=["']viewport["']/i.test(source);
+      return source.replace("</head>", `${hasViewport ? "" : viewportMeta}${responsiveStyle}</head>`);
     }
 
     return `
@@ -1091,7 +1192,7 @@ function productColorTheme(color) {
       <html>
         <head>
           <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          ${viewportMeta}
           ${responsiveStyle}
         </head>
         <body>

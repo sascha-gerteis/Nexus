@@ -1044,8 +1044,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
               >
                 View output
               </button>
-              <div class="bundle-workflow-preview" id="bundleWorkflowPreview-${index}" hidden></div>
             </div>
+            <div class="bundle-workflow-preview" id="bundleWorkflowPreview-${index}" hidden></div>
           </article>
         `).join("")
       : `<div class="card"><h3>No active workflows</h3><p>This bundle needs active products before it can be purchased.</p></div>`;
