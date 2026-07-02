@@ -318,6 +318,44 @@
                   <input class="input" id="workflowUpload" type="file" accept=".json,application/json">
                   <textarea class="textarea code-textarea" name="n8n_workflow_json" rows="10" placeholder="Paste exported n8n workflow JSON"></textarea>
                 </div>
+                <input type="hidden" name="sheet_access_config" value="{}">
+                <div class="full developer-sheet-access-panel hidden" id="developerSheetAccessPanel">
+                  <div class="sheet-access-head">
+                    <div>
+                      <h3>Google Sheets access</h3>
+                      <p>Nexus detected a Google Sheets node. Choose who owns the sheet data before import so buyers only see the setup fields they should see.</p>
+                    </div>
+                    <span class="pill blue">Sheets detected</span>
+                  </div>
+                  <div class="developer-field-grid">
+                    <div>
+                      <label>Sheet mode</label>
+                      <select class="select" data-sheet-access-field="mode">
+                        <option value="customer_owned">Customer-owned sheet</option>
+                        <option value="developer_owned">Developer-owned hidden sheet</option>
+                        <option value="private_per_customer">Private sheet per customer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Default tab</label>
+                      <input class="input" data-sheet-access-field="sheet_tab" placeholder="Sheet1">
+                    </div>
+                    <div>
+                      <label>Default range</label>
+                      <input class="input" data-sheet-access-field="sheet_range" placeholder="A:Z">
+                    </div>
+                    <div class="sheet-access-mode-fields" data-sheet-access-mode="developer_owned" hidden>
+                      <label>Developer sheet ID / URL</label>
+                      <input class="input" data-sheet-access-field="developer_sheet_id" placeholder="Paste the sheet ID or URL Nexus should use internally">
+                    </div>
+                    <div class="sheet-access-mode-fields" data-sheet-access-mode="private_per_customer" hidden>
+                      <label>Template sheet ID / URL</label>
+                      <input class="input" data-sheet-access-field="template_sheet_id" placeholder="Paste the template sheet Nexus should copy for each customer">
+                    </div>
+                  </div>
+                  <div class="sheet-access-guidance" id="developerSheetAccessGuidance"></div>
+                  <div class="sheet-node-list" id="developerSheetNodeList"></div>
+                </div>
                 <div class="full"><label>Buyer setup schema JSON</label><textarea class="textarea code-textarea" name="setup_schema" rows="7" placeholder='[{"name":"company_url","label":"Company website","type":"url","required":true}]'></textarea></div>
                 <div class="full"><label>Credential schema JSON</label><textarea class="textarea code-textarea" name="credential_schema" rows="6" placeholder='[{"name":"api_key","label":"API key","type":"secret","required":true}]'></textarea></div>
                 <div class="full"><label>Workflow placeholder mappings JSON</label><textarea class="textarea code-textarea" name="workflow_placeholder_mappings" rows="7" placeholder='[{"placeholder":"[[CompanyWebsite]]","source":"setup","key":"company_url"}]'></textarea></div>
@@ -1281,6 +1319,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       form.elements.credential_schema.value = "[]";
       form.elements.workflow_placeholder_mappings.value = "[]";
       form.elements.detected_placeholders.value = "{}";
+      form.elements.sheet_access_config.value = "{}";
       form.elements.placeholder_validation_status.value = "not_checked";
       form.elements.placeholder_validation_errors.value = "[]";
       const makeBlueprint = document.getElementById("makeBlueprintJson");
@@ -1291,6 +1330,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
       updateDeveloperImportResult(null);
       renderMakeImportResult(null);
+      renderDeveloperSheetAccessPanel(null);
       updateDeveloperWorkflowProviderUI();
       updateDeveloperPricingLabels();
     }
@@ -1438,6 +1478,151 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       ];
 
       return signals.some((signal) => text.includes(signal));
+    }
+
+    function parseWorkflowJsonInput() {
+      const form = document.getElementById("developerProductForm");
+      const raw = form?.elements?.n8n_workflow_json?.value || "";
+      if (!String(raw || "").trim()) return null;
+
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function workflowSheetNodes(workflow) {
+      const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+      return nodes.filter((node) => {
+        const text = [
+          node?.type,
+          node?.name,
+          node?.typeVersion,
+          JSON.stringify(node?.parameters || {})
+        ].map((value) => String(value || "").toLowerCase()).join(" ");
+
+        return text.includes("googlesheets") ||
+          text.includes("google sheets") ||
+          text.includes("spreadsheet");
+      }).map((node) => ({
+        name: node?.name || "Google Sheets node",
+        type: node?.type || "n8n Google Sheets",
+      }));
+    }
+
+    function productSheetAccessConfig(product = selectedProduct()) {
+      const detected = product?.detected_placeholders && typeof product.detected_placeholders === "object"
+        ? product.detected_placeholders
+        : {};
+      const config = detected._nexus_sheet_access_config && typeof detected._nexus_sheet_access_config === "object"
+        ? detected._nexus_sheet_access_config
+        : {};
+
+      return {
+        mode: ["customer_owned", "developer_owned", "private_per_customer"].includes(config.mode)
+          ? config.mode
+          : "customer_owned",
+        developer_sheet_id: String(config.developer_sheet_id || ""),
+        template_sheet_id: String(config.template_sheet_id || ""),
+        sheet_tab: String(config.sheet_tab || ""),
+        sheet_range: String(config.sheet_range || ""),
+      };
+    }
+
+    function currentSheetAccessConfigFromForm() {
+      const panel = document.getElementById("developerSheetAccessPanel");
+      const read = (name) => panel?.querySelector(`[data-sheet-access-field="${name}"]`)?.value || "";
+      const mode = read("mode") || "customer_owned";
+
+      return {
+        mode: ["customer_owned", "developer_owned", "private_per_customer"].includes(mode) ? mode : "customer_owned",
+        developer_sheet_id: read("developer_sheet_id"),
+        template_sheet_id: read("template_sheet_id"),
+        sheet_tab: read("sheet_tab"),
+        sheet_range: read("sheet_range"),
+      };
+    }
+
+    function setSheetAccessConfigHidden(config = {}) {
+      const field = document.querySelector("#developerProductForm [name='sheet_access_config']");
+      if (!field) return;
+      field.value = JSON.stringify({
+        mode: config.mode || "customer_owned",
+        developer_sheet_id: config.developer_sheet_id || "",
+        template_sheet_id: config.template_sheet_id || "",
+        sheet_tab: config.sheet_tab || "",
+        sheet_range: config.sheet_range || "",
+      });
+    }
+
+    function renderSheetAccessModeFields() {
+      const panel = document.getElementById("developerSheetAccessPanel");
+      if (!panel || panel.classList.contains("hidden")) return;
+
+      const config = currentSheetAccessConfigFromForm();
+      panel.querySelectorAll("[data-sheet-access-mode]").forEach((section) => {
+        section.hidden = section.dataset.sheetAccessMode !== config.mode;
+      });
+
+      const guidance = document.getElementById("developerSheetAccessGuidance");
+      const copy = {
+        customer_owned: {
+          title: "Customer-owned sheet",
+          body: "The buyer sees a Sheet URL/ID field during setup. They must share the sheet with the saved Google credential before running.",
+        },
+        developer_owned: {
+          title: "Developer-owned hidden sheet",
+          body: "The buyer will not see the sheet field. Nexus injects your saved sheet ID at runtime, useful for lookup tables or internal data.",
+        },
+        private_per_customer: {
+          title: "Private sheet per customer",
+          body: "Use a template sheet. Nexus stores the template/customer-sheet intent and passes private sheet keys into runtime so each customer can have a separate hidden sheet.",
+        },
+      };
+      const selected = copy[config.mode] || copy.customer_owned;
+      if (guidance) {
+        guidance.innerHTML = `
+          <strong>${NexusUI.escapeHtml(selected.title)}</strong>
+          <p>${NexusUI.escapeHtml(selected.body)}</p>
+        `;
+      }
+
+      setSheetAccessConfigHidden(config);
+    }
+
+    function renderDeveloperSheetAccessPanel(product = selectedProduct()) {
+      const panel = document.getElementById("developerSheetAccessPanel");
+      if (!panel) return;
+
+      const workflow = parseWorkflowJsonInput() || product?.n8n_workflow_json || product?.n8n_normalized_workflow_json || null;
+      const nodes = workflowSheetNodes(workflow);
+
+      if (!nodes.length) {
+        panel.classList.add("hidden");
+        setSheetAccessConfigHidden({});
+        return;
+      }
+
+      panel.classList.remove("hidden");
+      const config = productSheetAccessConfig(product);
+      ["mode", "developer_sheet_id", "template_sheet_id", "sheet_tab", "sheet_range"].forEach((key) => {
+        const field = panel.querySelector(`[data-sheet-access-field="${key}"]`);
+        if (field && !field.matches(":focus")) field.value = config[key] || "";
+      });
+
+      const nodeList = document.getElementById("developerSheetNodeList");
+      if (nodeList) {
+        nodeList.innerHTML = `
+          <strong>Detected sheet nodes</strong>
+          <div>
+            ${nodes.map((node) => `<span>${NexusUI.escapeHtml(node.name)}</span>`).join("")}
+          </div>
+        `;
+      }
+
+      renderSheetAccessModeFields();
     }
 
     function renderTechnicalTestField(field, values = {}) {
@@ -3243,6 +3428,16 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const selectedCurrency = String(formData.get("currency") || "USD").toUpperCase();
       const priceAmount = Number(formData.get("price_amount") || 0);
       const setupFeeAmount = Number(formData.get("setup_fee_amount") || 0);
+      const detectedPlaceholders = jsonField(formData, "detected_placeholders", {});
+      const sheetAccessConfig = jsonField(formData, "sheet_access_config", {});
+      if (
+        sheetAccessConfig &&
+        typeof sheetAccessConfig === "object" &&
+        !Array.isArray(sheetAccessConfig) &&
+        sheetAccessConfig.mode
+      ) {
+        detectedPlaceholders._nexus_sheet_access_config = sheetAccessConfig;
+      }
 
       return {
         id: String(formData.get("id") || "") || undefined,
@@ -3286,7 +3481,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         setup_schema: jsonField(formData, "setup_schema", []),
         credential_schema: jsonField(formData, "credential_schema", []),
         workflow_placeholder_mappings: jsonField(formData, "workflow_placeholder_mappings", []),
-        detected_placeholders: jsonField(formData, "detected_placeholders", {}),
+        detected_placeholders: detectedPlaceholders,
+        sheet_access_config: sheetAccessConfig,
         placeholder_validation_status: String(formData.get("placeholder_validation_status") || "not_checked"),
         placeholder_validation_errors: jsonField(formData, "placeholder_validation_errors", []),
         internal_notes: String(formData.get("internal_notes") || "")
@@ -3333,6 +3529,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (makeBlueprint) {
         makeBlueprint.value = product.make_blueprint ? JSON.stringify(product.make_blueprint, null, 2) : "";
       }
+      setSheetAccessConfigHidden(productSheetAccessConfig(product));
+      renderDeveloperSheetAccessPanel(product);
       state.makeImport = product.make_conversion_summary
         ? {
           status: product.make_import_status,
@@ -4262,6 +4460,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
         if (data?.generated_workflow_json) {
           document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
+          renderDeveloperSheetAccessPanel(selectedProduct());
           NexusUI.toast(`${sourceLabel} converted. Next: Save, import & test.`);
         } else {
           NexusUI.toast(data?.message || `${sourceLabel} scanned.`);
@@ -4295,6 +4494,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         applyGeneratedSetupSchemaFromMake(data);
         if (data?.generated_workflow_json) {
           document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
+          renderDeveloperSheetAccessPanel(selectedProduct());
         }
         NexusUI.toast(data?.message || "HTTP substitute saved.");
         await loadProducts();
@@ -4921,8 +5121,25 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (!file) return;
         try {
           document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(JSON.parse(await file.text()), null, 2);
+          renderDeveloperSheetAccessPanel(selectedProduct());
         } catch (error) {
           NexusUI.toast("That file is not valid JSON.");
+        }
+      });
+
+      document.querySelector("#developerProductForm [name='n8n_workflow_json']")?.addEventListener("input", function () {
+        renderDeveloperSheetAccessPanel(selectedProduct());
+      });
+
+      document.getElementById("developerSheetAccessPanel")?.addEventListener("input", function (event) {
+        if (event.target?.matches("[data-sheet-access-field]")) {
+          renderSheetAccessModeFields();
+        }
+      });
+
+      document.getElementById("developerSheetAccessPanel")?.addEventListener("change", function (event) {
+        if (event.target?.matches("[data-sheet-access-field]")) {
+          renderSheetAccessModeFields();
         }
       });
 

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { decryptCredentialPayload } from "../_shared/nexus-credentials.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,6 +41,10 @@ function env(name: string) {
 
 function cleanString(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function lowerString(value: unknown) {
+  return cleanString(value).toLowerCase();
 }
 
 function assignIfUseful(target: Record<string, unknown>, key: string, value: unknown) {
@@ -119,6 +124,314 @@ function expandBuyerSetupAliases(setup: Record<string, unknown>) {
   }
 
   return output;
+}
+
+function sheetAccessConfigFromAutomation(automation: any) {
+  const detected = normalizeJsonObject(automation?.detected_placeholders);
+  const config = normalizeJsonObject(detected._nexus_sheet_access_config || automation?.sheet_access_config);
+  const mode = cleanString(config.mode);
+
+  return {
+    mode: ["customer_owned", "developer_owned", "private_per_customer"].includes(mode)
+      ? mode
+      : "customer_owned",
+    developer_sheet_id: cleanString(config.developer_sheet_id),
+    template_sheet_id: cleanString(config.template_sheet_id),
+    sheet_tab: cleanString(config.sheet_tab),
+    sheet_range: cleanString(config.sheet_range),
+  };
+}
+
+function applySheetAccessSetup(setup: Record<string, unknown>, automation: any, customerAutomation: any) {
+  const config = sheetAccessConfigFromAutomation(automation);
+  const output = { ...(setup || {}) };
+
+  if (config.mode === "developer_owned" && config.developer_sheet_id) {
+    assignIfUseful(output, "nexus_dev_sheet_id", config.developer_sheet_id);
+    assignIfUseful(output, "google_sheet_id", config.developer_sheet_id);
+    assignIfUseful(output, "google_sheet_url", config.developer_sheet_id);
+  }
+
+  if (config.mode === "private_per_customer" && config.template_sheet_id) {
+    assignIfUseful(output, "nexus_private_sheet_template_id", config.template_sheet_id);
+    assignIfUseful(output, "nexus_private_customer_sheet_id", cleanString(customerAutomation?.private_google_sheet_id) || config.template_sheet_id);
+    assignIfUseful(output, "google_sheet_id", cleanString(customerAutomation?.private_google_sheet_id) || config.template_sheet_id);
+    assignIfUseful(output, "nexus_private_sheet_customer_key", cleanString(customerAutomation?.id));
+  }
+
+  if (config.sheet_tab) {
+    assignIfUseful(output, "nexus_sheet_tab", config.sheet_tab);
+    assignIfUseful(output, "google_sheet_name", config.sheet_tab);
+  }
+
+  if (config.sheet_range) {
+    assignIfUseful(output, "nexus_sheet_range", config.sheet_range);
+    assignIfUseful(output, "google_sheet_range", config.sheet_range);
+  }
+
+  assignIfUseful(output, "google_sheet_access_mode", config.mode);
+  return expandBuyerSetupAliases(output);
+}
+
+function base64UrlEncode(value: string | Uint8Array | ArrayBuffer) {
+  const bytes = typeof value === "string"
+    ? new TextEncoder().encode(value)
+    : value instanceof ArrayBuffer
+      ? new Uint8Array(value)
+      : value;
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function bytesFromBase64(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function privateKeyBytesFromPem(privateKey: string) {
+  const base64 = cleanString(privateKey)
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+  if (!base64) throw new Error("Google service account private key is missing.");
+  return bytesFromBase64(base64);
+}
+
+async function signGoogleServiceAccountJwt(fields: Record<string, unknown>, scopes: string) {
+  const email = cleanString(
+    fields.email ||
+      fields.service_account_email ||
+      fields.client_email,
+  );
+  const privateKey = cleanString(
+    fields.privateKey ||
+      fields.private_key,
+  ).replace(/\\n/g, "\n");
+
+  if (!email || !privateKey) {
+    throw new Error("Private sheet provisioning needs a Google Service Account credential with email and private key.");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = {
+    alg: "RS256",
+    typ: "JWT",
+  };
+  const claim = {
+    iss: email,
+    scope: scopes,
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  };
+  const signingInput = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(claim))}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    privateKeyBytesFromPem(privateKey),
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      hash: "SHA-256",
+    },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(signingInput),
+  );
+
+  return {
+    jwt: `${signingInput}.${base64UrlEncode(signature)}`,
+    email,
+  };
+}
+
+async function googleAccessTokenFromServiceAccount(fields: Record<string, unknown>) {
+  const scopes = cleanString(fields.scopes || fields.scope) ||
+    "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive";
+  const { jwt, email } = await signGoogleServiceAccountJwt(fields, scopes);
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }),
+  });
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok || !cleanString(result?.access_token)) {
+    throw new Error(
+      `Google service account token failed for ${email}: ${
+        result?.error_description ||
+        result?.error ||
+        "unknown Google OAuth error"
+      }`,
+    );
+  }
+
+  return {
+    accessToken: cleanString(result.access_token),
+    serviceAccountEmail: email,
+  };
+}
+
+function extractGoogleSpreadsheetId(value: unknown) {
+  const raw = cleanString(value);
+  if (!raw) return "";
+
+  const match = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match?.[1]) return match[1];
+
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(raw)) return raw;
+  return "";
+}
+
+async function findGoogleServiceAccountCredential(adminClient: any, automation: any) {
+  const bindings = normalizeJsonArray(automation?.n8n_credential_bindings);
+  const directBinding = bindings.find((binding: any) => (
+    cleanString(binding?.developer_credential_id) &&
+    (
+      lowerString(binding?.provider) === "google_service_account" ||
+      lowerString(binding?.n8n_credential_type || binding?.credential_key) === "googleapi"
+    )
+  ));
+
+  if (directBinding?.developer_credential_id) {
+    const { data, error } = await adminClient
+      .from("developer_credentials")
+      .select("*")
+      .eq("id", directBinding.developer_credential_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (data) return data;
+  }
+
+  let query = adminClient
+    .from("developer_credentials")
+    .select("*")
+    .eq("status", "active")
+    .eq("provider", "google_service_account")
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  if (cleanString(automation?.developer_id)) {
+    query = query.eq("developer_id", automation.developer_id);
+  } else {
+    query = query.is("developer_id", null);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? data[0] : null;
+}
+
+async function copyGoogleSheetFromTemplate(params: {
+  accessToken: string;
+  templateSheetId: string;
+  name: string;
+}) {
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(params.templateSheetId)}/copy?supportsAllDrives=true&fields=id,name,webViewLink`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: params.name,
+      }),
+    },
+  );
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok || !cleanString(result?.id)) {
+    throw new Error(
+      `Could not copy private customer Google Sheet: ${
+        result?.error?.message ||
+        result?.message ||
+        "Google Drive copy failed"
+      }`,
+    );
+  }
+
+  return {
+    id: cleanString(result.id),
+    url: cleanString(result.webViewLink),
+    name: cleanString(result.name),
+  };
+}
+
+async function provisionPrivateCustomerSheetIfNeeded(
+  adminClient: any,
+  automation: any,
+  customerAutomation: any,
+  user: any,
+) {
+  const config = sheetAccessConfigFromAutomation(automation);
+  if (config.mode !== "private_per_customer") return null;
+
+  const existingSheetId = cleanString(customerAutomation?.private_google_sheet_id);
+  if (existingSheetId) {
+    return {
+      sheetId: existingSheetId,
+      sheetUrl: cleanString(customerAutomation?.private_google_sheet_url),
+      copied: false,
+    };
+  }
+
+  const templateSheetId = extractGoogleSpreadsheetId(config.template_sheet_id);
+  if (!templateSheetId) {
+    throw new Error("Private per-customer sheet mode needs a valid Google Sheets template ID or URL.");
+  }
+
+  const credentialSecret = env("NEXUS_CREDENTIAL_SECRET");
+  if (!credentialSecret) {
+    throw new Error("NEXUS_CREDENTIAL_SECRET is required to copy private customer sheets.");
+  }
+
+  const credential = await findGoogleServiceAccountCredential(adminClient, automation);
+  if (!credential?.encrypted_payload) {
+    throw new Error(
+      "Private per-customer sheet mode needs an active Google Service Account credential saved in Nexus. Share the template Sheet with that service-account email, then apply credentials and run the check again.",
+    );
+  }
+
+  const fields = await decryptCredentialPayload(credential.encrypted_payload, credentialSecret);
+  const { accessToken, serviceAccountEmail } = await googleAccessTokenFromServiceAccount(fields);
+  const copied = await copyGoogleSheetFromTemplate({
+    accessToken,
+    templateSheetId,
+    name: `Nexus - ${cleanString(automation?.title) || "Automation"} - ${cleanString(user?.email) || cleanString(customerAutomation?.buyer_id) || cleanString(customerAutomation?.id)}`,
+  });
+
+  const now = new Date().toISOString();
+  await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
+    private_google_sheet_id: copied.id,
+    private_google_sheet_url: copied.url,
+    private_google_sheet_template_id: templateSheetId,
+    private_google_sheet_service_account_email: serviceAccountEmail,
+    private_google_sheet_provisioned_at: now,
+    updated_at: now,
+  });
+
+  return {
+    sheetId: copied.id,
+    sheetUrl: copied.url,
+    copied: true,
+    serviceAccountEmail,
+  };
 }
 
 function safeJsonParse(value: unknown, fallback: any) {
@@ -322,6 +635,11 @@ async function safeUpdateCustomerAutomation(
     "next_run_at",
     "last_run_at",
     "last_run_requested_at",
+    "private_google_sheet_id",
+    "private_google_sheet_url",
+    "private_google_sheet_template_id",
+    "private_google_sheet_service_account_email",
+    "private_google_sheet_provisioned_at",
   ];
 
   for (const column of optionalColumns) {
@@ -1097,11 +1415,23 @@ Deno.serve(async (req) => {
 
     const setupSchema = normalizeJsonArray(automation.setup_schema);
     const credentialSchema = normalizeJsonArray(automation.credential_schema);
+    const privateSheetProvision = await provisionPrivateCustomerSheetIfNeeded(
+      adminClient,
+      automation,
+      customerAutomation,
+      user,
+    );
+    if (privateSheetProvision?.sheetId) {
+      customerAutomation.private_google_sheet_id = privateSheetProvision.sheetId;
+      customerAutomation.private_google_sheet_url = privateSheetProvision.sheetUrl || "";
+    }
 
-    const { setupAnswers, secretAnswers, credentialKeys } = splitSetupAndSecrets(
+    const splitAnswers = splitSetupAndSecrets(
       answers,
       credentialSchema,
     );
+    let { setupAnswers, secretAnswers, credentialKeys } = splitAnswers;
+    setupAnswers = applySheetAccessSetup(setupAnswers, automation, customerAutomation) as Record<string, string>;
 
     /*
       Safety fallback for old temporary testing setup:

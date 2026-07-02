@@ -13634,6 +13634,71 @@ body.developer-guide-open {
   color: #9a3412;
 }
 
+.developer-sheet-access-panel {
+  border: 1px solid rgba(20, 184, 166, .28);
+  background: linear-gradient(135deg, rgba(236, 254, 255, .92), rgba(255, 255, 255, .96));
+  border-radius: 24px;
+  padding: 1.1rem;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .06);
+}
+
+.sheet-access-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.sheet-access-head h3 {
+  margin: 0 0 .25rem;
+  color: var(--navy);
+}
+
+.sheet-access-head p,
+.sheet-access-guidance p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.sheet-access-guidance {
+  margin-top: 1rem;
+  padding: .95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(59, 130, 246, .18);
+  background: rgba(255, 255, 255, .72);
+}
+
+.sheet-access-guidance strong,
+.sheet-node-list strong {
+  display: block;
+  color: var(--navy);
+  margin-bottom: .35rem;
+}
+
+.sheet-node-list {
+  margin-top: .9rem;
+}
+
+.sheet-node-list div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+}
+
+.sheet-node-list span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: .35rem .6rem;
+  background: rgba(59, 130, 246, .08);
+  border: 1px solid rgba(59, 130, 246, .14);
+  color: var(--navy);
+  font-weight: 800;
+  font-size: .84rem;
+}
+
 .credential-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -14306,6 +14371,10 @@ body.developer-guide-open {
   .developer-selected-product-summary {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .sheet-access-head {
+    display: grid;
   }
 
   .credential-card {

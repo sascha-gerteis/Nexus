@@ -873,6 +873,17 @@ function setupResourceLocator(key: string, mode = "url") {
   };
 }
 
+function literalResourceLocator(value: unknown, fallbackMode = "id") {
+  const raw = cleanString(value);
+  if (!raw) return null;
+
+  return {
+    __rl: true,
+    value: raw,
+    mode: /^https?:\/\//i.test(raw) ? "url" : fallbackMode,
+  };
+}
+
 function writeEmptyParameter(parameters: Record<string, any>, keys: string[], value: any) {
   const key = keys.find((item) => Object.prototype.hasOwnProperty.call(parameters, item)) || keys[0];
   if (!key || !isEmptyNodeValue(parameters[key])) return false;
@@ -901,14 +912,32 @@ function addSpecificSetupField(
   warnings.push(`Auto-added setup field ${key} ${reason}.`);
 }
 
+function sheetAccessConfigForProduct(product: any) {
+  const detected = asObject(product?.detected_placeholders);
+  const config = asObject(detected._nexus_sheet_access_config || product?.sheet_access_config);
+  const mode = cleanString(config.mode);
+
+  return {
+    mode: ["customer_owned", "developer_owned", "private_per_customer"].includes(mode)
+      ? mode
+      : "customer_owned",
+    developer_sheet_id: cleanString(config.developer_sheet_id),
+    template_sheet_id: cleanString(config.template_sheet_id),
+    sheet_tab: cleanString(config.sheet_tab),
+    sheet_range: cleanString(config.sheet_range),
+  };
+}
+
 function autoAddNativeAppSetupFieldsForWorkflow(
   workflow: any,
   setupSchema: any[],
   setupNames: Set<string>,
   warnings: string[],
   addedSetupFields: any[],
+  product: any = {},
 ) {
   const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+  const sheetConfig = sheetAccessConfigForProduct(product);
 
   for (const node of nodes) {
     const nodeText = cleanString(`${node?.type || ""} ${node?.name || ""}`).toLowerCase();
@@ -935,58 +964,80 @@ function autoAddNativeAppSetupFieldsForWorkflow(
       ]);
 
       if (isEmptyNodeValue(spreadsheetTarget)) {
-        addSpecificSetupField(
-          setupSchema,
-          setupNames,
-          warnings,
-          addedSetupFields,
-          setupField(
-            "google_sheet_url",
-            "Google Sheet URL",
-            "url",
-            "Auto-added because a Google Sheets node needs the target spreadsheet. The buyer can paste the sheet URL during setup, or the developer can hardcode it in the workflow editor.",
-            "https://docs.google.com/spreadsheets/d/...",
-          ),
-          `because "${node?.name || "Google Sheets"}" needs a spreadsheet target`,
-        );
-        writeEmptyParameter(parameters, ["documentId", "spreadsheetId", "sheetId", "fileId", "documentUrl", "spreadsheetUrl"], setupResourceLocator("google_sheet_url", "url"));
+        if (sheetConfig.mode === "developer_owned") {
+          const locator = literalResourceLocator(sheetConfig.developer_sheet_id, "id") || setupResourceLocator("nexus_dev_sheet_id", "id");
+          writeEmptyParameter(parameters, ["documentId", "spreadsheetId", "sheetId", "fileId", "documentUrl", "spreadsheetUrl"], locator);
+          warnings.push(`Google Sheets node "${node?.name || "Google Sheets"}" uses a developer-owned hidden sheet. Nexus will not ask the buyer for this sheet.`);
+        } else if (sheetConfig.mode === "private_per_customer") {
+          writeEmptyParameter(parameters, ["documentId", "spreadsheetId", "sheetId", "fileId", "documentUrl", "spreadsheetUrl"], setupResourceLocator("nexus_private_customer_sheet_id", "id"));
+          warnings.push(`Google Sheets node "${node?.name || "Google Sheets"}" uses a private per-customer sheet. Nexus stores the template/customer sheet intent outside the buyer form.`);
+        } else {
+          addSpecificSetupField(
+            setupSchema,
+            setupNames,
+            warnings,
+            addedSetupFields,
+            setupField(
+              "google_sheet_url",
+              "Google Sheet URL",
+              "url",
+              "Auto-added because a Google Sheets node needs the target spreadsheet. The buyer can paste the sheet URL during setup, or the developer can choose a hidden sheet mode in the product builder.",
+              "https://docs.google.com/spreadsheets/d/...",
+            ),
+            `because "${node?.name || "Google Sheets"}" needs a spreadsheet target`,
+          );
+          writeEmptyParameter(parameters, ["documentId", "spreadsheetId", "sheetId", "fileId", "documentUrl", "spreadsheetUrl"], setupResourceLocator("google_sheet_url", "url"));
+        }
       }
 
       if (isEmptyNodeValue(sheetTarget)) {
-        addSpecificSetupField(
-          setupSchema,
-          setupNames,
-          warnings,
-          addedSetupFields,
-          setupField(
-            "google_sheet_name",
-            "Google Sheet tab",
-            "text",
-            "Auto-added because a Google Sheets node needs the worksheet/tab name.",
-            "Sheet1",
-          ),
-          `because "${node?.name || "Google Sheets"}" needs a sheet/tab name`,
-        );
-        writeEmptyParameter(parameters, ["sheetName", "sheet", "tabName", "worksheet"], setupResourceLocator("google_sheet_name", "name"));
+        if (sheetConfig.mode === "customer_owned") {
+          addSpecificSetupField(
+            setupSchema,
+            setupNames,
+            warnings,
+            addedSetupFields,
+            setupField(
+              "google_sheet_name",
+              "Google Sheet tab",
+              "text",
+              "Auto-added because a Google Sheets node needs the worksheet/tab name.",
+              "Sheet1",
+            ),
+            `because "${node?.name || "Google Sheets"}" needs a sheet/tab name`,
+          );
+          writeEmptyParameter(parameters, ["sheetName", "sheet", "tabName", "worksheet"], setupResourceLocator("google_sheet_name", "name"));
+        } else if (sheetConfig.sheet_tab) {
+          writeEmptyParameter(parameters, ["sheetName", "sheet", "tabName", "worksheet"], sheetConfig.sheet_tab);
+        } else {
+          writeEmptyParameter(parameters, ["sheetName", "sheet", "tabName", "worksheet"], setupResourceLocator("nexus_sheet_tab", "name"));
+          warnings.push(`Google Sheets node "${node?.name || "Google Sheets"}" needs a sheet tab. Nexus will use the hidden sheet tab from the product sheet access settings.`);
+        }
       }
 
       if (isEmptyNodeValue(rangeTarget)) {
-        addSpecificSetupField(
-          setupSchema,
-          setupNames,
-          warnings,
-          addedSetupFields,
-          setupField(
-            "google_sheet_range",
-            "Google Sheet range",
-            "text",
-            "Auto-added because a Google Sheets node may need a read/write range. Leave the field editable if the exact range depends on the buyer's sheet.",
-            "A:Z",
-            false,
-          ),
-          `because "${node?.name || "Google Sheets"}" may need a sheet range`,
-        );
-        writeEmptyParameter(parameters, ["range", "dataRange"], setupExpression("google_sheet_range"));
+        if (sheetConfig.mode === "customer_owned") {
+          addSpecificSetupField(
+            setupSchema,
+            setupNames,
+            warnings,
+            addedSetupFields,
+            setupField(
+              "google_sheet_range",
+              "Google Sheet range",
+              "text",
+              "Auto-added because a Google Sheets node may need a read/write range. Leave the field editable if the exact range depends on the buyer's sheet.",
+              "A:Z",
+              false,
+            ),
+            `because "${node?.name || "Google Sheets"}" may need a sheet range`,
+          );
+          writeEmptyParameter(parameters, ["range", "dataRange"], setupExpression("google_sheet_range"));
+        } else if (sheetConfig.sheet_range) {
+          writeEmptyParameter(parameters, ["range", "dataRange"], sheetConfig.sheet_range);
+        } else {
+          writeEmptyParameter(parameters, ["range", "dataRange"], setupExpression("nexus_sheet_range"));
+        }
       }
     }
 
@@ -1189,6 +1240,7 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
     setupNames,
     warnings,
     addedSetupFields,
+    product,
   );
 
   if (["make", "zapier"].includes(cleanString(product.workflow_source_platform).toLowerCase()) || product.make_blueprint) {

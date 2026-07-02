@@ -142,6 +142,22 @@ function cleanJsonObject(value: unknown) {
   return isRecord(parsed) ? parsed : {};
 }
 
+function cleanSheetAccessConfig(value: unknown) {
+  const parsed = cleanJsonObject(value);
+  const mode = cleanString(parsed.mode);
+  if (!["customer_owned", "developer_owned", "private_per_customer"].includes(mode)) {
+    return {};
+  }
+
+  return {
+    mode,
+    developer_sheet_id: cleanString(parsed.developer_sheet_id).slice(0, 500),
+    template_sheet_id: cleanString(parsed.template_sheet_id).slice(0, 500),
+    sheet_tab: cleanString(parsed.sheet_tab).slice(0, 120),
+    sheet_range: cleanString(parsed.sheet_range).slice(0, 120),
+  };
+}
+
 function cleanJsonArray(value: unknown) {
   const parsed = parseJsonValue(value, []);
   return Array.isArray(parsed) ? parsed.slice(0, 100) : [];
@@ -564,6 +580,10 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
         ? "n8n_managed"
         : "manual";
   const detectedPlaceholders = cleanJsonObject(body.detected_placeholders);
+  const sheetAccessConfig = cleanSheetAccessConfig(body.sheet_access_config);
+  if (Object.keys(sheetAccessConfig).length) {
+    detectedPlaceholders._nexus_sheet_access_config = sheetAccessConfig;
+  }
   const placeholderValidationErrors = cleanJsonArray(body.placeholder_validation_errors);
   const placeholderValidationStatus = ["valid", "needs_fix", "not_checked"].includes(cleanString(body.placeholder_validation_status))
     ? cleanString(body.placeholder_validation_status)

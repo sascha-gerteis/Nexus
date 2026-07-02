@@ -426,6 +426,57 @@ function mergeObjectValues(base: Record<string, unknown>, override: unknown) {
   };
 }
 
+function sheetAccessConfigFromAutomation(automation: any) {
+  const detected = asObject(automation?.detected_placeholders);
+  const config = asObject(detected._nexus_sheet_access_config || automation?.sheet_access_config);
+  const mode = cleanString(config.mode);
+
+  return {
+    mode: ["customer_owned", "developer_owned", "private_per_customer"].includes(mode)
+      ? mode
+      : "customer_owned",
+    developer_sheet_id: cleanString(config.developer_sheet_id),
+    template_sheet_id: cleanString(config.template_sheet_id),
+    sheet_tab: cleanString(config.sheet_tab),
+    sheet_range: cleanString(config.sheet_range),
+  };
+}
+
+function applySheetAccessSetup(setup: Record<string, unknown>, automation: any) {
+  const config = sheetAccessConfigFromAutomation(automation);
+  const output = { ...(setup || {}) };
+
+  if (config.mode === "developer_owned" && config.developer_sheet_id) {
+    assignIfUseful(output, "nexus_dev_sheet_id", config.developer_sheet_id);
+    assignIfUseful(output, "google_sheet_id", config.developer_sheet_id);
+    assignIfUseful(output, "google_sheet_url", config.developer_sheet_id);
+  }
+
+  if (config.mode === "private_per_customer" && config.template_sheet_id) {
+    /*
+      Technical tests use the template sheet as the stand-in target.
+      Live provisioning can replace nexus_private_customer_sheet_id
+      with a copied per-customer sheet before runtime execution.
+    */
+    assignIfUseful(output, "nexus_private_sheet_template_id", config.template_sheet_id);
+    assignIfUseful(output, "nexus_private_customer_sheet_id", config.template_sheet_id);
+    assignIfUseful(output, "google_sheet_id", config.template_sheet_id);
+  }
+
+  if (config.sheet_tab) {
+    assignIfUseful(output, "nexus_sheet_tab", config.sheet_tab);
+    assignIfUseful(output, "google_sheet_name", config.sheet_tab);
+  }
+
+  if (config.sheet_range) {
+    assignIfUseful(output, "nexus_sheet_range", config.sheet_range);
+    assignIfUseful(output, "google_sheet_range", config.sheet_range);
+  }
+
+  assignIfUseful(output, "google_sheet_access_mode", config.mode);
+  return expandBuyerSetupAliases(output);
+}
+
 async function loadDefaultTestProfile(adminClient: any, automationId: string) {
   if (!automationId) return null;
 
@@ -476,7 +527,7 @@ function buildTestSetupAndSecrets(automation: any, testProfile: any) {
 
   if (!testProfile) {
     return {
-      setup: generatedSetup,
+      setup: applySheetAccessSetup(generatedSetup, automation),
       secrets: generatedSecrets,
       used_test_profile: false,
       test_profile_id: null,
@@ -490,7 +541,7 @@ function buildTestSetupAndSecrets(automation: any, testProfile: any) {
     workflow fields from becoming undefined during early testing.
   */
   return {
-    setup: expandBuyerSetupAliases(mergeObjectValues(generatedSetup, testProfile.setup_values)),
+    setup: applySheetAccessSetup(mergeObjectValues(generatedSetup, testProfile.setup_values), automation),
     secrets: mergeObjectValues(generatedSecrets, testProfile.secret_values) as Record<string, string>,
     used_test_profile: true,
     test_profile_id: testProfile.id || null,

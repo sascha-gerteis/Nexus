@@ -98,6 +98,53 @@ function expandBuyerSetupAliases(setup: Record<string, unknown>) {
   return output;
 }
 
+function sheetAccessConfigFromAutomation(automation: any) {
+  const detected = asObject(automation?.detected_placeholders);
+  const config = asObject(detected._nexus_sheet_access_config || automation?.sheet_access_config);
+  const mode = cleanString(config.mode);
+
+  return {
+    mode: ["customer_owned", "developer_owned", "private_per_customer"].includes(mode)
+      ? mode
+      : "customer_owned",
+    developer_sheet_id: cleanString(config.developer_sheet_id),
+    template_sheet_id: cleanString(config.template_sheet_id),
+    sheet_tab: cleanString(config.sheet_tab),
+    sheet_range: cleanString(config.sheet_range),
+  };
+}
+
+function applySheetAccessSetup(setup: Record<string, unknown>, automation: any, customerAutomation: any) {
+  const config = sheetAccessConfigFromAutomation(automation);
+  const output = { ...(setup || {}) };
+
+  if (config.mode === "developer_owned" && config.developer_sheet_id) {
+    assignIfUseful(output, "nexus_dev_sheet_id", config.developer_sheet_id);
+    assignIfUseful(output, "google_sheet_id", config.developer_sheet_id);
+    assignIfUseful(output, "google_sheet_url", config.developer_sheet_id);
+  }
+
+  if (config.mode === "private_per_customer" && config.template_sheet_id) {
+    assignIfUseful(output, "nexus_private_sheet_template_id", config.template_sheet_id);
+    assignIfUseful(output, "nexus_private_customer_sheet_id", cleanString(customerAutomation?.private_google_sheet_id) || config.template_sheet_id);
+    assignIfUseful(output, "google_sheet_id", cleanString(customerAutomation?.private_google_sheet_id) || config.template_sheet_id);
+    assignIfUseful(output, "nexus_private_sheet_customer_key", cleanString(customerAutomation?.id));
+  }
+
+  if (config.sheet_tab) {
+    assignIfUseful(output, "nexus_sheet_tab", config.sheet_tab);
+    assignIfUseful(output, "google_sheet_name", config.sheet_tab);
+  }
+
+  if (config.sheet_range) {
+    assignIfUseful(output, "nexus_sheet_range", config.sheet_range);
+    assignIfUseful(output, "google_sheet_range", config.sheet_range);
+  }
+
+  assignIfUseful(output, "google_sheet_access_mode", config.mode);
+  return expandBuyerSetupAliases(output);
+}
+
 function pickFirstString(...values: unknown[]) {
   for (const value of values) {
     const cleaned = cleanString(value);
@@ -460,7 +507,7 @@ function buildRuntimePayload(params: {
     run_id: params.run?.id || "",
     run_key: params.runKey,
 
-    setup: expandBuyerSetupAliases(params.setupAnswers || {}),
+    setup: applySheetAccessSetup(params.setupAnswers || {}, params.automation, customerAutomation),
     secrets: params.secrets || {},
 
     customer: {

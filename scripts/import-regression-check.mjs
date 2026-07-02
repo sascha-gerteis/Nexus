@@ -148,6 +148,7 @@ const developerCredentials = read("supabase/functions/developer-credentials/inde
 const makeAssistant = read("supabase/functions/make-import-assistant/index.ts");
 const developerProducts = read("supabase/functions/developer-products/index.ts");
 const checkoutFunction = read("supabase/functions/create-checkout-session/index.ts");
+const sheetAccessSql = read("supabase/sheet_access_modes_install_or_patch.sql");
 
 scenario("Direct n8n OpenAI HTTP workflow template is import-safe", () => {
   const workflow = readJson("workflow-templates/monthly-competitor-website-brief-nexus.workflow.json");
@@ -208,6 +209,30 @@ scenario("Technical test data is explicit for external sheets/files/ranges", () 
   assert(testWorkflow.includes("This workflow needs real technical test data"), "Technical test must fail early when real setup values are missing.");
   assert(testWorkflow.includes("spreadsheet"), "Technical test must recognize spreadsheet/sheet setup requirements.");
   assert(testWorkflow.includes("Google Sheets rejected the saved credential"), "Technical test must explain Google Sheets permission failures.");
+});
+
+scenario("Google Sheets access modes are only shown for sheet workflows and reach runtime payloads", () => {
+  const devDashboard = read("pages/developer/dashboard.html");
+  const devProducts = read("supabase/functions/developer-products/index.ts");
+  const importWorkflow = read("supabase/functions/import-n8n-workflow/index.ts");
+  const testWorkflow = read("supabase/functions/test-n8n-workflow/index.ts");
+  const submitSetup = read("supabase/functions/submit-automation-setup/index.ts");
+  const scheduledRunner = read("supabase/functions/run-scheduled-automations/index.ts");
+
+  assert(devDashboard.includes("developerSheetAccessPanel"), "Developer dashboard must include the Google Sheets access panel.");
+  assert(devDashboard.includes("workflowSheetNodes"), "Developer dashboard must detect Google Sheets nodes before showing sheet access options.");
+  assert(devDashboard.includes("_nexus_sheet_access_config"), "Developer dashboard must persist sheet access config with product placeholders.");
+  assert(devDashboard.includes("private_per_customer"), "Developer dashboard must expose private per-customer sheet mode.");
+  assert(devProducts.includes("cleanSheetAccessConfig"), "Developer product API must normalize sheet access config.");
+  assert(importWorkflow.includes("sheetAccessConfigForProduct"), "Importer must read sheet access config while normalizing workflows.");
+  assert(importWorkflow.includes("nexus_dev_sheet_id"), "Importer must support developer-owned hidden sheet IDs.");
+  assert(importWorkflow.includes("nexus_private_customer_sheet_id"), "Importer must support private per-customer sheet IDs.");
+  assert(testWorkflow.includes("applySheetAccessSetup"), "Technical tests must inject hidden sheet setup values.");
+  assert(submitSetup.includes("applySheetAccessSetup"), "Buyer setup submission must inject hidden sheet setup values.");
+  assert(submitSetup.includes("copyGoogleSheetFromTemplate"), "Buyer setup submission must copy template sheets for private per-customer mode.");
+  assert(submitSetup.includes("private_google_sheet_id"), "Buyer setup submission must store copied private sheet IDs.");
+  assert(scheduledRunner.includes("applySheetAccessSetup"), "Scheduled monthly runs must inject hidden sheet setup values.");
+  assert(sheetAccessSql.includes("private_google_sheet_id"), "Sheet access SQL must add copied private sheet storage.");
 });
 
 scenario("Importer uses full workflow replacement and keeps drafts inactive", () => {
