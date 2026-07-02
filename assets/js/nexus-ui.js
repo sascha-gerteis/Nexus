@@ -652,10 +652,8 @@ function workflowHealthStatus(product = {}, summary = {}) {
   const workflowId = product?.n8n_workflow_id || product?.n8n_workflow_json || product?.runtime_webhook_url || "";
   const listingType = String(product?.listing_type || "").toLowerCase();
   const pricingType = String(product?.pricing_type || "").toLowerCase();
-
-  if (["healthy", "warning", "failed", "paused_by_health_check", "skipped"].includes(rawHealth)) {
-    return rawHealth;
-  }
+  const productStatus = String(product?.status || "").toLowerCase();
+  const isLive = ["live", "active", "published"].includes(productStatus);
 
   if (listingType === "custom_request" || pricingType === "custom_quote") {
     return rawHealth && rawHealth !== "unknown" ? rawHealth : "not_applicable";
@@ -665,8 +663,8 @@ function workflowHealthStatus(product = {}, summary = {}) {
     return "healthy";
   }
 
-  if (rawHealth === "needs_recheck") {
-    return "needs_recheck";
+  if (["healthy", "warning", "failed", "paused_by_health_check", "skipped"].includes(rawHealth)) {
+    return rawHealth;
   }
 
   if (["failed", "error", "cancelled", "canceled"].includes(rawTechnical)) {
@@ -676,6 +674,12 @@ function workflowHealthStatus(product = {}, summary = {}) {
   if (["running", "queued", "not_tested", "not tested", "needs_recheck"].includes(rawTechnical)) {
     return "needs_recheck";
   }
+
+  if (rawHealth === "needs_recheck") {
+    return isLive && workflowId ? "healthy" : "needs_recheck";
+  }
+
+  if (isLive && workflowId) return rawHealth && rawHealth !== "unknown" ? rawHealth : "healthy";
 
   if (workflowId) return "needs_recheck";
 

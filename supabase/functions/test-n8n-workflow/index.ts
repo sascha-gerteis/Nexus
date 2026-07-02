@@ -345,6 +345,52 @@ function testValueForField(field: any) {
   return "TEST_VALUE";
 }
 
+function setupFieldNeedsRealTestValue(field: any) {
+  const text = [
+    field?.name,
+    field?.label,
+    field?.placeholder,
+    field?.description,
+  ].map((value) => cleanString(value).toLowerCase()).join(" ");
+
+  const signals = [
+    "spreadsheet",
+    "google sheet",
+    "sheet url",
+    "sheet id",
+    "sheet tab",
+    "sheet name",
+    "sheet range",
+    "cell range",
+    "worksheet",
+    "tab name",
+    "google drive",
+    "drive file",
+    "drive folder",
+    "folder id",
+    "folder url",
+    "document id",
+  ];
+
+  return signals.some((signal) => text.includes(signal));
+}
+
+function realTestFieldLabel(field: any) {
+  return cleanString(field?.label || field?.name || "setup field");
+}
+
+function missingRealTestFields(setupSchema: any[], testProfile: any) {
+  const savedSetup = asObject(testProfile?.setup_values);
+  return setupSchema
+    .filter(setupFieldNeedsRealTestValue)
+    .filter((field) => {
+      const key = cleanString(field?.name);
+      if (!key) return false;
+      return !cleanString(savedSetup[key]);
+    })
+    .map(realTestFieldLabel);
+}
+
 function buildSetupFromSchema(setupSchema: any[]) {
   const setup: Record<string, unknown> = {};
 
@@ -417,6 +463,13 @@ async function loadDefaultTestProfile(adminClient: any, automationId: string) {
 function buildTestSetupAndSecrets(automation: any, testProfile: any) {
   const setupSchema = normalizeSchema(automation.setup_schema);
   const credentialSchema = normalizeSchema(automation.credential_schema);
+  const missingRealFields = missingRealTestFields(setupSchema, testProfile);
+
+  if (missingRealFields.length) {
+    throw new Error(
+      `This workflow needs real technical test data before Nexus can run it. Save real values for: ${missingRealFields.join(", ")}. For Google Sheets or Drive, the saved service account must have access to the exact sheet, tab, file, or range used in the test.`,
+    );
+  }
 
   const generatedSetup = buildSetupFromSchema(setupSchema);
   const generatedSecrets = buildSecretsFromSchema(credentialSchema);
@@ -632,10 +685,47 @@ function extractRunDataError(resultData: Record<string, unknown>) {
   return null;
 }
 
-function formatExecutionErrorMessage(message: string, nodeName: string, nodeType: string) {
-  if (!message) return "";
+function friendlyExecutionErrorMessage(message: string, nodeName: string, nodeType: string) {
+  const cleanMessage = cleanString(message);
+  if (!cleanMessage) return "";
 
-  const parts = [message];
+  const combined = lower(`${cleanMessage} ${nodeName} ${nodeType}`);
+  const isResourceNotFound =
+    combined.includes("resource you are requesting could not be found") ||
+    combined.includes("resource could not be found") ||
+    combined.includes("requested resource") && combined.includes("not found");
+  const isGoogleSheetsNode =
+    combined.includes("googlesheets") ||
+    combined.includes("google sheets") ||
+    combined.includes("google sheet") ||
+    combined.includes("spreadsheet");
+
+  if (isResourceNotFound && isGoogleSheetsNode) {
+    return [
+      "Google Sheets could not find the spreadsheet, sheet tab, or range used by this node.",
+      "Check the Sheet ID/URL and tab/range in the workflow node or Nexus buyer setup fields.",
+      "If this workflow uses a Google Service Account, share the target Google Sheet with the service-account email saved in Nexus credentials, then Sync changes and Run check again.",
+      `Original n8n error: ${cleanMessage}`,
+    ].join(" ");
+  }
+
+  if (combined.includes("forbidden") && isGoogleSheetsNode) {
+    return [
+      "Google Sheets rejected the saved credential for this spreadsheet.",
+      "If this uses a Google Service Account, share the target Google Sheet with the service-account email saved in Nexus credentials.",
+      "Then confirm the Sheet ID/URL, tab, and range in the workflow node or Nexus technical test data, sync changes, and run the check again.",
+      `Original n8n error: ${cleanMessage}`,
+    ].join(" ");
+  }
+
+  return cleanMessage;
+}
+
+function formatExecutionErrorMessage(message: string, nodeName: string, nodeType: string) {
+  const friendlyMessage = friendlyExecutionErrorMessage(message, nodeName, nodeType);
+  if (!friendlyMessage) return "";
+
+  const parts = [friendlyMessage];
   const nodeParts = [nodeName, nodeType].filter(Boolean).join(" / ");
 
   if (nodeParts) {
@@ -1273,6 +1363,7 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
       workflowInput,
       workflowJsonColumn,
       updateHostedWorkflow: true,
+      allowExistingNativeN8nCredentials: true,
     });
 
     if (!credentialBinding.ok) {

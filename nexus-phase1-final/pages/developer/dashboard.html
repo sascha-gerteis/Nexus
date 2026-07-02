@@ -355,6 +355,11 @@
                 </span>
               </summary>
 
+              <section class="credential-panel technical-test-data-panel" id="developerTechnicalTestDataPanel">
+                <h3>Technical test data</h3>
+                <p>Select a saved product to add real test values for buyer setup fields before running the workflow check.</p>
+              </section>
+
               <div class="credential-console-grid product-credential-console">
                 <section class="credential-panel credential-workflow-panel">
                   <h3>Selected product credential check</h3>
@@ -404,8 +409,19 @@
                       <label>n8n credential type override</label>
                       <input class="input" data-credential-name="n8n_credential_type" placeholder="Usually detected from the workflow">
                     </div>
-                    <input type="hidden" data-credential-name="n8n_credential_id">
-                    <input type="hidden" data-credential-name="n8n_credential_name">
+                    <div class="full credential-native-reference" data-native-reference-fields hidden>
+                      <div class="credential-form-grid">
+                        <div>
+                          <label>Existing n8n credential ID</label>
+                          <input class="input" data-credential-name="n8n_credential_id" placeholder="Use when this account already exists in n8n">
+                        </div>
+                        <div>
+                          <label>Existing n8n credential name</label>
+                          <input class="input" data-credential-name="n8n_credential_name" placeholder="Optional display name from n8n">
+                        </div>
+                      </div>
+                      <p class="muted">For native account nodes like Google Sheets, Gmail, Drive, Slack OAuth, and Microsoft, the safest setup is to create/select the account once in the locked n8n editor, then save its credential ID here. Nexus will bind it to every matching node and run the check.</p>
+                    </div>
                     <div class="full" data-generic-credential-field>
                       <label>API key / token</label>
                       <input class="input" data-credential-name="api_key" type="password" autocomplete="off" placeholder="Paste key. It will not be shown again after saving.">
@@ -457,17 +473,17 @@
                           <label>Service account email</label>
                           <input class="input" data-credential-name="service_account_email" placeholder="Optional if included in JSON">
                         </div>
-                        <div>
-                          <label>Project ID</label>
-                          <input class="input" data-credential-name="service_account_project_id" placeholder="Optional if included in JSON">
-                        </div>
                         <div class="full">
                           <label>Private key</label>
                           <textarea class="textarea code-textarea" data-credential-name="service_account_private_key" rows="4" placeholder="Optional if included in JSON"></textarea>
                         </div>
                         <div class="full">
-                          <label>Delegated subject</label>
-                          <input class="input" data-credential-name="google_delegated_subject" placeholder="Optional Workspace delegated user email">
+                          <label>Scopes</label>
+                          <input class="input" data-credential-name="oauth_scope" placeholder="https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive">
+                        </div>
+                        <div class="full">
+                          <label>Delegated email</label>
+                          <input class="input" data-credential-name="google_delegated_subject" placeholder="Optional Google Workspace delegated user email">
                         </div>
                       </div>
                       <p class="muted">Use this only for Google APIs that can run with a service account. Share the target sheet or file with the service account email before running the check.</p>
@@ -865,6 +881,7 @@ NEXUS_CODE_SYSTEM("customer_automation_id")</code></pre>
 {{NEXUS_CUSTOMER.name}}
 {{NEXUS_ORDER.id}}
 {{NEXUS_SYSTEM.customer_automation_id}}</code></pre>
+              <p class="developer-muted">Recommended format is <code>{{NEXUS_SETUP.field_name}}</code>. Nexus also detects common variants such as <code>{{Nexus_setup|field_name}}</code>, <code>{{NexusSetup.field_name}}</code>, and <code>{{NX_SETUP:field_name}}</code>.</p>
             </div>
           </div>
         </section>
@@ -930,10 +947,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
   </section>
 
   <div class="toast" id="toast"></div>
-  <script src="/assets/js/nexus-ui.js?v=20260701-bundle-preview-width"></script>
-<script src="/assets/js/nexus-db.js?v=20260701-bundle-preview-width"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260702-workflow-import-health"></script>
+<script src="/assets/js/nexus-db.js?v=20260702-workflow-import-health"></script>
   <script>
-    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null };
+    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, testProfile: null, revealedCredentials: {} };
 
     const developerGuideSnippets = {
       setupSchema: JSON.stringify([
@@ -1393,6 +1410,216 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (root) root.innerHTML = `<div class="developer-empty-state"><p>${NexusUI.escapeHtml(message)}</p></div>`;
     }
 
+    function setupFieldNeedsRealTestValue(field = {}) {
+      const text = [
+        field.name,
+        field.label,
+        field.placeholder,
+        field.description
+      ].map((value) => String(value || "").toLowerCase()).join(" ");
+
+      const signals = [
+        "spreadsheet",
+        "google sheet",
+        "sheet url",
+        "sheet id",
+        "sheet tab",
+        "sheet name",
+        "sheet range",
+        "cell range",
+        "worksheet",
+        "tab name",
+        "google drive",
+        "drive file",
+        "drive folder",
+        "folder id",
+        "folder url",
+        "document id"
+      ];
+
+      return signals.some((signal) => text.includes(signal));
+    }
+
+    function renderTechnicalTestField(field, values = {}) {
+      const name = String(field?.name || "").trim();
+      if (!name) return "";
+
+      const type = String(field.type || "text").toLowerCase();
+      const value = values[name] ?? "";
+      const required = field.required || setupFieldNeedsRealTestValue(field);
+      const description = field.description
+        ? `<small>${NexusUI.escapeHtml(field.description)}</small>`
+        : "";
+      const note = setupFieldNeedsRealTestValue(field)
+        ? `<small class="technical-test-real-note">Use a real value that the saved provider credential can access.</small>`
+        : "";
+      const common = `
+        data-test-setup-name="${NexusUI.escapeAttribute(name)}"
+        ${required ? "required" : ""}
+      `;
+
+      let control = "";
+      if (type === "textarea" || type === "long_text" || String(value || "").includes("\n")) {
+        control = `<textarea class="textarea" rows="3" ${common} placeholder="${NexusUI.escapeAttribute(field.placeholder || "")}">${NexusUI.escapeHtml(value)}</textarea>`;
+      } else if (type === "select" && Array.isArray(field.options)) {
+        const options = field.options.map((option) => {
+          const optionValue = typeof option === "string" ? option : option.value || option.label || "";
+          const optionLabel = typeof option === "string" ? option : option.label || option.value || "";
+          return `<option value="${NexusUI.escapeAttribute(optionValue)}" ${String(optionValue) === String(value) ? "selected" : ""}>${NexusUI.escapeHtml(optionLabel)}</option>`;
+        }).join("");
+        control = `<select class="select" ${common}><option value="">Select test value...</option>${options}</select>`;
+      } else {
+        const inputType = type === "url"
+          ? "url"
+          : type === "email"
+            ? "email"
+            : type === "number"
+              ? "number"
+              : "text";
+        control = `<input class="input" type="${inputType}" value="${NexusUI.escapeAttribute(value)}" ${common} placeholder="${NexusUI.escapeAttribute(field.placeholder || "")}">`;
+      }
+
+      return `
+        <label>
+          <span>${NexusUI.escapeHtml(field.label || name)}${required ? " *" : ""}</span>
+          ${control}
+          ${description}
+          ${note}
+        </label>
+      `;
+    }
+
+    function collectTechnicalTestValues() {
+      const values = {};
+      document.querySelectorAll("[data-test-setup-name]").forEach((field) => {
+        const key = String(field.dataset.testSetupName || "").trim();
+        if (!key) return;
+        values[key] = field.value;
+      });
+      return values;
+    }
+
+    function renderDeveloperTestDataPanel(product = selectedProduct(), profile = state.testProfile, loadingMessage = "") {
+      const root = document.getElementById("developerTechnicalTestDataPanel");
+      if (!root) return;
+
+      if (!product?.id) {
+        root.innerHTML = `
+          <h3>Technical test data</h3>
+          <p>Save or select a product first. Nexus uses these values when it runs the full workflow check.</p>
+        `;
+        return;
+      }
+
+      if (product.listing_type === "custom_request") {
+        root.innerHTML = `
+          <h3>Technical test data</h3>
+          <p>Custom request listings do not need a hosted workflow technical test.</p>
+        `;
+        return;
+      }
+
+      const setupSchema = schemaArray(product.setup_schema);
+      const values = profile?.setup_values || {};
+      const realFields = setupSchema.filter(setupFieldNeedsRealTestValue);
+      const profileLabel = profile?.id
+        ? `Saved ${formatRunDate(profile.updated_at || profile.created_at)}`
+        : "Not saved yet";
+
+      if (!setupSchema.length) {
+        root.innerHTML = `
+          <div class="technical-test-head">
+            <div>
+              <h3>Technical test data</h3>
+              <p>This product has no buyer setup fields. Nexus will run the workflow with generated test context only.</p>
+            </div>
+            <span class="pill green">No setup fields</span>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = `
+        <div class="technical-test-head">
+          <div>
+            <h3>Technical test data</h3>
+            <p>Save realistic buyer setup values before running the workflow check. Google Sheets, Drive, files, tabs, and ranges must be real resources your saved credential can access.</p>
+          </div>
+          <span class="${profile?.id ? "pill green" : "pill orange"}">${NexusUI.escapeHtml(profileLabel)}</span>
+        </div>
+        ${loadingMessage ? `<div class="runtime-import-result compact">${NexusUI.escapeHtml(loadingMessage)}</div>` : ""}
+        ${realFields.length ? `
+          <div class="technical-test-warning">
+            <strong>Real resource required</strong>
+            <p>${NexusUI.escapeHtml(realFields.map((field) => field.label || field.name).join(", "))} must point to a sheet/file/range that the saved credential can access.</p>
+          </div>
+        ` : ""}
+        <div class="technical-test-grid">
+          ${setupSchema.map((field) => renderTechnicalTestField(field, values)).join("")}
+        </div>
+        <div class="credential-action-row">
+          <button class="btn btn-secondary btn-small" type="button" id="loadDeveloperTestDataButton">Reload saved test data</button>
+          <button class="btn btn-primary btn-small" type="button" id="saveDeveloperTestDataButton">Save test data</button>
+        </div>
+      `;
+
+      document.getElementById("loadDeveloperTestDataButton")?.addEventListener("click", () => loadDeveloperTestProfile(product.id));
+      document.getElementById("saveDeveloperTestDataButton")?.addEventListener("click", saveDeveloperTestProfile);
+    }
+
+    async function loadDeveloperTestProfile(automationId = state.selectedProductId) {
+      const product = selectedProduct();
+      if (!automationId || !product?.id) {
+        renderDeveloperTestDataPanel(null);
+        return;
+      }
+
+      renderDeveloperTestDataPanel(product, state.testProfile, "Loading saved test data...");
+
+      try {
+        const { data, error } = await NexusDB.getAutomationTestProfile(automationId);
+        if (error) throw new Error(error.message || "Could not load test data.");
+        if (String(state.selectedProductId || "") !== String(automationId || "")) return;
+        state.testProfile = data?.profile || null;
+        renderDeveloperTestDataPanel(product, state.testProfile);
+      } catch (error) {
+        state.testProfile = null;
+        renderDeveloperTestDataPanel(product, null, error.message || "Could not load saved test data.");
+      }
+    }
+
+    async function saveDeveloperTestProfile() {
+      const product = selectedProduct();
+      if (!product?.id) {
+        NexusUI.toast("Save or select a product first.");
+        return;
+      }
+
+      const values = collectTechnicalTestValues();
+      const missingRequired = schemaArray(product.setup_schema)
+        .filter((field) => (field.required || setupFieldNeedsRealTestValue(field)) && !String(values[field.name] ?? "").trim())
+        .map((field) => field.label || field.name);
+
+      if (missingRequired.length) {
+        NexusUI.toast(`Add test values for: ${missingRequired.join(", ")}`);
+        return;
+      }
+
+      try {
+        const { data, error } = await NexusDB.saveAutomationTestProfile(product.id, {
+          name: "Default test profile",
+          setup_values: values,
+          secret_values: {}
+        });
+        if (error) throw new Error(error.message || "Could not save test data.");
+        state.testProfile = data?.profile || null;
+        renderDeveloperTestDataPanel(product, state.testProfile);
+        NexusUI.toast("Technical test data saved. Apply credentials & run check again.");
+      } catch (error) {
+        NexusUI.toast(error.message || "Could not save test data.");
+      }
+    }
+
     function openProductEditor(product = null) {
       activeTab("products");
       if (product) {
@@ -1402,7 +1629,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       setSelectedProductId("");
       resetProductForm();
+      state.testProfile = null;
       renderSelectedProductSummary(null);
+      renderDeveloperTestDataPanel(null);
       clearCredentialWorkspace();
       renderProducts();
       if ((state.credentials || []).length) renderCredentialList();
@@ -1495,6 +1724,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
     function productHealthIssue(product) {
       const status = String(product?.health_status || "").toLowerCase();
+      if (status === "needs_recheck" && isPassingTestStatus(product?.n8n_last_test_status)) {
+        return "";
+      }
       if (["failed", "paused_by_health_check", "needs_recheck"].includes(status)) {
         return product?.health_failure_reason || "Nexus needs a fresh workflow check before this product can go live.";
       }
@@ -1784,6 +2016,35 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return cleanProvider || "Provider";
     }
 
+    function canUseGoogleServiceAccountForSlot(slot = {}, provider = "", n8nType = "") {
+      const cleanProvider = String(provider || slot.provider || "").trim().toLowerCase();
+      const cleanType = String(n8nType || slot.n8n_credential_type || slot.credential_key || "").trim().toLowerCase();
+      const nodeText = [
+        slot.node_type,
+        slot.node_name,
+        slot.provider,
+        slot.provider_label,
+        slot.credential_key,
+        slot.n8n_credential_type,
+      ].filter(Boolean).join(" ").toLowerCase();
+
+      return (
+        ["google_sheets", "google_drive", "google_docs"].includes(cleanProvider) ||
+        ["googlesheetsoauth2api", "googledriveoauth2api", "googledocsoauth2api"].includes(cleanType) ||
+        (
+          nodeText.includes("google") &&
+          (nodeText.includes("sheet") || nodeText.includes("drive") || nodeText.includes("doc")) &&
+          !nodeText.includes("gmail")
+        )
+      );
+    }
+
+    function preferredCredentialProviderForSlot(slot = {}, provider = "", n8nType = "") {
+      return canUseGoogleServiceAccountForSlot(slot, provider, n8nType)
+        ? "google_service_account"
+        : provider;
+    }
+
     function credentialProviderFieldGroup(provider, n8nType = "") {
       const cleanProvider = String(provider || "").trim().toLowerCase();
       const cleanType = String(n8nType || "").trim().toLowerCase();
@@ -1849,6 +2110,90 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       });
     }
 
+    function credentialSecretEditValues(fields = {}) {
+      const values = { ...(fields || {}) };
+      const first = (...keys) => keys.map((key) => fields?.[key]).find((value) => String(value ?? "").trim());
+
+      const apiKey = first("api_key", "apiKey", "key", "token", "accessToken", "apiToken");
+      if (apiKey) {
+        values.api_key = values.api_key || apiKey;
+        values.openai_api_key = values.openai_api_key || apiKey;
+      }
+
+      const baseUrl = first("url", "base_url", "baseURL", "connectionString", "connection_string");
+      if (baseUrl) {
+        values.url = values.url || baseUrl;
+        values.openai_base_url = values.openai_base_url || baseUrl;
+        values.connection_string = values.connection_string || baseUrl;
+      }
+
+      const serviceAccountJson = first("service_account_json", "serviceAccountJson");
+      if (serviceAccountJson) values.service_account_json = serviceAccountJson;
+
+      const serviceAccountEmail = first("service_account_email", "client_email", "email");
+      if (serviceAccountEmail) values.service_account_email = values.service_account_email || serviceAccountEmail;
+
+      const serviceAccountPrivateKey = first("service_account_private_key", "private_key", "privateKey");
+      if (serviceAccountPrivateKey) values.service_account_private_key = values.service_account_private_key || serviceAccountPrivateKey;
+
+      const delegatedSubject = first("google_delegated_subject", "delegated_subject", "delegatedSubject", "subject", "delegatedEmail");
+      if (delegatedSubject) values.google_delegated_subject = values.google_delegated_subject || delegatedSubject;
+
+      const projectId = first("service_account_project_id", "project_id", "projectId");
+      if (projectId) values.service_account_project_id = values.service_account_project_id || projectId;
+
+      const oauthClientId = first("oauth_client_id", "client_id", "clientId");
+      if (oauthClientId) values.oauth_client_id = values.oauth_client_id || oauthClientId;
+
+      const oauthClientSecret = first("oauth_client_secret", "client_secret", "clientSecret");
+      if (oauthClientSecret) values.oauth_client_secret = values.oauth_client_secret || oauthClientSecret;
+
+      const refreshToken = first("oauth_refresh_token", "refresh_token", "refreshToken");
+      if (refreshToken) values.oauth_refresh_token = values.oauth_refresh_token || refreshToken;
+
+      const accessToken = first("oauth_access_token", "access_token", "accessToken");
+      if (accessToken) values.oauth_access_token = values.oauth_access_token || accessToken;
+
+      const scope = first("oauth_scope", "scope", "scopes");
+      if (scope) values.oauth_scope = values.oauth_scope || scope;
+
+      const tokenUrl = first("token_url", "access_token_url", "accessTokenUrl");
+      if (tokenUrl) values.token_url = values.token_url || tokenUrl;
+
+      const username = first("username", "user", "email");
+      if (username) {
+        values.username = values.username || username;
+        values.email = values.email || username;
+      }
+
+      if (fields?.secure !== undefined) values.secure = String(fields.secure);
+      if (fields?.ssl !== undefined) values.ssl = String(fields.ssl);
+
+      return values;
+    }
+
+    function fillCredentialSecretInputs(form, fields = {}) {
+      const values = credentialSecretEditValues(fields);
+      let filled = 0;
+
+      Object.entries(values).forEach(([name, value]) => {
+        if (value === undefined || value === null) return;
+        form.querySelectorAll(`[data-credential-name='${name}']`).forEach((field) => {
+          if (!credentialFieldIsActive(field)) return;
+          field.value = typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
+          filled += 1;
+        });
+      });
+
+      const genericSecretField = form.querySelector("[data-credential-name='secret_fields']");
+      if (!filled && genericSecretField && credentialFieldIsActive(genericSecretField)) {
+        genericSecretField.value = JSON.stringify(fields || {}, null, 2);
+        filled += 1;
+      }
+
+      return filled;
+    }
+
     function credentialFieldIsActive(field) {
       const panel = field.closest("[data-provider-fields]");
       return !panel || !panel.hidden;
@@ -1858,9 +2203,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const type = form.querySelector("[data-credential-name='n8n_credential_type']")?.value || "";
       const group = credentialProviderFieldGroup(provider, type);
       if (group === "openai") return form.querySelector("[data-credential-name='openai_api_key']");
-      if (group === "google_oauth") return form.querySelector("[data-credential-name='oauth_client_id']");
+      if (group === "google_oauth") return form.querySelector("[data-credential-name='n8n_credential_id']") || form.querySelector("[data-credential-name='oauth_client_id']");
       if (group === "google_service_account") return form.querySelector("[data-credential-name='service_account_json']");
-      if (group === "oauth_account") return form.querySelector("[data-credential-name='oauth_client_id']");
+      if (group === "oauth_account") return form.querySelector("[data-credential-name='n8n_credential_id']") || form.querySelector("[data-credential-name='oauth_client_id']");
       if (group === "api_pair") return form.querySelector("[data-credential-name='api_key']");
       if (group === "database") return form.querySelector("[data-credential-name='connection_string']") || form.querySelector("[data-credential-name='host']");
       if (group === "email_server") return form.querySelector("[data-credential-name='host']");
@@ -1878,14 +2223,24 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
 
       const n8nType = slot.n8n_credential_type || slot.credential_key || "";
-      const provider = slot.provider || providerForCredentialType(n8nType) || "custom";
-      const providerLabel = slot.provider_label || providerLabelForProvider(provider) || "Provider";
+      const rawProvider = slot.provider || providerForCredentialType(n8nType) || "custom";
+      const provider = preferredCredentialProviderForSlot(slot, rawProvider, n8nType);
+      const effectiveN8nType = provider === "google_service_account" ? credentialProviderDefaults.google_service_account : n8nType;
+      const providerLabel = provider === "google_service_account"
+        ? providerLabelForProvider(provider)
+        : slot.provider_label || providerLabelForProvider(provider) || "Provider";
       const nodeName = slot.node_name || "workflow";
 
       const hints = Array.isArray(slot.setup_hints) ? slot.setup_hints.filter(Boolean).join(" ") : "";
+      const fieldGroup = credentialProviderFieldGroup(provider, effectiveN8nType || credentialProviderDefaults[provider] || "");
+      const nativeCopy = ["google_oauth", "oauth_account"].includes(fieldGroup)
+        ? "Nexus can bind an existing native n8n account for this node. If the account is not in n8n yet, create/select it in the locked editor first, then save the credential ID here."
+        : fieldGroup === "google_service_account"
+          ? "Nexus will create and bind a Google service-account credential automatically. Share the target Sheet, Drive file, or Doc with the service account email before running the check."
+          : `Nexus will create the matching n8n credential type <code>${NexusUI.escapeHtml(effectiveN8nType || credentialProviderDefaults[provider] || "detected")}</code>.`;
       root.innerHTML = `
         <strong>${NexusUI.escapeHtml(providerLabel)} account</strong>
-        <p>Detected from ${NexusUI.escapeHtml(nodeName)}. Nexus will create the matching n8n credential type <code>${NexusUI.escapeHtml(n8nType || credentialProviderDefaults[provider] || "detected")}</code>.${hints ? ` ${NexusUI.escapeHtml(hints)}` : ""}</p>
+        <p>Detected from ${NexusUI.escapeHtml(nodeName)}. ${nativeCopy}${hints ? ` ${NexusUI.escapeHtml(hints)}` : ""}</p>
       `;
     }
 
@@ -1894,15 +2249,19 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (!form || !slot) return;
 
       const n8nType = slot.n8n_credential_type || slot.credential_key || "";
-      const provider = slot.provider || providerForCredentialType(n8nType) || "custom";
-      const providerLabel = slot.provider_label || providerLabelForProvider(provider) || "Provider";
+      const rawProvider = slot.provider || providerForCredentialType(n8nType) || "custom";
+      const provider = preferredCredentialProviderForSlot(slot, rawProvider, n8nType);
+      const effectiveN8nType = provider === "google_service_account" ? credentialProviderDefaults.google_service_account : n8nType;
+      const providerLabel = provider === "google_service_account"
+        ? providerLabelForProvider(provider)
+        : slot.provider_label || providerLabelForProvider(provider) || "Provider";
       const nodeName = slot.node_name || "workflow";
       const label = `${providerLabel} account - ${nodeName}`;
 
       form.querySelector("[data-credential-name='id']").value = "";
       form.querySelector("[data-credential-name='provider']").value = provider;
       form.querySelector("[data-credential-name='label']").value = label;
-      form.querySelector("[data-credential-name='n8n_credential_type']").value = n8nType || credentialProviderDefaults[provider] || "";
+      form.querySelector("[data-credential-name='n8n_credential_type']").value = effectiveN8nType || credentialProviderDefaults[provider] || "";
       form.querySelector("[data-credential-name='n8n_credential_id']").value = "";
       form.querySelector("[data-credential-name='n8n_credential_name']").value = slot.current_name || label;
       clearCredentialSecretInputs(form);
@@ -1911,7 +2270,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         ...slot,
         provider,
         provider_label: providerLabel,
-        n8n_credential_type: n8nType || credentialProviderDefaults[provider] || "",
+        n8n_credential_type: effectiveN8nType || credentialProviderDefaults[provider] || "",
       });
 
       const credentialSection = document.getElementById("developerProductCredentialsSection");
@@ -1920,7 +2279,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (!options.quiet) {
         const targetField = primaryCredentialField(form, provider);
         targetField?.focus();
-        NexusUI.toast(`${providerLabel} credential form prepared from ${nodeName}. Add the required account details and save.`);
+        NexusUI.toast(`${providerLabel} credential form prepared from ${nodeName}. Add the required account details or existing n8n account ID and save.`);
       }
     }
 
@@ -1978,6 +2337,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       form.querySelectorAll("[data-generic-credential-field]").forEach((panel) => {
         panel.hidden = Boolean(group);
       });
+      form.querySelectorAll("[data-native-reference-fields]").forEach((panel) => {
+        panel.hidden = !["google_oauth", "oauth_account"].includes(group);
+      });
 
       const openAiBaseUrl = form.querySelector("[data-credential-name='openai_base_url']");
       if (provider === "openai" && openAiBaseUrl && !openAiBaseUrl.value) {
@@ -1987,6 +2349,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const googleScope = form.querySelector("[data-credential-name='oauth_scope']");
       if (group === "google_oauth" && googleScope && !googleScope.value) {
         googleScope.value = defaultGoogleScope(provider);
+      }
+      if (group === "google_service_account" && googleScope && !googleScope.value) {
+        googleScope.value = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive";
       }
     }
 
@@ -2233,8 +2598,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         button.addEventListener("click", () => {
           const credential = state.credentials.find((item) => String(item.id || "") === button.dataset.editCredential);
           if (!credential) return;
+          const credentialId = String(credential.id || "");
           const form = document.getElementById("developerCredentialForm");
-          form.querySelector("[data-credential-name='id']").value = credential.id || "";
+          form.querySelector("[data-credential-name='id']").value = credentialId;
           form.querySelector("[data-credential-name='provider']").value = credential.provider || "custom";
           form.querySelector("[data-credential-name='label']").value = credential.label || "";
           form.querySelector("[data-credential-name='n8n_credential_type']").value = credential.n8n_credential_type || "";
@@ -2242,6 +2608,16 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           form.querySelector("[data-credential-name='n8n_credential_name']").value = credential.n8n_credential_name || "";
           clearCredentialSecretInputs(form);
           renderCredentialProviderFields();
+          const revealed = state.revealedCredentials?.[credentialId];
+          if (revealed) {
+            const filled = fillCredentialSecretInputs(form, revealed);
+            NexusUI.toast(filled
+              ? "Credential edit form loaded with the revealed secret."
+              : "Credential selected. The secret is revealed, but this provider uses a different field layout.");
+          } else {
+            NexusUI.toast("Credential selected. Use View first if you want to edit the existing secret value.");
+          }
+          document.getElementById("developerProductCredentialsSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
         });
       });
 
@@ -2280,13 +2656,27 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           }
 
           const fields = data?.secret_fields || {};
+          const credentialId = String(button.dataset.viewCredential || "");
+          state.revealedCredentials[credentialId] = fields;
           if (target) {
             target.innerHTML = `
               <div class="runtime-import-result" style="margin-top:.7rem">
                 <strong>Revealed credential</strong>
                 <pre class="code-textarea" style="white-space:pre-wrap;margin:.5rem 0 0">${NexusUI.escapeHtml(JSON.stringify(fields, null, 2))}</pre>
+                <button class="btn btn-secondary btn-small" type="button" data-edit-revealed-credential="${NexusUI.escapeAttribute(credentialId)}" style="margin-top:.7rem">Edit revealed credential</button>
               </div>
             `;
+            target.querySelector("[data-edit-revealed-credential]")?.addEventListener("click", () => {
+              root.querySelector(`[data-edit-credential="${CSS.escape(credentialId)}"]`)?.click();
+            });
+          }
+
+          const activeFormId = document.querySelector("#developerCredentialForm [data-credential-name='id']")?.value || "";
+          if (activeFormId && activeFormId === credentialId) {
+            const form = document.getElementById("developerCredentialForm");
+            clearCredentialSecretInputs(form);
+            renderCredentialProviderFields();
+            fillCredentialSecretInputs(form, fields);
           }
         });
       });
@@ -2330,6 +2720,19 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (!credentialFieldIsActive(field)) return;
         payload[field.dataset.credentialName] = field.value;
       });
+      if (payload.service_account_json) {
+        try {
+          const parsed = JSON.parse(payload.service_account_json);
+          payload.service_account_email = payload.service_account_email || parsed.client_email || "";
+          payload.service_account_private_key = payload.service_account_private_key || parsed.private_key || "";
+          payload.service_account_project_id = payload.service_account_project_id || parsed.project_id || "";
+        } catch (_error) {
+          /*
+            Let the backend return the validation error. The form can still be
+            saved when the user supplies separate service-account fields.
+          */
+        }
+      }
       payload.sync_n8n = false;
       return payload;
     }
@@ -2483,6 +2886,13 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return Boolean(type && nodeType && !genericTypes.has(type) && !nodeType.includes("httprequest"));
     }
 
+    function requiresNativeEditorCredentialSetup(slot) {
+      const type = String(slot?.n8n_credential_type || slot?.credential_key || "").trim().toLowerCase();
+      if (!isNativeCredentialSlot(slot)) return false;
+      if (type === "googleapi" || type === "openaiapi") return false;
+      return type.includes("oauth2") || type === "gmailoauth2";
+    }
+
     function workflowRunGuidance(message, slots, bindings) {
       const text = String(message || "");
       if (!text) return "";
@@ -2503,14 +2913,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return groupCredentialSlots(slots, errors, bindings).map((group, index) => {
         const missing = group.errors.length > 0;
         const bound = group.bindings.length > 0;
-        const nativeGroup = group.slots.some(isNativeCredentialSlot);
+        const nativeEditorGroup = group.slots.some(requiresNativeEditorCredentialSetup);
         const status = missing ? "Missing" : bound ? "Bound" : "Detected only";
         const statusClassName = missing ? "pill red" : bound ? "pill green" : "pill orange";
         const credentialNames = Array.from(new Set(group.bindings.map((binding) => binding.n8n_credential_name || binding.developer_credential_id || "Nexus credential").filter(Boolean)));
         const nodeNames = group.slots.map((slot) => slot.node_name || "Workflow node").slice(0, 4);
         const firstError = group.errors[0]?.message || "";
         const setupHints = Array.from(new Set(group.slots.flatMap((slot) => Array.isArray(slot.setup_hints) ? slot.setup_hints : []).filter(Boolean))).join(" ");
-        const nativeFallbackCopy = nativeGroup && missing
+        const nativeFallbackCopy = nativeEditorGroup && missing
           ? `This is a native n8n account credential. Open the workflow editor, open ${nodeNames[0] || "the node"}, set/select the credential account there, save, then sync and run the check.`
           : "";
 
@@ -2534,9 +2944,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
               ? `
                 <div class="credential-action-row">
                   <button class="btn btn-secondary btn-small" type="button" data-prepare-credential-group="${index}">
-                    Add ${NexusUI.escapeHtml(group.provider)} ${nativeGroup ? "account" : "key"}
+                    Add ${NexusUI.escapeHtml(group.provider)} ${nativeEditorGroup ? "account" : "key"}
                   </button>
-                  ${nativeGroup ? `<button class="btn btn-secondary btn-small" type="button" data-open-workflow-editor="${index}">Fallback editor setup</button>` : ""}
+                  ${nativeEditorGroup ? `<button class="btn btn-secondary btn-small" type="button" data-open-workflow-editor="${index}">Fallback editor setup</button>` : ""}
                 </div>
               `
               : ""}
@@ -2938,6 +3348,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       updateDeveloperPricingLabels();
       updateDeveloperImportResult(product);
       renderSelectedProductSummary(product);
+      state.testProfile = null;
+      renderDeveloperTestDataPanel(product, null);
+      loadDeveloperTestProfile(product?.id);
       renderProducts();
       renderCredentialProductSelect();
       if ((state.credentials || []).length) renderCredentialList();
@@ -4563,6 +4976,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       document.getElementById("saveDeveloperCredentialButton").addEventListener("click", async function () {
         const button = this;
         const originalText = button?.textContent || "";
+        const editingCredentialId = document.querySelector("#developerCredentialForm [data-credential-name='id']")?.value || "";
         if (button) {
           button.disabled = true;
           button.textContent = "Saving...";
@@ -4572,6 +4986,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           const { data, error } = await NexusDB.saveDeveloperCredential(credentialPayload());
           if (error) throw new Error(error.message || "Could not save credential.");
           NexusUI.toast("Credential saved. Apply it to the product to update n8n and run the full test.");
+          if (editingCredentialId) delete state.revealedCredentials[editingCredentialId];
+          if (data?.id) delete state.revealedCredentials[data.id];
           resetCredentialForm();
           await loadCredentials();
         } catch (error) {

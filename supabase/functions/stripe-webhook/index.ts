@@ -1,5 +1,6 @@
 import Stripe from "https://esm.sh/stripe@14.25.0?target=deno";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { safeEnqueueEmail } from "../_shared/nexus-email.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
   apiVersion: "2024-06-20",
@@ -45,6 +46,37 @@ function roundMoney(value: number) {
 
 function stripeAmountToMajor(value: unknown) {
   return roundMoney(Number(value || 0) / 100);
+}
+
+async function loadDeveloperEmailRecipient(developerId: string) {
+  if (!developerId) return null;
+
+  const { data: developer, error: developerError } = await adminClient
+    .from("developers")
+    .select("id, display_name, profile_id")
+    .eq("id", developerId)
+    .maybeSingle();
+
+  if (developerError || !developer?.profile_id) {
+    if (developerError) console.warn("Could not load developer recipient:", developerError.message);
+    return null;
+  }
+
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("email, full_name")
+    .eq("id", developer.profile_id)
+    .maybeSingle();
+
+  if (profileError || !profile?.email) {
+    if (profileError) console.warn("Could not load developer profile recipient:", profileError.message);
+    return null;
+  }
+
+  return {
+    email: profile.email,
+    name: developer.display_name || profile.full_name || "Developer",
+  };
 }
 
 function isMissingWalletSchemaError(error: any) {
@@ -495,6 +527,25 @@ async function recordDeveloperEarningForOrder(
     ...orderFinancialPatch,
     revenue_share_status: "allocated",
   });
+
+  const developerRecipient = await loadDeveloperEmailRecipient(developerId);
+  if (developerRecipient) {
+    await safeEnqueueEmail(
+      adminClient,
+      "developer_order_received",
+      developerRecipient,
+      {
+        product_title: order.automation_title || automationProduct?.title || "Automation product",
+        buyer_email: order.buyer_email || "",
+        developer_amount: developerAmount,
+        currency,
+        dashboard_url: "/pages/developer/dashboard.html#wallet",
+      },
+      {
+        dedupeKey: `developer_order_received:${order.id}:${developerId}`,
+      },
+    );
+  }
 }
 
 async function markDeveloperEarningForCharge(
@@ -724,6 +775,20 @@ async function handlePaidBundleOrder(order: any, isPaid: boolean, isSubscription
     status: "unread",
     created_at: nowIso(),
   });
+
+  await safeEnqueueEmail(
+    adminClient,
+    "bundle_payment_received",
+    { email: order.buyer_email, name: order.buyer_name },
+    {
+      bundle_title: order.automation_title || "Automation bundle",
+      order_id: order.id,
+      dashboard_url: "/pages/buyer/dashboard.html#automations",
+    },
+    {
+      dedupeKey: `bundle_payment_received:${order.id}`,
+    },
+  );
 }
 
 async function activateBundleSchedulesIfReady(order: any, subscriptionStatus = "") {
@@ -996,6 +1061,20 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     status: "unread",
     created_at: nowIso(),
   });
+
+  await safeEnqueueEmail(
+    adminClient,
+    "order_payment_received",
+    { email: order.buyer_email, name: order.buyer_name },
+    {
+      product_title: order.automation_title || automationProduct?.title || "Automation",
+      order_id: order.id,
+      dashboard_url: "/pages/buyer/dashboard.html#automations",
+    },
+    {
+      dedupeKey: `order_payment_received:${order.id}`,
+    },
+  );
 }
 
 async function handleCheckoutExpired(session: Stripe.Checkout.Session) {

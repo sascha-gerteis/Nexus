@@ -640,20 +640,28 @@ const NexusDB = (() => {
     const derivedHealth = (product) => {
       const health = String(product?.health_status || "").toLowerCase();
       const test = String(product?.n8n_last_test_status || "").toLowerCase();
-
-      if (["healthy", "warning", "failed", "paused_by_health_check", "skipped"].includes(health)) {
-        return health;
-      }
+      const status = String(product?.status || "").toLowerCase();
+      const isLive = ["live", "active", "published"].includes(status);
 
       if (["passed", "passed_with_expected_test_callback_error", "success", "succeeded", "completed"].includes(test)) {
         return "healthy";
       }
 
-      if (health === "needs_recheck") return "needs_recheck";
+      if (["healthy", "warning", "failed", "paused_by_health_check", "skipped"].includes(health)) {
+        return health;
+      }
 
       if (["failed", "error", "cancelled", "canceled"].includes(test)) {
         return "failed";
       }
+
+      if (["running", "queued", "not_tested", "not tested", "needs_recheck"].includes(test)) {
+        return "needs_recheck";
+      }
+
+      if (health === "needs_recheck") return isLive && (product?.n8n_workflow_id || product?.n8n_workflow_json) ? "healthy" : "needs_recheck";
+
+      if (isLive && (product?.n8n_workflow_id || product?.n8n_workflow_json)) return health || "healthy";
 
       if (product?.n8n_workflow_id || product?.n8n_workflow_json) return "needs_recheck";
 
@@ -2309,6 +2317,23 @@ async function checkN8nWorkflowTest(payload = {}) {
     ...payload
   });
 }
+
+async function getAutomationTestProfile(automationId) {
+  return callNexusFunction("automation-test-profile", {
+    mode: "get",
+    automation_id: automationId
+  });
+}
+
+async function saveAutomationTestProfile(automationId, payload = {}) {
+  return callNexusFunction("automation-test-profile", {
+    mode: "save",
+    automation_id: automationId,
+    name: payload.name || "Default test profile",
+    setup_values: payload.setup_values || payload.setupValues || {},
+    secret_values: payload.secret_values || payload.secretValues || {}
+  });
+}
 async function listBuyerCustomerAutomations(userId) {
   let buyerId = userId || "";
 
@@ -3033,6 +3058,8 @@ syncN8nEditorWorkflow,
 revokeN8nEditorSession,
 startN8nWorkflowTest,
 checkN8nWorkflowTest,
+getAutomationTestProfile,
+saveAutomationTestProfile,
 listBuyerCustomerAutomations,
 listBuyerAutomationOutputs,
 listBuyerAutomationRuns,

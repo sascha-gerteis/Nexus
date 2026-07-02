@@ -3022,6 +3022,7 @@ function extractRuntimeSetupKeysFromText(text) {
   const patterns = [
     /NEXUS_SETUP\.([a-zA-Z0-9_.-]+)/g,
     /NEXUS_SETUP[_:-]([a-zA-Z0-9_.-]+)/gi,
+    /\{\{\s*(?:(?:NEXUS|NX)[\s_-]*SETUP|SETUP[\s_-]*(?:NEXUS|NX))\s*(?:[|:.=_\-\[\(]|\s+)\s*([a-zA-Z0-9_. -]+?)\s*(?:[\]\)])?\s*\}\}/gi,
     /\bsetup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
     /\bbody\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
     /\$json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
@@ -4003,6 +4004,7 @@ if (shouldImportN8n) {
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (form.dataset.submitting === "true") return;
 
       const submitButton = form.querySelector("button[type='submit'], button:not([type])");
       const originalButtonText = submitButton?.textContent || "Join waitlist";
@@ -4035,6 +4037,7 @@ if (shouldImportN8n) {
         submitButton.disabled = true;
         submitButton.textContent = "Joining...";
       }
+      form.dataset.submitting = "true";
 
       const { error } = await NexusDB.createWaitlist({
         name,
@@ -4056,6 +4059,7 @@ if (shouldImportN8n) {
           submitButton.disabled = false;
           submitButton.textContent = originalButtonText;
         }
+        form.dataset.submitting = "false";
         return;
       }
 

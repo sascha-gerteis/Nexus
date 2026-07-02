@@ -13568,6 +13568,72 @@ body.developer-guide-open {
   margin: 0 0 .9rem;
 }
 
+.technical-test-data-panel {
+  margin: 1rem 0 1.1rem;
+}
+
+.technical-test-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: .85rem;
+}
+
+.technical-test-head h3 {
+  margin: 0 0 .35rem;
+}
+
+.technical-test-head p {
+  margin: 0;
+  max-width: 820px;
+}
+
+.technical-test-warning {
+  border: 1px solid rgba(245, 158, 11, .35);
+  background: rgba(255, 247, 237, .88);
+  border-radius: 8px;
+  padding: .85rem;
+  margin: .85rem 0;
+}
+
+.technical-test-warning strong {
+  display: block;
+  color: #9a3412;
+  margin-bottom: .25rem;
+}
+
+.technical-test-warning p {
+  margin: 0;
+  color: #9a3412;
+}
+
+.technical-test-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.technical-test-grid label {
+  display: grid;
+  gap: .35rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.technical-test-grid label span {
+  color: var(--muted);
+}
+
+.technical-test-grid small {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.technical-test-real-note {
+  color: #9a3412;
+}
+
 .credential-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -14115,6 +14181,14 @@ body.developer-guide-open {
   .developer-product-workspace,
   .developer-wallet-layout,
   .credential-console-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .technical-test-head {
+    display: grid;
+  }
+
+  .technical-test-grid {
     grid-template-columns: 1fr;
   }
 

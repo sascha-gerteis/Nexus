@@ -174,8 +174,9 @@ scenario("Direct n8n Gemini HTTP workflow template is import-safe", () => {
 scenario("Stale imported n8n credential IDs cannot mark a product ready", () => {
   assert(credentialsShared.includes("removeCredentialReferencesForErrors"), "Shared binder must strip dead credential references on errors.");
   assert(!credentialsShared.includes("manualNativeN8nBindingFromSlot"), "Shared binder must not trust imported native n8n credential IDs.");
-  assert(!developerCredentials.includes("manualNativeBindingFromSlot"), "Dashboard scan must not mark manual imported native IDs as bound.");
-  assert(!developerCredentials.includes("manual_n8n_credential: true"), "Dashboard scan must not create manual native bindings from uploaded JSON.");
+  assert(developerCredentials.includes("const manualNativeBinding = liveWorkflow ? manualNativeBindingFromSlot(slot) : null;"), "Dashboard scan may only trust native n8n account IDs from the live hosted workflow.");
+  assert(developerCredentials.includes("product.n8n_normalized_workflow_json"), "Dashboard scan must keep uploaded/normalized workflow JSON separate from live hosted workflow scans.");
+  assert(credentialsShared.includes("until the key is saved and synced from the Nexus credential manager"), "Shared binder must warn that uploaded n8n credential IDs are not portable.");
 });
 
 scenario("Native OpenAI model credentials are treated as openAiApi, not generic HTTP", () => {
@@ -183,6 +184,30 @@ scenario("Native OpenAI model credentials are treated as openAiApi, not generic 
   assert(credentialsShared.includes('type === "openaiapi"'), "OpenAI credential sync must have an openAiApi payload branch.");
   assert(credentialsShared.includes("apiKey: openAiApiKey"), "OpenAI credential payload must send apiKey.");
   assert(credentialsShared.includes("https://api.openai.com/v1"), "OpenAI credential payload should include the default base URL.");
+});
+
+scenario("Developer credential reveal can safely refill edit forms", () => {
+  const devDashboard = read("pages/developer/dashboard.html");
+
+  assert(devDashboard.includes("revealedCredentials: {}"), "Dashboard state must keep short-lived revealed credential values.");
+  assert(devDashboard.includes("function credentialSecretEditValues"), "Dashboard must map revealed backend secret fields back to editable form fields.");
+  assert(devDashboard.includes("function fillCredentialSecretInputs"), "Dashboard must refill the credential form after a successful reveal.");
+  assert(devDashboard.includes("Edit revealed credential"), "Reveal view must offer a direct edit action.");
+  assert(devDashboard.includes("delete state.revealedCredentials"), "Saving credentials must clear stale revealed secret values from memory.");
+});
+
+scenario("Technical test data is explicit for external sheets/files/ranges", () => {
+  const devDashboard = read("pages/developer/dashboard.html");
+  const nexusDb = read("assets/js/nexus-db.js");
+  const testWorkflow = read("supabase/functions/test-n8n-workflow/index.ts");
+
+  assert(nexusDb.includes("getAutomationTestProfile"), "NexusDB must expose test profile reads.");
+  assert(nexusDb.includes("saveAutomationTestProfile"), "NexusDB must expose test profile writes.");
+  assert(devDashboard.includes("Technical test data"), "Developer dashboard must show the technical test data panel.");
+  assert(devDashboard.includes("saveAutomationTestProfile"), "Developer dashboard must save product-specific technical test values.");
+  assert(testWorkflow.includes("This workflow needs real technical test data"), "Technical test must fail early when real setup values are missing.");
+  assert(testWorkflow.includes("spreadsheet"), "Technical test must recognize spreadsheet/sheet setup requirements.");
+  assert(testWorkflow.includes("Google Sheets rejected the saved credential"), "Technical test must explain Google Sheets permission failures.");
 });
 
 scenario("Importer uses full workflow replacement and keeps drafts inactive", () => {

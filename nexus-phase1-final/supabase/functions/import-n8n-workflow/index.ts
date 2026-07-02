@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { bindAutomationCredentials, normalizeWorkflowResourceLocators } from "../_shared/nexus-credentials.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -11,6 +12,16 @@ function cleanBaseUrl(url: string) {
 
 function cleanString(value: unknown) {
   return String(value || "").trim();
+}
+
+function lower(value: unknown) {
+  return cleanString(value).toLowerCase();
+}
+
+function asObject(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, any>
+    : {};
 }
 
 function slugify(value: string) {
@@ -49,18 +60,35 @@ function escapeRegExp(value: string) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function isCredentialSchemaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /developer_credentials|automation_credential_requirements|credential_binding|schema cache|relation .* does not exist|could not find .* column/i.test(message);
+}
+
 /* =========================================================
    NEXUS RUNTIME CONTEXT EXPRESSIONS
    ========================================================= */
 
+function runtimeContextPath(section: string, key: string) {
+  const cleanSection = cleanString(section);
+  const cleanKey = cleanString(key);
+  if (!cleanSection || !cleanKey) return "";
+
+  const keyPath = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(cleanKey)
+    ? `.${cleanKey}`
+    : `[${JSON.stringify(cleanKey)}]`;
+
+  return `$("Nexus Runtime Context").first().json.${cleanSection}${keyPath}`;
+}
+
 function contextPathForMapping(source: string, key: string) {
   const cleanSource = cleanString(source).toLowerCase();
-  const cleanKey = cleanString(key);
+  const cleanKey = cleanSource === "setup" ? canonicalSetupKey(key) : cleanString(key);
 
   if (!cleanKey) return "";
 
   if (cleanSource === "setup") {
-    return `$("Nexus Runtime Context").first().json.setup.${cleanKey}`;
+    return runtimeContextPath("setup", cleanKey);
   }
 
   if (
@@ -69,19 +97,19 @@ function contextPathForMapping(source: string, key: string) {
     cleanSource === "credential" ||
     cleanSource === "credentials"
   ) {
-    return `$("Nexus Runtime Context").first().json.secrets.${cleanKey}`;
+    return runtimeContextPath("secrets", cleanKey);
   }
 
   if (cleanSource === "customer") {
-    return `$("Nexus Runtime Context").first().json.customer.${cleanKey}`;
+    return runtimeContextPath("customer", cleanKey);
   }
 
   if (cleanSource === "system") {
-    return `$("Nexus Runtime Context").first().json.system.${cleanKey}`;
+    return runtimeContextPath("system", cleanKey);
   }
 
   if (cleanSource === "order") {
-    return `$("Nexus Runtime Context").first().json.order.${cleanKey}`;
+    return runtimeContextPath("order", cleanKey);
   }
 
   return "";
@@ -178,10 +206,12 @@ function forceN8nExpressionModeIfNeeded(value: string, childKey = "") {
 
   /*
     Do not turn actual code blocks into n8n expression fields.
-    Code node jsCode must remain plain JavaScript.
+    Code node jsCode must remain plain JavaScript, and HTTP JSON bodies
+    should keep {{ ... }} interpolation inside valid JSON.
   */
   if (
     key === "jscode" ||
+    key === "jsonbody" ||
     key === "code" ||
     key === "functioncode" ||
     key === "script"
@@ -276,6 +306,7 @@ function jsStringAccessorForMapping(source: string, key: string) {
 
 function replaceQuotedCodePlaceholder(sourceCode: string, placeholderRegex: RegExp, source: string) {
   let output = String(sourceCode || "");
+  const quotedFlags = placeholderRegex.flags.includes("i") ? "gi" : "g";
 
   /*
     Replace placeholders that are wrapped in quotes, for example:
@@ -287,7 +318,7 @@ function replaceQuotedCodePlaceholder(sourceCode: string, placeholderRegex: RegE
       String($("Nexus Runtime Context").first().json.setup.facebook_page_id ?? "")
   */
   output = output.replace(
-    new RegExp("([\"\'`])\\s*" + placeholderRegex.source + "\\s*\\1", "g"),
+    new RegExp("([\"\'`])\\s*" + placeholderRegex.source + "\\s*\\1", quotedFlags),
     (_full: string, _quote: string, key: string) => {
       return jsStringAccessorForMapping(source, key) || "\"\"";
     },
@@ -389,31 +420,31 @@ function convertOfficialPlaceholdersInCode(sourceCode: string) {
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_SETUP\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("SETUP"),
     "setup",
   );
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_SECRET\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("SECRET"),
     "secret",
   );
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_CUSTOMER\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("CUSTOMER"),
     "customer",
   );
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_SYSTEM\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("SYSTEM"),
     "system",
   );
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_ORDER\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("ORDER"),
     "order",
   );
 
@@ -438,6 +469,24 @@ function convertLegacyPlaceholdersInCode(sourceCode: string) {
 
   for (const item of legacy) {
     output = replaceQuotedCodePlaceholder(output, item.regex, item.source);
+  }
+
+  const bracketSetupPatterns = [
+    /\{\{\s*\$json\[['"]([^'"]+)['"]\]\s*\}\}/g,
+    /\{\{\s*\$json\.body\[['"]([^'"]+)['"]\]\s*\}\}/g,
+  ];
+
+  for (const pattern of bracketSetupPatterns) {
+    output = output.replace(
+      new RegExp("([\"'`])\\s*" + pattern.source + "\\s*\\1", "g"),
+      (_full: string, _quote: string, key: string) => {
+        return jsStringAccessorForMapping("setup", canonicalSetupKey(key)) || "\"\"";
+      },
+    );
+
+    output = output.replace(pattern, (_full: string, key: string) => {
+      return jsStringAccessorForMapping("setup", canonicalSetupKey(key)) || "\"\"";
+    });
   }
 
   return output;
@@ -504,14 +553,14 @@ function extractPlaceholders(text: string) {
     unknown: [] as string[],
   };
 
-  const pattern = /\{\{\s*NEXUS_([A-Z]+)\.([a-zA-Z0-9_.-]+)\s*\}\}/g;
+  const pattern = /\{\{\s*(?:(?:NEXUS|NX)[\s_-]*([A-Z]+)|([A-Z]+)[\s_-]*(?:NEXUS|NX))\s*(?:[|:.=_\-\[\(]|\s+)\s*([a-zA-Z0-9_. -]+?)\s*(?:[\]\)])?\s*\}\}/gi;
   let match;
 
   while ((match = pattern.exec(text)) !== null) {
-    const type = match[1];
-    const name = match[2];
+    const type = String(match[1] || match[2] || "").toUpperCase();
+    const name = match[3];
 
-    if (type === "SETUP") found.setup.push(name);
+    if (type === "SETUP") found.setup.push(canonicalSetupKey(name));
     else if (type === "SECRET") found.secret.push(name);
     else if (type === "CUSTOMER") found.customer.push(name);
     else if (type === "SYSTEM") found.system.push(name);
@@ -533,7 +582,7 @@ function validatePlaceholders(product: any, workflow: any) {
   const setupSchema = normalizeJsonArray(product.setup_schema);
   const credentialSchema = normalizeJsonArray(product.credential_schema);
 
-  const setupNames = setupSchema.map((item: any) => item.name).filter(Boolean);
+  const setupNames = setupSchema.map((item: any) => canonicalSetupKey(item.name)).filter(Boolean);
   const credentialNames = credentialSchema.map((item: any) => item.name).filter(Boolean);
 
   const errors: string[] = [];
@@ -558,29 +607,36 @@ function validatePlaceholders(product: any, workflow: any) {
   return { detected, errors, warnings };
 }
 
+function nexusPlaceholderRegex(type: string) {
+  return new RegExp(
+    `\\{\\{\\s*(?:(?:NEXUS|NX)[\\s_-]*${type}|${type}[\\s_-]*(?:NEXUS|NX))\\s*(?:[|:.=_\\-\\[\\(]|\\s+)\\s*([a-zA-Z0-9_. -]+?)\\s*(?:[\\]\\)])?\\s*\\}\\}`,
+    "gi",
+  );
+}
+
 function convertNexusPlaceholders(value: any, childKey = ""): any {
   if (typeof value === "string") {
     let output = value;
 
     const replacements = [
       {
-        regex: /\{\{\s*NEXUS_SETUP\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("SETUP"),
         source: "setup",
       },
       {
-        regex: /\{\{\s*NEXUS_SECRET\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("SECRET"),
         source: "secret",
       },
       {
-        regex: /\{\{\s*NEXUS_CUSTOMER\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("CUSTOMER"),
         source: "customer",
       },
       {
-        regex: /\{\{\s*NEXUS_SYSTEM\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("SYSTEM"),
         source: "system",
       },
       {
-        regex: /\{\{\s*NEXUS_ORDER\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("ORDER"),
         source: "order",
       },
     ];
@@ -635,7 +691,14 @@ function inferSetupFieldType(name: string) {
 
   if (key.includes("email")) return "email";
   if (key.includes("url") || key.includes("website") || key.includes("link")) return "url";
-  if (key.includes("notes") || key.includes("description") || key.includes("instructions")) return "textarea";
+  if (
+    key.includes("notes") ||
+    key.includes("description") ||
+    key.includes("instructions") ||
+    key.includes("competitor") ||
+    key.includes("areas") ||
+    key.includes("requirements")
+  ) return "textarea";
 
   return "text";
 }
@@ -645,8 +708,26 @@ function makeSetupField(name: string) {
     name,
     label: inferFieldLabel(name),
     type: inferSetupFieldType(name),
-    required: false,
+    required: true,
     description: "Auto-added by Nexus because the uploaded workflow uses this setup placeholder.",
+  };
+}
+
+function setupField(
+  name: string,
+  label: string,
+  type: string,
+  description: string,
+  placeholder = "",
+  required = true,
+) {
+  return {
+    name,
+    label,
+    type,
+    required,
+    ...(placeholder ? { placeholder } : {}),
+    description,
   };
 }
 
@@ -670,12 +751,357 @@ function isSecretSource(source: string) {
   );
 }
 
+function normalizedSetupKey(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function stripDerivedSetupSuffix(key: string) {
+  const suffixes = [
+    "_join",
+    "_joined",
+    "_csv",
+    "_lines",
+    "_text",
+    "_string",
+  ];
+
+  for (const suffix of suffixes) {
+    if (key.endsWith(suffix) && key.length > suffix.length + 2) {
+      return key.slice(0, -suffix.length);
+    }
+  }
+
+  return key;
+}
+
+function canonicalSetupKey(value: unknown) {
+  const key = stripDerivedSetupSuffix(normalizedSetupKey(value));
+  const aliases: Record<string, string> = {
+    main_website: "company_url",
+    company_website: "company_url",
+    company_site: "company_url",
+    company_url: "company_url",
+    business_website: "company_url",
+    business_site: "company_url",
+    buyer_website: "company_url",
+    buyer_site: "company_url",
+    client_website: "company_url",
+    client_site: "company_url",
+    customer_website: "company_url",
+    customer_site: "company_url",
+    competitor_websites: "competitor_urls",
+    competitor_sites: "competitor_urls",
+    competitor_urls: "competitor_urls",
+    competitors: "competitor_urls",
+    competitor_list: "competitor_urls",
+    market_or_region: "market_region",
+    market_region: "market_region",
+    target_market: "market_region",
+    local_market: "market_region",
+  };
+
+  return aliases[key] || key;
+}
+
+function addSetupName(target: Set<string>, value: unknown) {
+  const key = canonicalSetupKey(value);
+  if (key) target.add(key);
+}
+
+function extractRuntimeSetupKeys(text: string) {
+  const setupNames = new Set<string>();
+  const source = String(text || "");
+  const patterns = [
+    /NEXUS_SETUP\.([a-zA-Z0-9_.-]+)/g,
+    /NEXUS_SETUP[_:-]([a-zA-Z0-9_.-]+)/gi,
+    /\{\{\s*(?:(?:NEXUS|NX)[\s_-]*SETUP|SETUP[\s_-]*(?:NEXUS|NX))\s*(?:[|:.=_\-\[\(]|\s+)\s*([a-zA-Z0-9_. -]+?)\s*(?:[\]\)])?\s*\}\}/gi,
+    /\bsetup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\bbody\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+      addSetupName(setupNames, match[1]);
+    }
+  }
+
+  return [...setupNames].sort();
+}
+
+function isEmptyNodeValue(value: any) {
+  if (value == null) return true;
+  if (typeof value === "string") return !cleanString(value);
+  if (typeof value === "number" || typeof value === "boolean") return false;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") {
+    const object = asObject(value);
+    if (cleanString(object.value) || cleanString(object.cachedResultName) || cleanString(object.name)) {
+      return false;
+    }
+    return Object.keys(object).length === 0 || Object.values(object).every(isEmptyNodeValue);
+  }
+  return false;
+}
+
+function firstParameterValue(parameters: Record<string, any>, keys: string[]) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(parameters, key)) {
+      return parameters[key];
+    }
+  }
+  return undefined;
+}
+
+function setupExpression(key: string) {
+  return contextExpressionForMapping("setup", key, true);
+}
+
+function setupResourceLocator(key: string, mode = "url") {
+  return {
+    __rl: true,
+    value: setupExpression(key),
+    mode,
+  };
+}
+
+function writeEmptyParameter(parameters: Record<string, any>, keys: string[], value: any) {
+  const key = keys.find((item) => Object.prototype.hasOwnProperty.call(parameters, item)) || keys[0];
+  if (!key || !isEmptyNodeValue(parameters[key])) return false;
+  parameters[key] = value;
+  return true;
+}
+
+function addSpecificSetupField(
+  setupSchema: any[],
+  setupNames: Set<string>,
+  warnings: string[],
+  addedSetupFields: any[],
+  field: any,
+  reason: string,
+) {
+  const key = canonicalSetupKey(field?.name);
+  if (!key || setupNames.has(key)) return;
+
+  const normalizedField = {
+    ...field,
+    name: key,
+  };
+  setupSchema.push(normalizedField);
+  setupNames.add(key);
+  addedSetupFields.push(normalizedField);
+  warnings.push(`Auto-added setup field ${key} ${reason}.`);
+}
+
+function autoAddNativeAppSetupFieldsForWorkflow(
+  workflow: any,
+  setupSchema: any[],
+  setupNames: Set<string>,
+  warnings: string[],
+  addedSetupFields: any[],
+) {
+  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+
+  for (const node of nodes) {
+    const nodeText = cleanString(`${node?.type || ""} ${node?.name || ""}`).toLowerCase();
+    const parameters = asObject(node?.parameters);
+
+    if (nodeText.includes("googlesheets") || nodeText.includes("google sheets")) {
+      const spreadsheetTarget = firstParameterValue(parameters, [
+        "documentId",
+        "spreadsheetId",
+        "sheetId",
+        "fileId",
+        "documentUrl",
+        "spreadsheetUrl",
+      ]);
+      const sheetTarget = firstParameterValue(parameters, [
+        "sheetName",
+        "sheet",
+        "tabName",
+        "worksheet",
+      ]);
+      const rangeTarget = firstParameterValue(parameters, [
+        "range",
+        "dataRange",
+      ]);
+
+      if (isEmptyNodeValue(spreadsheetTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "google_sheet_url",
+            "Google Sheet URL",
+            "url",
+            "Auto-added because a Google Sheets node needs the target spreadsheet. The buyer can paste the sheet URL during setup, or the developer can hardcode it in the workflow editor.",
+            "https://docs.google.com/spreadsheets/d/...",
+          ),
+          `because "${node?.name || "Google Sheets"}" needs a spreadsheet target`,
+        );
+        writeEmptyParameter(parameters, ["documentId", "spreadsheetId", "sheetId", "fileId", "documentUrl", "spreadsheetUrl"], setupResourceLocator("google_sheet_url", "url"));
+      }
+
+      if (isEmptyNodeValue(sheetTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "google_sheet_name",
+            "Google Sheet tab",
+            "text",
+            "Auto-added because a Google Sheets node needs the worksheet/tab name.",
+            "Sheet1",
+          ),
+          `because "${node?.name || "Google Sheets"}" needs a sheet/tab name`,
+        );
+        writeEmptyParameter(parameters, ["sheetName", "sheet", "tabName", "worksheet"], setupResourceLocator("google_sheet_name", "name"));
+      }
+
+      if (isEmptyNodeValue(rangeTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "google_sheet_range",
+            "Google Sheet range",
+            "text",
+            "Auto-added because a Google Sheets node may need a read/write range. Leave the field editable if the exact range depends on the buyer's sheet.",
+            "A:Z",
+            false,
+          ),
+          `because "${node?.name || "Google Sheets"}" may need a sheet range`,
+        );
+        writeEmptyParameter(parameters, ["range", "dataRange"], setupExpression("google_sheet_range"));
+      }
+    }
+
+    if (nodeText.includes("googledrive") || nodeText.includes("google drive")) {
+      const fileTarget = firstParameterValue(parameters, ["fileId", "folderId", "documentId", "fileUrl", "folderUrl"]);
+      if (isEmptyNodeValue(fileTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "google_drive_file_url",
+            "Google Drive file or folder URL",
+            "url",
+            "Auto-added because a Google Drive node needs the target file or folder.",
+            "https://drive.google.com/...",
+          ),
+          `because "${node?.name || "Google Drive"}" needs a file or folder target`,
+        );
+        writeEmptyParameter(parameters, ["fileId", "folderId", "documentId", "fileUrl", "folderUrl"], setupResourceLocator("google_drive_file_url", "url"));
+      }
+    }
+
+    if (nodeText.includes("gmail")) {
+      const toTarget = firstParameterValue(parameters, ["to", "sendTo", "recipient", "email"]);
+      if (isEmptyNodeValue(toTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "recipient_email",
+            "Recipient email",
+            "email",
+            "Auto-added because a Gmail node needs the email address it should send to or process for this buyer.",
+            "team@example.com",
+            false,
+          ),
+          `because "${node?.name || "Gmail"}" may need a recipient email`,
+        );
+        writeEmptyParameter(parameters, ["to", "sendTo", "recipient", "email"], setupExpression("recipient_email"));
+      }
+    }
+
+    node.parameters = parameters;
+  }
+}
+
+function inferMakeSetupKeysFromText(text: string) {
+  const setupNames = new Set<string>();
+  const source = String(text || "").toLowerCase();
+
+  const rules = [
+    {
+      key: "company_url",
+      pattern: /\b(company|business|buyer|client|customer)(?:'s)?\s+(?:main\s+)?(?:website|site|url)\b|\bmain\s+website\b/,
+    },
+    {
+      key: "competitor_urls",
+      pattern: /\bcompetitor(?:s)?\s+(?:websites?|sites?|urls?)\b|\bcompetitor\s+list\b/,
+    },
+    {
+      key: "focus_areas",
+      pattern: /\bfocus\s+areas?\b|\bfocus\s+topics?\b|\bpricing,\s*offers,\s*messaging\b|\bpricing\s+offers\s+messaging\b/,
+    },
+    {
+      key: "market_region",
+      pattern: /\bmarket\s*(?:or|\/)\s*region\b|\bmarket\s+region\b|\btarget\s+market\b|\blocal\s+market\b/,
+    },
+    {
+      key: "report_title",
+      pattern: /\breport\s+title\b|\btitle\s+for\s+(?:the\s+)?report\b/,
+    },
+  ];
+
+  for (const rule of rules) {
+    if (rule.pattern.test(source)) setupNames.add(rule.key);
+  }
+
+  return [...setupNames].sort();
+}
+
+function addGeneratedSetupFields(
+  setupSchema: any[],
+  setupNames: Set<string>,
+  detectedNames: string[],
+  warnings: string[],
+  addedSetupFields: any[],
+  reason: string,
+) {
+  for (const name of detectedNames || []) {
+    const key = canonicalSetupKey(name);
+    if (!key || setupNames.has(key)) continue;
+
+    const field = makeSetupField(key);
+    setupSchema.push(field);
+    setupNames.add(key);
+    addedSetupFields.push(field);
+    warnings.push(`Auto-added setup field ${key} ${reason}.`);
+  }
+}
+
 function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mappings: any[]) {
-  const workflowText = JSON.stringify(workflow || {});
+  const workflowForImport = deepClone(workflow || {});
+  const workflowText = JSON.stringify(workflowForImport || {});
   const setupSchema = normalizeJsonArray(product.setup_schema);
   const credentialSchema = normalizeJsonArray(product.credential_schema);
 
-  const setupNames = new Set(setupSchema.map((item: any) => cleanString(item?.name)).filter(Boolean));
+  const setupNames = new Set(
+    setupSchema
+      .map((item: any) => canonicalSetupKey(item?.name))
+      .filter(Boolean),
+  );
   const credentialNames = new Set(credentialSchema.map((item: any) => cleanString(item?.name)).filter(Boolean));
 
   const addedSetupFields: any[] = [];
@@ -689,7 +1115,7 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
   const detected = extractPlaceholders(workflowText);
 
   for (const name of detected.setup || []) {
-    const key = cleanString(name);
+    const key = canonicalSetupKey(name);
     if (!key || setupNames.has(key)) continue;
 
     const field = makeSetupField(key);
@@ -725,12 +1151,13 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
     if (!workflowText.includes(placeholder)) continue;
 
     if (source === "setup") {
-      if (!setupNames.has(key)) {
-        const field = makeSetupField(key);
+      const canonicalKey = canonicalSetupKey(key);
+      if (!setupNames.has(canonicalKey)) {
+        const field = makeSetupField(canonicalKey);
         setupSchema.push(field);
-        setupNames.add(key);
+        setupNames.add(canonicalKey);
         addedSetupFields.push(field);
-        warnings.push(`Auto-added setup field ${key} because workflow uses ${placeholder}.`);
+        warnings.push(`Auto-added setup field ${canonicalKey} because workflow uses ${placeholder}.`);
       }
       continue;
     }
@@ -747,11 +1174,40 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
     }
   }
 
+  addGeneratedSetupFields(
+    setupSchema,
+    setupNames,
+    extractRuntimeSetupKeys(workflowText),
+    warnings,
+    addedSetupFields,
+    "from runtime setup references",
+  );
+
+  autoAddNativeAppSetupFieldsForWorkflow(
+    workflowForImport,
+    setupSchema,
+    setupNames,
+    warnings,
+    addedSetupFields,
+  );
+
+  if (["make", "zapier"].includes(cleanString(product.workflow_source_platform).toLowerCase()) || product.make_blueprint) {
+    addGeneratedSetupFields(
+      setupSchema,
+      setupNames,
+      inferMakeSetupKeysFromText(JSON.stringify(product.make_blueprint || {}) + "\n" + workflowText),
+      warnings,
+      addedSetupFields,
+      "from source workflow buyer input hints",
+    );
+  }
+
   return {
     product: {
       ...product,
       setup_schema: setupSchema,
       credential_schema: credentialSchema,
+      n8n_workflow_json: workflowForImport,
     },
     setup_schema: setupSchema,
     credential_schema: credentialSchema,
@@ -889,6 +1345,14 @@ function convertLegacyDynamicReferences(value: any, childKey = ""): any {
         source: "setup",
       },
       {
+        regex: /\{\{\s*\$json\[['"]([^'"]+)['"]\]\s*\}\}/g,
+        source: "setup",
+      },
+      {
+        regex: /\{\{\s*\$json\.body\[['"]([^'"]+)['"]\]\s*\}\}/g,
+        source: "setup",
+      },
+      {
         regex: /\{\{\s*\$json\.body\.secrets\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
         source: "secret",
       },
@@ -926,7 +1390,8 @@ function convertLegacyDynamicReferences(value: any, childKey = ""): any {
       output = output.replace(item.regex, (fullMatch: string, key: string) => {
         const whole = isWholeString(value, fullMatch);
         const expressionMode = whole && isLikelyExpressionField(childKey);
-        return contextExpressionForMapping(item.source, key, expressionMode);
+        const mappedKey = item.source === "setup" ? canonicalSetupKey(key) : key;
+        return contextExpressionForMapping(item.source, mappedKey, expressionMode);
       });
     }
 
@@ -1174,9 +1639,9 @@ function buildNexusOutputNode(callbackUrl: string, position = [1100, 0], existin
         ],
       },
       sendBody: true,
-      bodyContentType: "json",
-      specifyBody: "json",
-      jsonBody:
+      contentType: "raw",
+      rawContentType: "application/json",
+      body:
         `={{ JSON.stringify({
           customer_automation_id: $("Nexus Runtime Context").first().json.system.customer_automation_id,
           status: "success",
@@ -1194,9 +1659,468 @@ function buildNexusOutputNode(callbackUrl: string, position = [1100, 0], existin
     id: existingNode?.id || crypto.randomUUID(),
     name: "Nexus Submit Output",
     type: "n8n-nodes-base.httpRequest",
-    typeVersion: 4.2,
+    typeVersion: 3,
     position: existingNode?.position || position,
   };
+}
+
+function providerFromUrlOrName(value: string) {
+  const text = cleanString(value).toLowerCase();
+  if (text.includes("generativelanguage") || text.includes("gemini") || text.includes("googleapis")) {
+    return { provider: "google_gemini", label: "Google Gemini" };
+  }
+  if (text.includes("openai")) return { provider: "openai", label: "OpenAI" };
+  if (text.includes("anthropic") || text.includes("claude")) return { provider: "anthropic", label: "Anthropic" };
+  if (text.includes("openrouter")) return { provider: "openrouter", label: "OpenRouter" };
+  if (text.includes("groq")) return { provider: "groq", label: "Groq" };
+  if (text.includes("mistral")) return { provider: "mistral", label: "Mistral AI" };
+  if (text.includes("perplexity")) return { provider: "perplexity", label: "Perplexity" };
+  if (text.includes("slack")) return { provider: "slack", label: "Slack" };
+  if (text.includes("hubspot")) return { provider: "hubspot", label: "HubSpot" };
+  if (text.includes("airtable")) return { provider: "airtable", label: "Airtable" };
+  if (text.includes("notion")) return { provider: "notion", label: "Notion" };
+  if (text.includes("stripe")) return { provider: "stripe", label: "Stripe" };
+  if (text.includes("github")) return { provider: "github", label: "GitHub" };
+  if (text.includes("apify")) return { provider: "apify", label: "Apify" };
+  if (text.includes("serper")) return { provider: "serper", label: "Serper" };
+  if (text.includes("firecrawl")) return { provider: "firecrawl", label: "Firecrawl" };
+  return { provider: "webhook_api", label: "Generic API / Webhook" };
+}
+
+function keyValueCollectionToObject(value: any) {
+  const input = asObject(value);
+  const rows = Array.isArray(input.parameters)
+    ? input.parameters
+    : Array.isArray(input.parameter)
+      ? input.parameter
+      : [];
+
+  return rows.reduce((accumulator: Record<string, any>, item: any) => {
+    const name = cleanString(item?.name || item?.key);
+    if (name) accumulator[name] = item?.value ?? "";
+    return accumulator;
+  }, {});
+}
+
+function parseJsonObjectString(value: any) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function makeRuntimeProxyCode(nodeName: string, proxyUrl: string, anonKey: string, template: any) {
+  return [
+    "const context = $('Nexus Runtime Context').first().json || {};",
+    `const template = ${JSON.stringify(template, null, 2)};`,
+    "function valueAt(path) {",
+    "  const parts = String(path || '').split('.').filter(Boolean);",
+    "  let value = context;",
+    "  for (const part of parts) value = value == null ? undefined : value[part];",
+    "  return value == null ? '' : value;",
+    "}",
+    "function renderString(value) {",
+    "  return String(value ?? '')",
+    "    .replace(/\\{\\{\\s*NEXUS_SETUP\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`setup.${key}`)))",
+    "    .replace(/\\{\\{\\s*NEXUS_SECRET\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`secrets.${key}`)))",
+    "    .replace(/\\{\\{\\s*NEXUS_CUSTOMER\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`customer.${key}`)))",
+    "    .replace(/\\{\\{\\s*NEXUS_ORDER\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`order.${key}`)))",
+    "    .replace(/\\{\\{\\s*NEXUS_SYSTEM\\.([a-zA-Z0-9_.-]+)\\s*\\}\\}/g, (_, key) => String(valueAt(`system.${key}`)));",
+    "}",
+    "function renderValue(value) {",
+    "  if (Array.isArray(value)) return value.map(renderValue);",
+    "  if (value && typeof value === 'object') {",
+    "    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, renderValue(inner)]));",
+    "  }",
+    "  if (typeof value === 'string') return renderString(value);",
+    "  return value;",
+    "}",
+    "function appendQuery(rawUrl, query) {",
+    "  const entries = Object.entries(query || {}).filter(([, value]) => value !== '' && value !== null && value !== undefined);",
+    "  if (!entries.length) return rawUrl;",
+    "  const joiner = rawUrl.includes('?') ? '&' : '?';",
+    "  return rawUrl + joiner + entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join('&');",
+    "}",
+    "const nexusHelpers = typeof this !== 'undefined' && this ? this.helpers : null;",
+    "async function callNexusProxy(payload) {",
+    "  const headers = {",
+    "    'content-type': 'application/json',",
+    `    'authorization': 'Bearer ${anonKey}',`,
+    `    'apikey': '${anonKey}',`,
+    "    'x-nexus-runtime-secret': context.system?.runtime_secret || ''",
+    "  };",
+    "  if (typeof fetch === 'function') {",
+    `    const response = await fetch(${JSON.stringify(proxyUrl)}, { method: 'POST', headers, body: JSON.stringify(payload) });`,
+    "    const text = await response.text();",
+    "    let data;",
+    "    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }",
+    "    if (!response.ok) throw new Error(data.message || data.error || data.raw || `Nexus proxy request failed with status ${response.status}`);",
+    "    return data;",
+    "  }",
+    "  if (nexusHelpers?.request) {",
+    `    return await nexusHelpers.request({ method: 'POST', uri: ${JSON.stringify(proxyUrl)}, headers, body: payload, json: true });`,
+    "  }",
+    "  if (nexusHelpers?.httpRequest) {",
+    `    return await nexusHelpers.httpRequest({ method: 'POST', url: ${JSON.stringify(proxyUrl)}, headers, body: payload, json: true });`,
+    "  }",
+    "  throw new Error('This n8n Code node cannot make HTTP requests because fetch and n8n HTTP helpers are unavailable. Update n8n or run this product through the Nexus Make proxy runner.');",
+    "}",
+    "const query = renderValue(template.query || {});",
+    "const url = appendQuery(renderString(template.url), query);",
+    "const data = await callNexusProxy({",
+    "    automation_id: context.automation_id || context.system?.automation_id || '',",
+    `    node_name: ${JSON.stringify(nodeName)},`,
+    "    credential_key: template.credential_key,",
+    "    provider: template.provider,",
+    "    provider_label: template.provider_label,",
+    "    method: template.method,",
+    "    url,",
+    "    headers: renderValue(template.headers || {}),",
+    "    body: renderValue(template.body || {}),",
+    "    auth_type: template.auth_type",
+    "});",
+    "return [{ json: data.result ?? data }];",
+  ].join("\n");
+}
+
+function runtimeContextExpressionForHttpTemplate(source: string, key: string) {
+  const sourceKey = cleanString(source).toLowerCase();
+  const bucket =
+    ["secret", "secrets", "credential", "credentials"].includes(sourceKey)
+      ? "secrets"
+      : sourceKey === "customer"
+        ? "customer"
+        : sourceKey === "order"
+          ? "order"
+          : sourceKey === "system"
+            ? "system"
+            : "setup";
+
+  return `{{ $('Nexus Runtime Context').first().json.${bucket}.${cleanString(key)} }}`;
+}
+
+function renderNexusRuntimeTemplatesForHttp(value: any, prefixExpression = true): any {
+  if (Array.isArray(value)) return value.map((item) => renderNexusRuntimeTemplatesForHttp(item, prefixExpression));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, renderNexusRuntimeTemplatesForHttp(inner, prefixExpression)]));
+  }
+  if (typeof value !== "string") return value;
+
+  const rendered = value.replace(
+    /\{\{\s*NEXUS_(SETUP|SECRET|SECRETS|CUSTOMER|ORDER|SYSTEM)\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    (_match, source, key) => runtimeContextExpressionForHttpTemplate(source, key),
+  );
+
+  return prefixExpression && rendered.includes("$('Nexus Runtime Context').first().json") && !rendered.trim().startsWith("=")
+    ? `=${rendered}`
+    : rendered;
+}
+
+function objectToHttpParameterRows(value: Record<string, any>) {
+  return Object.entries(value || {})
+    .filter(([key]) => cleanString(key))
+    .map(([name, inner]) => ({
+      name,
+      value: renderNexusRuntimeTemplatesForHttp(inner),
+    }));
+}
+
+function hasHttpPayload(value: any) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return value !== undefined && value !== null && value !== "";
+}
+
+function stripContentTypeHeaderForHttp(headers: Record<string, any>) {
+  return Object.entries(headers || {}).reduce((accumulator: Record<string, any>, [key, value]) => {
+    if (cleanString(key).toLowerCase() === "content-type") return accumulator;
+    accumulator[key] = value;
+    return accumulator;
+  }, {});
+}
+
+function httpTemplateBody(template: Record<string, any>) {
+  if (template.body_json !== undefined && template.body_json !== null) return template.body_json;
+  if (template.body !== undefined && template.body !== null) return template.body;
+  if (template.jsonBody !== undefined && template.jsonBody !== null) return parseJsonObjectString(template.jsonBody);
+  if (template.bodyParametersJson !== undefined && template.bodyParametersJson !== null) {
+    return parseJsonObjectString(template.bodyParametersJson);
+  }
+  return {};
+}
+
+function makeLegacyHttpParametersFromTemplate(input: {
+  method: string;
+  url: string;
+  credentialKey: string;
+  headers: Record<string, any>;
+  query: Record<string, any>;
+  body: any;
+}) {
+  const body = renderNexusRuntimeTemplatesForHttp(input.body || {}, false);
+  const methodFromInput = cleanString(input.method || "GET").toUpperCase();
+  const method = methodFromInput === "GET" && hasHttpPayload(body) ? "POST" : methodFromInput;
+  const parameters: Record<string, any> = {
+    authentication: input.credentialKey ? "genericCredentialType" : "none",
+    requestMethod: method,
+    url: renderNexusRuntimeTemplatesForHttp(input.url),
+    responseFormat: "json",
+    jsonParameters: true,
+    options: {},
+  };
+
+  if (input.credentialKey) {
+    parameters.genericAuthType = input.credentialKey;
+  }
+
+  const headers = stripContentTypeHeaderForHttp(renderNexusRuntimeTemplatesForHttp(input.headers || {}, false));
+  if (Object.keys(headers).length) {
+    parameters.headerParametersJson = JSON.stringify(headers, null, 2);
+  }
+
+  const query = renderNexusRuntimeTemplatesForHttp(input.query || {}, false);
+  if (Object.keys(query).length) {
+    parameters.queryParametersJson = JSON.stringify(query, null, 2);
+  }
+
+  if (method !== "GET" && hasHttpPayload(body)) {
+    parameters.bodyParametersJson = JSON.stringify(body, null, 2);
+    parameters.options.bodyContentType = "raw";
+    parameters.options.bodyContentCustomMimeType = "application/json";
+  }
+
+  return parameters;
+}
+
+function httpRequestNodeFromTemplate(node: any, template: any, credentialMetadata: any) {
+  const credentialKey = cleanString(
+    template.credential_key ||
+    credentialMetadata.credential_key ||
+    credentialMetadata.n8n_credential_type,
+  ) || (cleanString(template.auth_type).toLowerCase() === "none" ? "" : "httpBearerAuth");
+  const url = cleanString(template.url || credentialMetadata.url);
+  const providerInfo = providerFromUrlOrName(
+    `${url} ${credentialMetadata.provider_label || credentialMetadata.provider || node?.name || ""}`,
+  );
+  const provider = cleanString(template.provider || credentialMetadata.provider || providerInfo.provider);
+  const providerLabel = cleanString(template.provider_label || credentialMetadata.provider_label || providerInfo.label);
+  const body = httpTemplateBody(template);
+  const methodFromTemplate = cleanString(template.method || "GET").toUpperCase();
+  const method = methodFromTemplate === "GET" && hasHttpPayload(body) ? "POST" : methodFromTemplate;
+  const allowedHost = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return cleanString(credentialMetadata.allowed_host);
+    }
+  })();
+
+  return {
+    ...node,
+    credentials: undefined,
+    type: "n8n-nodes-base.httpRequest",
+    typeVersion: 2,
+    parameters: {
+      ...makeLegacyHttpParametersFromTemplate({
+        method,
+        url,
+        credentialKey,
+        headers: asObject(template.headers),
+        query: asObject(template.query),
+        body,
+      }),
+      nexusProxyTemplate: {
+        method,
+        url,
+        headers: asObject(template.headers),
+        query: asObject(template.query),
+        body,
+        body_json: body,
+        auth_type: cleanString(template.auth_type || (credentialKey ? "bearer" : "none")),
+        provider,
+        provider_label: providerLabel,
+        credential_key: credentialKey,
+      },
+      ...(credentialKey
+        ? {
+            nexusCredential: {
+              uses_nexus_proxy: false,
+              provider,
+              provider_label: providerLabel,
+              credential_key: credentialKey,
+              n8n_credential_type: credentialKey,
+              url,
+              allowed_host: allowedHost,
+            },
+          }
+        : {}),
+    },
+  };
+}
+
+function httpRequestNodeToProxyCodeNode(node: any, supabaseUrl: string) {
+  const parameters = asObject(node.parameters);
+  const method = cleanString(parameters.requestMethod || parameters.method || "GET").toUpperCase();
+  const url = cleanString(parameters.url);
+  const existingCredentialKey = cleanString(
+    parameters.genericAuthType ||
+    Object.keys(asObject(node.credentials))[0] ||
+    "httpBearerAuth",
+  );
+  const headers = {
+    ...parseJsonObjectString(parameters.headerParametersJson),
+    ...keyValueCollectionToObject(parameters.headerParameters),
+    ...keyValueCollectionToObject(parameters.headerParametersUi),
+  };
+  const query = {
+    ...parseJsonObjectString(parameters.queryParametersJson),
+    ...keyValueCollectionToObject(parameters.queryParameters),
+    ...keyValueCollectionToObject(parameters.queryParametersUi),
+  };
+  const body = parameters.bodyParametersJson
+    ? parseJsonObjectString(parameters.bodyParametersJson)
+    : parameters.jsonBody
+      ? parseJsonObjectString(parameters.jsonBody)
+      : parameters.body || {};
+  const providerInfo = providerFromUrlOrName(`${url} ${node.name}`);
+  const allowedHost = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  const proxyTemplate = {
+    method,
+    url,
+    headers,
+    query,
+    body,
+    auth_type: existingCredentialKey ? "bearer" : "none",
+    provider: providerInfo.provider,
+    provider_label: providerInfo.label,
+    credential_key: existingCredentialKey,
+  };
+
+  return httpRequestNodeFromTemplate(node, proxyTemplate, {
+    provider: providerInfo.provider,
+    provider_label: providerInfo.label,
+    credential_key: existingCredentialKey,
+    n8n_credential_type: existingCredentialKey,
+    url,
+    allowed_host: allowedHost,
+  });
+}
+
+function isNexusProxyCodeNode(node: any) {
+  const parameters = asObject(node?.parameters);
+  const credential = asObject(parameters.nexusCredential);
+  return (
+    String(node?.type || "").toLowerCase().includes("n8n-nodes-base.code") &&
+    credential.uses_nexus_proxy
+  );
+}
+
+function extractNexusProxyTemplateFromCode(node: any) {
+  const explicitTemplate = asObject(asObject(node?.parameters).nexusProxyTemplate);
+  if (Object.keys(explicitTemplate).length) return explicitTemplate;
+
+  const jsCode = cleanString(asObject(node?.parameters).jsCode);
+  const marker = "const template = ";
+  const start = jsCode.indexOf(marker);
+  if (start < 0) return {};
+
+  const afterMarker = jsCode.slice(start + marker.length);
+  const end = afterMarker.indexOf(";\nfunction valueAt");
+  if (end < 0) return {};
+
+  return parseJsonObjectString(afterMarker.slice(0, end).trim());
+}
+
+function refreshNexusProxyCodeNode(node: any, supabaseUrl: string) {
+  if (!isNexusProxyCodeNode(node)) return node;
+
+  const parameters = asObject(node.parameters);
+  const credential = asObject(parameters.nexusCredential);
+  const template = extractNexusProxyTemplateFromCode(node);
+  const templateUrl = cleanString(template.url || credential.url);
+
+  if (!templateUrl) return node;
+
+  const providerInfo = providerFromUrlOrName(
+    `${templateUrl} ${credential.provider_label || credential.provider || node.name}`,
+  );
+  const credentialKey = cleanString(
+    template.credential_key ||
+    credential.credential_key ||
+    credential.n8n_credential_type,
+  ) || (cleanString(template.auth_type).toLowerCase() === "none" ? "" : "httpBearerAuth");
+  const allowedHost = (() => {
+    try {
+      return new URL(templateUrl).hostname;
+    } catch {
+      return cleanString(credential.allowed_host);
+    }
+  })();
+  const templateBody = httpTemplateBody(template);
+  const rawMethod = cleanString(template.method || "GET").toUpperCase();
+  const method = rawMethod === "GET" && hasHttpPayload(templateBody) ? "POST" : rawMethod;
+  const proxyTemplate = {
+    method,
+    url: templateUrl,
+    headers: asObject(template.headers),
+    query: asObject(template.query),
+    body: templateBody,
+    body_json: templateBody,
+    auth_type: cleanString(template.auth_type || (credentialKey ? "bearer" : "none")),
+    provider: cleanString(template.provider || credential.provider || providerInfo.provider),
+    provider_label: cleanString(template.provider_label || credential.provider_label || providerInfo.label),
+    credential_key: credentialKey,
+  };
+
+  return httpRequestNodeFromTemplate(
+    {
+      ...node,
+      parameters,
+    },
+    proxyTemplate,
+    {
+      ...credential,
+      uses_nexus_proxy: false,
+      provider: proxyTemplate.provider,
+      provider_label: proxyTemplate.provider_label,
+      credential_key: proxyTemplate.credential_key,
+      n8n_credential_type: proxyTemplate.credential_key,
+      url: templateUrl,
+      allowed_host: allowedHost,
+    },
+  );
+}
+
+function convertMakeHttpRequestNodesToProxy(workflowInput: any, product: any, supabaseUrl: string) {
+  const workflow = deepClone(workflowInput);
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const sourcePlatform = cleanString(product?.workflow_source_platform).toLowerCase();
+  const looksLikeMake =
+    sourcePlatform === "make" ||
+    sourcePlatform === "zapier" ||
+    Boolean(product?.make_import_session_id || product?.make_blueprint) ||
+    nodes.some((node: any) => ["NEXUS_INPUT", "NEXUS_FINAL_OUTPUT"].includes(cleanString(node?.name)));
+
+  if (!looksLikeMake) return workflow;
+
+  workflow.nodes = nodes.map((node: any) => {
+    if (isNexusProxyCodeNode(node)) return refreshNexusProxyCodeNode(node, supabaseUrl);
+    if (!isHttpRequestNode(node) || cleanString(node?.name) === "Nexus Submit Output") return node;
+    return httpRequestNodeToProxyCodeNode(node, supabaseUrl);
+  });
+
+  return workflow;
 }
 
 function ensureMainConnection(
@@ -1306,6 +2230,280 @@ function isIgnoredTerminalNode(node: any) {
 function isHttpRequestNode(node: any) {
   const type = String(node?.type || "").toLowerCase();
   return type.includes("n8n-nodes-base.httprequest");
+}
+
+function keyValueParametersToObject(value: any) {
+  const input = asObject(value);
+  const rows = Array.isArray(input.parameters)
+    ? input.parameters
+    : Array.isArray(input.parameter)
+      ? input.parameter
+      : [];
+
+  return rows.reduce((accumulator: Record<string, any>, item: any) => {
+    const name = cleanString(item?.name || item?.key);
+    if (!name) return accumulator;
+    accumulator[name] = item?.value ?? "";
+    return accumulator;
+  }, {});
+}
+
+function jsonStringOrEmpty(value: any) {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function stripContentTypeHeaderJson(value: any) {
+  const parsed = parseJsonObjectString(value);
+  const stripped = stripContentTypeHeaderForHttp(parsed);
+  return Object.keys(stripped).length ? JSON.stringify(stripped, null, 2) : "";
+}
+
+function isHtmlFetchHttpNode(node: any, parameters: Record<string, any>) {
+  const haystack = lower([
+    node?.name,
+    parameters.url,
+    parameters.nexusProxyTemplate?.url,
+    parameters.nexusCredential?.url,
+  ].filter(Boolean).join(" "));
+
+  if (
+    haystack.includes("fetch website") ||
+    haystack.includes("website html") ||
+    haystack.includes("fetch html") ||
+    haystack.includes("scrape website") ||
+    haystack.includes("landing page") ||
+    haystack.includes("page html") ||
+    haystack.includes("webpage") ||
+    haystack.includes("extract page")
+  ) {
+    return true;
+  }
+
+  const method = cleanString(parameters.requestMethod || parameters.method || "GET").toUpperCase();
+  const hasBody = hasHttpPayload(parameters.bodyParametersJson || parameters.jsonBody || parameters.body);
+  const url = cleanString(parameters.url || parameters.nexusProxyTemplate?.url || parameters.nexusCredential?.url);
+
+  return method === "GET" &&
+    !hasBody &&
+    (
+      url.includes("Nexus Runtime Context") ||
+      url.includes("$json.url") ||
+      url.includes("$json[") ||
+      url.includes("landing_page_url") ||
+      url.includes("company_url") ||
+      url.includes("website")
+    );
+}
+
+function normalizeLegacyHttpRequestNodeForN8n(node: any) {
+  if (!isHttpRequestNode(node) || !node || typeof node !== "object") return node;
+
+  const parameters = {
+    ...(node.parameters || {}),
+  };
+
+  const method = cleanString(parameters.requestMethod || parameters.method || "GET").toUpperCase();
+  const legacyOptions = {
+    ...asObject(parameters.options),
+  };
+
+  const legacyParameters: Record<string, any> = {
+    authentication: parameters.authentication || "none",
+    requestMethod: method || "GET",
+    url: cleanString(parameters.url),
+    allowUnauthorizedCerts: Boolean(parameters.allowUnauthorizedCerts),
+    responseFormat: isHtmlFetchHttpNode(node, parameters)
+      ? "string"
+      : (parameters.responseFormat || "json"),
+    jsonParameters: true,
+    options: legacyOptions,
+  };
+
+  if (parameters.genericAuthType) {
+    legacyParameters.genericAuthType = parameters.genericAuthType;
+  }
+
+  if (parameters.nodeCredentialType) {
+    legacyParameters.nodeCredentialType = parameters.nodeCredentialType;
+  }
+
+  const headerJson = stripContentTypeHeaderJson(
+    parameters.headerParametersJson ||
+    jsonStringOrEmpty(keyValueParametersToObject(parameters.headerParameters)) ||
+    jsonStringOrEmpty(keyValueParametersToObject(parameters.headerParametersUi)),
+  );
+
+  if (headerJson && headerJson !== "{}") {
+    legacyParameters.headerParametersJson = headerJson;
+  }
+
+  const queryJson =
+    parameters.queryParametersJson ||
+    jsonStringOrEmpty(keyValueParametersToObject(parameters.queryParameters)) ||
+    jsonStringOrEmpty(keyValueParametersToObject(parameters.queryParametersUi));
+
+  if (queryJson && queryJson !== "{}") {
+    legacyParameters.queryParametersJson = queryJson;
+  }
+
+  const rawBody =
+    parameters.bodyParametersJson ||
+    parameters.jsonBody ||
+    parameters.body ||
+    "";
+
+  if (rawBody !== "" && rawBody !== null && rawBody !== undefined && method !== "GET") {
+    legacyParameters.bodyParametersJson = jsonStringOrEmpty(rawBody);
+
+    legacyOptions.bodyContentType = "raw";
+    legacyOptions.bodyContentCustomMimeType = parameters.rawContentType || "application/json";
+  }
+
+  return {
+    ...node,
+    typeVersion: 2,
+    parameters: legacyParameters,
+  };
+}
+
+function normalizeModernHttpRequestNodeForN8n(node: any) {
+  if (!isHttpRequestNode(node) || !node || typeof node !== "object") return node;
+
+  const parameters = {
+    ...(node.parameters || {}),
+  };
+
+  if (isHtmlFetchHttpNode(node, parameters)) {
+    parameters.responseFormat = "text";
+    parameters.options = {
+      ...asObject(parameters.options),
+      response: {
+        ...asObject(asObject(parameters.options).response),
+        responseFormat: "text",
+      },
+    };
+  }
+
+  /*
+    n8n HTTP Request v4 expects `contentType`, not the older/wrong
+    `bodyContentType` key. Leaving the old key can make n8n skip JSON bodies
+    or fail internally with `config.headers.setContentType is not a function`.
+  */
+  if (parameters.bodyContentType && !parameters.contentType) {
+    parameters.contentType = parameters.bodyContentType;
+  }
+
+  delete parameters.bodyContentType;
+
+  if (parameters.sendBody && parameters.jsonBody) {
+    parameters.contentType = "json";
+    parameters.specifyBody = "json";
+    delete parameters.body;
+    delete parameters.rawContentType;
+  }
+
+  if (parameters.sendBody && parameters.body && !parameters.contentType) {
+    parameters.contentType = "raw";
+    parameters.rawContentType = parameters.rawContentType || "application/json";
+  }
+
+  if (parameters.contentType === "raw") {
+    delete parameters.jsonBody;
+    delete parameters.specifyBody;
+    delete parameters.bodyParameters;
+  }
+
+  return {
+    ...node,
+    typeVersion: Number(node.typeVersion || 0) >= 3 ? node.typeVersion : 4.2,
+    parameters,
+  };
+}
+
+function normalizeHttpRequestNodeForN8n(node: any, options: { useLegacyHttpRequest?: boolean } = {}) {
+  if (options.useLegacyHttpRequest) {
+    return normalizeLegacyHttpRequestNodeForN8n(node);
+  }
+
+  return normalizeModernHttpRequestNodeForN8n(node);
+}
+
+function normalizeHttpRequestNodesForN8n(nodes: any[], product: any) {
+  const workflowLooksMakeConverted = nodes.some((node: any) => {
+    const name = cleanString(node?.name);
+    return name === "NEXUS_INPUT" || name === "NEXUS_FINAL_OUTPUT";
+  });
+  const sourcePlatform = cleanString(product?.workflow_source_platform).toLowerCase();
+
+  const forceLegacyForMake =
+    sourcePlatform === "make" ||
+    sourcePlatform === "zapier" ||
+    Boolean(product?.make_import_session_id || product?.make_blueprint || workflowLooksMakeConverted);
+
+  return nodes.map((node: any) => {
+    const nonNexusHttpRequest =
+      isHttpRequestNode(node) &&
+      cleanString(node?.name) !== "Nexus Submit Output";
+    const useLegacyHttpRequest =
+      nonNexusHttpRequest &&
+      (
+        forceLegacyForMake ||
+        (Number(node?.typeVersion || 0) > 0 && Number(node?.typeVersion || 0) < 3)
+      );
+
+    return normalizeHttpRequestNodeForN8n(node, { useLegacyHttpRequest });
+  });
+}
+
+function httpNodeDiagnostics(workflow: any) {
+  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+
+  return nodes
+    .filter((node: any) => isHttpRequestNode(node))
+    .map((node: any) => {
+      const parameters = asObject(node.parameters);
+      return {
+        name: cleanString(node.name),
+        type_version: node.typeVersion,
+        method: parameters.method || parameters.requestMethod || "",
+        url: parameters.url || "",
+        send_body: Boolean(parameters.sendBody || parameters.body || parameters.jsonBody || parameters.bodyParametersJson),
+        content_type: parameters.contentType || null,
+        raw_content_type: parameters.rawContentType || null,
+        legacy_body_content_type: asObject(parameters.options).bodyContentType || null,
+        legacy_body_mime_type: asObject(parameters.options).bodyContentCustomMimeType || null,
+        has_body: Object.prototype.hasOwnProperty.call(parameters, "body") ||
+          Object.prototype.hasOwnProperty.call(parameters, "bodyParametersJson"),
+        has_json_body: Object.prototype.hasOwnProperty.call(parameters, "jsonBody"),
+        has_body_content_type: Object.prototype.hasOwnProperty.call(parameters, "bodyContentType"),
+        has_body_parameters_json: Object.prototype.hasOwnProperty.call(parameters, "bodyParametersJson"),
+        specify_body: parameters.specifyBody || null,
+        auth: parameters.authentication || "none",
+        generic_auth_type: parameters.genericAuthType || "",
+      };
+    });
+}
+
+function proxyNodeDiagnostics(workflow: any) {
+  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+
+  return nodes
+    .filter((node: any) => asObject(asObject(node?.parameters).nexusCredential).uses_nexus_proxy)
+    .map((node: any) => {
+      const nexusCredential = asObject(asObject(node?.parameters).nexusCredential);
+      return {
+        name: cleanString(node.name),
+        type: cleanString(node.type),
+        type_version: node.typeVersion,
+        provider: nexusCredential.provider || "",
+        provider_label: nexusCredential.provider_label || "",
+        credential_key: nexusCredential.credential_key || nexusCredential.n8n_credential_type || "",
+        url: nexusCredential.url || "",
+        allowed_host: nexusCredential.allowed_host || "",
+      };
+    });
 }
 
 function applyRetrySettingsToWorkflowNodes(nodes: any[]) {
@@ -1679,6 +2877,7 @@ function normalizeWorkflow(product: any, rawWorkflow: any, supabaseUrl: string, 
     This protects customer-triggered runs from transient API failures,
     especially Facebook Graph OAuthException code 2 / temporary 500 errors.
   */
+  nodes = normalizeHttpRequestNodesForN8n(nodes, product);
   nodes = applyRetrySettingsToWorkflowNodes(nodes);
 
   return {
@@ -1731,59 +2930,223 @@ async function n8nRequest(n8nBaseUrl: string, n8nApiKey: string, path: string, o
 }
 
 function normalizeWorkflowForN8nApi(workflow: any) {
+  const normalized = normalizeWorkflowResourceLocators(workflow);
+
   return {
-    name: cleanString(workflow.name || "Nexus Workflow"),
-    nodes: Array.isArray(workflow.nodes) ? workflow.nodes : [],
-    connections: workflow.connections || {},
+    name: cleanString(normalized.name || "Nexus Workflow"),
+    nodes: Array.isArray(normalized.nodes) ? normalized.nodes : [],
+    connections: normalized.connections || {},
     settings: {
-      executionOrder: workflow.settings?.executionOrder || "v1",
+      executionOrder: normalized.settings?.executionOrder || "v1",
     },
-    staticData: workflow.staticData || {},
+    staticData: normalized.staticData || {},
   };
 }
 
-async function findExistingN8nWorkflowByName(n8nBaseUrl: string, n8nApiKey: string, workflowName: string) {
+function removeUnboundCredentialReferences(workflow: any, errors: any[] = []) {
+  if (!errors.length || !workflow || typeof workflow !== "object") {
+    return workflow;
+  }
+
+  const missingByNode = new Map<string, Set<string>>();
+
+  for (const error of errors || []) {
+    const nodeName = cleanString(error?.node_name);
+    const credentialKey = cleanString(error?.credential_key);
+    if (!nodeName || !credentialKey) continue;
+
+    if (!missingByNode.has(nodeName)) {
+      missingByNode.set(nodeName, new Set());
+    }
+    missingByNode.get(nodeName)?.add(credentialKey);
+  }
+
+  if (!missingByNode.size) {
+    return workflow;
+  }
+
+  const output = deepClone(workflow);
+  output.nodes = Array.isArray(output.nodes)
+    ? output.nodes.map((node: any) => {
+      const keys = missingByNode.get(cleanString(node?.name));
+      if (!keys?.size || !node?.credentials || typeof node.credentials !== "object") {
+        return node;
+      }
+
+      const credentials = { ...node.credentials };
+      for (const key of keys) {
+        delete credentials[key];
+      }
+
+      if (Object.keys(credentials).length) {
+        return {
+          ...node,
+          credentials,
+        };
+      }
+
+      const { credentials: _removedCredentials, ...withoutCredentials } = node;
+      return withoutCredentials;
+    })
+    : [];
+
+  return output;
+}
+
+async function listN8nWorkflows(n8nBaseUrl: string, n8nApiKey: string) {
   const response = await n8nRequest(n8nBaseUrl, n8nApiKey, "/api/v1/workflows?limit=100", {
     method: "GET",
   });
 
-  const workflows =
+  return (
     Array.isArray(response?.data)
       ? response.data
       : Array.isArray(response)
         ? response
-        : [];
+        : []
+  );
+}
+
+async function findExistingN8nWorkflowByName(n8nBaseUrl: string, n8nApiKey: string, workflowName: string) {
+  const workflows = await listN8nWorkflows(n8nBaseUrl, n8nApiKey);
 
   return workflows.find((workflow: any) => workflow.name === workflowName) || null;
+}
+
+function workflowWebhookPaths(workflow: any) {
+  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+  return nodes
+    .filter((node: any) => isWebhookNode(node))
+    .map((node: any) => cleanString(node?.parameters?.path))
+    .filter(Boolean);
+}
+
+async function getN8nWorkflowById(n8nBaseUrl: string, n8nApiKey: string, workflowId: string) {
+  return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
+    method: "GET",
+  });
+}
+
+async function deactivateDuplicateWorkflows(
+  n8nBaseUrl: string,
+  n8nApiKey: string,
+  workflowName: string,
+  webhookPath = "",
+  keepWorkflowId = "",
+) {
+  const workflows = await listN8nWorkflows(n8nBaseUrl, n8nApiKey);
+  const duplicates = [];
+
+  for (const workflow of workflows) {
+    const id = cleanString(workflow?.id);
+    if (!id || id === keepWorkflowId) continue;
+
+    if (workflow?.name === workflowName) {
+      duplicates.push(workflow);
+      continue;
+    }
+
+    if (webhookPath) {
+      try {
+        const fullWorkflow = await getN8nWorkflowById(n8nBaseUrl, n8nApiKey, id);
+        if (workflowWebhookPaths(fullWorkflow).includes(webhookPath)) {
+          duplicates.push(workflow);
+        }
+      } catch {
+        /*
+          Best-effort cleanup only. If one old workflow cannot be inspected,
+          do not block the current product import.
+        */
+      }
+    }
+  }
+
+  const results = [];
+  for (const workflow of duplicates) {
+    results.push({
+      id: workflow.id,
+      name: workflow.name,
+      result: await deactivateWorkflow(n8nBaseUrl, n8nApiKey, workflow.id),
+    });
+  }
+
+  return results;
 }
 
 async function updateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowId: string, workflow: any) {
   const cleanWorkflow = normalizeWorkflowForN8nApi(workflow);
 
+  /*
+    Use full PUT replacement only. PATCH can merge nested node parameters in n8n.
+    For HTTP Request nodes, stale fields like jsonBody/bodyContentType can survive
+    a PATCH and keep throwing setContentType errors at runtime.
+  */
+  return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
+    method: "PUT",
+    body: JSON.stringify(cleanWorkflow),
+  });
+}
+
+async function deactivateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowId: string) {
   try {
-    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
-      method: "PATCH",
-      body: JSON.stringify(cleanWorkflow),
+    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}/deactivate`, {
+      method: "POST",
+      body: JSON.stringify({}),
     });
-  } catch (patchError) {
-    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
-      method: "PUT",
-      body: JSON.stringify(cleanWorkflow),
-    });
+  } catch (error) {
+    return {
+      deactivate_warning: error instanceof Error ? error.message : String(error),
+    };
   }
+}
+
+async function replaceExistingWorkflow(
+  n8nBaseUrl: string,
+  n8nApiKey: string,
+  workflowId: string,
+  workflow: any,
+) {
+  /*
+    n8n keeps active webhook executions in memory. Updating an already-active
+    workflow can leave the webhook using the old node version until the workflow
+    is deactivated/reactivated. That is exactly how a Make import can still run
+    HTTP Request V3 after Nexus saved a V2-safe workflow.
+  */
+  const deactivation = await deactivateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
+  const updated = await updateWorkflow(n8nBaseUrl, n8nApiKey, workflowId, workflow);
+
+  return {
+    ...updated,
+    deactivation,
+  };
 }
 
 async function importWorkflowToN8n(n8nBaseUrl: string, n8nApiKey: string, product: any, normalizedWorkflow: any) {
   const cleanWorkflow = normalizeWorkflowForN8nApi(normalizedWorkflow);
+  const webhookPath = workflowWebhookPaths(cleanWorkflow)[0] || "";
+  let duplicateDeactivations: any[] = [];
 
   if (product.n8n_workflow_id) {
     try {
-      const updated = await updateWorkflow(n8nBaseUrl, n8nApiKey, product.n8n_workflow_id, cleanWorkflow);
+      duplicateDeactivations = await deactivateDuplicateWorkflows(
+        n8nBaseUrl,
+        n8nApiKey,
+        cleanWorkflow.name,
+        webhookPath,
+        product.n8n_workflow_id,
+      );
+      const updated = await replaceExistingWorkflow(
+        n8nBaseUrl,
+        n8nApiKey,
+        product.n8n_workflow_id,
+        cleanWorkflow,
+      );
 
       return {
         ...updated,
         id: product.n8n_workflow_id,
         updated_existing_workflow: true,
+        duplicate_deactivations: duplicateDeactivations,
       };
     } catch {
       /*
@@ -1800,21 +3163,44 @@ async function importWorkflowToN8n(n8nBaseUrl: string, n8nApiKey: string, produc
   );
 
   if (existingWorkflow?.id) {
-    const updated = await updateWorkflow(n8nBaseUrl, n8nApiKey, existingWorkflow.id, cleanWorkflow);
+    duplicateDeactivations = await deactivateDuplicateWorkflows(
+      n8nBaseUrl,
+      n8nApiKey,
+      cleanWorkflow.name,
+      webhookPath,
+      existingWorkflow.id,
+    );
+    const updated = await replaceExistingWorkflow(
+      n8nBaseUrl,
+      n8nApiKey,
+      existingWorkflow.id,
+      cleanWorkflow,
+    );
 
     return {
       ...updated,
       id: existingWorkflow.id,
       reused_existing_workflow: true,
+      duplicate_deactivations: duplicateDeactivations,
     };
   }
 
+  duplicateDeactivations = await deactivateDuplicateWorkflows(
+    n8nBaseUrl,
+    n8nApiKey,
+    cleanWorkflow.name,
+    webhookPath,
+    "",
+  );
   const created = await n8nRequest(n8nBaseUrl, n8nApiKey, "/api/v1/workflows", {
     method: "POST",
     body: JSON.stringify(cleanWorkflow),
   });
 
-  return created;
+  return {
+    ...created,
+    duplicate_deactivations: duplicateDeactivations,
+  };
 }
 
 async function activateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowId: string) {
@@ -1834,11 +3220,11 @@ async function activateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowI
    AUTH
    ========================================================= */
 
-async function requireAdmin(req: Request, supabaseUrl: string, anonKey: string, serviceRoleKey: string) {
+async function requireMarketplaceOperator(req: Request, supabaseUrl: string, anonKey: string, serviceRoleKey: string) {
   const authHeader = req.headers.get("Authorization") || "";
 
   if (!authHeader.startsWith("Bearer ")) {
-    return { user: null, error: "Missing auth token" };
+    return { user: null, profile: null, developer: null, error: "Missing auth token" };
   }
 
   const token = authHeader.replace("Bearer ", "");
@@ -1856,20 +3242,36 @@ async function requireAdmin(req: Request, supabaseUrl: string, anonKey: string, 
   const { data: userData, error: userError } = await userClient.auth.getUser(token);
 
   if (userError || !userData?.user) {
-    return { user: null, error: "Invalid auth token" };
+    return { user: null, profile: null, developer: null, error: "Invalid auth token" };
   }
 
   const { data: profile, error: profileError } = await adminClient
     .from("profiles")
-    .select("role")
+    .select("id, role")
     .eq("id", userData.user.id)
     .maybeSingle();
 
-  if (profileError || profile?.role !== "admin") {
-    return { user: null, error: "Admin access required" };
+  if (profileError || !["admin", "developer"].includes(profile?.role)) {
+    return { user: null, profile: null, developer: null, error: "Admin or developer access required" };
   }
 
-  return { user: userData.user, error: null };
+  let developer = null;
+
+  if (profile.role === "developer") {
+    const { data: developerRow, error: developerError } = await adminClient
+      .from("developers")
+      .select("id, profile_id")
+      .eq("profile_id", userData.user.id)
+      .maybeSingle();
+
+    if (developerError || !developerRow) {
+      return { user: userData.user, profile, developer: null, error: "Developer account not found" };
+    }
+
+    developer = developerRow;
+  }
+
+  return { user: userData.user, profile, developer, error: null };
 }
 
 /* =========================================================
@@ -1896,6 +3298,7 @@ Deno.serve(async (req) => {
         has_n8n_base_url: Boolean(env("N8N_BASE_URL")),
         has_n8n_api_key: Boolean(env("N8N_API_KEY")),
         has_runtime_secret: Boolean(env("NEXUS_RUNTIME_SECRET")),
+        has_credential_secret: Boolean(env("NEXUS_CREDENTIAL_SECRET")),
       },
     });
   }
@@ -1924,7 +3327,7 @@ Deno.serve(async (req) => {
       return errorResponse("Missing NEXUS_RUNTIME_SECRET.", 500);
     }
 
-    const { error: authError } = await requireAdmin(req, supabaseUrl, anonKey, serviceRoleKey);
+    const { profile, developer, error: authError } = await requireMarketplaceOperator(req, supabaseUrl, anonKey, serviceRoleKey);
 
     if (authError) {
       return errorResponse(authError, 401);
@@ -1949,6 +3352,10 @@ Deno.serve(async (req) => {
       return errorResponse(productError?.message || "Automation product not found.", 404);
     }
 
+    if (profile?.role === "developer" && product.developer_id !== developer?.id) {
+      return errorResponse("Developer can only import their own products.", 403);
+    }
+
     if (!product.n8n_workflow_json) {
       return errorResponse("No n8n workflow JSON found on this product.", 400);
     }
@@ -1968,6 +3375,24 @@ Deno.serve(async (req) => {
     );
 
     const productForImport = autoSchema.product;
+    productForImport.n8n_workflow_json = convertMakeHttpRequestNodesToProxy(
+      productForImport.n8n_workflow_json,
+      productForImport,
+      supabaseUrl,
+    );
+
+    const credentialBinding = await bindAutomationCredentials({
+      adminClient,
+      product: productForImport,
+      n8nBaseUrl,
+      n8nApiKey,
+      credentialSecret: env("NEXUS_CREDENTIAL_SECRET"),
+      syncMissingN8nCredentials: true,
+    });
+
+    productForImport.n8n_workflow_json = credentialBinding.ok
+      ? credentialBinding.workflow
+      : removeUnboundCredentialReferences(credentialBinding.workflow, credentialBinding.errors);
 
     const mappingValidation = validateWorkflowPlaceholderMappings(
       productForImport,
@@ -2039,6 +3464,7 @@ Deno.serve(async (req) => {
     }
 
     const normalized = normalizeWorkflow(productForImport, productForImport.n8n_workflow_json, supabaseUrl, n8nBaseUrl);
+    normalized.workflow = normalizeWorkflowResourceLocators(normalized.workflow);
 
     const imported = await importWorkflowToN8n(
       n8nBaseUrl,
@@ -2046,6 +3472,8 @@ Deno.serve(async (req) => {
       productForImport,
       normalized.workflow,
     );
+    const httpDiagnostics = httpNodeDiagnostics(normalized.workflow);
+    const proxyDiagnostics = proxyNodeDiagnostics(normalized.workflow);
 
     const workflowId = imported.id || imported.data?.id || product.n8n_workflow_id;
 
@@ -2053,7 +3481,10 @@ Deno.serve(async (req) => {
       throw new Error("n8n did not return a workflow ID.");
     }
 
-    const activation = await activateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
+    const shouldKeepActiveAfterImport = ["active", "published"].includes(cleanString(product.status).toLowerCase());
+    const postImportWorkflowState = shouldKeepActiveAfterImport
+      ? await activateWorkflow(n8nBaseUrl, n8nApiKey, workflowId)
+      : await deactivateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
 
     const { data: updatedProduct, error: updateError } = await adminClient
       .from("automations")
@@ -2071,13 +3502,37 @@ Deno.serve(async (req) => {
         n8n_last_synced_at: new Date().toISOString(),
         setup_schema: productForImport.setup_schema,
         credential_schema: productForImport.credential_schema,
+        n8n_workflow_json: productForImport.n8n_workflow_json,
+        n8n_last_test_status: "not_tested",
+        n8n_last_test_error: null,
+        n8n_last_test_result: null,
+        n8n_last_tested_at: null,
+        health_status: "needs_recheck",
+        health_failure_reason: "Workflow imported. Run a fresh technical check before publishing.",
+        health_failure_details: {
+          imported_workflow: true,
+          workflow_id: workflowId,
+          at: new Date().toISOString(),
+        },
+        health_next_check_at: null,
         detected_placeholders: validation.detected,
         placeholder_validation_status: "valid",
         placeholder_validation_errors: [],
+        developer_credential_requirements: credentialBinding.slots,
+        n8n_credential_bindings: credentialBinding.bindings,
+        credential_binding_status: credentialBinding.status,
+        credential_binding_errors: credentialBinding.errors,
+        n8n_last_credential_bound_at: credentialBinding.ok ? new Date().toISOString() : product.n8n_last_credential_bound_at || null,
         n8n_last_import_result: {
           workflow_id: workflowId,
           webhook_url: normalized.webhookUrl,
           callback_url: normalized.callbackUrl,
+          http_nodes: httpDiagnostics,
+          proxy_nodes: proxyDiagnostics,
+          credential_binding_status: credentialBinding.status,
+          credential_bindings: credentialBinding.bindings,
+          deactivation: imported.deactivation || null,
+          duplicate_deactivations: imported.duplicate_deactivations || [],
           custom_mapping_warnings: [
             ...autoSchema.warnings,
             ...mappingValidation.warnings,
@@ -2085,7 +3540,9 @@ Deno.serve(async (req) => {
           ],
           auto_added_setup_fields: autoSchema.addedSetupFields,
           auto_added_credential_fields: autoSchema.addedCredentialFields,
-          activation,
+          workflow_state: shouldKeepActiveAfterImport ? "active" : "draft_inactive",
+          activation: shouldKeepActiveAfterImport ? postImportWorkflowState : null,
+          deactivation_after_import: shouldKeepActiveAfterImport ? null : postImportWorkflowState,
         },
       })
       .eq("id", automationId)
@@ -2100,8 +3557,13 @@ Deno.serve(async (req) => {
       ok: true,
       product_id: updatedProduct.id,
       workflow_id: workflowId,
+      workflow_state: shouldKeepActiveAfterImport ? "active" : "draft_inactive",
       webhook_url: normalized.webhookUrl,
       callback_url: normalized.callbackUrl,
+      http_nodes: httpDiagnostics,
+      proxy_nodes: proxyDiagnostics,
+      credential_binding_status: credentialBinding.status,
+      credential_bindings: credentialBinding.bindings,
       custom_mapping_warnings: [
         ...autoSchema.warnings,
         ...mappingValidation.warnings,
@@ -2112,6 +3574,13 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error(error);
+
+    if (isCredentialSchemaError(error)) {
+      return errorResponse(
+        `${error instanceof Error ? error.message : "Credential vault schema is missing."} Run supabase/developer_credentials_install_or_patch.sql in the Supabase SQL editor, then redeploy developer-credentials and import-n8n-workflow.`,
+        500,
+      );
+    }
 
     return errorResponse(
       error instanceof Error ? error.message : "Could not import n8n workflow.",

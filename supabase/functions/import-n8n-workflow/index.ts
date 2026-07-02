@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
-import { bindAutomationCredentials } from "../_shared/nexus-credentials.ts";
+import { bindAutomationCredentials, normalizeWorkflowResourceLocators } from "../_shared/nexus-credentials.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -83,7 +83,7 @@ function runtimeContextPath(section: string, key: string) {
 
 function contextPathForMapping(source: string, key: string) {
   const cleanSource = cleanString(source).toLowerCase();
-  const cleanKey = cleanString(key);
+  const cleanKey = cleanSource === "setup" ? canonicalSetupKey(key) : cleanString(key);
 
   if (!cleanKey) return "";
 
@@ -306,6 +306,7 @@ function jsStringAccessorForMapping(source: string, key: string) {
 
 function replaceQuotedCodePlaceholder(sourceCode: string, placeholderRegex: RegExp, source: string) {
   let output = String(sourceCode || "");
+  const quotedFlags = placeholderRegex.flags.includes("i") ? "gi" : "g";
 
   /*
     Replace placeholders that are wrapped in quotes, for example:
@@ -317,7 +318,7 @@ function replaceQuotedCodePlaceholder(sourceCode: string, placeholderRegex: RegE
       String($("Nexus Runtime Context").first().json.setup.facebook_page_id ?? "")
   */
   output = output.replace(
-    new RegExp("([\"\'`])\\s*" + placeholderRegex.source + "\\s*\\1", "g"),
+    new RegExp("([\"\'`])\\s*" + placeholderRegex.source + "\\s*\\1", quotedFlags),
     (_full: string, _quote: string, key: string) => {
       return jsStringAccessorForMapping(source, key) || "\"\"";
     },
@@ -419,31 +420,31 @@ function convertOfficialPlaceholdersInCode(sourceCode: string) {
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_SETUP\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("SETUP"),
     "setup",
   );
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_SECRET\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("SECRET"),
     "secret",
   );
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_CUSTOMER\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("CUSTOMER"),
     "customer",
   );
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_SYSTEM\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("SYSTEM"),
     "system",
   );
 
   output = replaceQuotedCodePlaceholder(
     output,
-    /\{\{\s*NEXUS_ORDER\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+    nexusPlaceholderRegex("ORDER"),
     "order",
   );
 
@@ -552,14 +553,14 @@ function extractPlaceholders(text: string) {
     unknown: [] as string[],
   };
 
-  const pattern = /\{\{\s*NEXUS_([A-Z]+)\.([a-zA-Z0-9_.-]+)\s*\}\}/g;
+  const pattern = /\{\{\s*(?:(?:NEXUS|NX)[\s_-]*([A-Z]+)|([A-Z]+)[\s_-]*(?:NEXUS|NX))\s*(?:[|:.=_\-\[\(]|\s+)\s*([a-zA-Z0-9_. -]+?)\s*(?:[\]\)])?\s*\}\}/gi;
   let match;
 
   while ((match = pattern.exec(text)) !== null) {
-    const type = match[1];
-    const name = match[2];
+    const type = String(match[1] || match[2] || "").toUpperCase();
+    const name = match[3];
 
-    if (type === "SETUP") found.setup.push(name);
+    if (type === "SETUP") found.setup.push(canonicalSetupKey(name));
     else if (type === "SECRET") found.secret.push(name);
     else if (type === "CUSTOMER") found.customer.push(name);
     else if (type === "SYSTEM") found.system.push(name);
@@ -581,7 +582,7 @@ function validatePlaceholders(product: any, workflow: any) {
   const setupSchema = normalizeJsonArray(product.setup_schema);
   const credentialSchema = normalizeJsonArray(product.credential_schema);
 
-  const setupNames = setupSchema.map((item: any) => item.name).filter(Boolean);
+  const setupNames = setupSchema.map((item: any) => canonicalSetupKey(item.name)).filter(Boolean);
   const credentialNames = credentialSchema.map((item: any) => item.name).filter(Boolean);
 
   const errors: string[] = [];
@@ -606,29 +607,36 @@ function validatePlaceholders(product: any, workflow: any) {
   return { detected, errors, warnings };
 }
 
+function nexusPlaceholderRegex(type: string) {
+  return new RegExp(
+    `\\{\\{\\s*(?:(?:NEXUS|NX)[\\s_-]*${type}|${type}[\\s_-]*(?:NEXUS|NX))\\s*(?:[|:.=_\\-\\[\\(]|\\s+)\\s*([a-zA-Z0-9_. -]+?)\\s*(?:[\\]\\)])?\\s*\\}\\}`,
+    "gi",
+  );
+}
+
 function convertNexusPlaceholders(value: any, childKey = ""): any {
   if (typeof value === "string") {
     let output = value;
 
     const replacements = [
       {
-        regex: /\{\{\s*NEXUS_SETUP\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("SETUP"),
         source: "setup",
       },
       {
-        regex: /\{\{\s*NEXUS_SECRET\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("SECRET"),
         source: "secret",
       },
       {
-        regex: /\{\{\s*NEXUS_CUSTOMER\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("CUSTOMER"),
         source: "customer",
       },
       {
-        regex: /\{\{\s*NEXUS_SYSTEM\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("SYSTEM"),
         source: "system",
       },
       {
-        regex: /\{\{\s*NEXUS_ORDER\.([a-zA-Z0-9_.-]+)\s*\}\}/g,
+        regex: nexusPlaceholderRegex("ORDER"),
         source: "order",
       },
     ];
@@ -702,6 +710,24 @@ function makeSetupField(name: string) {
     type: inferSetupFieldType(name),
     required: true,
     description: "Auto-added by Nexus because the uploaded workflow uses this setup placeholder.",
+  };
+}
+
+function setupField(
+  name: string,
+  label: string,
+  type: string,
+  description: string,
+  placeholder = "",
+  required = true,
+) {
+  return {
+    name,
+    label,
+    type,
+    required,
+    ...(placeholder ? { placeholder } : {}),
+    description,
   };
 }
 
@@ -792,6 +818,7 @@ function extractRuntimeSetupKeys(text: string) {
   const patterns = [
     /NEXUS_SETUP\.([a-zA-Z0-9_.-]+)/g,
     /NEXUS_SETUP[_:-]([a-zA-Z0-9_.-]+)/gi,
+    /\{\{\s*(?:(?:NEXUS|NX)[\s_-]*SETUP|SETUP[\s_-]*(?:NEXUS|NX))\s*(?:[|:.=_\-\[\(]|\s+)\s*([a-zA-Z0-9_. -]+?)\s*(?:[\]\)])?\s*\}\}/gi,
     /\bsetup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
     /\bbody\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
     /\$json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
@@ -808,6 +835,206 @@ function extractRuntimeSetupKeys(text: string) {
   }
 
   return [...setupNames].sort();
+}
+
+function isEmptyNodeValue(value: any) {
+  if (value == null) return true;
+  if (typeof value === "string") return !cleanString(value);
+  if (typeof value === "number" || typeof value === "boolean") return false;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") {
+    const object = asObject(value);
+    if (cleanString(object.value) || cleanString(object.cachedResultName) || cleanString(object.name)) {
+      return false;
+    }
+    return Object.keys(object).length === 0 || Object.values(object).every(isEmptyNodeValue);
+  }
+  return false;
+}
+
+function firstParameterValue(parameters: Record<string, any>, keys: string[]) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(parameters, key)) {
+      return parameters[key];
+    }
+  }
+  return undefined;
+}
+
+function setupExpression(key: string) {
+  return contextExpressionForMapping("setup", key, true);
+}
+
+function setupResourceLocator(key: string, mode = "url") {
+  return {
+    __rl: true,
+    value: setupExpression(key),
+    mode,
+  };
+}
+
+function writeEmptyParameter(parameters: Record<string, any>, keys: string[], value: any) {
+  const key = keys.find((item) => Object.prototype.hasOwnProperty.call(parameters, item)) || keys[0];
+  if (!key || !isEmptyNodeValue(parameters[key])) return false;
+  parameters[key] = value;
+  return true;
+}
+
+function addSpecificSetupField(
+  setupSchema: any[],
+  setupNames: Set<string>,
+  warnings: string[],
+  addedSetupFields: any[],
+  field: any,
+  reason: string,
+) {
+  const key = canonicalSetupKey(field?.name);
+  if (!key || setupNames.has(key)) return;
+
+  const normalizedField = {
+    ...field,
+    name: key,
+  };
+  setupSchema.push(normalizedField);
+  setupNames.add(key);
+  addedSetupFields.push(normalizedField);
+  warnings.push(`Auto-added setup field ${key} ${reason}.`);
+}
+
+function autoAddNativeAppSetupFieldsForWorkflow(
+  workflow: any,
+  setupSchema: any[],
+  setupNames: Set<string>,
+  warnings: string[],
+  addedSetupFields: any[],
+) {
+  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
+
+  for (const node of nodes) {
+    const nodeText = cleanString(`${node?.type || ""} ${node?.name || ""}`).toLowerCase();
+    const parameters = asObject(node?.parameters);
+
+    if (nodeText.includes("googlesheets") || nodeText.includes("google sheets")) {
+      const spreadsheetTarget = firstParameterValue(parameters, [
+        "documentId",
+        "spreadsheetId",
+        "sheetId",
+        "fileId",
+        "documentUrl",
+        "spreadsheetUrl",
+      ]);
+      const sheetTarget = firstParameterValue(parameters, [
+        "sheetName",
+        "sheet",
+        "tabName",
+        "worksheet",
+      ]);
+      const rangeTarget = firstParameterValue(parameters, [
+        "range",
+        "dataRange",
+      ]);
+
+      if (isEmptyNodeValue(spreadsheetTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "google_sheet_url",
+            "Google Sheet URL",
+            "url",
+            "Auto-added because a Google Sheets node needs the target spreadsheet. The buyer can paste the sheet URL during setup, or the developer can hardcode it in the workflow editor.",
+            "https://docs.google.com/spreadsheets/d/...",
+          ),
+          `because "${node?.name || "Google Sheets"}" needs a spreadsheet target`,
+        );
+        writeEmptyParameter(parameters, ["documentId", "spreadsheetId", "sheetId", "fileId", "documentUrl", "spreadsheetUrl"], setupResourceLocator("google_sheet_url", "url"));
+      }
+
+      if (isEmptyNodeValue(sheetTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "google_sheet_name",
+            "Google Sheet tab",
+            "text",
+            "Auto-added because a Google Sheets node needs the worksheet/tab name.",
+            "Sheet1",
+          ),
+          `because "${node?.name || "Google Sheets"}" needs a sheet/tab name`,
+        );
+        writeEmptyParameter(parameters, ["sheetName", "sheet", "tabName", "worksheet"], setupResourceLocator("google_sheet_name", "name"));
+      }
+
+      if (isEmptyNodeValue(rangeTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "google_sheet_range",
+            "Google Sheet range",
+            "text",
+            "Auto-added because a Google Sheets node may need a read/write range. Leave the field editable if the exact range depends on the buyer's sheet.",
+            "A:Z",
+            false,
+          ),
+          `because "${node?.name || "Google Sheets"}" may need a sheet range`,
+        );
+        writeEmptyParameter(parameters, ["range", "dataRange"], setupExpression("google_sheet_range"));
+      }
+    }
+
+    if (nodeText.includes("googledrive") || nodeText.includes("google drive")) {
+      const fileTarget = firstParameterValue(parameters, ["fileId", "folderId", "documentId", "fileUrl", "folderUrl"]);
+      if (isEmptyNodeValue(fileTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "google_drive_file_url",
+            "Google Drive file or folder URL",
+            "url",
+            "Auto-added because a Google Drive node needs the target file or folder.",
+            "https://drive.google.com/...",
+          ),
+          `because "${node?.name || "Google Drive"}" needs a file or folder target`,
+        );
+        writeEmptyParameter(parameters, ["fileId", "folderId", "documentId", "fileUrl", "folderUrl"], setupResourceLocator("google_drive_file_url", "url"));
+      }
+    }
+
+    if (nodeText.includes("gmail")) {
+      const toTarget = firstParameterValue(parameters, ["to", "sendTo", "recipient", "email"]);
+      if (isEmptyNodeValue(toTarget)) {
+        addSpecificSetupField(
+          setupSchema,
+          setupNames,
+          warnings,
+          addedSetupFields,
+          setupField(
+            "recipient_email",
+            "Recipient email",
+            "email",
+            "Auto-added because a Gmail node needs the email address it should send to or process for this buyer.",
+            "team@example.com",
+            false,
+          ),
+          `because "${node?.name || "Gmail"}" may need a recipient email`,
+        );
+        writeEmptyParameter(parameters, ["to", "sendTo", "recipient", "email"], setupExpression("recipient_email"));
+      }
+    }
+
+    node.parameters = parameters;
+  }
 }
 
 function inferMakeSetupKeysFromText(text: string) {
@@ -865,7 +1092,8 @@ function addGeneratedSetupFields(
 }
 
 function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mappings: any[]) {
-  const workflowText = JSON.stringify(workflow || {});
+  const workflowForImport = deepClone(workflow || {});
+  const workflowText = JSON.stringify(workflowForImport || {});
   const setupSchema = normalizeJsonArray(product.setup_schema);
   const credentialSchema = normalizeJsonArray(product.credential_schema);
 
@@ -955,6 +1183,14 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
     "from runtime setup references",
   );
 
+  autoAddNativeAppSetupFieldsForWorkflow(
+    workflowForImport,
+    setupSchema,
+    setupNames,
+    warnings,
+    addedSetupFields,
+  );
+
   if (["make", "zapier"].includes(cleanString(product.workflow_source_platform).toLowerCase()) || product.make_blueprint) {
     addGeneratedSetupFields(
       setupSchema,
@@ -971,6 +1207,7 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
       ...product,
       setup_schema: setupSchema,
       credential_schema: credentialSchema,
+      n8n_workflow_json: workflowForImport,
     },
     setup_schema: setupSchema,
     credential_schema: credentialSchema,
@@ -2693,14 +2930,16 @@ async function n8nRequest(n8nBaseUrl: string, n8nApiKey: string, path: string, o
 }
 
 function normalizeWorkflowForN8nApi(workflow: any) {
+  const normalized = normalizeWorkflowResourceLocators(workflow);
+
   return {
-    name: cleanString(workflow.name || "Nexus Workflow"),
-    nodes: Array.isArray(workflow.nodes) ? workflow.nodes : [],
-    connections: workflow.connections || {},
+    name: cleanString(normalized.name || "Nexus Workflow"),
+    nodes: Array.isArray(normalized.nodes) ? normalized.nodes : [],
+    connections: normalized.connections || {},
     settings: {
-      executionOrder: workflow.settings?.executionOrder || "v1",
+      executionOrder: normalized.settings?.executionOrder || "v1",
     },
-    staticData: workflow.staticData || {},
+    staticData: normalized.staticData || {},
   };
 }
 
@@ -3225,6 +3464,7 @@ Deno.serve(async (req) => {
     }
 
     const normalized = normalizeWorkflow(productForImport, productForImport.n8n_workflow_json, supabaseUrl, n8nBaseUrl);
+    normalized.workflow = normalizeWorkflowResourceLocators(normalized.workflow);
 
     const imported = await importWorkflowToN8n(
       n8nBaseUrl,
