@@ -899,6 +899,114 @@ async function getAutomation(adminClient: any, operator: any, automationId: stri
   return data;
 }
 
+function preferredBindingFromCredential(slot: any, credential: any) {
+  return {
+    node_name: slot.node_name,
+    node_type: slot.node_type,
+    provider: slot.provider || credential.provider || null,
+    provider_label: slot.provider_label || credential.provider_label || null,
+    credential_key: slot.credential_key || slot.n8n_credential_type,
+    n8n_credential_type: slot.n8n_credential_type || slot.credential_key || credential.n8n_credential_type || null,
+    n8n_credential_id: credential.n8n_credential_id || slot.current_id || null,
+    n8n_credential_name: credential.n8n_credential_name || credential.label || slot.current_name || null,
+    developer_credential_id: credential.id,
+    selected_credential_type: credential.n8n_credential_type || null,
+    manual_preference: true,
+    selected_at: new Date().toISOString(),
+  };
+}
+
+function requestedCredentialSlots(product: any, body: any) {
+  const submittedSlots = Array.isArray(body.slots)
+    ? body.slots.map(asObject).filter((slot: any) => cleanString(slot.node_name) && cleanString(slot.credential_key || slot.n8n_credential_type))
+    : [];
+  const productSlots = Array.isArray(product.developer_credential_requirements)
+    ? product.developer_credential_requirements.map(asObject).filter((slot: any) => cleanString(slot.node_name) && cleanString(slot.credential_key || slot.n8n_credential_type))
+    : [];
+
+  if (!submittedSlots.length) return productSlots;
+
+  const requestedKeys = new Set(submittedSlots.map(slotKey).filter((key) => key !== ":"));
+  const matchingProductSlots = productSlots.filter((slot: any) => requestedKeys.has(slotKey(slot)));
+  return matchingProductSlots.length ? matchingProductSlots : submittedSlots;
+}
+
+function canCredentialBePreferredForSlots(credential: any, slots: any[]) {
+  const credentialType = lower(credential?.n8n_credential_type);
+  return slots.some((slot: any) => {
+    const slotType = lower(slot?.n8n_credential_type || slot?.credential_key);
+    return credentialType === slotType || providerMatchesCredential(credential, slot);
+  });
+}
+
+async function preferAutomationCredential(adminClient: any, operator: any, body: any) {
+  const product = await getAutomation(adminClient, operator, cleanString(body.automation_id));
+  const credentialId = cleanString(body.credential_id);
+  if (!credentialId) throw new Error("credential_id is required.");
+
+  const { data: credential, error: credentialError } = await adminClient
+    .from("developer_credentials")
+    .select("*")
+    .eq("id", credentialId)
+    .maybeSingle();
+
+  if (credentialError || !credential) throw new Error(credentialError?.message || "Saved credential not found.");
+  if (!["active", "needs_attention"].includes(cleanString(credential.status || "active"))) {
+    throw new Error("Choose an active saved credential.");
+  }
+
+  const productDeveloperId = cleanString(product.developer_id);
+  const credentialDeveloperId = cleanString(credential.developer_id);
+  if (operator.profile.role === "developer" && credentialDeveloperId !== cleanString(operator.developer.id)) {
+    throw new Error("You can only use your own saved credentials.");
+  }
+  if (operator.profile.role === "admin" && productDeveloperId && credentialDeveloperId && credentialDeveloperId !== productDeveloperId) {
+    throw new Error("This credential belongs to a different developer.");
+  }
+  if (!productDeveloperId && credentialDeveloperId) {
+    throw new Error("Nexus-owned products can only use Nexus/internal credentials.");
+  }
+
+  const slots = requestedCredentialSlots(product, body);
+  if (!slots.length) throw new Error("No matching credential slots were found for this product.");
+  if (!canCredentialBePreferredForSlots(credential, slots)) {
+    throw new Error("This saved credential does not match the selected workflow credential slot.");
+  }
+
+  const selectedKeys = new Set(slots.map(slotKey));
+  const existingBindings = Array.isArray(product.n8n_credential_bindings) ? product.n8n_credential_bindings : [];
+  const nextBindings = [
+    ...existingBindings.filter((binding: any) => !selectedKeys.has(slotKey(binding))),
+    ...slots.map((slot: any) => preferredBindingFromCredential(slot, credential)),
+  ];
+  const existingErrors = Array.isArray(product.credential_binding_errors) ? product.credential_binding_errors : [];
+  const nextErrors = existingErrors.filter((error: any) => !selectedKeys.has(slotKey(error)));
+
+  const { data: updatedProduct, error: updateError } = await adminClient
+    .from("automations")
+    .update({
+      n8n_credential_bindings: nextBindings,
+      credential_binding_errors: nextErrors,
+      credential_binding_status: "needs_credentials",
+      n8n_last_test_status: "not_tested",
+      n8n_last_test_error: "Credential selection changed. Apply credentials and run a fresh technical test.",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", product.id)
+    .select("*")
+    .single();
+
+  if (updateError) throw new Error(updateError.message);
+
+  return {
+    product: updatedProduct || product,
+    credential: redactCredential(credential),
+    slots,
+    bindings: nextBindings,
+    errors: nextErrors,
+  };
+}
+
 async function scanAutomation(adminClient: any, operator: any, body: any) {
   const product = await getAutomation(adminClient, operator, cleanString(body.automation_id));
 
@@ -1196,6 +1304,20 @@ Deno.serve(async (req) => {
         slots: result.slots,
         bindings: result.bindings,
         errors: result.errors,
+      });
+    }
+
+    if (action === "prefer_automation_credential") {
+      const result = await preferAutomationCredential(adminClient, operator, body);
+      return jsonResponse({
+        ok: true,
+        product_id: result.product.id,
+        product: productRuntimeSummary(result.product),
+        credential: result.credential,
+        slots: result.slots,
+        bindings: result.bindings,
+        errors: result.errors,
+        message: "Saved credential selected. Add any remaining credentials, then press Apply credentials & run check.",
       });
     }
 

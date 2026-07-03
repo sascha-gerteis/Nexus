@@ -1127,7 +1127,7 @@
     runtimePillClass(status) {
       const value = String(status || "").toLowerCase();
 
-      if (["success", "succeeded", "completed", "passed", "passed_with_expected_test_callback_error", "healthy"].includes(value)) return "pill green";
+      if (["success", "succeeded", "completed", "passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error", "healthy"].includes(value)) return "pill green";
       if (["failed", "error", "cancelled", "canceled", "paused_by_health_check"].includes(value)) return "pill red";
       if (["running", "queued", "warning", "needs_recheck", "paused"].includes(value)) return "pill orange";
 

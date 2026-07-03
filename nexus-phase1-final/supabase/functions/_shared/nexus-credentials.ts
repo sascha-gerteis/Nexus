@@ -273,9 +273,10 @@ const PROVIDER_PRESETS = [
   {
     provider: "apify",
     label: "Apify",
-    n8nCredentialType: "httpBearerAuth",
+    n8nCredentialType: "httpQueryAuth",
     matches: ["apify"],
-    aliases: { api_key: "token", apiKey: "token", token: "token", api_token: "token" },
+    aliases: { api_key: "value", apiKey: "value", token: "value", api_token: "value", name: "name" },
+    defaults: { name: "token" },
   },
   {
     provider: "serpapi",
@@ -1232,6 +1233,246 @@ function isHttpRequestNode(node: any) {
   return lower(node?.type).includes("httprequest");
 }
 
+function isSetLikeNode(node: any) {
+  const text = lower(`${node?.type || ""} ${node?.name || ""}`);
+  return (
+    text.includes("n8n-nodes-base.set") ||
+    text.includes("edit fields") ||
+    text.includes("editfields")
+  );
+}
+
+function scanText(value: any) {
+  try {
+    return typeof value === "string" ? value : JSON.stringify(value || {});
+  } catch {
+    return String(value || "");
+  }
+}
+
+function normalizedFieldName(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function isCredentialLikeFieldName(value: unknown) {
+  const name = normalizedFieldName(value);
+  if (!name) return false;
+
+  const safeNonSecrets = [
+    "sheet_id",
+    "spreadsheet_id",
+    "document_id",
+    "file_id",
+    "page_id",
+    "channel_id",
+    "account_id",
+    "campaign_id",
+    "customer_id",
+    "workspace_id",
+  ];
+
+  if (safeNonSecrets.includes(name)) return false;
+
+  return (
+    name.includes("api_key") ||
+    name.includes("apikey") ||
+    name.includes("api_token") ||
+    name.includes("access_token") ||
+    name.includes("auth_token") ||
+    name.includes("refresh_token") ||
+    name.includes("client_secret") ||
+    name.includes("secret_key") ||
+    name.includes("private_key") ||
+    name.includes("bearer") ||
+    name.includes("credential") ||
+    name === "token" ||
+    name === "secret" ||
+    name === "password"
+  );
+}
+
+function isCredentialLikeText(value: unknown) {
+  const text = lower(value);
+  if (!text) return false;
+  return (
+    text.includes("authorization") ||
+    text.includes("bearer ") ||
+    text.includes("api_key") ||
+    text.includes("apikey") ||
+    text.includes("api-token") ||
+    text.includes("api_token") ||
+    text.includes("access_token") ||
+    text.includes("auth_token") ||
+    text.includes("client_secret") ||
+    text.includes("private_key") ||
+    text.includes("$env.")
+  );
+}
+
+function extractJsonFieldReferences(value: unknown) {
+  const text = scanText(value);
+  const refs = new Set<string>();
+  const patterns = [
+    /\$json\.([a-zA-Z_$][a-zA-Z0-9_$.-]*)/g,
+    /\$json\[['"]([^'"]+)['"]\]/g,
+    /\.json\.([a-zA-Z_$][a-zA-Z0-9_$.-]*)/g,
+    /\.json\[['"]([^'"]+)['"]\]/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text))) {
+      const ref = normalizedFieldName(match[1]);
+      if (ref) refs.add(ref);
+    }
+  }
+
+  return Array.from(refs);
+}
+
+function collectNameValueAssignments(value: any, output: any[] = []) {
+  if (!value || typeof value !== "object") return output;
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectNameValueAssignments(item, output);
+    return output;
+  }
+
+  const object = asObject(value);
+  const name = cleanString(
+    object.name ||
+    object.key ||
+    object.field ||
+    object.fieldName ||
+    object.parameterName,
+  );
+
+  if (name) {
+    const assignedValue =
+      object.value ??
+      object.fieldValue ??
+      object.stringValue ??
+      object.defaultValue ??
+      object.expression ??
+      object.content;
+
+    output.push({
+      name,
+      value: assignedValue,
+    });
+  }
+
+  for (const child of Object.values(object)) {
+    if (child && typeof child === "object") collectNameValueAssignments(child, output);
+  }
+
+  return output;
+}
+
+function credentialCarriersForWorkflow(nodes: any[]) {
+  const carriers = new Map<string, any>();
+
+  for (const node of nodes || []) {
+    const nodeIsCarrier = isSetLikeNode(node) || isCodeLikeNode(node);
+    if (!nodeIsCarrier) continue;
+
+    const assignments = collectNameValueAssignments(node?.parameters);
+    const nodeText = scanText(node);
+
+    for (const assignment of assignments) {
+      const fieldName = normalizedFieldName(assignment.name);
+      if (!fieldName) continue;
+
+      const valueText = scanText(assignment.value);
+      const credentialLike = isCredentialLikeFieldName(fieldName) || isCredentialLikeText(valueText);
+      if (!credentialLike) continue;
+
+      const preset = providerPreset(`${assignment.name} ${valueText} ${node?.name || ""} ${node?.type || ""}`);
+      carriers.set(fieldName, {
+        field: assignment.name,
+        normalized_field: fieldName,
+        source_node: cleanString(node?.name || "Unnamed node"),
+        source_node_type: cleanString(node?.type),
+        provider: preset?.provider || "",
+        provider_label: preset?.label || "",
+        n8n_credential_type: preset?.n8nCredentialType || "",
+      });
+    }
+
+    /*
+      Code nodes often construct objects without the Set node's explicit
+      assignment shape. If they mention env/API-key fields, keep a light hint
+      so downstream HTTP nodes can still be flagged instead of silently passing.
+    */
+    if (isCodeLikeNode(node) && isCredentialLikeText(nodeText)) {
+      const preset = providerPreset(nodeText);
+      for (const ref of extractJsonFieldReferences(nodeText)) {
+        if (!isCredentialLikeFieldName(ref)) continue;
+        carriers.set(ref, {
+          field: ref,
+          normalized_field: ref,
+          source_node: cleanString(node?.name || "Unnamed node"),
+          source_node_type: cleanString(node?.type),
+          provider: preset?.provider || "",
+          provider_label: preset?.label || "",
+          n8n_credential_type: preset?.n8nCredentialType || "",
+        });
+      }
+    }
+  }
+
+  return carriers;
+}
+
+function httpCredentialReferenceHint(node: any, credentialCarriers: Map<string, any> | null = null) {
+  if (!isHttpRequestNode(node)) return null;
+
+  const parameters = asObject(node?.parameters);
+  const text = scanText(parameters);
+  const targetPreset = httpTargetPresetForNode(node);
+  const refs = extractJsonFieldReferences(parameters);
+  const matchingCarriers = refs
+    .map((ref) => credentialCarriers?.get(ref))
+    .filter(Boolean);
+  const credentialFieldRefs = refs.filter(isCredentialLikeFieldName);
+  const hasEnvSecret = /\$env\.[a-zA-Z0-9_]*(?:API|TOKEN|SECRET|KEY|PASSWORD)[a-zA-Z0-9_]*/i.test(text);
+  const hasCredentialSignal = Boolean(
+    matchingCarriers.length ||
+    credentialFieldRefs.length ||
+    hasEnvSecret ||
+    isCredentialLikeText(text),
+  );
+
+  if (!hasCredentialSignal) return null;
+
+  const carrierPreset = matchingCarriers
+    .map((carrier) => providerPreset(carrier.provider || carrier.n8n_credential_type || carrier.provider_label || carrier.field))
+    .find(Boolean);
+  const textPreset = providerPreset(text);
+  const preset =
+    targetPreset ||
+    httpCompatibleCredentialPreset(node, carrierPreset) ||
+    httpCompatibleCredentialPreset(node, textPreset) ||
+    providerPreset("bearer_token");
+
+  return {
+    preset,
+    fields: Array.from(new Set([
+      ...matchingCarriers.map((carrier) => cleanString(carrier.field || carrier.normalized_field)).filter(Boolean),
+      ...credentialFieldRefs,
+    ])),
+    source_nodes: Array.from(new Set(matchingCarriers.map((carrier) => cleanString(carrier.source_node)).filter(Boolean))),
+    detected_from: hasEnvSecret
+      ? "env_secret_reference"
+      : matchingCarriers.length
+        ? "upstream_credential_field"
+        : "http_parameter_secret_reference",
+  };
+}
+
 function isNexusInternalRuntimeNode(node: any) {
   const name = lower(node?.name);
   return [
@@ -1274,16 +1515,74 @@ function httpTargetPresetForNode(node: any) {
     summary.path,
   ].filter(Boolean).join(" ");
   const nodeText = `${node?.type || ""} ${node?.name || ""}`;
+  const preset = providerPreset(urlText) || providerPreset(nodeText);
 
-  return providerPreset(urlText)
-    || providerPreset(nodeText);
+  return httpCompatibleCredentialPreset(node, preset);
+}
+
+function httpCompatibleCredentialPreset(node: any, preset: any) {
+  if (!preset) return null;
+  if (!isHttpRequestNode(node)) return preset;
+
+  const provider = cleanString(preset.provider);
+  const text = lower(scanText(node?.parameters));
+  if (provider === "apify") {
+    return {
+      ...preset,
+      n8nCredentialType: "httpQueryAuth",
+      aliases: { api_key: "value", apiKey: "value", token: "value", api_token: "value", name: "name" },
+      defaults: { name: "token" },
+    };
+  }
+
+  if (isGenericHttpCredentialType(preset.n8nCredentialType)) return preset;
+
+  const bearerProviders = new Set([
+    "openai",
+    "anthropic",
+    "mistral",
+    "cohere",
+    "groq",
+    "huggingface",
+    "perplexity",
+    "openrouter",
+    "firecrawl",
+    "zapier",
+  ]);
+
+  if (provider === "google_gemini") {
+    if (text.includes("key=") || text.includes("api_key") || text.includes("apikey")) {
+      return {
+        ...preset,
+        n8nCredentialType: "httpQueryAuth",
+        aliases: { api_key: "value", apiKey: "value", key: "value", token: "value", name: "name" },
+        defaults: { name: "key" },
+      };
+    }
+
+    return {
+      ...preset,
+      n8nCredentialType: "httpHeaderAuth",
+      aliases: { api_key: "value", apiKey: "value", key: "value", token: "value", name: "name" },
+      defaults: { name: "x-goog-api-key" },
+    };
+  }
+
+  if (bearerProviders.has(provider)) {
+    return {
+      ...preset,
+      n8nCredentialType: "httpBearerAuth",
+    };
+  }
+
+  return preset;
 }
 
 function isProviderSpecificPreset(preset: any) {
   return Boolean(preset?.provider && !isGenericCredentialProvider(preset.provider));
 }
 
-function httpNodeHasCredentialRequirement(node: any) {
+function httpNodeHasCredentialRequirement(node: any, credentialCarriers: Map<string, any> | null = null) {
   if (!isHttpRequestNode(node)) return false;
 
   const parameters = asObject(node?.parameters);
@@ -1295,6 +1594,7 @@ function httpNodeHasCredentialRequirement(node: any) {
   const nodeCredentialType = cleanString(parameters.nodeCredentialType);
   const credentialType = genericAuthType || nodeCredentialType;
   const targetPreset = httpTargetPresetForNode(node);
+  const referenceHint = httpCredentialReferenceHint(node, credentialCarriers);
 
   /*
     n8n exports can keep a stale credentials object even after an HTTP Request
@@ -1302,7 +1602,10 @@ function httpNodeHasCredentialRequirement(node: any) {
     first so public website fetches do not become fake developer-key requirements.
   */
   if (!authentication || ["none", "noauth", "no auth"].includes(authentication)) {
-    return false;
+    return Boolean(
+      isProviderSpecificPreset(targetPreset) ||
+      (referenceHint && isProviderSpecificPreset(referenceHint.preset || targetPreset))
+    );
   }
 
   /*
@@ -1311,7 +1614,7 @@ function httpNodeHasCredentialRequirement(node: any) {
     credential to that node, strip it instead of asking developers for a key.
   */
   if (isDynamicHttpTarget(node) && !isProviderSpecificPreset(targetPreset)) {
-    return false;
+    return Boolean(referenceHint && isProviderSpecificPreset(referenceHint.preset));
   }
 
   /*
@@ -1320,13 +1623,13 @@ function httpNodeHasCredentialRequirement(node: any) {
     API host or explicit Nexus credential metadata.
   */
   if (isGenericHttpCredentialType(credentialType) && !isProviderSpecificPreset(targetPreset)) {
-    return false;
+    return Boolean(referenceHint && isProviderSpecificPreset(referenceHint.preset));
   }
 
   return true;
 }
 
-function servicePresetForNode(node: any) {
+function servicePresetForNode(node: any, credentialCarriers: Map<string, any> | null = null) {
   if (isNonCredentialUtilityNode(node) || isNexusInternalRuntimeNode(node)) return null;
 
   const nexusCredential = asObject(asObject(node?.parameters).nexusCredential);
@@ -1349,15 +1652,16 @@ function servicePresetForNode(node: any) {
   if (explicitPreset) return explicitPreset;
 
   if (isHttpRequestNode(node)) {
-    if (!httpNodeHasCredentialRequirement(node)) return null;
+    if (!httpNodeHasCredentialRequirement(node, credentialCarriers)) return null;
 
-    return httpTargetPresetForNode(node);
+    return httpTargetPresetForNode(node)
+      || httpCredentialReferenceHint(node, credentialCarriers)?.preset;
   }
 
   return providerPreset(nodeText);
 }
 
-function inferSlotFromNode(node: any) {
+function inferSlotFromNode(node: any, credentialCarriers: Map<string, any> | null = null) {
   /*
     Code nodes can contain Nexus setup/customer helpers such as
     NEXUS_CODE_SETUP("company_url"). Those are dynamic buyer fields,
@@ -1395,18 +1699,19 @@ function inferSlotFromNode(node: any) {
   }
 
   if (isCodeLikeNode(node) || isNonCredentialUtilityNode(node) || isNexusInternalRuntimeNode(node)) return null;
-  if (isHttpRequestNode(node) && !httpNodeHasCredentialRequirement(node)) return null;
+  if (isHttpRequestNode(node) && !httpNodeHasCredentialRequirement(node, credentialCarriers)) return null;
 
   const parameters = asObject(node?.parameters);
   const summary = nodeSummary(node);
-  const servicePreset = servicePresetForNode(node);
+  const referenceHint = httpCredentialReferenceHint(node, credentialCarriers);
+  const servicePreset = servicePresetForNode(node, credentialCarriers);
   const authCredentialType =
     isHttpRequestNode(node) && cleanString(parameters.authentication) === "genericCredentialType"
       ? cleanString(parameters.genericAuthType)
       : cleanString(parameters.nodeCredentialType);
 
   const credentialPreset = providerPreset(authCredentialType);
-  const preset = servicePreset || credentialPreset;
+  const preset = servicePreset || credentialPreset || referenceHint?.preset;
 
   if (!preset) return null;
 
@@ -1423,6 +1728,10 @@ function inferSlotFromNode(node: any) {
     current_id: "",
     current_name: "",
     inferred: true,
+    inferred_from_parameter_reference: Boolean(referenceHint),
+    credential_source_fields: referenceHint?.fields || [],
+    credential_source_nodes: referenceHint?.source_nodes || [],
+    detected_from: referenceHint?.detected_from || "",
     uses_nexus_proxy: false,
     allowed_host: "",
     summary,
@@ -1535,19 +1844,20 @@ export function sanitizeWorkflowCredentialReferences(workflowInput: any) {
 export function detectWorkflowCredentialSlots(workflowInput: any) {
   const workflow = sanitizeWorkflowCredentialReferences(workflowInput);
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const credentialCarriers = credentialCarriersForWorkflow(nodes);
   const slots: any[] = [];
   const seen = new Set<string>();
 
   for (const node of nodes) {
     if (isNonCredentialUtilityNode(node) || isNexusInternalRuntimeNode(node)) continue;
-    if (isHttpRequestNode(node) && !httpNodeHasCredentialRequirement(node)) continue;
+    if (isHttpRequestNode(node) && !httpNodeHasCredentialRequirement(node, credentialCarriers)) continue;
 
     const credentials = asObject(node?.credentials);
     const credentialEntries = Object.entries(credentials);
 
     for (const [credentialKey, credentialValue] of credentialEntries) {
       const value = asObject(credentialValue);
-      const servicePreset = servicePresetForNode(node);
+      const servicePreset = servicePresetForNode(node, credentialCarriers);
       const credentialPreset = providerPreset(credentialKey) || providerPreset(node?.type);
       const preset = servicePreset || credentialPreset;
       const serviceCredentialType = cleanString(servicePreset?.n8nCredentialType);
@@ -1585,7 +1895,7 @@ export function detectWorkflowCredentialSlots(workflowInput: any) {
     }
 
     if (!credentialEntries.length) {
-      const inferred = inferSlotFromNode(node);
+      const inferred = inferSlotFromNode(node, credentialCarriers);
       if (!inferred) continue;
 
       const key = `${node?.name || ""}:${inferred.credential_key}:${inferred.n8n_credential_type}`;
@@ -1915,6 +2225,22 @@ function credentialDataCandidatesForN8n(
 
     candidates.push({ name: headerName, value: headerValue });
     candidates.push({ headerName, headerValue });
+  } else if (type === "httpqueryauth" && value) {
+    const queryName = cleanString(
+      rawFields.queryName ||
+      rawFields.name ||
+      defaults.queryName ||
+      defaults.name ||
+      "key",
+    );
+    const queryValue = cleanString(
+      rawFields.queryValue ||
+      rawFields.value ||
+      value,
+    );
+
+    candidates.push({ name: queryName, value: queryValue });
+    candidates.push({ queryName, queryValue });
   } else if (type === "httpbasicauth") {
     const username = cleanString(rawFields.username || rawFields.user || rawFields.login);
     const password = cleanString(rawFields.password || rawFields.pass || rawFields.api_key || rawFields.token);
@@ -2338,6 +2664,179 @@ async function loadCredentialsForProduct(adminClient: SupabaseAdminClient, produ
   });
 }
 
+function credentialSourceFieldSet(slot: any) {
+  return new Set(
+    (Array.isArray(slot?.credential_source_fields) ? slot.credential_source_fields : [])
+      .map(normalizedFieldName)
+      .filter(Boolean)
+  );
+}
+
+function textReferencesCredentialSource(value: unknown, fieldNames: Set<string>) {
+  const text = scanText(value);
+  const normalizedText = lower(text);
+  if (isCredentialLikeText(text)) return true;
+
+  for (const field of fieldNames) {
+    if (!field) continue;
+    if (normalizedText.includes(field)) return true;
+  }
+
+  return false;
+}
+
+function isCredentialHeaderName(value: unknown) {
+  const name = normalizedFieldName(value);
+  return Boolean(
+    name === "authorization" ||
+    name === "x_api_key" ||
+    name === "api_key" ||
+    name === "apikey" ||
+    name === "api_token" ||
+    name === "access_token" ||
+    name === "token"
+  );
+}
+
+function removeCredentialLikeHttpParameters(parameters: Record<string, any>, slot: any) {
+  const fieldNames = credentialSourceFieldSet(slot);
+  const stripCredentialQueryParametersFromUrl = (value: unknown) => {
+    const raw = cleanString(value);
+    if (!raw || !raw.includes("?")) return value;
+
+    const expressionPrefix = raw.startsWith("=") ? "=" : "";
+    const body = expressionPrefix ? raw.slice(1) : raw;
+    const hashIndex = body.indexOf("#");
+    const withoutHash = hashIndex >= 0 ? body.slice(0, hashIndex) : body;
+    const hash = hashIndex >= 0 ? body.slice(hashIndex) : "";
+    const queryIndex = withoutHash.indexOf("?");
+    if (queryIndex < 0) return value;
+
+    const base = withoutHash.slice(0, queryIndex);
+    const query = withoutHash.slice(queryIndex + 1);
+    const kept = query
+      .split("&")
+      .filter((part) => {
+        const [rawName, ...rawValueParts] = part.split("=");
+        const name = decodeURIComponent(cleanString(rawName).replace(/\+/g, " "));
+        const queryValue = decodeURIComponent(rawValueParts.join("=").replace(/\+/g, " "));
+        return !(isCredentialHeaderName(name) || textReferencesCredentialSource(queryValue, fieldNames));
+      });
+
+    const next = `${base}${kept.length ? `?${kept.join("&")}` : ""}${hash}`;
+    return `${expressionPrefix}${next}`;
+  };
+  const removeCredentialRows = (rows: any) => {
+    if (!Array.isArray(rows)) return rows;
+    return rows.filter((row) => {
+      const item = asObject(row);
+      const name = item.name || item.key || item.parameterName;
+      const value = item.value ?? item.fieldValue ?? item.expression;
+      return !(isCredentialHeaderName(name) || textReferencesCredentialSource(value, fieldNames));
+    });
+  };
+  const removeCredentialStringHeaders = (value: string) => {
+    const raw = cleanString(value);
+    if (!raw) return raw;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return JSON.stringify(removeCredentialRows(parsed), null, 2);
+      }
+
+      if (parsed && typeof parsed === "object") {
+        const cleanHeaders: Record<string, any> = {};
+        for (const [key, headerValue] of Object.entries(asObject(parsed))) {
+          if (isCredentialHeaderName(key) || textReferencesCredentialSource(headerValue, fieldNames)) continue;
+          cleanHeaders[key] = headerValue;
+        }
+        return JSON.stringify(cleanHeaders, null, 2);
+      }
+    } catch {
+      // Plain string headers are handled line-by-line below.
+    }
+
+    return raw
+      .split(/\r?\n/)
+      .filter((line) => {
+        const [headerName] = line.split(":");
+        return !(isCredentialHeaderName(headerName) || textReferencesCredentialSource(line, fieldNames));
+      })
+      .join("\n");
+  };
+
+  const next = { ...parameters };
+  const headerParameters = asObject(next.headerParameters);
+  if (Array.isArray(headerParameters.parameters)) {
+    next.headerParameters = {
+      ...headerParameters,
+      parameters: removeCredentialRows(headerParameters.parameters),
+    };
+  }
+
+  const queryParameters = asObject(next.queryParameters);
+  if (Array.isArray(queryParameters.parameters)) {
+    next.queryParameters = {
+      ...queryParameters,
+      parameters: removeCredentialRows(queryParameters.parameters),
+    };
+  }
+
+  if (Array.isArray(next.headers)) {
+    next.headers = removeCredentialRows(next.headers);
+  }
+
+  if (typeof next.headers === "string" && textReferencesCredentialSource(next.headers, fieldNames)) {
+    next.headers = removeCredentialStringHeaders(next.headers);
+  }
+
+  for (const urlKey of ["url", "endpoint", "webhookUrl"]) {
+    if (typeof next[urlKey] === "string") {
+      next[urlKey] = stripCredentialQueryParametersFromUrl(next[urlKey]);
+    }
+  }
+
+  return next;
+}
+
+function scrubCredentialCarrierAssignments(parameters: any, slot: any) {
+  const fieldNames = credentialSourceFieldSet(slot);
+  if (!fieldNames.size) return parameters;
+
+  const scrub = (value: any): any => {
+    if (!value || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value.map(scrub);
+
+    const object = { ...asObject(value) };
+    const name = normalizedFieldName(
+      object.name ||
+      object.key ||
+      object.field ||
+      object.fieldName ||
+      object.parameterName,
+    );
+
+    if (name && fieldNames.has(name)) {
+      for (const key of ["value", "fieldValue", "stringValue", "defaultValue", "expression", "content"]) {
+        if (Object.prototype.hasOwnProperty.call(object, key)) {
+          object[key] = "";
+        }
+      }
+    }
+
+    for (const [key, child] of Object.entries(object)) {
+      if (child && typeof child === "object") {
+        object[key] = scrub(child);
+      }
+    }
+
+    return object;
+  };
+
+  return scrub(parameters);
+}
+
 function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: any) {
   const normalizedSlot = coerceNativeCredentialSlot(slot);
   const workflow = normalizeWorkflowObject(workflowInput);
@@ -2361,14 +2860,31 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
 
   if (!n8nCredentialId || !credentialKey) return workflow;
 
+  const sourceNodes = new Set(
+    (Array.isArray(normalizedSlot.credential_source_nodes) ? normalizedSlot.credential_source_nodes : [])
+      .map(cleanString)
+      .filter(Boolean)
+  );
+
   workflow.nodes = nodes.map((node: any) => {
+    if (sourceNodes.has(cleanString(node?.name))) {
+      return {
+        ...node,
+        parameters: scrubCredentialCarrierAssignments(node.parameters, normalizedSlot),
+      };
+    }
+
     if (cleanString(node?.name) !== cleanString(normalizedSlot.node_name)) return node;
 
-    const parameters = {
+    let parameters = {
       ...asObject(node.parameters),
     };
 
     if (isHttpRequestNode && isGenericHttpCredential) {
+      if (normalizedSlot.inferred_from_parameter_reference || normalizedSlot.credential_source_fields?.length) {
+        parameters = removeCredentialLikeHttpParameters(parameters, normalizedSlot);
+      }
+
       parameters.authentication = "genericCredentialType";
       parameters.genericAuthType = credentialKey;
     }

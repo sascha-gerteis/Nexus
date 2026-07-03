@@ -66,6 +66,18 @@ function expandBuyerSetupAliases(setup: Record<string, unknown>) {
     "target_market",
     "local_market",
   ]);
+  const targetCustomer = pickSetupValue(output, [
+    "target_customer",
+    "business_target_customer",
+    "business_target_customer_profile",
+    "business_target_audience",
+    "target_audience",
+    "ideal_customer",
+    "buyer_persona",
+    "customer_persona",
+    "audience",
+    "target_client",
+  ]);
 
   if (companyUrl !== undefined) {
     for (const key of ["company_url", "company_website", "main_website"]) {
@@ -92,6 +104,23 @@ function expandBuyerSetupAliases(setup: Record<string, unknown>) {
   if (marketRegion !== undefined) {
     for (const key of ["market_region", "market_or_region", "target_market"]) {
       assignIfUseful(output, key, marketRegion);
+    }
+  }
+
+  if (targetCustomer !== undefined) {
+    for (const key of [
+      "target_customer",
+      "business_target_customer",
+      "business_target_customer_profile",
+      "business_target_audience",
+      "target_audience",
+      "ideal_customer",
+      "buyer_persona",
+      "customer_persona",
+      "audience",
+      "target_client",
+    ]) {
+      assignIfUseful(output, key, targetCustomer);
     }
   }
 

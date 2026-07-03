@@ -97,7 +97,7 @@
     }
 
     function isPassingStatus(value) {
-      return ["passed", "success", "completed", "passed_with_expected_test_callback_error"].includes(normalizeStatus(value));
+      return ["passed", "success", "completed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(normalizeStatus(value));
     }
 
     function formatDateTime(value) {

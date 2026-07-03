@@ -543,7 +543,6 @@ function startupStubResponse(request, targetPath, env) {
     return jsonResponse({ data: [], count: 0 }, 200, request, env);
   }
   if (path.startsWith("/rest/credentials")) return jsonResponse({ data: [], count: 0 }, 200, request, env);
-  if (path === "/rest/executions" || path === "/rest/execution") return jsonResponse({ data: [], count: 0 }, 200, request, env);
   if (path.startsWith("/rest/variables")) return jsonResponse({ data: [], count: 0 }, 200, request, env);
   if (path === "/api/banners" || path === "/api/whats-new") return jsonResponse([], 200, request, env);
   if (path.startsWith("/api/versions/")) return jsonResponse([], 200, request, env);
@@ -614,6 +613,7 @@ function allowedExecutionPath(path, method, workflowId) {
 
   if (["GET", "HEAD"].includes(methodName)) {
     if (safe === "/rest/push" || safe.startsWith("/rest/push/")) return true;
+    if (safe === "/rest/executions" || safe === "/rest/execution") return true;
     if (safe === "/rest/executions-current" || safe.startsWith("/rest/executions-current/")) return true;
     if (/^\/rest\/executions\/[^/]+$/i.test(raw)) return true;
     if (/^\/rest\/execution\/[^/]+$/i.test(raw)) return true;
@@ -744,7 +744,9 @@ function collectWorkflowIds(payload) {
 
 function shouldFilterExecutionJson(path) {
   const safe = String(path || "").toLowerCase().replace(/\/+$/, "");
-  return safe === "/rest/executions-current" ||
+  return safe === "/rest/executions" ||
+    safe === "/rest/execution" ||
+    safe === "/rest/executions-current" ||
     safe.startsWith("/rest/executions-current/") ||
     /^\/rest\/executions\/[^/]+$/i.test(String(path || "")) ||
     /^\/rest\/execution\/[^/]+$/i.test(String(path || ""));
@@ -767,27 +769,60 @@ function filterExecutionPayload(value, workflowId) {
 
   if (!value || typeof value !== "object") return value;
 
+  const next = { ...value };
+  let filteredCollection = false;
+
+  if (Array.isArray(next.results)) {
+    next.results = next.results.filter((item) => executionMatchesWorkflow(item, workflowId));
+    filteredCollection = true;
+  }
+
+  if (Array.isArray(next.executions)) {
+    next.executions = next.executions.filter((item) => executionMatchesWorkflow(item, workflowId));
+    filteredCollection = true;
+  }
+
   if (Array.isArray(value.data)) {
-    return {
-      ...value,
-      data: value.data.filter((item) => executionMatchesWorkflow(item, workflowId)),
-    };
+    next.data = value.data.filter((item) => executionMatchesWorkflow(item, workflowId));
+    filteredCollection = true;
+    return next;
   }
 
-  if (value.data && typeof value.data === "object" && !executionMatchesWorkflow(value.data, workflowId)) {
-    return { ...value, data: null };
+  if (value.data && typeof value.data === "object") {
+    const nested = { ...value.data };
+    let filteredNestedCollection = false;
+
+    if (Array.isArray(nested.results)) {
+      nested.results = nested.results.filter((item) => executionMatchesWorkflow(item, workflowId));
+      filteredNestedCollection = true;
+    }
+
+    if (Array.isArray(nested.executions)) {
+      nested.executions = nested.executions.filter((item) => executionMatchesWorkflow(item, workflowId));
+      filteredNestedCollection = true;
+    }
+
+    if (filteredNestedCollection) {
+      next.data = nested;
+      return next;
+    }
+
+    if (!executionMatchesWorkflow(value.data, workflowId)) {
+      next.data = null;
+      return next;
+    }
   }
 
-  if (!("data" in value) && !executionMatchesWorkflow(value, workflowId)) {
+  if (!filteredCollection && !("data" in value) && !executionMatchesWorkflow(value, workflowId)) {
     return null;
   }
 
-  return value;
+  return next;
 }
 
 function executionMatchesWorkflow(item, workflowId) {
   const id = executionWorkflowId(item);
-  return !id || id === String(workflowId);
+  return id === String(workflowId);
 }
 
 function executionWorkflowId(item) {
@@ -840,8 +875,6 @@ function injectEditorLock(html, workflowId, token, env) {
       [data-test-id*="side-menu"],
       [data-test-id*="project"],
       [data-test-id*="credentials"],
-      [data-test-id*="executions"],
-      [data-test-id*="workflow-history"],
       [data-test-id*="workflow-publish-button"],
       [data-test-id*="workflow-activate-switch"],
       [data-test-id*="github"],

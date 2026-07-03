@@ -213,7 +213,29 @@ function stableJson(value: unknown) {
 }
 
 function isPassingWorkflowTest(status: unknown) {
-  return ["passed", "passed_with_expected_test_callback_error"].includes(cleanString(status).toLowerCase());
+  return ["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(cleanString(status).toLowerCase());
+}
+
+function isLiveProductStatus(status: unknown) {
+  return ["live", "active", "published"].includes(cleanString(status).toLowerCase());
+}
+
+function hasRealPassingWorkflowTest(product: any) {
+  if (!isPassingWorkflowTest(product?.n8n_last_test_status)) return false;
+
+  const result = isRecord(product?.n8n_last_test_result)
+    ? product.n8n_last_test_result
+    : {};
+  const webhookResponse = isRecord(result.webhook_response)
+    ? result.webhook_response
+    : {};
+
+  return Boolean(
+    result.used_test_profile ||
+      cleanString(result.test_profile_id) ||
+      webhookResponse.used_test_profile ||
+      cleanString(webhookResponse.test_profile_id),
+  );
 }
 
 function inferFieldLabel(name: string) {
@@ -795,6 +817,13 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
     if (!isPassingWorkflowTest(existingProduct.n8n_last_test_status)) {
       return {
         error: "Run a successful technical test before submitting this workflow product for review.",
+        status: 400,
+      };
+    }
+
+    if (!isLiveProductStatus(existingProduct.status) && !hasRealPassingWorkflowTest(existingProduct)) {
+      return {
+        error: "Before submitting, use Save & run real test in the Technical test data section. Generated placeholder test runs are useful for debugging, but they are not enough for review.",
         status: 400,
       };
     }

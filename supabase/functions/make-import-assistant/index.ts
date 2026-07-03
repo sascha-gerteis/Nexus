@@ -3137,7 +3137,7 @@ async function validateSuccessfulMappings(adminClient: any, operator: OperatorCo
   const normalizedPlatform = sourcePlatform(body.source_platform || body.platform || product.workflow_source_platform || "make");
   const label = platformLabel(normalizedPlatform);
 
-  const passed = ["passed", "passed_with_expected_test_callback_error"].includes(lower(product.n8n_last_test_status));
+  const passed = ["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(lower(product.n8n_last_test_status));
   if (!passed) {
     return {
       promoted_count: 0,

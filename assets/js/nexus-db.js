@@ -215,7 +215,7 @@ const NexusDB = (() => {
   }
 
   function isPassingWorkflowTest(status) {
-    return ["passed", "passed_with_expected_test_callback_error"].includes(String(status || "").toLowerCase());
+    return ["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(String(status || "").toLowerCase());
   }
 
   function isPublicAutomationRunnable(product) {
@@ -643,7 +643,7 @@ const NexusDB = (() => {
       const status = String(product?.status || "").toLowerCase();
       const isLive = ["live", "active", "published"].includes(status);
 
-      if (["passed", "passed_with_expected_test_callback_error", "success", "succeeded", "completed"].includes(test)) {
+      if (["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error", "success", "succeeded", "completed"].includes(test)) {
         return "healthy";
       }
 
@@ -1949,6 +1949,15 @@ async function applyAutomationCredentials(automationId) {
   });
 }
 
+async function preferAutomationCredential(automationId, credentialId, slots = []) {
+  return callDeveloperCredentials({
+    action: "prefer_automation_credential",
+    automation_id: automationId,
+    credential_id: credentialId,
+    slots
+  });
+}
+
 async function listCredentialProviders() {
   return callDeveloperCredentials({
     action: "providers"
@@ -2955,6 +2964,7 @@ async function listMakeImportMappings(payload = {}) {
     revealDeveloperCredential,
     scanAutomationCredentials,
     applyAutomationCredentials,
+    preferAutomationCredential,
     listCredentialProviders,
     getDeveloperStripeStatus,
     refreshDeveloperStripeAccount,

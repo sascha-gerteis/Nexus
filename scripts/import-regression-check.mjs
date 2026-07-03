@@ -180,6 +180,22 @@ scenario("Stale imported n8n credential IDs cannot mark a product ready", () => 
   assert(credentialsShared.includes("until the key is saved and synced from the Nexus credential manager"), "Shared binder must warn that uploaded n8n credential IDs are not portable.");
 });
 
+scenario("Credential scanner traces Set/Edit Fields API key carriers into HTTP nodes", () => {
+  assert(credentialsShared.includes("credentialCarriersForWorkflow"), "Shared scanner must collect credential-like fields from Set/Edit Fields/Code nodes.");
+  assert(credentialsShared.includes("httpCredentialReferenceHint"), "Shared scanner must detect HTTP nodes that reference upstream credential fields.");
+  assert(credentialsShared.includes("httpCompatibleCredentialPreset"), "HTTP API calls must use HTTP-compatible n8n credential families.");
+  assert(credentialsShared.includes('n8nCredentialType: "httpBearerAuth"'), "HTTP OpenAI/Apify-style calls must be able to map to bearer credentials.");
+  assert(credentialsShared.includes('n8nCredentialType: "httpQueryAuth"'), "HTTP Gemini-style query API keys must be able to map to query credentials.");
+  assert(credentialsShared.includes('provider === "apify"'), "Apify URL-token workflows must be coerced to query-auth credentials.");
+  assert(credentialsShared.includes("stripCredentialQueryParametersFromUrl"), "Credential apply must strip token query parameters from HTTP URLs.");
+  assert(credentialsShared.includes('type === "httpqueryauth"'), "n8n credential sync must create HTTP query-auth credential payloads.");
+  assert(credentialsShared.includes("inferred_from_parameter_reference"), "Detected slots must mark upstream parameter-reference credentials.");
+  assert(credentialsShared.includes("credential_source_fields"), "Detected slots must keep the source field names that carried credentials.");
+  assert(credentialsShared.includes("credential_source_nodes"), "Detected slots must keep the upstream source nodes that carried credentials.");
+  assert(credentialsShared.includes("scrubCredentialCarrierAssignments"), "Credential apply must scrub raw key values from upstream carrier nodes.");
+  assert(credentialsShared.includes("removeCredentialLikeHttpParameters"), "Credential apply must remove raw credential headers/query params from HTTP nodes.");
+});
+
 scenario("Native OpenAI model credentials are treated as openAiApi, not generic HTTP", () => {
   assert(credentialsShared.includes('credentialType = "openAiApi"'), "Native OpenAI model slots must force openAiApi credential type.");
   assert(credentialsShared.includes('type === "openaiapi"'), "OpenAI credential sync must have an openAiApi payload branch.");
@@ -248,6 +264,14 @@ scenario("Setup schema is auto-generated before submission gates", () => {
   assert(importFunction.includes("extractRuntimeSetupKeys"), "Importer must detect runtime setup references.");
   assert(importFunction.includes("inferMakeSetupKeysFromText"), "Importer must infer setup fields from Make/Zapier source text.");
   assert(developerProducts.includes("mergeMissingSetupFields"), "Developer submit gate must merge detected setup fields.");
+});
+
+scenario("Importer normalizes sloppy setup and credential placeholders", () => {
+  assert(importFunction.includes("canonicalSecretKey"), "Importer must canonicalize typo-prone credential names.");
+  assert(importFunction.includes("apify_toke"), "Importer must repair common Apify token typos.");
+  assert(importFunction.includes("business_target_customer"), "Importer must normalize target customer setup aliases.");
+  assert(importFunction.includes("extractLooseBarePlaceholders"), "Importer must infer schema fields from loose {{field}} placeholders.");
+  assert(importFunction.includes("convertLooseBarePlaceholders"), "Importer must convert loose placeholders before n8n import.");
 });
 
 scenario("Make converter has broad mapping coverage and reusable substitute promotion", () => {

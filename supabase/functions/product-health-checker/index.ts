@@ -11,7 +11,7 @@ const N8N_API_KEY = Deno.env.get("N8N_API_KEY") || "";
 const NEXUS_RUNTIME_SECRET = Deno.env.get("NEXUS_RUNTIME_SECRET") || "";
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
-const PASSING_TECHNICAL_STATUSES = new Set(["passed", "passed_with_expected_test_callback_error"]);
+const PASSING_TECHNICAL_STATUSES = new Set(["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"]);
 const CHECKABLE_PRODUCT_STATUSES = ["live", "active", "published"];
 
 function cleanString(value: unknown) {

@@ -57,7 +57,7 @@ function cleanString(value: unknown) {
 }
 
 function isPassingWorkflowTest(status: unknown) {
-  return ["passed", "passed_with_expected_test_callback_error"].includes(cleanString(status).toLowerCase());
+  return ["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(cleanString(status).toLowerCase());
 }
 
 function hasAttachedCheckoutFlow(product: any) {

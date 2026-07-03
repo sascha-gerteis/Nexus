@@ -1949,6 +1949,15 @@ async function applyAutomationCredentials(automationId) {
   });
 }
 
+async function preferAutomationCredential(automationId, credentialId, slots = []) {
+  return callDeveloperCredentials({
+    action: "prefer_automation_credential",
+    automation_id: automationId,
+    credential_id: credentialId,
+    slots
+  });
+}
+
 async function listCredentialProviders() {
   return callDeveloperCredentials({
     action: "providers"
@@ -2955,6 +2964,7 @@ async function listMakeImportMappings(payload = {}) {
     revealDeveloperCredential,
     scanAutomationCredentials,
     applyAutomationCredentials,
+    preferAutomationCredential,
     listCredentialProviders,
     getDeveloperStripeStatus,
     refreshDeveloperStripeAccount,

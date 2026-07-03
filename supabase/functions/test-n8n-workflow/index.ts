@@ -135,6 +135,15 @@ function canonicalSetupKey(value: unknown) {
     market_region: "market_region",
     target_market: "market_region",
     local_market: "market_region",
+    business_target_customer: "target_customer",
+    business_target_customer_profile: "target_customer",
+    business_target_audience: "target_customer",
+    target_audience: "target_customer",
+    ideal_customer: "target_customer",
+    buyer_persona: "target_customer",
+    customer_persona: "target_customer",
+    audience: "target_customer",
+    target_client: "target_customer",
     report_title: "report_title",
   };
 
@@ -182,6 +191,18 @@ function expandBuyerSetupAliases(setup: Record<string, unknown>) {
     "target_market",
     "local_market",
   ]);
+  const targetCustomer = pickSetupValue(output, [
+    "target_customer",
+    "business_target_customer",
+    "business_target_customer_profile",
+    "business_target_audience",
+    "target_audience",
+    "ideal_customer",
+    "buyer_persona",
+    "customer_persona",
+    "audience",
+    "target_client",
+  ]);
 
   if (companyUrl !== undefined) {
     for (const key of ["landing_page_url", "page_url", "website_url", "website", "company_url", "company_website", "main_website"]) {
@@ -208,6 +229,23 @@ function expandBuyerSetupAliases(setup: Record<string, unknown>) {
   if (marketRegion !== undefined) {
     for (const key of ["market_region", "market_or_region", "target_market"]) {
       assignIfUseful(output, key, marketRegion);
+    }
+  }
+
+  if (targetCustomer !== undefined) {
+    for (const key of [
+      "target_customer",
+      "business_target_customer",
+      "business_target_customer_profile",
+      "business_target_audience",
+      "target_audience",
+      "ideal_customer",
+      "buyer_persona",
+      "customer_persona",
+      "audience",
+      "target_client",
+    ]) {
+      assignIfUseful(output, key, targetCustomer);
     }
   }
 
@@ -246,6 +284,7 @@ function isTerminalStatus(status: string) {
     "failed",
     "execution_not_found_after_timeout",
     "passed_with_expected_test_callback_error",
+    "passed_with_expected_test_input_error",
     "cancelled",
     "timeout"
   ].includes(safe);
@@ -343,6 +382,77 @@ function testValueForField(field: any) {
   }
   if (type === "textarea") return "This is a Nexus technical test run. Values are placeholders.";
   return "TEST_VALUE";
+}
+
+function inferSetupFieldType(name: string) {
+  const key = cleanString(name).toLowerCase();
+  if (key.includes("email")) return "email";
+  if (key.includes("url") || key.includes("website") || key.includes("link")) return "url";
+  if (key.includes("count") || key.includes("limit") || key.includes("max_") || key.includes("amount")) return "number";
+  if (key.includes("notes") || key.includes("description") || key.includes("instructions") || key.includes("customer") || key.includes("audience")) return "textarea";
+  return "text";
+}
+
+function inferredSetupField(name: string) {
+  const key = canonicalSetupKey(name);
+  return key
+    ? {
+        name: key,
+        label: key.replace(/[_-]+/g, " ").replace(/\b\w/g, (match) => match.toUpperCase()),
+        type: inferSetupFieldType(key),
+        required: true,
+      }
+    : null;
+}
+
+function inferSetupKeysFromWorkflow(automation: any) {
+  const setupNames = new Set<string>();
+  const source = stringifySafe(
+    automation?.n8n_normalized_workflow_json ||
+      automation?.n8n_workflow_json ||
+      automation?.workflow_json ||
+      {},
+  );
+  const patterns = [
+    /NEXUS_SETUP\.([a-zA-Z0-9_.-]+)/g,
+    /NEXUS_SETUP[_:-]([a-zA-Z0-9_.-]+)/gi,
+    /\{\{\s*(?:(?:NEXUS|NX)[\s_-]*SETUP|SETUP[\s_-]*(?:NEXUS|NX))\s*(?:[|:.=_\-\[\(]|\s+)\s*([a-zA-Z0-9_. -]+?)\s*(?:[\]\)])?\s*\}\}/gi,
+    /\bsetup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\bbody\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /\$json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+    /json\.body\.setup\.([a-zA-Z][a-zA-Z0-9_.-]*)/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+      const key = canonicalSetupKey(match[1]);
+      if (key) setupNames.add(key);
+    }
+  }
+
+  return [...setupNames].sort();
+}
+
+function schemaWithInferredWorkflowSetupFields(setupSchema: any[], automation: any) {
+  const existing = new Set(
+    setupSchema
+      .map((field) => canonicalSetupKey(field?.name))
+      .filter(Boolean),
+  );
+  const output = [...setupSchema];
+
+  for (const key of inferSetupKeysFromWorkflow(automation)) {
+    if (!key || existing.has(key)) continue;
+    const field = inferredSetupField(key);
+    if (!field) continue;
+    output.push(field);
+    existing.add(key);
+  }
+
+  return output;
 }
 
 function setupFieldNeedsRealTestValue(field: any) {
@@ -512,7 +622,7 @@ async function loadDefaultTestProfile(adminClient: any, automationId: string) {
 }
 
 function buildTestSetupAndSecrets(automation: any, testProfile: any) {
-  const setupSchema = normalizeSchema(automation.setup_schema);
+  const setupSchema = schemaWithInferredWorkflowSetupFields(normalizeSchema(automation.setup_schema), automation);
   const credentialSchema = normalizeSchema(automation.credential_schema);
   const missingRealFields = missingRealTestFields(setupSchema, testProfile);
 
@@ -693,6 +803,8 @@ function extractKnownN8nErrorText(value: unknown) {
     /Incorrect API key provided:\s*[^.\n\r"]+/i,
     /Forbidden\s+-\s+perhaps check your credentials\??/i,
     /Authorization failed\s+-\s+please check your credentials[^"\n\r]*(?:Missing authorization header)?/i,
+    /Input is not valid:\s*[^"\n\r]+/i,
+    /Values in input\.[^"\n\r]+/i,
     /config\.headers\.setContentType is not a function/i,
     /Missing authorization header/i,
     /UNAUTHORIZED_NO_AUTH_HEADER/i,
@@ -736,6 +848,67 @@ function extractRunDataError(resultData: Record<string, unknown>) {
   return null;
 }
 
+function extractItemErrorMessage(value: unknown) {
+  const item = asObject(value);
+  const json = asObject(item.json || item);
+  const error = json.error || item.error;
+  const errorObject = asObject(error);
+  const message = pickFirstUsefulString(
+    errorObject.message,
+    errorObject.description,
+    errorObject.errorMessage,
+    errorObject.reason,
+    json.message,
+    json.error_message,
+    json.errorMessage,
+    typeof error === "string" ? error : "",
+  );
+
+  if (!message) return "";
+
+  const hasErrorShape = Boolean(
+    error ||
+      json.error ||
+      json.error_message ||
+      json.errorMessage ||
+      errorObject.name ||
+      errorObject.code ||
+      errorObject.status,
+  );
+
+  return hasErrorShape ? message : "";
+}
+
+function extractRunDataOutputError(resultData: Record<string, unknown>) {
+  const runData = asObject(resultData.runData);
+
+  for (const [nodeName, entries] of Object.entries(runData)) {
+    const nodeExecutions = Array.isArray(entries) ? entries : [entries];
+
+    for (const entry of nodeExecutions) {
+      const safeEntry = asObject(entry);
+      const main = Array.isArray(asObject(safeEntry.data).main) ? asObject(safeEntry.data).main : [];
+
+      for (const output of main) {
+        const outputItems = Array.isArray(output) ? output : [output];
+        for (const item of outputItems) {
+          const message = extractItemErrorMessage(item);
+          if (message) {
+            return {
+              message,
+              node: pickFirstUsefulString(nodeName, safeEntry.nodeName),
+              node_type: pickFirstUsefulString(safeEntry.nodeType),
+              raw_error: asObject(item).json || item || {},
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 function friendlyExecutionErrorMessage(message: string, nodeName: string, nodeType: string) {
   const cleanMessage = cleanString(message);
   if (!cleanMessage) return "";
@@ -750,6 +923,39 @@ function friendlyExecutionErrorMessage(message: string, nodeName: string, nodeTy
     combined.includes("google sheets") ||
     combined.includes("google sheet") ||
     combined.includes("spreadsheet");
+  const isApifyNode =
+    combined.includes("apify") ||
+    combined.includes("api.apify.com") ||
+    combined.includes("apify.com");
+  const isApifyMaxCostTooLow =
+    combined.includes("max-total-charge-usd-below-minimum") ||
+    combined.includes("maximum cost per run is less than") ||
+    combined.includes("maxtotalchargeusd") ||
+    combined.includes("max total charge");
+  const isInvalidProviderInput =
+    combined.includes("invalid-input") ||
+    combined.includes("input is not valid") ||
+    combined.includes("input.directurls") ||
+    combined.includes("directurls");
+
+  if (isApifyNode && isApifyMaxCostTooLow) {
+    return [
+      "Apify rejected this run because the workflow sets the maximum cost per run below Apify's minimum of $0.50.",
+      "Set the Nexus setup/test field max_apify_cost_usd to 0.50 or higher, or update the Apify HTTP node parameter maxTotalChargeUsd to 0.50 or higher.",
+      "This is not a Nexus Submit Output problem; the output node only surfaced Apify's response.",
+      "After changing the value, sync the workflow and run the technical check again.",
+      `Original n8n error: ${cleanMessage}`,
+    ].join(" ");
+  }
+
+  if (isApifyNode && isInvalidProviderInput) {
+    return [
+      "Apify rejected the workflow test input, not the saved Apify credential.",
+      "The Apify key is bound, but the URL or directUrls value sent to the actor is invalid for this node.",
+      "Check the buyer setup fields or technical test data for the affected Instagram, TikTok, or Facebook URL, then run the check again.",
+      `Original n8n error: ${cleanMessage}`,
+    ].join(" ");
+  }
 
   if (isResourceNotFound && isGoogleSheetsNode) {
     return [
@@ -795,8 +1001,9 @@ function extractExecutionError(execution: any) {
     null;
 
   const runDataError = extractRunDataError(resultData);
+  const outputError = extractRunDataOutputError(resultData);
   const status = cleanString(execution?.status).toLowerCase();
-  const shouldScanRawErrorText = Boolean(error || runDataError || ["error", "failed", "crashed"].includes(status));
+  const shouldScanRawErrorText = Boolean(error || runDataError || outputError || ["error", "failed", "crashed"].includes(status));
 
   const node = asObject(asObject(error).node);
   const lastNodeExecuted = pickFirstUsefulString(
@@ -805,12 +1012,14 @@ function extractExecutionError(execution: any) {
     node.name,
     asObject(error).nodeName,
     runDataError?.node,
+    outputError?.node,
   );
 
   const nodeType = pickFirstUsefulString(
     node.type,
     asObject(error).nodeType,
     runDataError?.node_type,
+    outputError?.node_type,
   );
   const knownMessage = shouldScanRawErrorText ? pickFirstUsefulString(
     extractKnownN8nErrorText(resultData),
@@ -819,6 +1028,7 @@ function extractExecutionError(execution: any) {
   const objectMessage = pickFirstUsefulString(
     errorMessageFromObject(error),
     runDataError?.message,
+    outputError?.message,
   );
   const message =
     knownMessage && (!objectMessage || knownMessage.length > objectMessage.length)
@@ -830,7 +1040,7 @@ function extractExecutionError(execution: any) {
     display_message: formatExecutionErrorMessage(message, lastNodeExecuted, nodeType),
     node: lastNodeExecuted,
     node_type: nodeType,
-    raw_error: error || runDataError?.raw_error || {},
+    raw_error: error || runDataError?.raw_error || outputError?.raw_error || {},
   };
 }
 
@@ -861,7 +1071,65 @@ function executionStatusOf(execution: any) {
   return status || "unknown";
 }
 
-function classifyExecution(execution: any) {
+function usedSavedTestProfile(testRun: any) {
+  const webhookResponse = asObject(testRun?.webhook_response);
+  return Boolean(
+    webhookResponse.used_test_profile ||
+      webhookResponse.test_profile_id ||
+      testRun?.test_profile_id,
+  );
+}
+
+function isCredentialAuthFailureText(value: string) {
+  const combined = lower(value);
+  return (
+    combined.includes("missing required credential") ||
+    combined.includes("credential with id") ||
+    combined.includes("check your credentials") ||
+    combined.includes("incorrect api key") ||
+    combined.includes("invalid api key") ||
+    combined.includes("missing authorization header") ||
+    combined.includes("unauthorized") ||
+    combined.includes("forbidden") ||
+    combined.includes("401") ||
+    combined.includes("403")
+  );
+}
+
+function isExpectedGeneratedSetupDataError(message: string, nodeName: string, nodeType: string, testRun: any) {
+  if (usedSavedTestProfile(testRun)) return false;
+
+  const combined = lower(`${message} ${nodeName} ${nodeType}`);
+  if (!combined || isCredentialAuthFailureText(combined)) return false;
+
+  const isApifyNode =
+    combined.includes("apify") ||
+    combined.includes("api.apify.com") ||
+    combined.includes("apify.com");
+
+  const looksLikeGeneratedInputRejection =
+    combined.includes("invalid-input") ||
+    combined.includes("input is not valid") ||
+    combined.includes("input.directurls") ||
+    combined.includes("directurls") ||
+    combined.includes("must match regular expression") ||
+    combined.includes("invalid url") ||
+    combined.includes("url is invalid") ||
+    combined.includes("only absolute urls are supported");
+
+  const isSocialUrlShapeRejection =
+    looksLikeGeneratedInputRejection &&
+    (
+      combined.includes("instagram") ||
+      combined.includes("tiktok") ||
+      combined.includes("facebook") ||
+      combined.includes("directurl")
+    );
+
+  return looksLikeGeneratedInputRejection && (isApifyNode || isSocialUrlShapeRejection);
+}
+
+function classifyExecution(execution: any, testRun: any = null) {
   const status = executionStatusOf(execution);
   const extractedError = extractExecutionError(execution);
   const rawMessage = extractedError.message || "";
@@ -897,6 +1165,19 @@ function classifyExecution(execution: any) {
       status: "passed_with_expected_test_callback_error",
       message:
         "Workflow reached the Nexus output callback. The callback rejected the fake test customer automation ID, which is expected in a technical test.",
+      error_node: extractedError.node,
+      error_node_type: extractedError.node_type,
+      error_message: rawMessage || message,
+      raw_error: extractedError.raw_error,
+    };
+  }
+
+  if (isExpectedGeneratedSetupDataError(rawMessage || message, extractedError.node, extractedError.node_type, testRun)) {
+    return {
+      ok: true,
+      status: "passed_with_expected_test_input_error",
+      message:
+        "Structural technical check passed. Nexus confirmed the workflow started, credentials were mapped, and n8n reached the provider. The provider rejected generated placeholder test data, which is expected when no real technical test profile is saved.",
       error_node: extractedError.node,
       error_node_type: extractedError.node_type,
       error_message: rawMessage || message,
@@ -1065,7 +1346,7 @@ async function findExecutionForTestRun(testRun: any) {
 }
 
 function isPassingWorkflowTestStatus(status: unknown) {
-  return ["passed", "passed_with_expected_test_callback_error"].includes(lower(status));
+  return ["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(lower(status));
 }
 
 async function validateReusableImportMappings(adminClient: any, automationId: string, result: any) {
@@ -1309,6 +1590,12 @@ function publicRunPayload(testRun: any, extra: Record<string, unknown> = {}) {
   const elapsedSeconds = testRun.started_at
     ? Math.max(0, Math.round((Date.now() - new Date(testRun.started_at).getTime()) / 1000))
     : Number(testRun.elapsed_seconds || 0);
+  const webhookResponse = asObject(testRun.webhook_response);
+  const usedTestProfile = Boolean(
+    webhookResponse.used_test_profile ||
+      webhookResponse.test_profile_id ||
+      testRun.test_profile_id,
+  );
 
   return {
     ok: !["failed", "execution_not_found_after_timeout", "timeout"].includes(cleanString(testRun.status)),
@@ -1324,6 +1611,9 @@ function publicRunPayload(testRun: any, extra: Record<string, unknown> = {}) {
     last_checked_at: testRun.last_checked_at,
     error_node: testRun.error_node,
     error_message: testRun.error_message,
+    used_test_profile: usedTestProfile,
+    test_profile_id: webhookResponse.test_profile_id || testRun.test_profile_id || null,
+    test_profile_name: webhookResponse.test_profile_name || testRun.test_profile_name || null,
     message:
       testRun.error_message ||
       (testRun.status === "running"
@@ -1565,7 +1855,7 @@ async function checkTestRun(adminClient: any, testRun: any) {
   }
 
   const executionId = executionIdOf(execution);
-  const classified = classifyExecution(execution);
+  const classified = classifyExecution(execution, testRun);
 
   if (classified.status === "running") {
     const running = await updateTestRun(adminClient, testRun.id, {

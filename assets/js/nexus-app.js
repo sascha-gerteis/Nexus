@@ -2782,7 +2782,7 @@ async function submitCheckoutIntent(event) {
   function runtimeStatusPill(status) {
     const value = String(status || "").toLowerCase();
 
-    if (["success", "succeeded", "completed", "passed", "passed_with_expected_test_callback_error", "healthy"].includes(value)) return "pill green";
+    if (["success", "succeeded", "completed", "passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error", "healthy"].includes(value)) return "pill green";
     if (["failed", "error", "cancelled", "canceled", "paused_by_health_check"].includes(value)) return "pill red";
     if (["running", "queued", "warning", "needs_recheck", "paused"].includes(value)) return "pill orange";
 
@@ -3061,7 +3061,7 @@ function inferMakeSetupKeysFromText(text) {
   return [...keys].sort();
 }
 
-function missingSetupSchemaFieldsForProduct(product) {
+  function missingSetupSchemaFieldsForProduct(product) {
   const workflowText = JSON.stringify(product?.n8n_workflow_json || product?.n8n_normalized_workflow_json || {});
   const mappingText = JSON.stringify(product?.workflow_placeholder_mappings || []);
   const blueprintText = JSON.stringify(product?.make_blueprint || {});
@@ -3076,10 +3076,36 @@ function missingSetupSchemaFieldsForProduct(product) {
   const setupSchema = Array.isArray(product?.setup_schema) ? product.setup_schema : [];
   const existing = new Set(setupSchema.map((field) => canonicalSetupSchemaName(field?.name)).filter(Boolean));
 
-  return [...required].filter((key) => !existing.has(canonicalSetupSchemaName(key)));
-}
+    return [...required].filter((key) => !existing.has(canonicalSetupSchemaName(key)));
+  }
 
-async function approveDeveloperProduct(id) {
+  function isAdminPassingWorkflowTest(status) {
+    return ["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(String(status || "").toLowerCase());
+  }
+
+  function isAdminLiveProductStatus(status) {
+    return ["live", "active", "published"].includes(String(status || "").toLowerCase());
+  }
+
+  function hasAdminRealPassingWorkflowTest(product) {
+    if (!isAdminPassingWorkflowTest(product?.n8n_last_test_status)) return false;
+
+    const result = product?.n8n_last_test_result && typeof product.n8n_last_test_result === "object"
+      ? product.n8n_last_test_result
+      : {};
+    const webhookResponse = result.webhook_response && typeof result.webhook_response === "object"
+      ? result.webhook_response
+      : {};
+
+    return Boolean(
+      result.used_test_profile ||
+        result.test_profile_id ||
+        webhookResponse.used_test_profile ||
+        webhookResponse.test_profile_id
+    );
+  }
+
+  async function approveDeveloperProduct(id) {
   const confirmed = await NexusUI.confirmDialog({
     title: "Approve product?",
     message: "This will publish the developer product live after the workflow checks pass.",
@@ -3114,9 +3140,18 @@ async function approveDeveloperProduct(id) {
 
   if (
     product.listing_type !== "custom_request" &&
-    !["passed", "passed_with_expected_test_callback_error"].includes(String(product.n8n_last_test_status || "").toLowerCase())
+    !isAdminPassingWorkflowTest(product.n8n_last_test_status)
   ) {
     NexusUI.toast("Run a successful technical test before approving this developer product.");
+    return;
+  }
+
+  if (
+    product.listing_type !== "custom_request" &&
+    !isAdminLiveProductStatus(product.status) &&
+    !hasAdminRealPassingWorkflowTest(product)
+  ) {
+    NexusUI.toast("This product needs one passing real run from saved Technical test data before approval.");
     return;
   }
 

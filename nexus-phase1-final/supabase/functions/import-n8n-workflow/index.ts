@@ -83,7 +83,11 @@ function runtimeContextPath(section: string, key: string) {
 
 function contextPathForMapping(source: string, key: string) {
   const cleanSource = cleanString(source).toLowerCase();
-  const cleanKey = cleanSource === "setup" ? canonicalSetupKey(key) : cleanString(key);
+  const cleanKey = cleanSource === "setup"
+    ? canonicalSetupKey(key)
+    : isSecretSource(cleanSource)
+      ? canonicalSecretKey(key)
+      : cleanString(key);
 
   if (!cleanKey) return "";
 
@@ -499,6 +503,7 @@ function convertCodeNodeDynamicReferences(sourceCode: string, mappings: any[] = 
   output = replaceMappedPlaceholdersInCode(output, mappings);
   output = convertOfficialPlaceholdersInCode(output);
   output = convertLegacyPlaceholdersInCode(output);
+  output = convertLooseBarePlaceholders(output);
   output = replaceQuotedRuntimeContextExpressionInCode(output);
 
   return output;
@@ -561,7 +566,7 @@ function extractPlaceholders(text: string) {
     const name = match[3];
 
     if (type === "SETUP") found.setup.push(canonicalSetupKey(name));
-    else if (type === "SECRET") found.secret.push(name);
+    else if (type === "SECRET") found.secret.push(canonicalSecretKey(name));
     else if (type === "CUSTOMER") found.customer.push(name);
     else if (type === "SYSTEM") found.system.push(name);
     else if (type === "ORDER") found.order.push(name);
@@ -583,7 +588,7 @@ function validatePlaceholders(product: any, workflow: any) {
   const credentialSchema = normalizeJsonArray(product.credential_schema);
 
   const setupNames = setupSchema.map((item: any) => canonicalSetupKey(item.name)).filter(Boolean);
-  const credentialNames = credentialSchema.map((item: any) => item.name).filter(Boolean);
+  const credentialNames = credentialSchema.map((item: any) => canonicalSecretKey(item.name)).filter(Boolean);
 
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -595,7 +600,8 @@ function validatePlaceholders(product: any, workflow: any) {
   }
 
   for (const name of detected.secret) {
-    if (!credentialNames.includes(name)) {
+    const key = canonicalSecretKey(name);
+    if (!credentialNames.includes(key)) {
       warnings.push(`NEXUS_SECRET.${name} was detected but credential_schema did not contain it. Nexus will still import, but the buyer form may need this secret field.`);
     }
   }
@@ -802,9 +808,78 @@ function canonicalSetupKey(value: unknown) {
     market_region: "market_region",
     target_market: "market_region",
     local_market: "market_region",
+    business_target_customer: "target_customer",
+    business_target_customer_profile: "target_customer",
+    business_target_audience: "target_customer",
+    target_audience: "target_customer",
+    ideal_customer: "target_customer",
+    buyer_persona: "target_customer",
+    customer_persona: "target_customer",
+    audience: "target_customer",
+    target_client: "target_customer",
   };
 
   return aliases[key] || key;
+}
+
+function canonicalSecretKey(value: unknown) {
+  const key = normalizedSetupKey(value);
+  const aliases: Record<string, string> = {
+    apify_toke: "apify_token",
+    apify_tokn: "apify_token",
+    apify_api: "apify_token",
+    apify_api_key: "apify_token",
+    apify_key: "apify_token",
+    apify_access_token: "apify_token",
+    open_ai_key: "openai_api_key",
+    openai_key: "openai_api_key",
+    openai_token: "openai_api_key",
+    open_ai_api_key: "openai_api_key",
+    chatgpt_key: "openai_api_key",
+    chatgpt_api_key: "openai_api_key",
+    gpt_key: "openai_api_key",
+    gpt_api_key: "openai_api_key",
+  };
+
+  if (aliases[key]) return aliases[key];
+  if (key.includes("apify") && (key.includes("tok") || key.includes("key"))) return "apify_token";
+  if ((key.includes("openai") || key.includes("chatgpt") || key === "gpt_key") && (key.includes("key") || key.includes("token"))) {
+    return "openai_api_key";
+  }
+
+  return key;
+}
+
+function isLikelyCredentialPlaceholderKey(value: unknown) {
+  const key = normalizedSetupKey(value);
+  if (!key) return false;
+
+  return (
+    key.includes("api_key") ||
+    key.includes("apikey") ||
+    key.includes("api_token") ||
+    key.includes("access_token") ||
+    key.includes("auth_token") ||
+    key.includes("refresh_token") ||
+    key.includes("secret_key") ||
+    key.includes("client_secret") ||
+    key.includes("private_key") ||
+    key.includes("credential") ||
+    key.includes("bearer") ||
+    key.includes("password") ||
+    key === "token" ||
+    key === "secret" ||
+    key.includes("apify_toke") ||
+    key.includes("apify_tok") ||
+    ((key.includes("openai") || key.includes("chatgpt") || key.startsWith("gpt_")) && (key.includes("key") || key.includes("token")))
+  );
+}
+
+function isLikelySetupPlaceholderKey(value: unknown) {
+  const key = normalizedSetupKey(value);
+  if (!key || isLikelyCredentialPlaceholderKey(key)) return false;
+  if (["item", "data", "json", "body", "result", "response", "output"].includes(key)) return false;
+  return /^[a-z][a-z0-9_]{1,79}$/.test(key);
 }
 
 function addSetupName(target: Set<string>, value: unknown) {
@@ -835,6 +910,80 @@ function extractRuntimeSetupKeys(text: string) {
   }
 
   return [...setupNames].sort();
+}
+
+function extractLooseBarePlaceholders(text: string) {
+  const setupNames = new Set<string>();
+  const secretNames = new Set<string>();
+  const source = String(text || "");
+  const pattern = /\{\{\s*([a-zA-Z][a-zA-Z0-9_ -]{1,80})\s*\}\}/g;
+  let match;
+
+  while ((match = pattern.exec(source)) !== null) {
+    const rawKey = cleanString(match[1]);
+    if (!rawKey) continue;
+
+    if (isLikelyCredentialPlaceholderKey(rawKey)) {
+      const key = canonicalSecretKey(rawKey);
+      if (key) secretNames.add(key);
+      continue;
+    }
+
+    if (isLikelySetupPlaceholderKey(rawKey)) {
+      const key = canonicalSetupKey(rawKey);
+      if (key) setupNames.add(key);
+    }
+  }
+
+  return {
+    setup: [...setupNames].sort(),
+    secret: [...secretNames].sort(),
+  };
+}
+
+function convertLooseBarePlaceholders(value: any, childKey = ""): any {
+  if (typeof value === "string") {
+    let output = value;
+    const pattern = /\{\{\s*([a-zA-Z][a-zA-Z0-9_ -]{1,80})\s*\}\}/g;
+
+    output = output.replace(pattern, (fullMatch: string, rawKey: string) => {
+      if (isLikelyCredentialPlaceholderKey(rawKey)) {
+        const key = canonicalSecretKey(rawKey);
+        const whole = isWholeString(value, fullMatch);
+        const expressionMode = whole && isLikelyExpressionField(childKey);
+        return contextExpressionForMapping("secret", key, expressionMode) || fullMatch;
+      }
+
+      if (isLikelySetupPlaceholderKey(rawKey)) {
+        const key = canonicalSetupKey(rawKey);
+        const whole = isWholeString(value, fullMatch);
+        const expressionMode = whole && isLikelyExpressionField(childKey);
+        return contextExpressionForMapping("setup", key, expressionMode) || fullMatch;
+      }
+
+      return fullMatch;
+    });
+
+    output = repairBadMixedCredentialValue(output);
+    output = forceN8nExpressionModeIfNeeded(output, childKey);
+    return output;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => convertLooseBarePlaceholders(item, childKey));
+  }
+
+  if (value && typeof value === "object") {
+    const result: Record<string, any> = {};
+
+    for (const [key, child] of Object.entries(value)) {
+      result[key] = convertLooseBarePlaceholders(child, key);
+    }
+
+    return result;
+  }
+
+  return value;
 }
 
 function isEmptyNodeValue(value: any) {
@@ -1153,7 +1302,7 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
       .map((item: any) => canonicalSetupKey(item?.name))
       .filter(Boolean),
   );
-  const credentialNames = new Set(credentialSchema.map((item: any) => cleanString(item?.name)).filter(Boolean));
+  const credentialNames = new Set(credentialSchema.map((item: any) => canonicalSecretKey(item?.name)).filter(Boolean));
 
   const addedSetupFields: any[] = [];
   const addedCredentialFields: any[] = [];
@@ -1177,7 +1326,7 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
   }
 
   for (const name of detected.secret || []) {
-    const key = cleanString(name);
+    const key = canonicalSecretKey(name);
     if (!key || credentialNames.has(key)) continue;
 
     const field = makeCredentialField(key);
@@ -1185,6 +1334,28 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
     credentialNames.add(key);
     addedCredentialFields.push(field);
     warnings.push(`Auto-added credential field ${key} from NEXUS_SECRET.${key}.`);
+  }
+
+  const loosePlaceholders = extractLooseBarePlaceholders(workflowText);
+
+  addGeneratedSetupFields(
+    setupSchema,
+    setupNames,
+    loosePlaceholders.setup,
+    warnings,
+    addedSetupFields,
+    "from loose buyer setup placeholders",
+  );
+
+  for (const name of loosePlaceholders.secret || []) {
+    const key = canonicalSecretKey(name);
+    if (!key || credentialNames.has(key)) continue;
+
+    const field = makeCredentialField(key);
+    credentialSchema.push(field);
+    credentialNames.add(key);
+    addedCredentialFields.push(field);
+    warnings.push(`Auto-added credential field ${key} from loose credential placeholder ${name}.`);
   }
 
   /*
@@ -1214,12 +1385,13 @@ function autoAddMissingSchemaFieldsForWorkflow(product: any, workflow: any, mapp
     }
 
     if (isSecretSource(source)) {
-      if (!credentialNames.has(key)) {
-        const field = makeCredentialField(key);
+      const canonicalKey = canonicalSecretKey(key);
+      if (!credentialNames.has(canonicalKey)) {
+        const field = makeCredentialField(canonicalKey);
         credentialSchema.push(field);
-        credentialNames.add(key);
+        credentialNames.add(canonicalKey);
         addedCredentialFields.push(field);
-        warnings.push(`Auto-added credential field ${key} because workflow uses ${placeholder}.`);
+        warnings.push(`Auto-added credential field ${canonicalKey} because workflow uses ${placeholder}.`);
       }
       continue;
     }
@@ -1318,7 +1490,7 @@ function validateWorkflowPlaceholderMappings(product: any, workflow: any, mappin
   const credentialSchema = normalizeJsonArray(product.credential_schema);
 
   const setupNames = setupSchema.map((item: any) => item.name).filter(Boolean);
-  const credentialNames = credentialSchema.map((item: any) => item.name).filter(Boolean);
+  const credentialNames = credentialSchema.map((item: any) => canonicalSecretKey(item.name)).filter(Boolean);
 
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -1370,7 +1542,7 @@ function validateWorkflowPlaceholderMappings(product: any, workflow: any, mappin
       continue;
     }
 
-    if (isSecretSource(source) && !credentialNames.includes(key)) {
+    if (isSecretSource(source) && !credentialNames.includes(canonicalSecretKey(key))) {
       warnings.push(`Mapping ${placeholder} points to secret.${key}, but credential_schema did not contain it. Nexus auto-adds missing fields during import when possible.`);
       continue;
     }
@@ -2707,6 +2879,7 @@ function normalizeWorkflow(product: any, rawWorkflow: any, supabaseUrl: string, 
   workflow = applyWorkflowPlaceholderMappings(workflow, customMappings);
   workflow = convertNexusPlaceholders(workflow);
   workflow = convertLegacyDynamicReferences(workflow);
+  workflow = convertLooseBarePlaceholders(workflow);
 
   /*
     Code node fix:
