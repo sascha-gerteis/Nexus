@@ -1038,7 +1038,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
   <script src="/assets/js/nexus-ui.js?v=20260702-workflow-import-health"></script>
 <script src="/assets/js/nexus-db.js?v=20260704-output-body-repair"></script>
   <script>
-    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, testProfile: null, revealedCredentials: {} };
+    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, testProfile: null, revealedCredentials: {}, workflowPollers: {} };
 
     const developerGuideSnippets = {
       setupSchema: JSON.stringify([
@@ -1312,6 +1312,108 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
       if (tab === "analytics") {
         loadDeveloperAnalytics();
+      }
+    }
+
+    function openProductWorkspaceSection(sectionId, options = {}) {
+      activeTab("products");
+      const section = document.getElementById(sectionId);
+      if (section && "open" in section) section.open = true;
+      const target = document.getElementById(options.scrollTargetId || sectionId) || section;
+      if (target) {
+        setTimeout(() => target.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+      }
+      return target;
+    }
+
+    function focusProductFormField(name, message = "") {
+      const field = document.querySelector(`#developerProductForm [name="${CSS.escape(name)}"]`);
+      const details = field?.closest("details");
+      if (details && "open" in details) details.open = true;
+      activeTab("products");
+      if (field) {
+        if (message) updateDeveloperImportResult(selectedProduct(), message);
+        setTimeout(() => {
+          field.scrollIntoView({ behavior: "smooth", block: "center" });
+          field.focus({ preventScroll: true });
+        }, 70);
+      }
+    }
+
+    function setTechnicalTestInlineMessage(message = "", className = "error") {
+      const root = document.getElementById("developerTechnicalTestDataPanel");
+      if (!root) return;
+      let node = root.querySelector("[data-technical-test-inline-message]");
+      if (!message) {
+        node?.remove();
+        return;
+      }
+      if (!node) {
+        node = document.createElement("div");
+        node.setAttribute("data-technical-test-inline-message", "true");
+        const anchor = root.querySelector(".technical-test-grid") || root.querySelector(".credential-action-row");
+        root.insertBefore(node, anchor || root.firstChild);
+      }
+      node.className = `runtime-import-result compact ${className}`;
+      node.textContent = message;
+    }
+
+    function focusMissingTechnicalTestField() {
+      const root = document.getElementById("developerTechnicalTestDataPanel");
+      const fields = Array.from(root?.querySelectorAll("[data-test-setup-name]") || []);
+      const missing = fields.find((field) => field.required && !String(field.value || "").trim()) || fields[0];
+      if (missing) {
+        setTimeout(() => {
+          missing.scrollIntoView({ behavior: "smooth", block: "center" });
+          missing.focus({ preventScroll: true });
+        }, 90);
+      }
+    }
+
+    async function openTechnicalTestDataBlocker(message = "") {
+      openProductWorkspaceSection("developerProductCredentialsSection", { scrollTargetId: "developerTechnicalTestDataPanel" });
+      const product = selectedProduct();
+      const hasRenderedFields = document.querySelector("[data-test-setup-name]");
+      if (product?.id && !hasRenderedFields) {
+        await loadDeveloperTestProfile(product.id);
+      }
+      setTechnicalTestInlineMessage(message, "error");
+      focusMissingTechnicalTestField();
+    }
+
+    async function showProductSubmissionBlocker(message = "") {
+      const text = String(message || "");
+      const lower = text.toLowerCase();
+
+      if (/setup schema|buyer setup schema|required by this workflow|setup fields before submitting/.test(lower)) {
+        focusProductFormField("setup_schema", text);
+        return;
+      }
+
+      if (/placeholder|mapping|workflow placeholder/.test(lower)) {
+        focusProductFormField("workflow_placeholder_mappings", text);
+        return;
+      }
+
+      if (/test data|real test|real run|save & run real test|technical test data|test profile|spreadsheet|sheet id|sheet url|sheet tab|sheet range|google drive|drive file|resource/.test(lower)) {
+        await openTechnicalTestDataBlocker(text);
+        return;
+      }
+
+      if (/credential|key|oauth|provider|smtp|telegram|openai|apify|google|service account|binding/.test(lower)) {
+        openProductWorkspaceSection("developerProductCredentialsSection", { scrollTargetId: "developerCredentialScanResult" });
+        await scanCurrentProductCredentials();
+        return;
+      }
+
+      if (/successful technical|technical check|workflow check|run check|technical test/.test(lower)) {
+        openProductWorkspaceSection("developerProductCredentialsSection", { scrollTargetId: "developerCredentialScanResult" });
+        await scanCurrentProductCredentials();
+        return;
+      }
+
+      if (/import|workflow json|hosted n8n|runtime|technical test/.test(lower)) {
+        focusProductFormField("n8n_workflow_json", text);
       }
     }
 
@@ -1860,7 +1962,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         .map((field) => field.label || field.name);
 
       if (missingRequired.length) {
-        NexusUI.toast(`Add test values for: ${missingRequired.join(", ")}`);
+        const message = `Add test values for: ${missingRequired.join(", ")}`;
+        NexusUI.toast(message);
+        openProductWorkspaceSection("developerProductCredentialsSection", { scrollTargetId: "developerTechnicalTestDataPanel" });
+        setTechnicalTestInlineMessage(message, "error");
+        focusMissingTechnicalTestField();
         return;
       }
 
@@ -1891,7 +1997,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
 
       if (!state.testProfile?.id) {
-        NexusUI.toast("Save Technical test data first, then run the real check.");
+        const message = "Save Technical test data first, then run the real check.";
+        NexusUI.toast(message);
+        await openTechnicalTestDataBlocker(message);
         return;
       }
 
@@ -1901,7 +2009,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
 
       if (product.n8n_import_status !== "imported" || !product.n8n_workflow_id) {
-        NexusUI.toast("Import the workflow before running a real test.");
+        const message = "Import the workflow before running a real test.";
+        NexusUI.toast(message);
+        focusProductFormField("n8n_workflow_json", message);
         return;
       }
 
@@ -1926,15 +2036,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           throw new Error("Nexus did not start this run with saved Technical test data. Save the test data again, then run the real check.");
         }
 
-        for (let index = 0; index < 40 && String(result.status || "").toLowerCase() === "running"; index += 1) {
-          await wait(3000);
-          const checked = await NexusDB.checkN8nWorkflowTest({
-            test_run_id: result.test_run_id,
-            automation_id: automationId
-          });
-          if (checked.error) throw new Error(checked.error.message || "Could not check real workflow test.");
-          result = checked.data || result;
-        }
+        result = await pollWorkflowTestToCompletion({
+          automationId,
+          initialResult: result,
+          maxAttempts: 60,
+          intervalMs: 3000,
+          progressMessage: "Running real workflow check",
+          checkErrorMessage: "Could not check real workflow test."
+        });
 
         updateLocalWorkflowRun(automationId, result);
 
@@ -2874,9 +2983,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     function updateLocalWorkflowRun(automationId, result = {}) {
       const product = state.products.find((item) => String(item.id || "") === String(automationId || ""));
       if (!product) return;
-      product.n8n_last_test_status = result.status || "failed";
-      product.n8n_last_test_error = result.ok ? "" : result.error_message || result.message || "Workflow run failed.";
-      product.n8n_last_tested_at = result.finished_at || result.last_checked_at || new Date().toISOString();
+      const status = String(result.status || "failed").toLowerCase();
+      product.n8n_last_test_status = status;
+      product.n8n_last_test_error = status === "running" || result.ok ? "" : result.error_message || result.message || "Workflow run failed.";
+      product.n8n_last_tested_at = result.finished_at || result.last_checked_at || result.started_at || new Date().toISOString();
+      product.n8n_last_test_result = result;
     }
 
     function updateLocalProductSummary(summary = {}) {
@@ -3619,17 +3730,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       });
       if (started.error) throw new Error(started.error.message || "Workflow test failed to start.");
 
-      let result = started.data || {};
-
-      for (let index = 0; index < 40 && String(result.status || "").toLowerCase() === "running"; index += 1) {
-        await wait(3000);
-        const checked = await NexusDB.checkN8nWorkflowTest({
-          test_run_id: result.test_run_id,
-          automation_id: automationId
-        });
-        if (checked.error) throw new Error(checked.error.message || "Could not check workflow test.");
-        result = checked.data || result;
-      }
+      const result = await pollWorkflowTestToCompletion({
+        automationId,
+        initialResult: started.data || {},
+        maxAttempts: 60,
+        intervalMs: 3000,
+        progressMessage: "Running credential workflow check",
+        checkErrorMessage: "Could not check workflow test."
+      });
 
       if (isPassingTestStatus(result.status)) return result;
       if (String(result.status || "").toLowerCase() === "running") {
@@ -4473,6 +4581,81 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
+    function refreshWorkflowRunUi(automationId, result = {}, message = "") {
+      updateLocalWorkflowRun(automationId, result);
+      const product = state.products.find((item) => String(item.id || "") === String(automationId || ""));
+      if (!product) return;
+      renderCredentialWorkflowList();
+      renderProducts();
+      if (String(state.selectedProductId || "") === String(automationId || "")) {
+        renderSelectedProductSummary(product);
+        if (message) updateDeveloperImportResult(product, message);
+      }
+    }
+
+    function scheduleWorkflowStatusRefresh(automationId, result = {}, options = {}) {
+      const id = String(automationId || "");
+      if (!id || String(result.status || "").toLowerCase() !== "running") return;
+
+      clearTimeout(state.workflowPollers[id]);
+      const attemptsLeft = Number(options.attemptsLeft ?? 24);
+      if (attemptsLeft <= 0) return;
+
+      state.workflowPollers[id] = setTimeout(async () => {
+        try {
+          const checked = await NexusDB.checkN8nWorkflowTest({
+            test_run_id: result.test_run_id,
+            automation_id: id
+          });
+          if (checked.error) throw new Error(checked.error.message || "Could not refresh workflow test.");
+          const nextResult = checked.data || result;
+          const status = String(nextResult.status || "").toLowerCase();
+          refreshWorkflowRunUi(id, nextResult, status === "running" ? "Workflow test is still running..." : workflowTestFailureMessage(nextResult, "Workflow test finished."));
+          if (status === "running") {
+            scheduleWorkflowStatusRefresh(id, nextResult, { attemptsLeft: attemptsLeft - 1 });
+          } else if (String(state.selectedProductId || "") === id) {
+            scanCurrentProductCredentials();
+          }
+        } catch (error) {
+          const failedResult = {
+            ...result,
+            status: "failed",
+            error_message: error.message || "Could not refresh workflow test."
+          };
+          refreshWorkflowRunUi(id, failedResult, failedResult.error_message);
+        }
+      }, Number(options.intervalMs || 5000));
+    }
+
+    async function pollWorkflowTestToCompletion(options = {}) {
+      const automationId = options.automationId || "";
+      const maxAttempts = Number(options.maxAttempts || 60);
+      const intervalMs = Number(options.intervalMs || 3000);
+      const progressMessage = options.progressMessage || "Workflow test is running";
+      const checkErrorMessage = options.checkErrorMessage || "Could not check workflow test.";
+      let result = options.initialResult || {};
+
+      refreshWorkflowRunUi(automationId, result, progressMessage);
+
+      for (let index = 0; index < maxAttempts && String(result.status || "").toLowerCase() === "running"; index += 1) {
+        refreshWorkflowRunUi(automationId, result, `${progressMessage} (${index + 1}/${maxAttempts})...`);
+        await wait(intervalMs);
+        const checked = await NexusDB.checkN8nWorkflowTest({
+          test_run_id: result.test_run_id,
+          automation_id: automationId
+        });
+        if (checked.error) throw new Error(checked.error.message || checkErrorMessage);
+        result = checked.data || result;
+        refreshWorkflowRunUi(automationId, result, String(result.status || "").toLowerCase() === "running" ? `${progressMessage}...` : workflowTestFailureMessage(result, "Workflow test finished."));
+      }
+
+      if (String(result.status || "").toLowerCase() === "running") {
+        scheduleWorkflowStatusRefresh(automationId, result);
+      }
+
+      return result;
+    }
+
     async function importAndTestCurrentProduct(button = null) {
       try {
         updateDeveloperImportResult(null, "Saving latest draft before import...");
@@ -4529,17 +4712,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         });
         if (started.error) throw new Error(started.error.message || "Workflow test failed to start.");
 
-        let result = started.data || {};
-
-        for (let index = 0; index < 8 && String(result.status || "").toLowerCase() === "running"; index += 1) {
-          await wait(2000);
-          const checked = await NexusDB.checkN8nWorkflowTest({
-            test_run_id: result.test_run_id,
-            automation_id: product.id
-          });
-          if (checked.error) throw new Error(checked.error.message || "Could not check workflow test.");
-          result = checked.data || result;
-        }
+        const result = await pollWorkflowTestToCompletion({
+          automationId: product.id,
+          initialResult: started.data || {},
+          maxAttempts: 60,
+          intervalMs: 3000,
+          progressMessage: "Running import workflow check",
+          checkErrorMessage: "Could not check workflow test."
+        });
 
         if (isPassingTestStatus(result.status)) {
           NexusUI.toast("Workflow imported and test passed.");
@@ -5603,7 +5783,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           closeProductEditor();
           await loadProducts();
         } catch (error) {
-          NexusUI.toast(error.message || "Could not submit product.");
+          const message = error.message || "Could not submit product.";
+          NexusUI.toast(message);
+          await showProductSubmissionBlocker(message);
         }
       });
 
