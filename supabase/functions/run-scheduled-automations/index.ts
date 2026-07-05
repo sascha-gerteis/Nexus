@@ -5,6 +5,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const NEXUS_RUNTIME_SECRET = Deno.env.get("NEXUS_RUNTIME_SECRET") || "";
+const N8N_BASE_URL = Deno.env.get("N8N_BASE_URL") || "";
+const N8N_API_KEY = Deno.env.get("N8N_API_KEY") || "";
 
 function nowIso() {
   return new Date().toISOString();
@@ -12,6 +14,10 @@ function nowIso() {
 
 function cleanString(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function cleanBaseUrl(value: unknown) {
+  return cleanString(value).replace(/\/+$/, "");
 }
 
 function asObject(value: unknown) {
@@ -384,7 +390,7 @@ function developerOwnsCandidate(row: any, developerId: string) {
 async function loadLatestSetupValues(adminClient: any, customerAutomationId: string) {
   const { data, error } = await adminClient
     .from("automation_setup_submissions")
-    .select("answers, setup_answers")
+    .select("answers")
     .eq("customer_automation_id", customerAutomationId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -627,6 +633,85 @@ async function triggerWebhook(webhookUrl: string, payload: any) {
   };
 }
 
+function isWebhookNotRegistered(error: unknown) {
+  const message = error instanceof Error ? error.message : cleanString(error);
+  const lower = message.toLowerCase();
+
+  return lower.includes("webhook") &&
+    (lower.includes("not registered") || lower.includes("requested webhook"));
+}
+
+async function n8nApiRequest(path: string, options: RequestInit = {}) {
+  const baseUrl = cleanBaseUrl(N8N_BASE_URL);
+  const apiKey = cleanString(N8N_API_KEY);
+
+  if (!baseUrl || !apiKey) {
+    throw new Error("Missing N8N_BASE_URL or N8N_API_KEY Supabase secrets.");
+  }
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "X-N8N-API-KEY": apiKey,
+      ...(options.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+  let data: any = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message ||
+        data?.error ||
+        data?.raw ||
+        `n8n API failed (${response.status}).`,
+    );
+  }
+
+  return data;
+}
+
+async function activateRuntimeWorkflowById(workflowId: string) {
+  const id = cleanString(workflowId);
+  if (!id) {
+    throw new Error("Cannot activate n8n workflow because no workflow ID is stored.");
+  }
+
+  try {
+    const result = await n8nApiRequest(`/api/v1/workflows/${encodeURIComponent(id)}/activate`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+
+    return {
+      ok: true,
+      workflow_id: id,
+      result,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : cleanString(error);
+
+    if (message.toLowerCase().includes("active")) {
+      return {
+        ok: true,
+        already_active: true,
+        workflow_id: id,
+      };
+    }
+
+    throw error;
+  }
+}
+
 function extractExecutionId(responseBody: any) {
   return pickFirstString(
     responseBody?.executionId,
@@ -637,7 +722,12 @@ function extractExecutionId(responseBody: any) {
   );
 }
 
-async function loadCandidates(adminClient: any, options: { action: string; id?: string; limit: number }) {
+async function loadCandidates(adminClient: any, options: {
+  action: string;
+  id?: string;
+  title?: string;
+  limit: number;
+}) {
   if (options.id) {
     const { data, error } = await adminClient
       .from("customer_automations")
@@ -647,6 +737,31 @@ async function loadCandidates(adminClient: any, options: { action: string; id?: 
 
     if (error) throw new Error(error.message);
     return data ? [data] : [];
+  }
+
+  if (options.title) {
+    const { data, error } = await adminClient
+      .from("customer_automations")
+      .select("*, automations!inner(*), orders(*)")
+      .ilike("automations.title", `%${options.title}%`)
+      .order("last_run_requested_at", { ascending: false, nullsFirst: false })
+      .order("updated_at", { ascending: false, nullsFirst: false })
+      .limit(options.limit);
+
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  if (options.action === "run_latest") {
+    const { data, error } = await adminClient
+      .from("customer_automations")
+      .select("*, automations(*), orders(*)")
+      .order("last_run_requested_at", { ascending: false, nullsFirst: false })
+      .order("updated_at", { ascending: false, nullsFirst: false })
+      .limit(1);
+
+    if (error) throw new Error(error.message);
+    return data || [];
   }
 
   const { data, error } = await adminClient
@@ -666,17 +781,25 @@ async function runCandidate(adminClient: any, row: any, options: {
   action: string;
   dryRun: boolean;
   advanceSchedule: boolean;
+  allowInactiveSubscription?: boolean;
 }) {
   const customerAutomation = row;
   const automation = one(row.automations) || {};
   const order = one(row.orders) || {};
   const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
   const eligibility = scheduleIsRunnable(customerAutomation, order, webhookUrl);
-  const scheduledFor = options.action === "run_one"
+  const isManualRun = options.action === "run_one" ||
+    options.action === "run_latest" ||
+    options.action === "run_matching";
+  const scheduledFor = isManualRun
     ? nowIso()
     : cleanString(customerAutomation.next_run_at) || nowIso();
 
-  if (!eligibility.ok) {
+  const canBypassInactiveSubscription = isManualRun &&
+    options.allowInactiveSubscription === true &&
+    eligibility.reason === "subscription_not_active";
+
+  if (!eligibility.ok && !canBypassInactiveSubscription) {
     return {
       customer_automation_id: customerAutomation.id,
       status: "skipped",
@@ -693,7 +816,7 @@ async function runCandidate(adminClient: any, row: any, options: {
     };
   }
 
-  const runKey = options.action === "run_one"
+  const runKey = isManualRun
     ? `manual:${customerAutomation.id}:${Date.now()}`
     : `monthly:${customerAutomation.id}:${scheduledDateKey(scheduledFor)}`;
 
@@ -728,7 +851,7 @@ async function runCandidate(adminClient: any, row: any, options: {
     automation_id: customerAutomation.automation_id,
     order_id: customerAutomation.order_id,
     runtime_type: customerAutomation.runtime_type || automation?.runtime_type || "n8n_managed",
-    trigger_type: options.action === "run_one" ? "manual_admin" : "scheduled_monthly",
+    trigger_type: isManualRun ? "manual_admin" : "scheduled_monthly",
     trigger_source: "run-scheduled-automations",
     run_key: runKey,
     scheduled_for: scheduledFor,
@@ -762,7 +885,26 @@ async function runCandidate(adminClient: any, row: any, options: {
   });
 
   try {
-    const response = await triggerWebhook(webhookUrl, runtimePayload);
+    let response: any;
+
+    try {
+      response = await triggerWebhook(webhookUrl, runtimePayload);
+    } catch (error) {
+      if (!isWebhookNotRegistered(error)) throw error;
+
+      const workflowId = pickFirstString(
+        customerAutomation.n8n_workflow_id,
+        automation?.n8n_workflow_id,
+        order?.n8n_workflow_id,
+      );
+      const activation = await activateRuntimeWorkflowById(workflowId);
+      response = await triggerWebhook(webhookUrl, runtimePayload);
+      response.data = {
+        ...(response.data || {}),
+        nexus_activation_retry: activation,
+      };
+    }
+
     const n8nExecutionId = extractExecutionId(response.data);
     const now = nowIso();
 
@@ -795,10 +937,10 @@ async function runCandidate(adminClient: any, row: any, options: {
       buyer_id: customerAutomation.buyer_id,
       automation_id: customerAutomation.automation_id,
       order_id: customerAutomation.order_id,
-      event_type: options.action === "run_one"
+      event_type: isManualRun
         ? "manual_runtime_triggered"
         : "scheduled_runtime_triggered",
-      title: options.action === "run_one"
+      title: isManualRun
         ? "Manual automation run started"
         : "Monthly automation run started",
       message: JSON.stringify({
@@ -873,6 +1015,44 @@ async function runCandidate(adminClient: any, row: any, options: {
   }
 }
 
+async function loadCandidateStatus(adminClient: any, row: any) {
+  const customerAutomation = row || {};
+  const automation = one(customerAutomation.automations) || {};
+
+  const [{ data: runs, error: runsError }, { data: outputs, error: outputsError }] = await Promise.all([
+    adminClient
+      .from("automation_runs")
+      .select("id, status, run_key, n8n_execution_id, error_message, created_at, updated_at, finished_at")
+      .eq("customer_automation_id", customerAutomation.id)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    adminClient
+      .from("automation_outputs")
+      .select("id, title, status, output_type, created_at, updated_at")
+      .eq("customer_automation_id", customerAutomation.id)
+      .order("created_at", { ascending: false })
+      .limit(5),
+  ]);
+
+  if (runsError) throw new Error(runsError.message);
+  if (outputsError) throw new Error(outputsError.message);
+
+  return {
+    customer_automation_id: customerAutomation.id,
+    automation_id: customerAutomation.automation_id,
+    automation_title: automation.title || customerAutomation.title || "",
+    status: customerAutomation.status || "",
+    runtime_status: customerAutomation.runtime_status || "",
+    health_status: customerAutomation.health_status || "",
+    setup_status: customerAutomation.setup_status || "",
+    last_run_requested_at: customerAutomation.last_run_requested_at || null,
+    last_run_at: customerAutomation.last_run_at || null,
+    last_error_message: customerAutomation.last_error_message || "",
+    latest_runs: runs || [],
+    latest_outputs: outputs || [],
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -902,7 +1082,7 @@ Deno.serve(async (req) => {
     const action = cleanString(body.action || "run_due");
     const limit = Math.max(1, Math.min(Number(body.limit || 25), 100));
 
-    if (!["dry_run", "run_due", "run_one"].includes(action)) {
+    if (!["dry_run", "run_due", "run_one", "run_latest", "run_matching", "latest_status"].includes(action)) {
       return errorResponse("Unknown action.", 400);
     }
 
@@ -926,14 +1106,24 @@ Deno.serve(async (req) => {
         body.customerAutomationId ||
         body.id,
     );
+    const automationTitle = cleanString(
+      body.automation_title ||
+        body.automationTitle ||
+        body.title,
+    );
 
     if (action === "run_one" && !customerAutomationId) {
       return errorResponse("customer_automation_id is required for run_one.", 400);
     }
 
+    if (action === "run_matching" && !automationTitle) {
+      return errorResponse("automation_title is required for run_matching.", 400);
+    }
+
     let rows = await loadCandidates(adminClient, {
-      action,
+      action: action === "latest_status" ? "run_latest" : action,
       id: customerAutomationId,
+      title: automationTitle,
       limit,
     });
 
@@ -952,11 +1142,27 @@ Deno.serve(async (req) => {
 
     const results = [];
 
+    if (action === "latest_status") {
+      for (const row of rows) {
+        results.push(await loadCandidateStatus(adminClient, row));
+      }
+
+      return jsonResponse({
+        ok: true,
+        action,
+        count: results.length,
+        results,
+      });
+    }
+
     for (const row of rows) {
       const result = await runCandidate(adminClient, row, {
         action,
         dryRun: action === "dry_run" || Boolean(body.dry_run),
         advanceSchedule: action === "run_due" || body.advance_schedule === true,
+        allowInactiveSubscription: body.allow_inactive_subscription === true ||
+          body.allowInactiveSubscription === true ||
+          body.force === true,
       });
 
       results.push(result);

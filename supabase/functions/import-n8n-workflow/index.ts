@@ -1806,11 +1806,14 @@ function buildWebhookNode(webhookPath: string, position = [0, 0]) {
 function buildNexusRuntimeContextNode(position = [300, 0], existingNode: any = null) {
   return {
     parameters: {
-      jsCode: `const body = $("Nexus Webhook Trigger").first().json.body || {};
+      jsCode: `const incoming = $("Nexus Webhook Trigger").first().json || {};
+const body = incoming.body || {};
 
 return [
   {
     json: {
+      ...incoming,
+      body,
       customer_automation_id: body.customer_automation_id || body.system?.customer_automation_id || "",
       automation_id: body.automation_id || body.system?.automation_id || "",
       order_id: body.order_id || body.system?.order_id || "",
@@ -1848,6 +1851,162 @@ function buildNexusRuntimeMergeNode(position = [850, 0], existingNode: any = nul
   };
 }
 
+function buildNexusSubmitOutputBodyExpression() {
+  return `={{ (() => {
+  const context = $("Nexus Runtime Context").first().json || {};
+  const source = $json || {};
+  const outputKeys = [
+    "NEXUS_FINAL_OUTPUT",
+    "Nexus_final_output",
+    "nexus_final_output",
+    "nexusFinalOutput",
+    "final_output",
+    "finalOutput",
+    "automation_output",
+    "automationOutput",
+    "output",
+    "result",
+    "report",
+    "payload",
+    "data",
+    "body"
+  ];
+  const isPlainObject = (value) => value && typeof value === "object" && !Array.isArray(value);
+  const maybeParse = (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (!((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]")))) {
+      return value;
+    }
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  };
+  const unwrap = (value) => {
+    let current = maybeParse(value);
+    for (let index = 0; index < 4; index += 1) {
+      if (Array.isArray(current)) {
+        current = current.length === 1 ? maybeParse(current[0]) : current;
+        continue;
+      }
+      if (!isPlainObject(current)) return current;
+      const key = outputKeys.find((candidate) => {
+        const candidateValue = current[candidate];
+        return candidateValue !== undefined && candidateValue !== null && candidateValue !== "";
+      });
+      if (!key) return current;
+      current = maybeParse(current[key]);
+    }
+    return current;
+  };
+  const finalValue = unwrap(source);
+  const objectOutput = isPlainObject(finalValue) ? finalValue : {};
+  const textOutput = typeof finalValue === "string" ? finalValue : "";
+  const looksLikeHtml = /<[a-z][\\s\\S]*>/i.test(textOutput);
+  const contentHtml =
+    objectOutput.content_html ||
+    objectOutput.contentHtml ||
+    objectOutput.html ||
+    objectOutput.HTML ||
+    objectOutput.report_html ||
+    objectOutput.reportHtml ||
+    (looksLikeHtml ? textOutput : "");
+  const contentText =
+    objectOutput.content_text ||
+    objectOutput.contentText ||
+    objectOutput.text ||
+    objectOutput.markdown ||
+    objectOutput.output_text ||
+    objectOutput.outputText ||
+    (!contentHtml ? textOutput : "");
+  const contentJson =
+    objectOutput.content_json ||
+    objectOutput.contentJson ||
+    objectOutput.json ||
+    (isPlainObject(finalValue) || Array.isArray(finalValue)
+      ? finalValue
+      : (textOutput ? { value: textOutput } : source));
+
+  return JSON.stringify({
+    customer_automation_id:
+      context.system?.customer_automation_id ||
+      source.customer_automation_id ||
+      source.system?.customer_automation_id ||
+      source.body?.customer_automation_id ||
+      source.body?.system?.customer_automation_id ||
+      "",
+    status: objectOutput.status || "success",
+    output_type: objectOutput.output_type || objectOutput.outputType || "report",
+    title:
+      objectOutput.title ||
+      objectOutput.report_title ||
+      objectOutput.reportTitle ||
+      objectOutput.name ||
+      "Automation output",
+    summary: objectOutput.summary || objectOutput.description || "",
+    content_html: contentHtml,
+    content_text: contentText,
+    file_url: objectOutput.file_url || objectOutput.fileUrl || "",
+    storage_path: objectOutput.storage_path || objectOutput.storagePath || "",
+    content_json: contentJson
+  });
+})() }}`;
+}
+
+function buildNexusSubmitOutputBodyParameters() {
+  return {
+    parameters: [
+      {
+        name: "customer_automation_id",
+        value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}',
+      },
+      {
+        name: "status",
+        value: "success",
+      },
+      {
+        name: "output_type",
+        value: '={{ $json.output_type || $json.outputType || "report" }}',
+      },
+      {
+        name: "title",
+        value:
+          '={{ $json.title || $json.report_title || $json.reportTitle || $json.name || "Automation output" }}',
+      },
+      {
+        name: "summary",
+        value: '={{ $json.summary || $json.description || "" }}',
+      },
+      {
+        name: "content_html",
+        value:
+          '={{ $json.content_html || $json.contentHtml || $json.html || $json.HTML || $json.report_html || $json.reportHtml || "" }}',
+      },
+      {
+        name: "content_text",
+        value:
+          '={{ $json.content_text || $json.contentText || $json.text || $json.markdown || $json.output_text || $json.outputText || "" }}',
+      },
+      {
+        name: "file_url",
+        value: '={{ $json.file_url || $json.fileUrl || "" }}',
+      },
+      {
+        name: "storage_path",
+        value: '={{ $json.storage_path || $json.storagePath || "" }}',
+      },
+      {
+        name: "content_json",
+        value:
+          '={{ JSON.stringify($json.content_json || $json.contentJson || $json.json || $json.data || $json) }}',
+      },
+    ],
+  };
+}
+
 function buildNexusOutputNode(callbackUrl: string, position = [1100, 0], existingNode: any = null) {
   return {
     parameters: {
@@ -1860,30 +2019,26 @@ function buildNexusOutputNode(callbackUrl: string, position = [1100, 0], existin
             name: "x-nexus-runtime-secret",
             value: '={{ $("Nexus Runtime Context").first().json.system.runtime_secret }}',
           },
+          {
+            name: "x-nexus-customer-automation-id",
+            value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}',
+          },
+          {
+            name: "Content-Type",
+            value: "application/json",
+          },
         ],
       },
       sendBody: true,
-      contentType: "raw",
-      rawContentType: "application/json",
-      body:
-        `={{ JSON.stringify({
-          customer_automation_id: $("Nexus Runtime Context").first().json.system.customer_automation_id,
-          status: "success",
-          output_type: $json.output_type || "report",
-          title: $json.title || "Automation output",
-          summary: $json.summary || "",
-          content_html: $json.content_html || $json.html || "",
-          content_text: $json.content_text || "",
-          file_url: $json.file_url || "",
-          storage_path: $json.storage_path || "",
-          content_json: $json.content_json || {}
-        }) }}`,
+      bodyContentType: "json",
+      specifyBody: "keypair",
+      bodyParameters: buildNexusSubmitOutputBodyParameters(),
       options: {},
     },
     id: existingNode?.id || crypto.randomUUID(),
     name: "Nexus Submit Output",
     type: "n8n-nodes-base.httpRequest",
-    typeVersion: 3,
+    typeVersion: 4.2,
     position: existingNode?.position || position,
   };
 }
@@ -2398,15 +2553,95 @@ function removeMainConnectionTo(connections: any, sourceName: string, targetName
   return connections;
 }
 
-function wrapWebhookWithRuntimeContext(connections: any) {
+function wrapWebhookWithRuntimeContext(connections: any, nodes: any[] = []) {
   const webhookName = "Nexus Webhook Trigger";
   const contextName = "Nexus Runtime Context";
 
   const currentWebhookMain = connections?.[webhookName]?.main;
-  const originalTargets =
-    Array.isArray(currentWebhookMain) && Array.isArray(currentWebhookMain[0])
-      ? currentWebhookMain[0].filter((connection: any) => connection.node !== contextName)
-      : [];
+  const currentContextMain = connections?.[contextName]?.main;
+
+  const collectMainTargets = (mainConnections: any, excludeNode = "") => {
+    if (!Array.isArray(mainConnections)) return [];
+
+    const targets: any[] = [];
+
+    for (const group of mainConnections) {
+      if (!Array.isArray(group)) continue;
+
+      for (const connection of group) {
+        const targetName = cleanString(connection?.node);
+        if (!targetName || (excludeNode && targetName === excludeNode)) continue;
+
+        targets.push({
+          node: targetName,
+          type: cleanString(connection?.type) || "main",
+          index: Number(connection?.index || 0),
+        });
+      }
+    }
+
+    return targets;
+  };
+
+  const uniqueTargets = (targets: any[]) => {
+    const seen = new Set<string>();
+    const output: any[] = [];
+
+    for (const target of targets || []) {
+      const key = `${target.node}::${target.type || "main"}::${Number(target.index || 0)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      output.push({
+        node: target.node,
+        type: target.type || "main",
+        index: Number(target.index || 0),
+      });
+    }
+
+    return output;
+  };
+
+  const directWebhookTargets = collectMainTargets(currentWebhookMain, contextName);
+  const existingContextTargets = collectMainTargets(currentContextMain);
+  let originalTargets = uniqueTargets([
+    ...directWebhookTargets,
+    ...existingContextTargets,
+  ]);
+
+  if (!originalTargets.length && Array.isArray(nodes) && nodes.length) {
+    const webhookNode = nodes.find((node: any) => node?.name === webhookName);
+    const targetNames = getConnectedTargetNames(connections);
+    const webhookX = Number(webhookNode?.position?.[0] || 0);
+    const webhookY = Number(webhookNode?.position?.[1] || 0);
+
+    const possibleStarts = nodes
+      .filter((node: any) => {
+        const name = cleanString(node?.name);
+        if (!name) return false;
+        if ([webhookName, contextName, "Nexus Submit Output", "Nexus Runtime Merge"].includes(name)) return false;
+        if (targetNames.has(name)) return false;
+        if (isIgnoredTerminalNode(node)) return false;
+        if (isWebhookNode(node) || isSupportedReplaceableTrigger(node)) return false;
+        return true;
+      })
+      .sort((a: any, b: any) => {
+        const ax = Number(a?.position?.[0] || 0);
+        const bx = Number(b?.position?.[0] || 0);
+        const ay = Number(a?.position?.[1] || 0);
+        const by = Number(b?.position?.[1] || 0);
+        const aScore = Math.abs(ax - (webhookX + 300)) + Math.abs(ay - webhookY);
+        const bScore = Math.abs(bx - (webhookX + 300)) + Math.abs(by - webhookY);
+        return aScore - bScore;
+      });
+
+    if (possibleStarts[0]?.name) {
+      originalTargets = [{
+        node: possibleStarts[0].name,
+        type: "main",
+        index: 0,
+      }];
+    }
+  }
 
   if (!connections[webhookName]) {
     connections[webhookName] = {};
@@ -2424,13 +2659,7 @@ function wrapWebhookWithRuntimeContext(connections: any) {
     connections[contextName] = {};
   }
 
-  connections[contextName].main = [
-    originalTargets.map((connection: any) => ({
-      node: connection.node,
-      type: "main",
-      index: Number(connection.index || 0),
-    })),
-  ];
+  connections[contextName].main = [originalTargets];
 
   return connections;
 }
@@ -3007,7 +3236,7 @@ function normalizeWorkflow(product: any, rawWorkflow: any, supabaseUrl: string, 
     nodes.push(contextNode);
   }
 
-  connections = wrapWebhookWithRuntimeContext(connections);
+  connections = wrapWebhookWithRuntimeContext(connections, nodes);
 
   /*
     We no longer need Nexus Runtime Merge.
@@ -3029,8 +3258,16 @@ function normalizeWorkflow(product: any, rawWorkflow: any, supabaseUrl: string, 
 
     source.main = source.main.map((group: any) => {
       if (!Array.isArray(group)) return group;
-      return group.filter((connection: any) => connection.node !== "Nexus Runtime Merge");
+      return group.filter((connection: any) =>
+        connection.node !== "Nexus Runtime Merge" &&
+        connection.node !== "Nexus Prepare Output Payload"
+      );
     });
+  }
+
+  nodes = nodes.filter((node: any) => node.name !== "Nexus Prepare Output Payload");
+  if (connections["Nexus Prepare Output Payload"]) {
+    delete connections["Nexus Prepare Output Payload"];
   }
 
   const existingOutputNode = nodes.find((node: any) => node.name === "Nexus Submit Output");
@@ -3046,7 +3283,8 @@ function normalizeWorkflow(product: any, rawWorkflow: any, supabaseUrl: string, 
     const terminalNames = getTerminalNodeNames(nodes, connections)
       .filter((name) => name !== "Nexus Submit Output")
       .filter((name) => name !== "Nexus Webhook Trigger")
-      .filter((name) => name !== "Nexus Runtime Context");
+      .filter((name) => name !== "Nexus Runtime Context")
+      .filter((name) => name !== "Nexus Prepare Output Payload");
 
     const bestOutputNode = pickBestOutputNode(nodes, terminalNames);
 
@@ -3084,8 +3322,9 @@ function normalizeWorkflow(product: any, rawWorkflow: any, supabaseUrl: string, 
   }
 
   /*
-    Make final result node go directly to Nexus Submit Output.
-    This guarantees the dashboard callback executes without needing a merge node.
+    Make the final result node feed Nexus Submit Output directly.
+    The submit node reads the previous node's $json, so a developer-owned Nexus Output
+    node remains the source of truth.
   */
   connections = removeMainConnectionTo(connections, attachToNodeName, "Nexus Submit Output");
   connections = ensureMainConnection(

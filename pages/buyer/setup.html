@@ -52,8 +52,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
-  <script src="/assets/js/nexus-db.js?v=20260624-analytics"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260704-setup-prefill"></script>
+  <script src="/assets/js/nexus-db.js?v=20260704-output-body-repair"></script>
 
   <script>
     let activeCustomerAutomation = null;
@@ -90,6 +90,55 @@
       return [];
     }
 
+    function normalizeAnswerKey(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    }
+
+    function asAnswerObject(value) {
+      if (!value) return {};
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+        } catch {
+          return {};
+        }
+      }
+      return typeof value === "object" && !Array.isArray(value) ? value : {};
+    }
+
+    function mergeSetupAnswers(submission) {
+      const source = submission || {};
+      const answers = asAnswerObject(source.answers);
+      const setupAnswers = asAnswerObject(source.setup_answers);
+      const setup = asAnswerObject(source.setup);
+
+      return {
+        ...answers,
+        ...setupAnswers,
+        ...setup,
+        ...asAnswerObject(answers.setup),
+        ...asAnswerObject(answers.setup_answers)
+      };
+    }
+
+    function answerValue(existingAnswers, name) {
+      const answers = existingAnswers || {};
+
+      if (answers[name] !== undefined && answers[name] !== null) {
+        return answers[name];
+      }
+
+      const normalizedName = normalizeAnswerKey(name);
+      const match = Object.keys(answers).find(key => normalizeAnswerKey(key) === normalizedName);
+
+      return match ? answers[match] : "";
+    }
+
     function fieldRequired(field) {
       return field.required ? "required" : "";
     }
@@ -99,7 +148,7 @@
       const label = field.label || name;
       const type = field.type || "text";
       const required = fieldRequired(field);
-      const value = type === "secret" ? "" : (existingAnswers[name] || "");
+      const value = type === "secret" ? "" : answerValue(existingAnswers, name);
 
       if (!name) return "";
 
@@ -182,6 +231,79 @@
       `;
     }
 
+    function cleanFlag(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function isBuyerOwnedCredentialField(field, product = {}) {
+      const owner = cleanFlag(field.owner || field.credential_owner || field.credentialOwner || field.scope);
+      const mode = cleanFlag(field.mode || field.credential_mode || field.credentialMode);
+      const source = cleanFlag(field.source || field.source_type || field.sourceType);
+      const visibility = cleanFlag(field.visibility || field.audience || field.exposed_to);
+
+      if (
+        field.customer_owned === true ||
+        field.buyer_owned === true ||
+        field.customer_visible === true ||
+        field.buyer_visible === true ||
+        field.expose_to_buyer === true ||
+        owner === "customer" ||
+        owner === "buyer" ||
+        mode === "customer_owned" ||
+        source === "customer" ||
+        source === "buyer" ||
+        visibility === "customer" ||
+        visibility === "buyer"
+      ) {
+        return true;
+      }
+
+      if (
+        field.developer_owned === true ||
+        field.internal === true ||
+        field.admin_only === true ||
+        owner === "developer" ||
+        owner === "dev" ||
+        owner === "admin" ||
+        owner === "nexus" ||
+        owner === "internal" ||
+        mode === "developer_owned" ||
+        mode === "private_per_customer" ||
+        source === "developer" ||
+        source === "admin" ||
+        source === "nexus" ||
+        source === "internal"
+      ) {
+        return false;
+      }
+
+      const fieldName = normalizeAnswerKey(field.name || field.key || field.credential_key);
+      const devSlots = Array.isArray(product.developer_credential_requirements)
+        ? product.developer_credential_requirements
+        : [];
+      const devSlotMatches = devSlots.some(slot => {
+        const keys = [
+          slot.credential_key,
+          slot.key,
+          slot.provider,
+          slot.provider_label,
+          slot.n8n_credential_type,
+          slot.node_name
+        ].map(normalizeAnswerKey).filter(Boolean);
+
+        return fieldName && keys.some(key => key === fieldName || key.includes(fieldName) || fieldName.includes(key));
+      });
+
+      if (devSlotMatches) return false;
+
+      /*
+        Credential schema is sensitive. If a field is not explicitly buyer/customer-owned,
+        keep it out of the customer setup form. Developer credentials live in the Nexus
+        credential vault and are validated by product technical checks instead.
+      */
+      return false;
+    }
+
 
 
 async function resolveProductFromCustomerAutomation(automation) {
@@ -195,14 +317,10 @@ async function resolveProductFromCustomerAutomation(automation) {
     (Array.isArray(automation.product) ? automation.product[0] : automation.product) ||
     null;
 
-  if (
-    possibleProduct &&
-    (
-      possibleProduct.setup_schema ||
-      possibleProduct.credential_schema ||
-      possibleProduct.title
-    )
-  ) {
+  const joinedSetupSchema = normalizeSetupSchema(possibleProduct?.setup_schema);
+  const joinedCredentialSchema = normalizeSetupSchema(possibleProduct?.credential_schema);
+
+  if (possibleProduct && (joinedSetupSchema.length || joinedCredentialSchema.length)) {
     return possibleProduct;
   }
 
@@ -227,7 +345,12 @@ async function resolveProductFromCustomerAutomation(automation) {
     const { data, error } = await NexusDB.getAutomationById(automationId);
 
     if (!error && data) {
-      return data;
+      return {
+        ...(possibleProduct || {}),
+        ...data,
+        setup_schema: data.setup_schema || possibleProduct?.setup_schema || [],
+        credential_schema: data.credential_schema || possibleProduct?.credential_schema || []
+      };
     }
 
     console.warn("Fallback getAutomationById failed:", error);
@@ -259,10 +382,38 @@ async function resolveProductFromCustomerAutomation(automation) {
         return;
       }
 
-      const [{ data: automation, error }, { data: submission }] = await Promise.all([
-        NexusDB.getBuyerCustomerAutomationById(customerAutomationId),
-        NexusDB.getLatestSetupSubmission(customerAutomationId)
-      ]);
+      let automation = null;
+      let submission = null;
+      let error = null;
+      let loadedProduct = null;
+
+      if (typeof NexusDB.getBuyerAutomationSetupData === "function") {
+        const serverResult = await NexusDB.getBuyerAutomationSetupData(customerAutomationId);
+
+        if (!serverResult.error && serverResult.data?.customer_automation) {
+          automation = {
+            ...serverResult.data.customer_automation,
+            automations: serverResult.data.automation || null,
+            orders: serverResult.data.order || null
+          };
+          loadedProduct = serverResult.data.automation || null;
+          submission = serverResult.data.latest_submission || null;
+        } else {
+          error = serverResult.error || null;
+          console.warn("Server setup loader failed, falling back to browser query:", serverResult.error);
+        }
+      }
+
+      if (!automation) {
+        const [{ data: fallbackAutomation, error: fallbackError }, { data: fallbackSubmission }] = await Promise.all([
+          NexusDB.getBuyerCustomerAutomationById(customerAutomationId),
+          NexusDB.getLatestSetupSubmission(customerAutomationId)
+        ]);
+
+        automation = fallbackAutomation;
+        submission = fallbackSubmission;
+        error = fallbackError;
+      }
 
       if (error || !automation) {
         root.innerHTML = `
@@ -276,7 +427,7 @@ async function resolveProductFromCustomerAutomation(automation) {
       }
 
       activeCustomerAutomation = automation;
-activeProduct = await resolveProductFromCustomerAutomation(automation);
+activeProduct = loadedProduct || await resolveProductFromCustomerAutomation(automation);
 latestSubmission = submission;
 
 renderSetupForm(root);
@@ -290,9 +441,10 @@ renderSetupForm(root);
         : automation.orders || {};
 
       const setupSchema = normalizeSetupSchema(product.setup_schema);
-      const credentialSchema = normalizeSetupSchema(product.credential_schema);
+      const allCredentialSchema = normalizeSetupSchema(product.credential_schema);
+      const credentialSchema = allCredentialSchema.filter(field => isBuyerOwnedCredentialField(field, product));
 
-      const existingAnswers = latestSubmission?.answers || {};
+      const existingAnswers = mergeSetupAnswers(latestSubmission);
       const installType = automation.install_type || order.install_type || "self_serve";
      const hasSubmitted = !!latestSubmission;
 const isGuided = installType === "nexus_guided";
@@ -334,10 +486,8 @@ const setupFieldsHtml = setupSchema.length
         : `
           <div class="full">
             <div class="error">
-              <strong>This automation has no setup schema loaded.</strong><br>
-              The product may have a schema in Supabase, but this setup page did not receive it.
-              Check that customer_automations.automation_id points to the correct automation and that
-              NexusDB.getBuyerCustomerAutomationById joins the automations table with setup_schema and credential_schema.
+              <strong>This automation setup is not ready yet.</strong><br>
+              Nexus could not load the setup questions for this automation. Please message Nexus from your dashboard and we will fix the setup link.
             </div>
           </div>
         `
@@ -513,23 +663,23 @@ ${
                     ? `
                       <div>
                         <label>Best contact person</label>
-                        <input class="input" name="guided_contact_name" value="${escapeHtml(existingAnswers.guided_contact_name || "")}" placeholder="Name">
+                        <input class="input" name="guided_contact_name" value="${escapeHtml(answerValue(existingAnswers, "guided_contact_name") || "")}" placeholder="Name">
                       </div>
 
                       <div>
                         <label>Preferred contact method</label>
                         <select class="select" name="guided_contact_method">
                           <option value="">Choose...</option>
-                          <option value="Email" ${existingAnswers.guided_contact_method === "Email" ? "selected" : ""}>Email</option>
-                          <option value="Phone" ${existingAnswers.guided_contact_method === "Phone" ? "selected" : ""}>Phone</option>
-                          <option value="WhatsApp" ${existingAnswers.guided_contact_method === "WhatsApp" ? "selected" : ""}>WhatsApp</option>
-                          <option value="Google Meet" ${existingAnswers.guided_contact_method === "Google Meet" ? "selected" : ""}>Google Meet</option>
+                          <option value="Email" ${answerValue(existingAnswers, "guided_contact_method") === "Email" ? "selected" : ""}>Email</option>
+                          <option value="Phone" ${answerValue(existingAnswers, "guided_contact_method") === "Phone" ? "selected" : ""}>Phone</option>
+                          <option value="WhatsApp" ${answerValue(existingAnswers, "guided_contact_method") === "WhatsApp" ? "selected" : ""}>WhatsApp</option>
+                          <option value="Google Meet" ${answerValue(existingAnswers, "guided_contact_method") === "Google Meet" ? "selected" : ""}>Google Meet</option>
                         </select>
                       </div>
 
                       <div class="full">
                         <label>Preferred setup time / notes</label>
-                        <textarea class="textarea" name="guided_notes" placeholder="Tell Nexus when and how to contact your team.">${escapeHtml(existingAnswers.guided_notes || "")}</textarea>
+                        <textarea class="textarea" name="guided_notes" placeholder="Tell Nexus when and how to contact your team.">${escapeHtml(answerValue(existingAnswers, "guided_notes") || "")}</textarea>
                       </div>
                     `
                     : ""
@@ -588,18 +738,20 @@ ${
       });
 
       if (error) {
-        NexusUI.toast(error.message || "Could not submit setup.");
+        const rawMessage = String(error.message || "");
+        const safeMessage =
+          /n8n|webhook|runtime|supabase|authorization header|requested webhook|function/i.test(rawMessage)
+            ? "Your setup could not be fully started yet. Nexus has received the issue and will review the automation."
+            : rawMessage || "Could not submit setup.";
+
+        NexusUI.toast(safeMessage);
 
         document.getElementById("setupSubmitResult").innerHTML = `
-  <div class="success" style="margin-top:1rem">
-    <strong>Setup submitted.</strong><br>
-    ${
-      data?.triggered_n8n
-        ? "Your automation is running now. Outputs or errors will appear in your dashboard."
-        : "Nexus has received your setup details. Your automation will be prepared next."
-    }
-  </div>
-`;
+          <div class="error" style="margin-top:1rem">
+            <strong>Setup needs review.</strong><br>
+            ${escapeHtml(safeMessage)}
+          </div>
+        `;
 
         button.disabled = false;
         button.textContent = originalText;
@@ -616,7 +768,7 @@ ${
           ${
             data?.triggered_n8n
               ? "Your automation has started. Outputs will appear in your dashboard when it finishes."
-              : "Nexus has received your setup details. Your automation will be prepared next."
+              : data?.message || "Nexus has received your setup details. Your automation will be prepared next."
           }
         </div>
       `;
@@ -624,7 +776,7 @@ ${
       NexusUI.toast(
         data?.triggered_n8n
           ? "Setup submitted. Automation started."
-          : "Setup submitted."
+          : "Setup submitted. Nexus is preparing the automation."
       );
 
       button.disabled = false;

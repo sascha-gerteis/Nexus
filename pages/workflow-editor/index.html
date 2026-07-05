@@ -61,12 +61,12 @@
   </main>
 
   <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
-  <script src="/assets/js/nexus-db.js?v=20260624-analytics"></script>
+  <script src="/assets/js/nexus-db.js?v=20260704-output-body-repair"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const automationId = params.get("automation_id") || params.get("id") || "";
     const returnTo = params.get("return") || "";
-    const editorBuild = "20260620-manual-run-sync-credential-scan";
+    const editorBuild = "20260704-submit-output-legacy-body-repair";
     let editorSession = null;
     let editorProduct = null;
     let editorCredentialScan = null;
@@ -519,6 +519,15 @@
         return;
       }
 
+      setStatus("Repairing Nexus runtime nodes before opening editor...", "info");
+      const repaired = await NexusDB.importN8nWorkflow(automationId);
+      if (repaired.error) {
+        setStatus(repaired.error.message || "Could not repair workflow before opening editor.", "error");
+        NexusUI.toast(repaired.error.message || "Could not repair workflow before opening editor.");
+        return;
+      }
+      editorProduct = repaired.data?.product || editorProduct;
+
       const { data, error } = await NexusDB.createN8nEditorSession(automationId);
       if (error) {
         setStatus(error.message || "Could not open workflow editor.", "error");
@@ -562,9 +571,22 @@
         const { data, error } = await NexusDB.syncN8nEditorWorkflow(automationId);
         if (error) throw new Error(error.message || "Could not sync workflow.");
         editorProduct = data?.product || editorProduct;
+
+        /*
+          Pulling from n8n is not enough: developers may have edited around the
+          Nexus-managed trigger/context/output nodes, and older imports can keep
+          a stale HTTP Request body shape. Re-run the importer after every sync
+          so the hosted workflow is rewritten with the current Nexus runtime
+          contract before any technical test.
+        */
+        const normalized = await NexusDB.importN8nWorkflow(automationId);
+        if (normalized.error) {
+          throw new Error(normalized.error.message || "Workflow synced, but Nexus could not repair the runtime nodes.");
+        }
+        editorProduct = normalized.data?.product || data?.product || editorProduct;
         latestTestResult = null;
-        setStatus(data?.message || "Workflow synced. Run a fresh technical check before submitting.", "success");
-        NexusUI.toast(data?.message || "Workflow synced.");
+        setStatus("Workflow synced and Nexus runtime nodes repaired. Run a fresh technical check before submitting.", "success");
+        NexusUI.toast("Workflow synced and repaired.");
         await refreshWorkflowHelper({ silent: true });
       } catch (error) {
         setStatus(error.message || "Could not sync workflow.", "error");

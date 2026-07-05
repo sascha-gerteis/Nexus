@@ -508,6 +508,189 @@ function updateCustomerWebhookPath(workflow: any, webhookPath: string) {
   return workflow;
 }
 
+function buildNexusSubmitOutputBodyExpression() {
+  return `={{ (() => {
+  const context = $("Nexus Runtime Context").first().json || {};
+  const source = $json || {};
+  const outputKeys = [
+    "NEXUS_FINAL_OUTPUT",
+    "Nexus_final_output",
+    "nexus_final_output",
+    "nexusFinalOutput",
+    "final_output",
+    "finalOutput",
+    "automation_output",
+    "automationOutput",
+    "output",
+    "result",
+    "report",
+    "payload",
+    "data",
+    "body"
+  ];
+  const isPlainObject = (value) => value && typeof value === "object" && !Array.isArray(value);
+  const maybeParse = (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (!((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]")))) {
+      return value;
+    }
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  };
+  const unwrap = (value) => {
+    let current = maybeParse(value);
+    for (let index = 0; index < 4; index += 1) {
+      if (Array.isArray(current)) {
+        current = current.length === 1 ? maybeParse(current[0]) : current;
+        continue;
+      }
+      if (!isPlainObject(current)) return current;
+      const key = outputKeys.find((candidate) => {
+        const candidateValue = current[candidate];
+        return candidateValue !== undefined && candidateValue !== null && candidateValue !== "";
+      });
+      if (!key) return current;
+      current = maybeParse(current[key]);
+    }
+    return current;
+  };
+  const finalValue = unwrap(source);
+  const objectOutput = isPlainObject(finalValue) ? finalValue : {};
+  const textOutput = typeof finalValue === "string" ? finalValue : "";
+  const looksLikeHtml = /<[a-z][\\s\\S]*>/i.test(textOutput);
+  const contentHtml =
+    objectOutput.content_html ||
+    objectOutput.contentHtml ||
+    objectOutput.html ||
+    objectOutput.HTML ||
+    objectOutput.report_html ||
+    objectOutput.reportHtml ||
+    (looksLikeHtml ? textOutput : "");
+  const contentText =
+    objectOutput.content_text ||
+    objectOutput.contentText ||
+    objectOutput.text ||
+    objectOutput.markdown ||
+    objectOutput.output_text ||
+    objectOutput.outputText ||
+    (!contentHtml ? textOutput : "");
+  const contentJson =
+    objectOutput.content_json ||
+    objectOutput.contentJson ||
+    objectOutput.json ||
+    (isPlainObject(finalValue) || Array.isArray(finalValue)
+      ? finalValue
+      : (textOutput ? { value: textOutput } : source));
+
+  return JSON.stringify({
+    customer_automation_id:
+      context.system?.customer_automation_id ||
+      source.customer_automation_id ||
+      source.system?.customer_automation_id ||
+      source.body?.customer_automation_id ||
+      source.body?.system?.customer_automation_id ||
+      "",
+    status: objectOutput.status || "success",
+    output_type: objectOutput.output_type || objectOutput.outputType || "report",
+    title:
+      objectOutput.title ||
+      objectOutput.report_title ||
+      objectOutput.reportTitle ||
+      objectOutput.name ||
+      "Automation output",
+    summary: objectOutput.summary || objectOutput.description || "",
+    content_html: contentHtml,
+    content_text: contentText,
+    file_url: objectOutput.file_url || objectOutput.fileUrl || "",
+    storage_path: objectOutput.storage_path || objectOutput.storagePath || "",
+    content_json: contentJson
+  });
+})() }}`;
+}
+
+function buildNexusSubmitOutputBodyParameters() {
+  return {
+    parameters: [
+      {
+        name: "customer_automation_id",
+        value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}',
+      },
+      {
+        name: "status",
+        value: "success",
+      },
+      {
+        name: "output_type",
+        value: '={{ $json.output_type || $json.outputType || "report" }}',
+      },
+      {
+        name: "title",
+        value:
+          '={{ $json.title || $json.report_title || $json.reportTitle || $json.name || "Automation output" }}',
+      },
+      {
+        name: "summary",
+        value: '={{ $json.summary || $json.description || "" }}',
+      },
+      {
+        name: "content_html",
+        value:
+          '={{ $json.content_html || $json.contentHtml || $json.html || $json.HTML || $json.report_html || $json.reportHtml || "" }}',
+      },
+      {
+        name: "content_text",
+        value:
+          '={{ $json.content_text || $json.contentText || $json.text || $json.markdown || $json.output_text || $json.outputText || "" }}',
+      },
+      {
+        name: "file_url",
+        value: '={{ $json.file_url || $json.fileUrl || "" }}',
+      },
+      {
+        name: "storage_path",
+        value: '={{ $json.storage_path || $json.storagePath || "" }}',
+      },
+      {
+        name: "content_json",
+        value:
+          '={{ JSON.stringify($json.content_json || $json.contentJson || $json.json || $json.data || $json) }}',
+      },
+    ],
+  };
+}
+
+function ensureMainConnection(connections: any, sourceName: string, targetName: string, outputIndex = 0) {
+  if (!connections[sourceName]) {
+    connections[sourceName] = { main: [] };
+  }
+
+  if (!Array.isArray(connections[sourceName].main)) {
+    connections[sourceName].main = [];
+  }
+
+  while (connections[sourceName].main.length <= outputIndex) {
+    connections[sourceName].main.push([]);
+  }
+
+  const group = connections[sourceName].main[outputIndex];
+  const exists = group.some((connection: any) => connection?.node === targetName);
+
+  if (!exists) {
+    group.push({
+      node: targetName,
+      type: "main",
+      index: 0,
+    });
+  }
+
+  return connections;
+}
+
 function ensureSubmitOutputUsesRuntimePayload(workflow: any, callbackUrl: string) {
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
   const submitNode = nodes.find((node: any) => node?.name === "Nexus Submit Output");
@@ -516,12 +699,56 @@ function ensureSubmitOutputUsesRuntimePayload(workflow: any, callbackUrl: string
     throw new Error("Master workflow has no Nexus Submit Output node. Re-import the product workflow first.");
   }
 
+  workflow.nodes = nodes.filter((node: any) => node?.name !== "Nexus Prepare Output Payload");
+
+  const connections = workflow.connections || {};
+  const incomingSources: string[] = [];
+
+  for (const [sourceName, source] of Object.entries(connections || {}) as any[]) {
+    const main = Array.isArray(source?.main) ? source.main : [];
+
+    source.main = main.map((group: any) => {
+      if (!Array.isArray(group)) return group;
+
+      let hadSubmit = false;
+      let hadPrepare = false;
+      const filtered = group.filter((connection: any) => {
+        if (connection?.node === "Nexus Submit Output") {
+          hadSubmit = true;
+          return false;
+        }
+
+        if (connection?.node === "Nexus Prepare Output Payload") {
+          hadPrepare = true;
+          return false;
+        }
+
+        return true;
+      });
+
+      if ((hadSubmit || hadPrepare) && sourceName !== "Nexus Prepare Output Payload") {
+        incomingSources.push(sourceName);
+      }
+
+      return filtered;
+    });
+  }
+
+  if (connections["Nexus Prepare Output Payload"]) {
+    delete connections["Nexus Prepare Output Payload"];
+  }
+
+  for (const sourceName of incomingSources) {
+    ensureMainConnection(connections, sourceName, "Nexus Submit Output", 0);
+  }
+
+  workflow.connections = connections;
+
   /*
     Keep only runtime system fields dynamic.
     Customer setup values and credentials are hardcoded into the customer clone.
   */
   submitNode.parameters = {
-    ...(submitNode.parameters || {}),
     method: "POST",
     url: callbackUrl,
     sendHeaders: true,
@@ -529,17 +756,27 @@ function ensureSubmitOutputUsesRuntimePayload(workflow: any, callbackUrl: string
       parameters: [
         {
           name: "x-nexus-runtime-secret",
-          value: "={{ $json.body.system.runtime_secret || $json.system.runtime_secret }}",
+          value:
+            '={{ $("Nexus Runtime Context").first().json.system.runtime_secret || $json.body?.system?.runtime_secret || $json.system?.runtime_secret }}',
+        },
+        {
+          name: "x-nexus-customer-automation-id",
+          value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}',
+        },
+        {
+          name: "Content-Type",
+          value: "application/json",
         },
       ],
     },
     sendBody: true,
     bodyContentType: "json",
-    specifyBody: "json",
-    jsonBody:
-      "={{ JSON.stringify({ customer_automation_id: $json.body?.customer_automation_id || $json.body?.system?.customer_automation_id || $json.customer_automation_id || $json.system?.customer_automation_id, status: 'success', output_type: $json.output_type || 'report', title: $json.title || 'Automation output', summary: $json.summary || '', content_html: $json.content_html || $json.html || '', content_text: $json.content_text || '', file_url: $json.file_url || '', storage_path: $json.storage_path || '', content_json: $json.content_json || {} }) }}",
-    options: submitNode.parameters?.options || {},
+    specifyBody: "keypair",
+    bodyParameters: buildNexusSubmitOutputBodyParameters(),
+    options: {},
   };
+  submitNode.type = "n8n-nodes-base.httpRequest";
+  submitNode.typeVersion = 4.2;
 
   return workflow;
 }
@@ -554,19 +791,15 @@ function validateCopiedWorkflow(workflow: any) {
   );
 
   const hasFinalOutput = Boolean(nodes.find((node: any) => node?.name === "NEXUS_FINAL_OUTPUT"));
-  const hasRuntimeMerge = Boolean(nodes.find((node: any) => node?.name === "Nexus Runtime Merge"));
+  const hasRuntimeContext = Boolean(nodes.find((node: any) => node?.name === "Nexus Runtime Context"));
   const hasSubmitOutput = Boolean(nodes.find((node: any) => node?.name === "Nexus Submit Output"));
 
   if (!hasWebhook) {
     throw new Error("Copied workflow is missing Nexus Webhook Trigger.");
   }
 
-  if (!hasFinalOutput) {
-    throw new Error("Copied workflow is missing NEXUS_FINAL_OUTPUT.");
-  }
-
-  if (!hasRuntimeMerge) {
-    throw new Error("Copied workflow is missing Nexus Runtime Merge. Re-import the product master workflow first.");
+  if (!hasRuntimeContext) {
+    throw new Error("Copied workflow is missing Nexus Runtime Context. Re-import the product master workflow first.");
   }
 
   if (!hasSubmitOutput) {
@@ -577,7 +810,7 @@ function validateCopiedWorkflow(workflow: any) {
     nodeNames,
     hasWebhook,
     hasFinalOutput,
-    hasRuntimeMerge,
+    hasRuntimeContext,
     hasSubmitOutput,
   };
 }
@@ -910,13 +1143,26 @@ Deno.serve(async (req) => {
       return errorResponse("Missing N8N_BASE_URL or N8N_API_KEY.", 500);
     }
 
-    const { user, error: authError } = await requireBuyer(req, supabaseUrl, anonKey);
+    const body = await req.json().catch(() => ({}));
+    const runtimeSecret = cleanString(env("NEXUS_RUNTIME_SECRET"));
+    const providedRuntimeSecret = cleanString(
+      req.headers.get("x-nexus-runtime-secret") ||
+        body.runtime_secret ||
+        body.system?.runtime_secret,
+    );
+    const isInternalRuntime = Boolean(runtimeSecret && providedRuntimeSecret === runtimeSecret);
 
-    if (authError || !user) {
-      return errorResponse(authError || "Login required.", 401);
+    let user: any = null;
+
+    if (!isInternalRuntime) {
+      const authResult = await requireBuyer(req, supabaseUrl, anonKey);
+      user = authResult.user;
+
+      if (authResult.error || !user) {
+        return errorResponse(authResult.error || "Login required.", 401);
+      }
     }
 
-    const body = await req.json().catch(() => ({}));
     const customerAutomationId = cleanString(body.customer_automation_id);
 
     if (!customerAutomationId) {
@@ -924,11 +1170,13 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: profile } = await adminClient
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
+    const { data: profile } = user?.id
+      ? await adminClient
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle()
+      : { data: null };
 
     const isAdmin = profile?.role === "admin";
     const isDeveloper = profile?.role === "developer";
@@ -986,7 +1234,7 @@ Deno.serve(async (req) => {
       `)
       .eq("id", customerAutomationId);
 
-    if (!isAdmin && !isDeveloper) {
+    if (!isInternalRuntime && !isAdmin && !isDeveloper) {
       customerAutomationQuery = customerAutomationQuery.eq("buyer_id", user.id);
     }
 
@@ -1046,7 +1294,7 @@ Deno.serve(async (req) => {
       secrets: secretValues,
       customer: {
         id: customerAutomation.buyer_id || "",
-        email: order?.buyer_email || user.email || "",
+        email: order?.buyer_email || user?.email || "",
         name: order?.buyer_name || "",
         company: order?.buyer_company || "",
       },

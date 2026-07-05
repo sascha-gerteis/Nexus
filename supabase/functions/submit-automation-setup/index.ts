@@ -548,9 +548,142 @@ function pickFirstString(...values: unknown[]) {
   return "";
 }
 
+function cleanBaseUrl(value: string) {
+  return cleanString(value).replace(/\/+$/, "");
+}
+
+async function n8nApiRequest(path: string, options: RequestInit = {}) {
+  const baseUrl = cleanBaseUrl(env("N8N_BASE_URL"));
+  const apiKey = env("N8N_API_KEY");
+
+  if (!baseUrl || !apiKey) {
+    throw new Error("Missing N8N_BASE_URL or N8N_API_KEY Supabase secrets.");
+  }
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "X-N8N-API-KEY": apiKey,
+      ...(options.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+  let data: any = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message ||
+        data?.error ||
+        data?.raw ||
+        `n8n API request failed with status ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
+function runtimeWorkflowId(customerAutomation: any, automation: any, order: any = null) {
+  return pickFirstString(
+    customerAutomation?.n8n_workflow_id,
+    automation?.n8n_workflow_id,
+    order?.n8n_workflow_id,
+  );
+}
+
+async function activateRuntimeWorkflow(customerAutomation: any, automation: any, order: any = null) {
+  const workflowId = runtimeWorkflowId(customerAutomation, automation, order);
+  if (!workflowId) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "missing_n8n_workflow_id",
+    };
+  }
+
+  try {
+    const result = await n8nApiRequest(
+      `/api/v1/workflows/${encodeURIComponent(workflowId)}/activate`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    );
+
+    return {
+      ok: true,
+      workflow_id: workflowId,
+      result,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.toLowerCase().includes("active")) {
+      return {
+        ok: true,
+        already_active: true,
+        workflow_id: workflowId,
+      };
+    }
+
+    return {
+      ok: false,
+      workflow_id: workflowId,
+      error: message,
+    };
+  }
+}
+
 function buildCallbackUrl() {
   const supabaseUrl = env("SUPABASE_URL").replace(/\/+$/, "");
   return `${supabaseUrl}/functions/v1/runtime-submit-output`;
+}
+
+async function provisionCustomerWorkflowBeforeTrigger(params: {
+  supabaseUrl: string;
+  token: string;
+  customerAutomationId: string;
+}) {
+  const response = await fetch(
+    `${params.supabaseUrl.replace(/\/+$/, "")}/functions/v1/provision-customer-workflow`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${params.token}`,
+      },
+      body: JSON.stringify({
+        customer_automation_id: params.customerAutomationId,
+      }),
+    },
+  );
+
+  const text = await response.text();
+  let data: any = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok || data?.ok === false) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        data?.raw ||
+        `Customer workflow provisioning failed with status ${response.status}`,
+    );
+  }
+
+  return data;
 }
 
 function addMonths(date: Date, months: number) {
@@ -1001,6 +1134,18 @@ async function loadCustomerAutomation(adminClient: any, id: string) {
     }
   }
 
+  if (!automation && order?.automation_id) {
+    const result = await adminClient
+      .from("automations")
+      .select("*")
+      .eq("id", order.automation_id)
+      .maybeSingle();
+
+    if (!result.error) {
+      automation = result.data;
+    }
+  }
+
   return {
     data,
     automation,
@@ -1239,6 +1384,21 @@ function classifyImmediateWebhookError(message: string) {
   const lower = cleanString(message).toLowerCase();
 
   if (
+    lower.includes("webhook failed") ||
+    lower.includes("webhook") ||
+    lower.includes("not registered") ||
+    lower.includes("requested webhook") ||
+    lower.includes("n8n")
+  ) {
+    return {
+      needs_customer_action: false,
+      error_code: "WORKFLOW_RUNTIME_REVIEW_REQUIRED",
+      customer_message:
+        "Your setup was submitted. Nexus is preparing the automation and will add the output to your dashboard when it is ready.",
+    };
+  }
+
+  if (
     lower.includes("access token") ||
     lower.includes("oauth") ||
     lower.includes("credential") ||
@@ -1261,6 +1421,31 @@ function classifyImmediateWebhookError(message: string) {
   };
 }
 
+async function loadLatestSetupSubmission(adminClient: any, customerAutomationId: string, buyerId: string) {
+  const { data, error } = await adminClient
+    .from("automation_setup_submissions")
+    .select("*")
+    .eq("customer_automation_id", customerAutomationId)
+    .eq("buyer_id", buyerId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+  return data || null;
+}
+
+function isUnregisteredN8nWebhookError(message: string) {
+  const lower = cleanString(message).toLowerCase();
+  return (
+    lower.includes("webhook failed (404)") &&
+    (
+      lower.includes("not registered") ||
+      lower.includes("requested webhook")
+    )
+  );
+}
+
 async function recordTriggerError(
   adminClient: any,
   customerAutomation: any,
@@ -1269,17 +1454,18 @@ async function recordTriggerError(
 ) {
   const now = new Date().toISOString();
   const classification = classifyImmediateWebhookError(message);
+  const customerActionRequired = Boolean(classification.needs_customer_action);
 
   await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
-    status: classification.needs_customer_action ? "setup_error" : "error",
-    runtime_status: "error",
-    health_status: classification.needs_customer_action ? "needs_customer_action" : "error",
-    setup_status: classification.needs_customer_action ? "needs_update" : "submitted",
+    status: customerActionRequired ? "setup_error" : "setup_submitted",
+    runtime_status: customerActionRequired ? "error" : "not_started",
+    health_status: customerActionRequired ? "needs_customer_action" : "pending",
+    setup_status: customerActionRequired ? "needs_update" : "submitted",
 
-    needs_customer_action: classification.needs_customer_action,
+    needs_customer_action: customerActionRequired,
     last_error_code: classification.error_code,
     last_error_node: "n8n webhook trigger",
-    last_error_message: classification.customer_message,
+    last_error_message: customerActionRequired ? classification.customer_message : null,
     last_error_details: {
       message,
       raw_error: rawError,
@@ -1304,7 +1490,7 @@ async function recordTriggerError(
     error_message: message,
     customer_message: classification.customer_message,
     raw_error: rawError || {},
-    needs_customer_action: classification.needs_customer_action,
+    needs_customer_action: customerActionRequired,
     resolved: false,
     created_at: now,
   });
@@ -1314,10 +1500,10 @@ async function recordTriggerError(
     buyer_id: customerAutomation.buyer_id,
     automation_id: customerAutomation.automation_id,
     order_id: customerAutomation.order_id,
-    event_type: classification.needs_customer_action
+    event_type: customerActionRequired
       ? "customer_action_required"
       : "runtime_error",
-    title: classification.needs_customer_action
+    title: customerActionRequired
       ? "Customer action required"
       : "Automation trigger failed",
     message: JSON.stringify({
@@ -1327,6 +1513,8 @@ async function recordTriggerError(
     }),
     created_by: "runtime",
   });
+
+  return classification;
 }
 
 Deno.serve(async (req) => {
@@ -1442,8 +1630,34 @@ Deno.serve(async (req) => {
       return errorResponse("You do not have access to this automation.", 403);
     }
 
+    const action = lowerString(body.action);
     const setupSchema = normalizeJsonArray(automation.setup_schema);
     const credentialSchema = normalizeJsonArray(automation.credential_schema);
+
+    if (action === "load_setup" || action === "get_setup" || action === "setup_form") {
+      const latestSubmission = await loadLatestSetupSubmission(
+        adminClient,
+        customerAutomation.id,
+        customerAutomation.buyer_id || user.id,
+      );
+
+      return jsonResponse({
+        ok: true,
+        customer_automation: customerAutomation,
+        automation: {
+          ...automation,
+          setup_schema: setupSchema,
+          credential_schema: credentialSchema,
+        },
+        order,
+        latest_submission: latestSubmission,
+        schema_counts: {
+          setup: setupSchema.length,
+          credential: credentialSchema.length,
+        },
+      });
+    }
+
     const privateSheetProvision = await provisionPrivateCustomerSheetIfNeeded(
       adminClient,
       automation,
@@ -1582,7 +1796,60 @@ Deno.serve(async (req) => {
       });
     }
 
-    const runtimeType = getRuntimeType(customerAutomation, automation);
+    let runtimeType = getRuntimeType(customerAutomation, automation);
+
+    const hasManagedWorkflowTemplate = Boolean(
+      customerAutomation.n8n_workflow_id ||
+        automation?.n8n_workflow_id ||
+        order?.n8n_workflow_id ||
+        customerAutomation.runtime_webhook_url ||
+        automation?.runtime_webhook_url ||
+        order?.runtime_webhook_url,
+    );
+
+    if (runtimeType === "n8n_managed" || hasManagedWorkflowTemplate) {
+      try {
+        const provisionResult = await provisionCustomerWorkflowBeforeTrigger({
+          supabaseUrl,
+          token,
+          customerAutomationId: customerAutomation.id,
+        });
+
+        if (provisionResult?.customer_automation) {
+          Object.assign(customerAutomation, provisionResult.customer_automation);
+        }
+
+        runtimeType = getRuntimeType(customerAutomation, automation);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error || "");
+        const classification = await recordTriggerError(
+          adminClient,
+          customerAutomation,
+          `Customer workflow provisioning failed before trigger: ${message}`,
+          { source: "provision-customer-workflow" },
+        );
+
+        if (!isAdmin && !isDeveloper) {
+          return jsonResponse({
+            ok: true,
+            status: "submitted",
+            triggered_n8n: false,
+            runtime_review_required: true,
+            submission_id: submission.id,
+            setup_keys: Object.keys(setupAnswers),
+            credential_keys_available: Object.keys(savedSecrets),
+            message: classification?.customer_message ||
+              "Your setup was submitted. Nexus is preparing the automation and will add the output to your dashboard when it is ready.",
+          });
+        }
+
+        return errorResponse(message, 502, {
+          status: "provision_failed",
+          triggered_n8n: false,
+        });
+      }
+    }
+
     const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
 
     const shouldTriggerN8n =
@@ -1625,16 +1892,79 @@ Deno.serve(async (req) => {
         submissionId: submission.id,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      let message = error instanceof Error ? error.message : String(error);
+      let activationRetry: any = null;
 
-      await recordTriggerError(adminClient, customerAutomation, message, {
-        webhook_url: webhookUrl,
-      });
+      if (isUnregisteredN8nWebhookError(message)) {
+        activationRetry = await activateRuntimeWorkflow(customerAutomation, automation, order);
 
-      return errorResponse(message, 502, {
-        status: "trigger_failed",
-        triggered_n8n: false,
-      });
+        if (activationRetry?.ok) {
+          try {
+            triggerResult = await triggerN8nWebhook({
+              webhookUrl,
+              customerAutomation,
+              automation,
+              order,
+              user: isAdmin || isDeveloper ? null : user,
+              setupAnswers,
+              secrets: savedSecrets,
+              savedCredentialKeys,
+              submissionId: submission.id,
+            });
+          } catch (retryError) {
+            message = retryError instanceof Error ? retryError.message : String(retryError);
+          }
+        }
+      }
+
+      if (triggerResult) {
+        await insertAutomationEvent(adminClient, {
+          customer_automation_id: customerAutomation.id,
+          buyer_id: customerAutomation.buyer_id,
+          automation_id: customerAutomation.automation_id,
+          order_id: customerAutomation.order_id,
+          event_type: "runtime_webhook_recovered",
+          title: "Runtime webhook activated and retried",
+          message: JSON.stringify({
+            webhook_path: getRuntimeWebhookPath(customerAutomation, automation, order),
+            activation_retry: activationRetry,
+          }),
+          created_by: "runtime",
+        });
+      } else {
+        const classification = await recordTriggerError(adminClient, customerAutomation, message, {
+          webhook_url: webhookUrl,
+          workflow_id: runtimeWorkflowId(customerAutomation, automation, order),
+          activation_retry: activationRetry,
+        });
+
+        if (!isAdmin && !isDeveloper) {
+          if (classification?.needs_customer_action) {
+            return errorResponse(classification.customer_message, 400, {
+              status: "customer_action_required",
+              triggered_n8n: false,
+            });
+          }
+
+          return jsonResponse({
+            ok: true,
+            status: "submitted",
+            triggered_n8n: false,
+            runtime_review_required: true,
+            submission_id: submission.id,
+            setup_keys: Object.keys(setupAnswers),
+            credential_keys_available: Object.keys(savedSecrets),
+            message: classification?.customer_message ||
+              "Your setup was submitted. Nexus is preparing the automation and will add the output to your dashboard when it is ready.",
+          });
+        }
+
+        return errorResponse(message, 502, {
+          status: "trigger_failed",
+          triggered_n8n: false,
+          activation_retry: activationRetry,
+        });
+      }
     }
 
     const executionId = triggerResult?.executionId || "";

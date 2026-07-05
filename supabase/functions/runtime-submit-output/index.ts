@@ -17,6 +17,26 @@ function asJsonObject(value: unknown) {
   return value as Record<string, unknown>;
 }
 
+function parseMaybeJson(value: unknown) {
+  if (typeof value !== "string") return value;
+
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  if (
+    !((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]")))
+  ) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
 function stringifySafe(value: unknown) {
   try {
     if (typeof value === "string") return value;
@@ -433,8 +453,24 @@ Deno.serve(async (req) => {
       return errorResponse("Missing NEXUS_RUNTIME_SECRET.", 500);
     }
 
+    const requestUrl = new URL(req.url);
     const headerSecret = req.headers.get("x-nexus-runtime-secret") || "";
-    const body = await req.json().catch(() => ({}));
+    const fallbackCustomerAutomationId = pickFirstString(
+      req.headers.get("x-nexus-customer-automation-id"),
+      requestUrl.searchParams.get("customer_automation_id"),
+      requestUrl.searchParams.get("customerAutomationId"),
+    );
+    const parsedBody = await req.json().catch(() => ({}));
+    if (parsedBody === null && !fallbackCustomerAutomationId) {
+      return errorResponse(
+        "runtime-submit-output received a null JSON body. Reprovision this customer workflow so the Nexus Submit Output node sends its output payload.",
+        400,
+      );
+    }
+    const body =
+      parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
+        ? parsedBody
+        : {};
 
     const bodySecret =
       cleanString(body.runtime_secret) ||
@@ -452,11 +488,15 @@ Deno.serve(async (req) => {
     const customerAutomationId = cleanString(
       body.customer_automation_id ||
         body.system?.customer_automation_id ||
-        body.customerAutomationId,
+        body.customerAutomationId ||
+        fallbackCustomerAutomationId,
     );
 
     if (!customerAutomationId) {
-      return errorResponse("customer_automation_id is required.", 400);
+      return errorResponse(
+        "customer_automation_id is required. The Nexus Submit Output node did not send a valid JSON body.",
+        400,
+      );
     }
 
     const status = cleanString(body.status || "success").toLowerCase();
@@ -633,7 +673,7 @@ Deno.serve(async (req) => {
       summary: cleanString(body.summary),
       content_text: cleanString(body.content_text),
       content_html: cleanString(body.content_html || body.html),
-      content_json: asJsonObject(body.content_json || body.data || {}),
+      content_json: asJsonObject(parseMaybeJson(body.content_json) || body.data || {}),
       file_url: cleanString(body.file_url),
       storage_path: cleanString(body.storage_path),
 

@@ -2105,45 +2105,6 @@ async function getBuyerOrderById(orderId) {
   const { data: user } = await getUser();
 
   if (!user) {
-    return { data: null, error: { message: "Login required." } };
-  }
-
-  return supabase
-    .from("orders")
-    .select("*, automations(title, slug, category, icon, color), developers(display_name)")
-    .eq("id", orderId)
-    .eq("buyer_id", user.id)
-    .maybeSingle();
-}
-
-async function getCustomerAutomationByOrderId(orderId) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return {
-      data: null,
-      error: { message: "You must be logged in." }
-    };
-  }
-
-  return supabase
-    .from("customer_automations")
-    .select(`
-      *,
-      automations(*),
-      orders(*)
-    `)
-    .eq("order_id", orderId)
-    .eq("buyer_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-}
-
-async function getBuyerOrderById(orderId) {
-  const { data: user } = await getUser();
-
-  if (!user) {
     return {
       data: null,
       error: { message: "Login required." }
@@ -2170,7 +2131,7 @@ async function getCustomerAutomationByOrderId(orderId) {
 
   return supabase
     .from("customer_automations")
-    .select("*, automations(title, slug, setup_schema, runtime_type), orders(payment_status, order_status)")
+    .select("*, automations(title, slug, setup_schema, credential_schema, runtime_type), orders(payment_status, order_status, automation_id)")
     .eq("order_id", orderId)
     .eq("buyer_id", user.id)
     .maybeSingle();
@@ -2200,6 +2161,7 @@ async function getBuyerCustomerAutomationById(customerAutomationId) {
         short_description,
         long_description,
         setup_schema,
+        credential_schema,
         runtime_type,
         runtime_webhook_url,
         n8n_workflow_id
@@ -2209,6 +2171,7 @@ async function getBuyerCustomerAutomationById(customerAutomationId) {
         id,
         payment_status,
         order_status,
+        automation_id,
         price_display,
         currency,
         install_type,
@@ -2313,10 +2276,16 @@ async function revokeN8nEditorSession(sessionId) {
 }
 
 async function startN8nWorkflowTest(automationId, options = {}) {
+  if (automationId && !options.skip_import) {
+    const repair = await importN8nWorkflow(automationId);
+    if (repair?.error) return repair;
+  }
+
+  const { skip_import: _skipImport, ...testOptions } = options || {};
   return callNexusFunction("test-n8n-workflow", {
     mode: "start",
     automation_id: automationId,
-    ...options
+    ...testOptions
   });
 }
 
@@ -2590,6 +2559,13 @@ async function getBuyerAutomationOutput(outputId) {
 
 async function submitAutomationSetup(payload) {
   return callNexusFunction("submit-automation-setup", payload);
+}
+
+async function getBuyerAutomationSetupData(customerAutomationId) {
+  return callNexusFunction("submit-automation-setup", {
+    action: "load_setup",
+    customer_automation_id: customerAutomationId
+  });
 }
 
 async function provisionCustomerWorkflow(customerAutomationId) {
@@ -3074,6 +3050,7 @@ listBuyerCustomerAutomations,
 listBuyerAutomationOutputs,
 listBuyerAutomationRuns,
 getBuyerAutomationOutput,
+getBuyerAutomationSetupData,
 submitAutomationSetup,
 provisionCustomerWorkflow,
 runScheduledAutomation,
