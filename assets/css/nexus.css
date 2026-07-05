@@ -14933,9 +14933,97 @@ iframe {
   object-position: top center !important;
 }
 
+#productModal .modal {
+  position: relative;
+}
+
+#productModal .modal-head {
+  padding-right: 3.4rem;
+}
+
+#productModal .modal-head .close {
+  position: absolute;
+  top: .9rem;
+  right: .9rem;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0 !important;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 0;
+  line-height: 1;
+}
+
+#productModal .modal-head .close::before {
+  content: "×";
+  font-size: 1.5rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
 @media (max-width: 1180px) {
   #productModal .modal {
     grid-template-columns: 1fr !important;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1180px) {
+  #productModal.modal-backdrop.open {
+    align-items: center !important;
+    padding: 1rem !important;
+  }
+
+  #productModal .modal {
+    width: min(96vw, 1120px) !important;
+    max-height: calc(100svh - 2rem) !important;
+    overflow: hidden !important;
+    display: grid !important;
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr) !important;
+  }
+
+  #productModal .modal-side,
+  #productModal .modal-main {
+    max-height: calc(100svh - 2rem) !important;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding: .95rem !important;
+  }
+
+  #productModal .modal-side {
+    border-right: 1px solid #edf2f7 !important;
+    border-bottom: 0 !important;
+  }
+
+  #productModal .modal-main {
+    border-top: 0 !important;
+  }
+
+  #productModal .modal-main .preview-window {
+    min-height: clamp(430px, 70svh, 720px) !important;
+  }
+
+  #productModal .modal-main .html-preview-device {
+    height: clamp(440px, 70svh, 720px) !important;
+  }
+
+  #productModal .modal-main .image-preview {
+    min-height: clamp(410px, 68svh, 700px) !important;
+  }
+
+  #productModal .bundle-preview-shell .preview-window {
+    min-height: clamp(420px, 68svh, 700px) !important;
+  }
+
+  #productModal .bundle-workflow-preview .html-preview-device,
+  #productModal .bundle-workflow-preview .image-preview {
+    min-height: clamp(400px, 66svh, 680px) !important;
+    height: clamp(400px, 66svh, 680px) !important;
   }
 }
 
@@ -14953,6 +15041,18 @@ iframe {
   #productModal .modal-side,
   #productModal .modal-main {
     padding: .65rem !important;
+  }
+
+  #productModal .modal-head {
+    padding-right: 3rem;
+  }
+
+  #productModal .modal-head .close {
+    top: .55rem;
+    right: .55rem;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
   }
 
   #productModal .modal-main .preview-shell {
