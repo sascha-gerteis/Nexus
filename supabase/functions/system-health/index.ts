@@ -128,7 +128,7 @@ async function checkScheduledRunner() {
     return check(
       "Supabase Cron runner",
       "error",
-      "Missing SUPABASE_URL or NEXUS_RUNTIME_SECRET, so the monthly runner cannot be checked.",
+      "Missing SUPABASE_URL or NEXUS_RUNTIME_SECRET, so the scheduled automation runner cannot be checked.",
     );
   }
 
@@ -286,12 +286,12 @@ Deno.serve(async (req) => {
     countTable(adminClient, "automation_health_checks"),
   ]);
 
-  const monthlyChecks = await Promise.all([
-    filteredCount(adminClient, "customer_automations", "Active monthly schedules", (query) =>
-      query.eq("run_frequency", "monthly").eq("schedule_status", "active")
+  const scheduledRunnerChecks = await Promise.all([
+    filteredCount(adminClient, "customer_automations", "Active scheduled automations", (query) =>
+      query.not("run_frequency", "in", "(manual,on_demand)").eq("schedule_status", "active")
     ),
-    filteredCount(adminClient, "customer_automations", "Monthly runs due now", (query) =>
-      query.eq("run_frequency", "monthly").eq("schedule_status", "active").lte("next_run_at", new Date().toISOString())
+    filteredCount(adminClient, "customer_automations", "Scheduled runs due now", (query) =>
+      query.not("run_frequency", "in", "(manual,on_demand)").eq("schedule_status", "active").lte("next_run_at", new Date().toISOString())
     ),
     filteredCount(adminClient, "automation_runs", "Runs in last 32 days", (query) =>
       query.gte("created_at", new Date(Date.now() - 32 * 24 * 60 * 60 * 1000).toISOString())
@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
   const sections = [
     group("Secrets", secretChecks),
     group("Database", tableChecks),
-    group("Monthly runner", monthlyChecks),
+    group("Scheduled runner", scheduledRunnerChecks),
     group("Product workflow health", productHealthChecks),
     group("External services", externalChecks),
   ];

@@ -282,6 +282,45 @@
                     <option value="manual">Manual / custom fulfillment</option>
                   </select>
                 </div>
+                <div>
+                  <label>Runtime behavior</label>
+                  <select class="select" name="runtime_trigger_mode">
+                    <option value="setup_complete">Run after buyer setup</option>
+                    <option value="on_demand">On demand / question triggered</option>
+                    <option value="scheduled_interval">Run on a schedule</option>
+                    <option value="subscription_monthly">Monthly output</option>
+                    <option value="manual">Manual delivery</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Run cadence</label>
+                  <select class="select" name="runtime_run_frequency">
+                    <option value="manual">Only when triggered</option>
+                    <option value="on_demand">On demand</option>
+                    <option value="every_30_minutes">Every 30 minutes</option>
+                    <option value="hourly">Hourly</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div>
+                  <label>No-change behavior</label>
+                  <select class="select" name="runtime_no_change_policy">
+                    <option value="no_output">No dashboard output unless something changed</option>
+                    <option value="status_event">Log a status event only</option>
+                    <option value="empty_output">Show a “no change” output</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Customer response</label>
+                  <select class="select" name="runtime_response_mode">
+                    <option value="dashboard_output">Dashboard output</option>
+                    <option value="instant_message">Instant answer/message</option>
+                    <option value="alert_only">Alert only when triggered</option>
+                    <option value="webhook_ack">Webhook acknowledgement</option>
+                  </select>
+                </div>
                 <div class="full developer-workflow-source-panel developer-workflow-source-make hidden">
                   <div class="make-import-assistant">
                     <div class="make-import-head">
@@ -328,13 +367,23 @@
                     <span class="pill blue">Sheets detected</span>
                   </div>
                   <div class="developer-field-grid">
-                    <div>
+                    <div class="full">
                       <label>Sheet mode</label>
-                      <select class="select" data-sheet-access-field="mode">
-                        <option value="customer_owned">Customer-owned sheet</option>
-                        <option value="developer_owned">Developer-owned hidden sheet</option>
-                        <option value="private_per_customer">Private sheet per customer</option>
-                      </select>
+                      <input type="hidden" data-sheet-access-field="mode" value="customer_owned">
+                      <div class="sheet-access-mode-picker" role="group" aria-label="Google Sheets access mode">
+                        <button class="sheet-access-option" type="button" data-sheet-access-mode-choice="customer_owned">
+                          <strong>Customer-owned</strong>
+                          <span>Buyer provides and shares their sheet.</span>
+                        </button>
+                        <button class="sheet-access-option" type="button" data-sheet-access-mode-choice="developer_owned">
+                          <strong>Developer hidden</strong>
+                          <span>You provide one internal sheet.</span>
+                        </button>
+                        <button class="sheet-access-option" type="button" data-sheet-access-mode-choice="private_per_customer">
+                          <strong>Private per customer</strong>
+                          <span>Nexus copies your template per buyer.</span>
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label>Default tab</label>
@@ -357,6 +406,7 @@
                   <div class="sheet-node-list" id="developerSheetNodeList"></div>
                 </div>
                 <div class="full"><label>Buyer setup schema JSON</label><textarea class="textarea code-textarea" name="setup_schema" rows="7" placeholder='[{"name":"company_url","label":"Company website","type":"url","required":true}]'></textarea></div>
+                <div class="full"><label>On-demand request schema JSON</label><textarea class="textarea code-textarea" name="runtime_event_schema" rows="5" placeholder='[{"name":"question","label":"Question","type":"textarea","required":true}]'></textarea></div>
                 <div class="full"><label>Credential schema JSON</label><textarea class="textarea code-textarea" name="credential_schema" rows="6" placeholder='[{"name":"api_key","label":"API key","type":"secret","required":true}]'></textarea></div>
                 <div class="full"><label>Workflow placeholder mappings JSON</label><textarea class="textarea code-textarea" name="workflow_placeholder_mappings" rows="7" placeholder='[{"placeholder":"[[CompanyWebsite]]","source":"setup","key":"company_url"}]'></textarea></div>
                 <input type="hidden" name="detected_placeholders" value="{}">
@@ -1314,8 +1364,13 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       form.elements.icon.value = "AI";
       form.elements.color.value = "blue";
       form.elements.runtime_type.value = "n8n_managed";
+      form.elements.runtime_trigger_mode.value = "setup_complete";
+      form.elements.runtime_run_frequency.value = "manual";
+      form.elements.runtime_no_change_policy.value = "no_output";
+      form.elements.runtime_response_mode.value = "dashboard_output";
       form.elements.workflow_provider.value = "n8n";
       form.elements.setup_schema.value = "[]";
+      if (form.elements.runtime_event_schema) form.elements.runtime_event_schema.value = "[]";
       form.elements.credential_schema.value = "[]";
       form.elements.workflow_placeholder_mappings.value = "[]";
       form.elements.detected_placeholders.value = "{}";
@@ -1562,6 +1617,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (!panel || panel.classList.contains("hidden")) return;
 
       const config = currentSheetAccessConfigFromForm();
+      panel.querySelectorAll("[data-sheet-access-mode-choice]").forEach((button) => {
+        const active = button.dataset.sheetAccessModeChoice === config.mode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+
       panel.querySelectorAll("[data-sheet-access-mode]").forEach((section) => {
         section.hidden = section.dataset.sheetAccessMode !== config.mode;
       });
@@ -3773,9 +3834,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         preview_image_url: String(formData.get("preview_image_url") || ""),
         preview_base64: String(formData.get("preview_base64") || ""),
         runtime_type: String(formData.get("runtime_type") || "n8n_managed"),
+        runtime_trigger_mode: String(formData.get("runtime_trigger_mode") || "setup_complete"),
+        runtime_run_frequency: String(formData.get("runtime_run_frequency") || "manual"),
+        runtime_no_change_policy: String(formData.get("runtime_no_change_policy") || "no_output"),
+        runtime_response_mode: String(formData.get("runtime_response_mode") || "dashboard_output"),
         workflow_source_platform: String(formData.get("workflow_provider") || "n8n"),
         n8n_workflow_json: jsonField(formData, "n8n_workflow_json", null),
         setup_schema: jsonField(formData, "setup_schema", []),
+        runtime_event_schema: jsonField(formData, "runtime_event_schema", []),
         credential_schema: jsonField(formData, "credential_schema", []),
         workflow_placeholder_mappings: jsonField(formData, "workflow_placeholder_mappings", []),
         detected_placeholders: detectedPlaceholders,
@@ -5432,6 +5498,15 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (event.target?.matches("[data-sheet-access-field]")) {
           renderSheetAccessModeFields();
         }
+      });
+
+      document.getElementById("developerSheetAccessPanel")?.addEventListener("click", function (event) {
+        const button = event.target?.closest("[data-sheet-access-mode-choice]");
+        if (!button) return;
+        const mode = button.dataset.sheetAccessModeChoice || "customer_owned";
+        const modeField = this.querySelector('[data-sheet-access-field="mode"]');
+        if (modeField) modeField.value = mode;
+        renderSheetAccessModeFields();
       });
 
       document.getElementById("developerSheetAccessPanel")?.addEventListener("change", function (event) {

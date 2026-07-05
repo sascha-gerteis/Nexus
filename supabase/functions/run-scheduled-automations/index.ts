@@ -219,9 +219,55 @@ function nextMonthlyDate(fromIso: string, reference = new Date()) {
   return candidate.toISOString();
 }
 
-function scheduledDateKey(value: string) {
+function nextScheduledDate(frequency: string, fromIso: string, reference = new Date()) {
+  const start = fromIso ? new Date(fromIso) : reference;
+  let candidate = new Date(start.getTime());
+
+  const advance = () => {
+    if (frequency === "every_30_minutes") {
+      candidate.setUTCMinutes(candidate.getUTCMinutes() + 30);
+      return;
+    }
+    if (frequency === "hourly") {
+      candidate.setUTCHours(candidate.getUTCHours() + 1);
+      return;
+    }
+    if (frequency === "daily") {
+      candidate.setUTCDate(candidate.getUTCDate() + 1);
+      return;
+    }
+    if (frequency === "weekly") {
+      candidate.setUTCDate(candidate.getUTCDate() + 7);
+      return;
+    }
+    candidate = new Date(nextMonthlyDate(candidate.toISOString(), candidate));
+  };
+
+  advance();
+
+  while (candidate <= reference) {
+    advance();
+  }
+
+  return candidate.toISOString();
+}
+
+function scheduledDateKey(value: string, frequency = "monthly") {
   const date = value ? new Date(value) : new Date();
-  return date.toISOString().slice(0, 10);
+  const iso = date.toISOString();
+
+  if (frequency === "every_30_minutes" || frequency === "hourly") {
+    return iso.slice(0, 16);
+  }
+
+  return iso.slice(0, 10);
+}
+
+function runFrequency(customerAutomation: any) {
+  const frequency = cleanString(customerAutomation?.run_frequency).toLowerCase();
+  return ["every_30_minutes", "hourly", "daily", "weekly", "monthly"].includes(frequency)
+    ? frequency
+    : "monthly";
 }
 
 function buildCallbackUrl() {
@@ -288,8 +334,15 @@ function setupIsReady(customerAutomation: any) {
 }
 
 function scheduleIsRunnable(customerAutomation: any, order: any, webhookUrl: string) {
-  if (!subscriptionIsActive(order)) {
+  const isSubscriptionOrder = Boolean(order?.stripe_subscription_id || order?.stripe_mode === "subscription");
+  const paymentStatus = cleanString(order?.payment_status).toLowerCase();
+
+  if (isSubscriptionOrder && !subscriptionIsActive(order)) {
     return { ok: false, reason: "subscription_not_active" };
+  }
+
+  if (!isSubscriptionOrder && paymentStatus && paymentStatus !== "paid") {
+    return { ok: false, reason: "payment_not_paid" };
   }
 
   if (!setupIsReady(customerAutomation)) {
@@ -373,7 +426,11 @@ async function requireOperator(req: Request, body: any, adminClient: any) {
     return { ok: true, internal: false, user: data.user, role: "developer", developer };
   }
 
-  return { ok: false, error: "Admin or developer access required." };
+  if (profile?.role === "buyer" || !profile?.role) {
+    return { ok: true, internal: false, user: data.user, role: "buyer", developer: null };
+  }
+
+  return { ok: false, error: "Admin, developer, or buyer access required." };
 }
 
 function developerOwnsCandidate(row: any, developerId: string) {
@@ -385,6 +442,13 @@ function developerOwnsCandidate(row: any, developerId: string) {
 
   return cleanString(automation?.developer_id) === id ||
     cleanString(order?.developer_id) === id;
+}
+
+function buyerOwnsCandidate(row: any, buyerId: string) {
+  const id = cleanString(buyerId);
+  if (!id) return false;
+
+  return cleanString(row?.buyer_id) === id;
 }
 
 async function loadLatestSetupValues(adminClient: any, customerAutomationId: string) {
@@ -527,12 +591,14 @@ function buildRuntimePayload(params: {
   setupAnswers: Record<string, unknown>;
   secrets: Record<string, string>;
   savedCredentialKeys: string[];
+  eventPayload?: Record<string, unknown>;
   run: any;
   runKey: string;
   scheduledFor: string;
 }) {
   const customerAutomation = params.customerAutomation;
   const order = params.order || {};
+  const frequency = runFrequency(customerAutomation);
 
   return {
     customer_automation_id: customerAutomation.id,
@@ -543,6 +609,8 @@ function buildRuntimePayload(params: {
     run_key: params.runKey,
 
     setup: applySheetAccessSetup(params.setupAnswers || {}, params.automation, customerAutomation),
+    event: asObject(params.eventPayload),
+    request: asObject(params.eventPayload),
     secrets: params.secrets || {},
 
     customer: {
@@ -554,7 +622,7 @@ function buildRuntimePayload(params: {
     },
 
     schedule: {
-      frequency: "monthly",
+      frequency,
       scheduled_for: params.scheduledFor,
       run_key: params.runKey,
     },
@@ -589,6 +657,7 @@ function buildRedactedRequestPayload(payload: any) {
     run_key: payload.run_key,
     setup_keys: Object.keys(asObject(payload.setup)),
     secret_keys_available: Object.keys(asObject(payload.secrets)),
+    event_keys: Object.keys(asObject(payload.event)),
     schedule: payload.schedule || {},
     system: {
       callback_url: payload.system?.callback_url || "",
@@ -767,8 +836,8 @@ async function loadCandidates(adminClient: any, options: {
   const { data, error } = await adminClient
     .from("customer_automations")
     .select("*, automations(*), orders(*)")
-    .eq("run_frequency", "monthly")
     .eq("schedule_status", "active")
+    .not("run_frequency", "in", "(manual,on_demand)")
     .lte("next_run_at", nowIso())
     .order("next_run_at", { ascending: true })
     .limit(options.limit);
@@ -782,6 +851,7 @@ async function runCandidate(adminClient: any, row: any, options: {
   dryRun: boolean;
   advanceSchedule: boolean;
   allowInactiveSubscription?: boolean;
+  eventPayload?: Record<string, unknown>;
 }) {
   const customerAutomation = row;
   const automation = one(row.automations) || {};
@@ -791,6 +861,7 @@ async function runCandidate(adminClient: any, row: any, options: {
   const isManualRun = options.action === "run_one" ||
     options.action === "run_latest" ||
     options.action === "run_matching";
+  const frequency = runFrequency(customerAutomation);
   const scheduledFor = isManualRun
     ? nowIso()
     : cleanString(customerAutomation.next_run_at) || nowIso();
@@ -818,7 +889,7 @@ async function runCandidate(adminClient: any, row: any, options: {
 
   const runKey = isManualRun
     ? `manual:${customerAutomation.id}:${Date.now()}`
-    : `monthly:${customerAutomation.id}:${scheduledDateKey(scheduledFor)}`;
+    : `${frequency}:${customerAutomation.id}:${scheduledDateKey(scheduledFor, frequency)}`;
 
   const setupValues = await loadLatestSetupValues(adminClient, customerAutomation.id);
   const secrets = await loadSecretValues(adminClient, customerAutomation.id);
@@ -833,10 +904,11 @@ async function runCandidate(adminClient: any, row: any, options: {
     setup: expandBuyerSetupAliases(setupValues.setupAnswers),
     secrets,
     schedule: {
-      frequency: "monthly",
+      frequency,
       scheduled_for: scheduledFor,
       run_key: runKey,
     },
+    event: asObject(options.eventPayload),
     system: {
       callback_url: buildCallbackUrl(),
       runtime_type: customerAutomation.runtime_type || automation?.runtime_type || "n8n_managed",
@@ -851,7 +923,7 @@ async function runCandidate(adminClient: any, row: any, options: {
     automation_id: customerAutomation.automation_id,
     order_id: customerAutomation.order_id,
     runtime_type: customerAutomation.runtime_type || automation?.runtime_type || "n8n_managed",
-    trigger_type: isManualRun ? "manual_admin" : "scheduled_monthly",
+    trigger_type: isManualRun ? "manual_admin" : `scheduled_${frequency}`,
     trigger_source: "run-scheduled-automations",
     run_key: runKey,
     scheduled_for: scheduledFor,
@@ -879,6 +951,7 @@ async function runCandidate(adminClient: any, row: any, options: {
     setupAnswers: setupValues.setupAnswers,
     secrets,
     savedCredentialKeys: Object.keys(secrets),
+    eventPayload: options.eventPayload || {},
     run,
     runKey,
     scheduledFor,
@@ -927,7 +1000,7 @@ async function runCandidate(adminClient: any, row: any, options: {
     if (options.advanceSchedule) {
       updatePayload.schedule_status = "active";
       updatePayload.schedule_anchor_at = customerAutomation.schedule_anchor_at || scheduledFor;
-      updatePayload.next_run_at = nextMonthlyDate(scheduledFor, new Date());
+      updatePayload.next_run_at = nextScheduledDate(frequency, scheduledFor, new Date());
     }
 
     await updateCustomerAutomation(adminClient, customerAutomation.id, updatePayload);
@@ -942,7 +1015,7 @@ async function runCandidate(adminClient: any, row: any, options: {
         : "scheduled_runtime_triggered",
       title: isManualRun
         ? "Manual automation run started"
-        : "Monthly automation run started",
+        : `${frequency.replaceAll("_", " ")} automation run started`,
       message: JSON.stringify({
         run_id: run.id,
         run_key: runKey,
@@ -995,7 +1068,7 @@ async function runCandidate(adminClient: any, row: any, options: {
       automation_id: customerAutomation.automation_id,
       order_id: customerAutomation.order_id,
       event_type: "scheduled_runtime_error",
-      title: "Monthly automation run failed to start",
+      title: `${frequency.replaceAll("_", " ")} automation run failed to start`,
       message: JSON.stringify({
         run_id: run.id,
         run_key: runKey,
@@ -1140,6 +1213,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (auth.role === "buyer") {
+      if (action !== "run_one") {
+        return errorResponse("Buyers can only trigger one owned on-demand automation at a time.", 403);
+      }
+
+      rows = rows.filter((row: any) => buyerOwnsCandidate(row, auth.user?.id || ""));
+
+      if (!rows.length) {
+        return errorResponse("Customer automation not found for this buyer.", 404);
+      }
+
+      const nonOnDemand = rows.find((row: any) => runFrequency(row) !== "on_demand");
+      if (nonOnDemand) {
+        return errorResponse("This automation is not configured for buyer on-demand runs.", 403);
+      }
+    }
+
     const results = [];
 
     if (action === "latest_status") {
@@ -1163,6 +1253,7 @@ Deno.serve(async (req) => {
         allowInactiveSubscription: body.allow_inactive_subscription === true ||
           body.allowInactiveSubscription === true ||
           body.force === true,
+        eventPayload: asObject(body.event || body.request || body.input),
       });
 
       results.push(result);

@@ -47,18 +47,71 @@ function isMonthlyOrder(order: any) {
   );
 }
 
-function monthlyScheduleUpdate(order: any, current: any) {
-  if (!isMonthlyOrder(order)) return {};
+function orderIsPaidAndOpen(order: any) {
+  const paymentStatus = cleanString(order?.payment_status).toLowerCase();
+  const orderStatus = cleanString(order?.order_status).toLowerCase();
 
-  if (!subscriptionIsActive(order)) {
+  if (paymentStatus !== "paid") return false;
+
+  return !(
+    orderStatus.includes("cancel") ||
+    orderStatus.includes("expired") ||
+    orderStatus.includes("failed")
+  );
+}
+
+function runtimeTriggerMode(product: any, order: any) {
+  const mode = cleanString(product?.runtime_trigger_mode).toLowerCase();
+  if (["setup_complete", "on_demand", "scheduled_interval", "subscription_monthly", "manual"].includes(mode)) {
+    return mode;
+  }
+
+  return isMonthlyOrder(order) ? "subscription_monthly" : "setup_complete";
+}
+
+function runtimeRunFrequency(product: any, order: any) {
+  const triggerMode = runtimeTriggerMode(product, order);
+  const frequency = cleanString(product?.runtime_run_frequency).toLowerCase();
+  const allowed = new Set(["manual", "on_demand", "every_30_minutes", "hourly", "daily", "weekly", "monthly"]);
+
+  if (triggerMode === "on_demand") return "on_demand";
+  if (triggerMode === "subscription_monthly") return "monthly";
+  if (triggerMode === "scheduled_interval") {
+    return allowed.has(frequency) && !["manual", "on_demand"].includes(frequency) ? frequency : "daily";
+  }
+
+  return "manual";
+}
+
+function runtimeScheduleUpdate(order: any, product: any, current: any) {
+  const triggerMode = runtimeTriggerMode(product, order);
+  const frequency = runtimeRunFrequency(product, order);
+  const scheduled = ["every_30_minutes", "hourly", "daily", "weekly", "monthly"].includes(frequency);
+
+  if (!scheduled) {
     return {
-      run_frequency: "monthly",
+      runtime_trigger_mode: triggerMode,
+      run_frequency: frequency,
+      schedule_status: frequency === "on_demand" ? "on_demand" : "inactive",
+      next_run_at: null,
+    };
+  }
+
+  const active = triggerMode === "subscription_monthly"
+    ? subscriptionIsActive(order)
+    : orderIsPaidAndOpen(order);
+
+  if (!active) {
+    return {
+      runtime_trigger_mode: triggerMode,
+      run_frequency: frequency,
       schedule_status: "paused",
     };
   }
 
   return {
-    run_frequency: "monthly",
+    runtime_trigger_mode: triggerMode,
+    run_frequency: frequency,
     schedule_status: "active",
     schedule_anchor_at: current?.schedule_anchor_at || new Date().toISOString(),
     next_run_at: current?.next_run_at || new Date().toISOString(),
@@ -1215,7 +1268,11 @@ Deno.serve(async (req) => {
   n8n_workflow_id,
   n8n_workflow_name,
   runtime_webhook_url,
-  runtime_webhook_path
+  runtime_webhook_path,
+  runtime_trigger_mode,
+  runtime_run_frequency,
+  runtime_no_change_policy,
+  runtime_response_mode
 ),
         orders(
           id,
@@ -1458,7 +1515,7 @@ const workflowPlaceholderMappings = mergeMappings(
       health_status: "configured",
       status: "setup_submitted",
       setup_status: "submitted",
-      ...monthlyScheduleUpdate(order, customerAutomation),
+      ...runtimeScheduleUpdate(order, product, customerAutomation),
       last_error_message: null,
       updated_at: now,
     };
@@ -1472,6 +1529,9 @@ const workflowPlaceholderMappings = mergeMappings(
 
     if (updateResult.error) {
       const fallbackPayload = { ...updatePayload };
+      delete fallbackPayload.runtime_trigger_mode;
+      delete fallbackPayload.runtime_no_change_policy;
+      delete fallbackPayload.runtime_response_mode;
       delete fallbackPayload.run_frequency;
       delete fallbackPayload.schedule_status;
       delete fallbackPayload.schedule_anchor_at;

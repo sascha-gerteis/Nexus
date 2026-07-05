@@ -723,6 +723,19 @@ function subscriptionIsActive(order: any) {
   return Boolean(order?.stripe_subscription_id || order?.stripe_mode === "subscription");
 }
 
+function orderIsPaidAndOpen(order: any) {
+  const paymentStatus = cleanString(order?.payment_status).toLowerCase();
+  const orderStatus = cleanString(order?.order_status).toLowerCase();
+
+  if (paymentStatus !== "paid") return false;
+
+  return !(
+    orderStatus.includes("cancel") ||
+    orderStatus.includes("expired") ||
+    orderStatus.includes("failed")
+  );
+}
+
 function isMonthlyOrder(order: any) {
   return Boolean(
     order?.stripe_mode === "subscription" ||
@@ -731,32 +744,97 @@ function isMonthlyOrder(order: any) {
   );
 }
 
-function monthlyScheduleUpdate(order: any, current: any, firstRunTriggered: boolean) {
-  if (!isMonthlyOrder(order)) return {};
+function runtimeTriggerMode(automation: any, order: any) {
+  const mode = cleanString(automation?.runtime_trigger_mode).toLowerCase();
+  if (["setup_complete", "on_demand", "scheduled_interval", "subscription_monthly", "manual"].includes(mode)) {
+    return mode;
+  }
+
+  return isMonthlyOrder(order) ? "subscription_monthly" : "setup_complete";
+}
+
+function runtimeRunFrequency(automation: any, order: any) {
+  const mode = runtimeTriggerMode(automation, order);
+  const frequency = cleanString(automation?.runtime_run_frequency).toLowerCase();
+  const allowed = new Set(["manual", "on_demand", "every_30_minutes", "hourly", "daily", "weekly", "monthly"]);
+
+  if (mode === "on_demand") return "on_demand";
+  if (mode === "subscription_monthly") return "monthly";
+  if (mode === "scheduled_interval") {
+    return allowed.has(frequency) && !["manual", "on_demand"].includes(frequency) ? frequency : "daily";
+  }
+
+  return "manual";
+}
+
+function nextScheduledDate(frequency: string, from = new Date()) {
+  const next = new Date(from.getTime());
+
+  if (frequency === "every_30_minutes") {
+    next.setUTCMinutes(next.getUTCMinutes() + 30);
+    return next.toISOString();
+  }
+
+  if (frequency === "hourly") {
+    next.setUTCHours(next.getUTCHours() + 1);
+    return next.toISOString();
+  }
+
+  if (frequency === "daily") {
+    next.setUTCDate(next.getUTCDate() + 1);
+    return next.toISOString();
+  }
+
+  if (frequency === "weekly") {
+    next.setUTCDate(next.getUTCDate() + 7);
+    return next.toISOString();
+  }
+
+  return addMonths(next, 1).toISOString();
+}
+
+function runtimeScheduleUpdate(order: any, automation: any, current: any, firstRunTriggered: boolean) {
+  const frequency = runtimeRunFrequency(automation, order);
+  const triggerMode = runtimeTriggerMode(automation, order);
+  const scheduled = ["every_30_minutes", "hourly", "daily", "weekly", "monthly"].includes(frequency);
+
+  if (!scheduled) {
+    return {
+      runtime_trigger_mode: triggerMode,
+      run_frequency: frequency,
+      schedule_status: frequency === "on_demand" ? "on_demand" : "inactive",
+      next_run_at: null,
+    };
+  }
 
   const now = new Date();
-  const active = subscriptionIsActive(order);
+  const active = triggerMode === "subscription_monthly"
+    ? subscriptionIsActive(order)
+    : orderIsPaidAndOpen(order);
 
   if (!active) {
     return {
-      run_frequency: "monthly",
+      runtime_trigger_mode: triggerMode,
+      run_frequency: frequency,
       schedule_status: "paused",
     };
   }
 
   if (!firstRunTriggered) {
     return {
-      run_frequency: "monthly",
+      runtime_trigger_mode: triggerMode,
+      run_frequency: frequency,
       schedule_status: "inactive",
       schedule_anchor_at: current?.schedule_anchor_at || now.toISOString(),
     };
   }
 
   return {
-    run_frequency: "monthly",
+    runtime_trigger_mode: triggerMode,
+    run_frequency: frequency,
     schedule_status: "active",
     schedule_anchor_at: current?.schedule_anchor_at || now.toISOString(),
-    next_run_at: addMonths(now, 1).toISOString(),
+    next_run_at: nextScheduledDate(frequency, now),
     last_run_requested_at: now.toISOString(),
   };
 }
@@ -791,6 +869,9 @@ async function safeUpdateCustomerAutomation(
     "n8n_last_execution_checked_at",
     "health_status",
     "failure_count",
+    "runtime_trigger_mode",
+    "runtime_no_change_policy",
+    "runtime_response_mode",
     "run_frequency",
     "schedule_status",
     "schedule_anchor_at",
@@ -1742,7 +1823,7 @@ Deno.serve(async (req) => {
             n8n_last_execution_status: null,
             n8n_last_execution_checked_at: null,
 
-            ...monthlyScheduleUpdate(order, customerAutomation, false),
+            ...runtimeScheduleUpdate(order, automation, customerAutomation, false),
             updated_at: now,
           }
         : {
@@ -1862,7 +1943,7 @@ Deno.serve(async (req) => {
         runtime_status: "not_started",
         health_status: "pending",
         setup_status: "submitted",
-        ...monthlyScheduleUpdate(order, customerAutomation, false),
+        ...runtimeScheduleUpdate(order, automation, customerAutomation, false),
         updated_at: new Date().toISOString(),
       });
 
@@ -1974,12 +2055,12 @@ Deno.serve(async (req) => {
         n8n_last_execution_id: executionId,
         n8n_last_execution_status: "started",
         n8n_last_execution_checked_at: new Date().toISOString(),
-        ...monthlyScheduleUpdate(order, customerAutomation, true),
+        ...runtimeScheduleUpdate(order, automation, customerAutomation, true),
         updated_at: new Date().toISOString(),
       });
     } else {
       await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
-        ...monthlyScheduleUpdate(order, customerAutomation, true),
+        ...runtimeScheduleUpdate(order, automation, customerAutomation, true),
         updated_at: new Date().toISOString(),
       });
     }

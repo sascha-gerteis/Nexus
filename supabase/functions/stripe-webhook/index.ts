@@ -40,6 +40,51 @@ function pickFirstString(...values: unknown[]) {
   return "";
 }
 
+function normalizeProductRunFrequency(product: any, isSubscription: boolean) {
+  const mode = cleanString(product?.runtime_trigger_mode).toLowerCase();
+  const frequency = cleanString(product?.runtime_run_frequency).toLowerCase();
+  const allowed = new Set([
+    "manual",
+    "on_demand",
+    "every_30_minutes",
+    "hourly",
+    "daily",
+    "weekly",
+    "monthly",
+  ]);
+
+  if (!mode || mode === "legacy") return isSubscription ? "monthly" : "manual";
+  if (mode === "manual" || mode === "setup_complete") return "manual";
+  if (mode === "on_demand") return "on_demand";
+  if (mode === "subscription_monthly") return "monthly";
+  if (mode === "scheduled_interval") return allowed.has(frequency) && !["manual", "on_demand"].includes(frequency)
+    ? frequency
+    : "daily";
+
+  return isSubscription ? "monthly" : "manual";
+}
+
+function normalizeRuntimeTriggerMode(product: any, isSubscription: boolean) {
+  const mode = cleanString(product?.runtime_trigger_mode).toLowerCase();
+  if (["setup_complete", "on_demand", "scheduled_interval", "subscription_monthly", "manual"].includes(mode)) {
+    return mode;
+  }
+
+  return isSubscription ? "subscription_monthly" : "setup_complete";
+}
+
+function normalizeRuntimeNoChangePolicy(product: any) {
+  const policy = cleanString(product?.runtime_no_change_policy).toLowerCase();
+  return ["no_output", "status_event", "empty_output"].includes(policy) ? policy : "no_output";
+}
+
+function normalizeRuntimeResponseMode(product: any) {
+  const mode = cleanString(product?.runtime_response_mode).toLowerCase();
+  return ["dashboard_output", "instant_message", "alert_only", "webhook_ack"].includes(mode)
+    ? mode
+    : "dashboard_output";
+}
+
 function roundMoney(value: number) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
@@ -239,6 +284,9 @@ async function safeUpdateCustomerAutomationsByOrder(orderId: string, payload: Re
   const fallback = { ...payload };
   for (const key of [
     "run_frequency",
+    "runtime_trigger_mode",
+    "runtime_no_change_policy",
+    "runtime_response_mode",
     "schedule_status",
     "schedule_anchor_at",
     "next_run_at",
@@ -266,6 +314,9 @@ async function safeInsertCustomerAutomation(payload: Record<string, unknown>) {
   const fallback = { ...payload };
   for (const key of [
     "run_frequency",
+    "runtime_trigger_mode",
+    "runtime_no_change_policy",
+    "runtime_response_mode",
     "schedule_status",
     "schedule_anchor_at",
     "next_run_at",
@@ -295,6 +346,10 @@ async function getAutomationProduct(automationId: string) {
       slug,
       developer_id,
       runtime_type,
+      runtime_trigger_mode,
+      runtime_run_frequency,
+      runtime_no_change_policy,
+      runtime_response_mode,
       runtime_webhook_url,
       runtime_webhook_path,
       runtime_output_mode,
@@ -621,7 +676,7 @@ async function activateScheduleIfReady(order: any, subscriptionStatus = "") {
 
   const { data: customerAutomation } = await adminClient
     .from("customer_automations")
-    .select("*, automations(runtime_webhook_url, n8n_webhook_url)")
+    .select("*, automations(*)")
     .eq("order_id", order.id)
     .maybeSingle();
 
@@ -629,10 +684,11 @@ async function activateScheduleIfReady(order: any, subscriptionStatus = "") {
 
   const automationProduct = one(customerAutomation.automations) || {};
   const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automationProduct, order);
+  const runFrequency = normalizeProductRunFrequency(automationProduct, true);
 
   if (!setupIsReady(customerAutomation) || !webhookUrl) {
     await safeUpdateCustomerAutomationsByOrder(order.id, {
-      run_frequency: "monthly",
+      run_frequency: runFrequency,
       schedule_status: "inactive",
       updated_at: nowIso(),
     });
@@ -640,7 +696,7 @@ async function activateScheduleIfReady(order: any, subscriptionStatus = "") {
   }
 
   await safeUpdateCustomerAutomationsByOrder(order.id, {
-    run_frequency: "monthly",
+    run_frequency: runFrequency,
     schedule_status: "active",
     schedule_anchor_at: customerAutomation.schedule_anchor_at || nowIso(),
     next_run_at: customerAutomation.next_run_at || nowIso(),
@@ -716,6 +772,7 @@ async function handlePaidBundleOrder(order: any, isPaid: boolean, isSubscription
   for (const entry of entries) {
     const product = entry.product || {};
     const runtimeType = product.runtime_type || "manual";
+    const runFrequency = normalizeProductRunFrequency(product, isSubscription);
     const runtimeWebhookUrl = product.runtime_webhook_url || product.n8n_webhook_url || null;
     const runtimeWebhookPath = product.runtime_webhook_path || null;
 
@@ -730,13 +787,16 @@ async function handlePaidBundleOrder(order: any, isPaid: boolean, isSubscription
       install_type: "self_serve",
       setup_status: "setup_required",
       runtime_type: runtimeType,
+      runtime_trigger_mode: normalizeRuntimeTriggerMode(product, isSubscription),
       runtime_webhook_url: runtimeWebhookUrl,
       runtime_webhook_path: runtimeWebhookPath,
       runtime_output_mode: product.runtime_output_mode || "standard",
+      runtime_no_change_policy: normalizeRuntimeNoChangePolicy(product),
+      runtime_response_mode: normalizeRuntimeResponseMode(product),
       n8n_workflow_id: product.n8n_workflow_id || null,
       n8n_workflow_name: product.n8n_workflow_name || null,
       runtime_status: "not_started",
-      run_frequency: isSubscription ? "monthly" : "manual",
+      run_frequency: runFrequency,
       schedule_status: "inactive",
       schedule_anchor_at: null,
       next_run_at: null,
@@ -804,7 +864,17 @@ async function activateBundleSchedulesIfReady(order: any, subscriptionStatus = "
 
   const { data: rows, error } = await adminClient
     .from("customer_automations")
-    .select("*, automations(runtime_webhook_url, n8n_webhook_url)")
+    .select(`
+      *,
+      automations(
+        runtime_webhook_url,
+        n8n_webhook_url,
+        runtime_trigger_mode,
+        runtime_run_frequency,
+        runtime_no_change_policy,
+        runtime_response_mode
+      )
+    `)
     .eq("order_id", order.id);
 
   if (error) {
@@ -816,11 +886,15 @@ async function activateBundleSchedulesIfReady(order: any, subscriptionStatus = "
     const automationProduct = one(customerAutomation.automations) || {};
     const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automationProduct, order);
     const ready = setupIsReady(customerAutomation) && Boolean(webhookUrl);
+    const runFrequency = normalizeProductRunFrequency(automationProduct, true);
 
     await adminClient
       .from("customer_automations")
       .update({
-        run_frequency: "monthly",
+        runtime_trigger_mode: normalizeRuntimeTriggerMode(automationProduct, true),
+        runtime_no_change_policy: normalizeRuntimeNoChangePolicy(automationProduct),
+        runtime_response_mode: normalizeRuntimeResponseMode(automationProduct),
+        run_frequency: runFrequency,
         schedule_status: ready ? "active" : "inactive",
         schedule_anchor_at: customerAutomation.schedule_anchor_at || null,
         next_run_at: ready ? customerAutomation.next_run_at || nowIso() : customerAutomation.next_run_at || null,
@@ -999,6 +1073,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     automationProduct?.n8n_workflow_name ||
     order.n8n_workflow_name ||
     null;
+  const runFrequency = normalizeProductRunFrequency(automationProduct, isSubscription);
 
   const { data: customerAutomation, error: automationError } = await safeInsertCustomerAutomation({
     order_id: order.id,
@@ -1013,14 +1088,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     setup_status: "setup_required",
 
     runtime_type: runtimeType,
+    runtime_trigger_mode: normalizeRuntimeTriggerMode(automationProduct, isSubscription),
     runtime_webhook_url: runtimeWebhookUrl,
     runtime_webhook_path: runtimeWebhookPath,
     runtime_output_mode: automationProduct?.runtime_output_mode || "standard",
+    runtime_no_change_policy: normalizeRuntimeNoChangePolicy(automationProduct),
+    runtime_response_mode: normalizeRuntimeResponseMode(automationProduct),
     n8n_workflow_id: n8nWorkflowId,
     n8n_workflow_name: n8nWorkflowName,
     runtime_status: "not_started",
 
-    run_frequency: isSubscription ? "monthly" : "manual",
+    run_frequency: runFrequency,
     schedule_status: "inactive",
     schedule_anchor_at: null,
     next_run_at: null,

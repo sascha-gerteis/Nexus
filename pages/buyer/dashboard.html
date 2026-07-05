@@ -196,7 +196,7 @@
                 <article>
                   <span>Coming next</span>
                   <strong>Using the buyer dashboard</strong>
-                  <p>Setup, outputs, order history, messages, and monthly automation runs.</p>
+                  <p>Setup, outputs, order history, messages, and scheduled or on-demand automation runs.</p>
                 </article>
 
                 <article>
@@ -739,11 +739,13 @@ function productTitleFromAutomation(item) {
 }
 
 function isMonthlyAutomation(item) {
-  const frequency = String(item?.run_frequency || "").toLowerCase();
+  return String(item?.run_frequency || "").toLowerCase() === "monthly" || isSubscriptionAutomation(item);
+}
+
+function isSubscriptionAutomation(item) {
   const order = item?.orders || {};
 
   return (
-    frequency === "monthly" ||
     String(order?.stripe_mode || "").toLowerCase() === "subscription" ||
     Boolean(order?.stripe_subscription_id) ||
     String(order?.price_display || "").toLowerCase().includes("/mo") ||
@@ -751,8 +753,44 @@ function isMonthlyAutomation(item) {
   );
 }
 
+function runtimeFrequency(item) {
+  const frequency = String(item?.run_frequency || "").toLowerCase();
+
+  if ([
+    "every_30_minutes",
+    "hourly",
+    "daily",
+    "weekly",
+    "monthly",
+    "on_demand"
+  ].includes(frequency)) {
+    return frequency;
+  }
+
+  return isSubscriptionAutomation(item) ? "monthly" : "manual";
+}
+
+function isRecurringAutomation(item) {
+  return [
+    "every_30_minutes",
+    "hourly",
+    "daily",
+    "weekly",
+    "monthly"
+  ].includes(runtimeFrequency(item));
+}
+
 function cadenceLabel(item) {
-  return isMonthlyAutomation(item) ? "Monthly" : "One-time";
+  const frequency = runtimeFrequency(item);
+
+  if (frequency === "every_30_minutes") return "Every 30 min";
+  if (frequency === "hourly") return "Hourly";
+  if (frequency === "daily") return "Daily";
+  if (frequency === "weekly") return "Weekly";
+  if (frequency === "monthly") return "Monthly";
+  if (frequency === "on_demand") return "On demand";
+
+  return "One-time";
 }
 
 function isSetupReadyForScheduling(item) {
@@ -781,7 +819,17 @@ function formatOutputDueDate(value) {
 }
 
 function nextOutputInfo(item) {
-  if (!isMonthlyAutomation(item)) {
+  const frequency = runtimeFrequency(item);
+  const cadence = cadenceLabel(item).toLowerCase();
+
+  if (frequency === "on_demand") {
+    return {
+      label: "Runs when requested",
+      help: "This automation responds when you send a request or trigger the workflow."
+    };
+  }
+
+  if (!isRecurringAutomation(item)) {
     return {
       label: "One-time output",
       help: "This purchase is delivered once after setup or guided install is complete."
@@ -795,14 +843,14 @@ function nextOutputInfo(item) {
   if (status === "paused" || String(order?.stripe_subscription_status || "").toLowerCase() === "past_due") {
     return {
       label: "Paused",
-      help: "Monthly outputs pause until the subscription or schedule is active again."
+      help: `${cadenceLabel(item)} outputs pause until the payment or schedule is active again.`
     };
   }
 
   if (status === "error") {
     return {
       label: "Needs attention",
-      help: "Nexus needs to fix the workflow before the next monthly output can run."
+      help: `Nexus needs to fix the workflow before the next ${cadence} output can run.`
     };
   }
 
@@ -810,8 +858,8 @@ function nextOutputInfo(item) {
     return {
       label: isGuidedInstall(item) ? "After guided install" : "After setup is complete",
       help: isGuidedInstall(item)
-        ? "Monthly outputs start once Nexus completes the guided install."
-        : "Monthly outputs start after the setup form is submitted and the workflow is ready."
+        ? `${cadenceLabel(item)} outputs start once Nexus completes the guided install.`
+        : `${cadenceLabel(item)} outputs start after the setup form is submitted and the workflow is ready.`
     };
   }
 
@@ -820,7 +868,7 @@ function nextOutputInfo(item) {
     if (!Number.isNaN(next.getTime())) {
       return {
         label: next <= new Date() ? "Due now" : formatOutputDueDate(item.next_run_at),
-        help: "Estimated from the monthly automation schedule."
+        help: `Estimated from the ${cadence} automation schedule.`
       };
     }
   }
@@ -831,13 +879,13 @@ function nextOutputInfo(item) {
   if (formattedBillingDate && status === "active") {
     return {
       label: formattedBillingDate,
-      help: "Estimated from the current paid monthly billing period."
+      help: "Estimated from the current paid billing period."
     };
   }
 
   return {
     label: status === "active" ? "Waiting for schedule" : humanizeStatus(status || "not scheduled"),
-    help: "Nexus will show a date here once the monthly schedule is ready."
+    help: "Nexus will show a date here once the schedule is ready."
   };
 }
 
@@ -858,7 +906,8 @@ function lastRunLabel(item) {
 }
 
 function scheduleStatusLabel(item) {
-  if (!isMonthlyAutomation(item)) return "Manual";
+  if (runtimeFrequency(item) === "on_demand") return "On demand";
+  if (!isRecurringAutomation(item)) return "Manual";
   return humanizeStatus(item?.schedule_status || "inactive");
 }
 
@@ -1316,7 +1365,7 @@ function openAutomationDetail(customerAutomationId) {
       const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
       const automationOutputs = outputsForAutomation(item.id);
       const automationRuns = runsForAutomation(item.id);
-      const monthly = isMonthlyAutomation(item);
+      const recurring = isRecurringAutomation(item);
 
       return `
         <article class="buyer-automation-board-card">
@@ -1335,7 +1384,7 @@ function openAutomationDetail(customerAutomationId) {
           </div>
 
           <div class="buyer-automation-board-meta">
-            <div class="${monthly ? "monthly" : ""}">
+            <div class="${recurring ? "monthly" : ""}">
               <span>Cadence</span>
               <strong>${escapeHtml(cadenceLabel(item))}</strong>
             </div>
@@ -1476,7 +1525,7 @@ function openAutomationDetail(customerAutomationId) {
               <div>
                 <div class="buyer-automation-title-row">
                   <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
-                  <span class="${isMonthlyAutomation(item) ? "pill blue" : "pill"}">${escapeHtml(cadenceLabel(item))}</span>
+                  <span class="${isRecurringAutomation(item) || runtimeFrequency(item) === "on_demand" ? "pill blue" : "pill"}">${escapeHtml(cadenceLabel(item))}</span>
                   <span class="buyer-builder-inline">Built by ${escapeHtml(developerName)}</span>
                 </div>
                 <h3>${escapeHtml(productTitle)}</h3>
@@ -1594,7 +1643,7 @@ function openAutomationDetail(customerAutomationId) {
                     ${waitingAutomations.map(item => `
                       <article>
                         <strong>${escapeHtml(productTitleFromAutomation(item))}</strong>
-                        <span>${escapeHtml(isMonthlyAutomation(item) ? `Next output: ${nextOutputLabel(item)}` : getSetupDisplayLabel(item))}</span>
+                        <span>${escapeHtml(isRecurringAutomation(item) || runtimeFrequency(item) === "on_demand" ? `Next output: ${nextOutputLabel(item)}` : getSetupDisplayLabel(item))}</span>
                       </article>
                     `).join("")}
                   </div>

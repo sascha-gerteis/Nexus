@@ -149,6 +149,10 @@ const makeAssistant = read("supabase/functions/make-import-assistant/index.ts");
 const developerProducts = read("supabase/functions/developer-products/index.ts");
 const checkoutFunction = read("supabase/functions/create-checkout-session/index.ts");
 const sheetAccessSql = read("supabase/sheet_access_modes_install_or_patch.sql");
+const scheduledRunner = read("supabase/functions/run-scheduled-automations/index.ts");
+const submitSetupFunction = read("supabase/functions/submit-automation-setup/index.ts");
+const provisionWorkflow = read("supabase/functions/provision-customer-workflow/index.ts");
+const stripeWebhook = read("supabase/functions/stripe-webhook/index.ts");
 
 scenario("Direct n8n OpenAI HTTP workflow template is import-safe", () => {
   const workflow = readJson("workflow-templates/monthly-competitor-website-brief-nexus.workflow.json");
@@ -259,6 +263,21 @@ scenario("Importer uses full workflow replacement and keeps drafts inactive", ()
   assert(importFunction.includes("n8n_last_test_status: \"not_tested\""), "Import must reset technical test status.");
 });
 
+scenario("Importer keeps Nexus runtime/output nodes wired with a JSON body", () => {
+  assert(importFunction.includes("wrapWebhookWithRuntimeContext"), "Importer must preserve the original workflow path behind Nexus Runtime Context.");
+  assert(importFunction.includes("collectMainTargets"), "Importer must collect existing webhook targets before rewiring.");
+  assert(importFunction.includes("Nexus Submit Output"), "Importer must add the Nexus output callback node.");
+  assert(importFunction.includes("buildNexusSubmitOutputBodyParameters"), "Nexus output node must use explicit body parameters.");
+  assert(importFunction.includes("sendBody: true"), "Nexus output node must send a body.");
+  assert(importFunction.includes('bodyContentType: "json"'), "Nexus output node must send JSON.");
+  assert(importFunction.includes('specifyBody: "keypair"'), "Nexus output node must use n8n keypair body parameters.");
+  assert(importFunction.includes("customer_automation_id"), "Nexus output body must include customer_automation_id.");
+  assert(importFunction.includes("runtime_secret"), "Nexus output headers must include runtime_secret.");
+  assert(importFunction.includes("NEXUS_FINAL_OUTPUT"), "Importer must support a developer-marked final output node.");
+  assert(importFunction.includes("removeMainConnectionTo(connections, attachToNodeName, \"Nexus Submit Output\")"), "Importer must avoid duplicate output-node connections.");
+  assert(importFunction.includes("ensureMainConnection("), "Importer must connect final output into Nexus Submit Output.");
+});
+
 scenario("Setup schema is auto-generated before submission gates", () => {
   assert(importFunction.includes("autoAddMissingSchemaFieldsForWorkflow"), "Importer must auto-add missing setup schema fields.");
   assert(importFunction.includes("extractRuntimeSetupKeys"), "Importer must detect runtime setup references.");
@@ -305,11 +324,63 @@ scenario("HTTP substitutes reject unsafe URLs and raw secrets", () => {
   assert(makeAssistant.includes("credential vault"), "HTTP substitute errors should point developers to the credential vault.");
 });
 
+scenario("Credential system covers realistic launch provider families", () => {
+  assertContainsAll(
+    [
+      "openAiApi",
+      "httpBearerAuth",
+      "httpQueryAuth",
+      "apify",
+      "googleApi",
+      "googleSheetsOAuth2Api",
+      "gmailOAuth2",
+      "smtp",
+      "telegramApi",
+      "slackApi",
+      "hubspotApi",
+      "airtableTokenApi",
+    ],
+    [
+      "openAiApi",
+      "httpBearerAuth",
+      "httpQueryAuth",
+      "apify",
+      "googleApi",
+      "googleSheetsOAuth2Api",
+      "gmailOAuth2",
+      "smtp",
+      "telegramApi",
+      "slackApi",
+      "hubspotApi",
+      "airtableTokenApi",
+    ],
+    "Credential family fixture",
+  );
+  assert(credentialsShared.includes('n8nCredentialType: "openAiApi"'), "OpenAI native credentials must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "httpBearerAuth"'), "Bearer-token HTTP/API workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "httpQueryAuth"'), "Query-token HTTP/API workflows must be detected.");
+  assert(credentialsShared.includes('provider: "apify"'), "Apify workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "googleApi"'), "Google service account workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "googleSheetsOAuth2Api"'), "Google Sheets OAuth workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "gmailOAuth2"'), "Gmail OAuth workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "smtp"'), "SMTP email workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "telegramApi"'), "Telegram alert workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "slackApi"'), "Slack notification workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "hubspotApi"'), "HubSpot workflows must be detected.");
+  assert(credentialsShared.includes('n8nCredentialType: "airtableTokenApi"'), "Airtable workflows must be detected.");
+  assert(credentialsShared.includes("credentialCarriersForWorkflow"), "Scanner must inspect Set/Edit Fields/Code credential carrier nodes.");
+  assert(credentialsShared.includes("credential_source_fields"), "Scanner must remember upstream credential field names.");
+  assert(credentialsShared.includes("scrubCredentialCarrierAssignments"), "Credential application must scrub raw keys from carrier nodes.");
+});
+
 scenario("Checkout and approval gates still require import/test for paid products", () => {
   assert(checkoutFunction.includes("isPassingWorkflowTest"), "Checkout must require a passing workflow test.");
   assert(checkoutFunction.includes("n8n_last_test_status"), "Checkout must check latest workflow test status.");
   assert(developerProducts.includes("Run a successful technical test before submitting"), "Developer submission must require successful technical test.");
   assert(developerProducts.includes("Import this workflow to Nexus n8n before submitting"), "Developer submission must require hosted n8n import.");
+  assert(developerProducts.includes("Before submitting, use Save & run real test"), "Developer submission must require one saved real test for non-live products.");
+  assert(developerProducts.includes("hasRealPassingWorkflowTest"), "Developer submission must distinguish real test profiles from placeholder tests.");
+  assert(developerProducts.includes("used_test_profile"), "Developer submission must look for saved real test profile evidence.");
 });
 
 scenario("Make and Zapier source selections do not show plain n8n upload as the only path", () => {
@@ -322,6 +393,19 @@ scenario("Make and Zapier source selections do not show plain n8n upload as the 
   assert(adminForm.includes('option value="zapier"'), "Admin form must expose Zapier import mode.");
   assert(devDashboard.includes("Upload a Zapier-style workflow JSON"), "Developer dashboard must explain Zapier import.");
   assert(devDashboard.includes("Upload a Make blueprint"), "Developer dashboard must explain Make import.");
+});
+
+scenario("Runtime modes support one-time, recurring, and on-demand products end-to-end", () => {
+  assert(developerProducts.includes("runtime_trigger_mode"), "Developer products must persist runtime trigger mode.");
+  assert(developerProducts.includes("runtime_event_schema"), "Developer products must persist on-demand event schema.");
+  assert(stripeWebhook.includes("normalizeRuntimeTriggerMode"), "Checkout webhook must copy runtime trigger mode to customer automations.");
+  assert(stripeWebhook.includes("normalizeProductRunFrequency"), "Checkout webhook must copy runtime cadence to customer automations.");
+  assert(submitSetupFunction.includes("runtimeScheduleUpdate"), "Self-serve setup must activate schedules by runtime mode.");
+  assert(provisionWorkflow.includes("runtimeScheduleUpdate"), "Guided/admin provisioning must activate schedules by runtime mode.");
+  assert(scheduledRunner.includes('frequency === "every_30_minutes"'), "Scheduler must support every-30-minute cadence.");
+  assert(scheduledRunner.includes('.not("run_frequency", "in", "(manual,on_demand)")'), "Scheduler must not run manual/on-demand products as timed products.");
+  assert(scheduledRunner.includes("buyerOwnsCandidate"), "On-demand runs must be scoped to the buyer's own automation.");
+  assert(scheduledRunner.includes("body.event || body.request || body.input"), "On-demand runs must accept event/request payloads.");
 });
 
 console.log("");

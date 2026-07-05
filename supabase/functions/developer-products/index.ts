@@ -23,6 +23,47 @@ function productCurrency(value: unknown) {
   return ["THB", "USD", "EUR", "GBP", "JPY"].includes(currency) ? currency : "THB";
 }
 
+function runtimeTriggerMode(value: unknown) {
+  const mode = cleanString(value).toLowerCase();
+  return [
+    "setup_complete",
+    "on_demand",
+    "scheduled_interval",
+    "subscription_monthly",
+    "manual",
+  ].includes(mode) ? mode : "setup_complete";
+}
+
+function runtimeRunFrequency(value: unknown, triggerMode = "setup_complete") {
+  const frequency = cleanString(value).toLowerCase();
+  if ([
+    "manual",
+    "on_demand",
+    "every_30_minutes",
+    "hourly",
+    "daily",
+    "weekly",
+    "monthly",
+  ].includes(frequency)) return frequency;
+
+  if (triggerMode === "on_demand") return "on_demand";
+  if (triggerMode === "scheduled_interval") return "daily";
+  if (triggerMode === "subscription_monthly") return "monthly";
+  return "manual";
+}
+
+function runtimeNoChangePolicy(value: unknown) {
+  const policy = cleanString(value).toLowerCase();
+  return ["no_output", "status_event", "empty_output"].includes(policy) ? policy : "no_output";
+}
+
+function runtimeResponseMode(value: unknown) {
+  const mode = cleanString(value).toLowerCase();
+  return ["dashboard_output", "instant_message", "alert_only", "webhook_ack"].includes(mode)
+    ? mode
+    : "dashboard_output";
+}
+
 function boolValue(value: unknown) {
   const raw = cleanString(value).toLowerCase();
   return value === true || value === 1 || ["true", "1", "yes", "on"].includes(raw);
@@ -601,6 +642,11 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
       : requestedRuntimeType === "n8n_managed"
         ? "n8n_managed"
         : "manual";
+  const requestedTriggerMode = runtimeTriggerMode(body.runtime_trigger_mode);
+  const triggerMode = listingType === "custom_request" || runtimeType === "manual"
+    ? "manual"
+    : requestedTriggerMode;
+  const runFrequency = runtimeRunFrequency(body.runtime_run_frequency, triggerMode);
   const detectedPlaceholders = cleanJsonObject(body.detected_placeholders);
   const sheetAccessConfig = cleanSheetAccessConfig(body.sheet_access_config);
   if (Object.keys(sheetAccessConfig).length) {
@@ -665,9 +711,26 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     customizations: cleanCustomizations(body.customizations),
 
     runtime_type: runtimeType,
+    runtime_trigger_mode: triggerMode,
+    runtime_run_frequency: runFrequency,
+    runtime_interval_count: 1,
+    runtime_interval_unit: runFrequency === "every_30_minutes"
+      ? "minute"
+      : runFrequency === "hourly"
+        ? "hour"
+        : runFrequency === "daily"
+          ? "day"
+          : runFrequency === "weekly"
+            ? "week"
+            : runFrequency === "monthly"
+              ? "month"
+              : "month",
+    runtime_no_change_policy: runtimeNoChangePolicy(body.runtime_no_change_policy),
+    runtime_response_mode: runtimeResponseMode(body.runtime_response_mode),
     workflow_source_platform: listingType === "custom_request" ? "manual" : workflowSourcePlatform,
     runtime_output_mode: "standard",
     setup_schema: cleanSchema(body.setup_schema),
+    runtime_event_schema: cleanSchema(body.runtime_event_schema),
     credential_schema: cleanSchema(body.credential_schema),
     workflow_placeholder_mappings: cleanWorkflowMappings(body.workflow_placeholder_mappings),
     detected_placeholders: detectedPlaceholders,

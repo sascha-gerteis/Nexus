@@ -488,6 +488,28 @@
       </div>
 
       <div class="full">
+        <label>On-demand request fields</label>
+
+        <textarea
+          class="textarea code-textarea"
+          name="runtime_event_schema"
+          placeholder='[
+  {
+    "name": "question",
+    "label": "Question",
+    "type": "textarea",
+    "required": true,
+    "description": "Used for chatbot or on-demand products when the buyer sends a request."
+  }
+]'
+        ></textarea>
+
+        <small>
+          Use this for per-request inputs on on-demand products. Setup fields are saved once; request fields are sent each time the buyer triggers the automation.
+        </small>
+      </div>
+
+      <div class="full">
         <label>Credential fields / secrets</label>
 
         <textarea
@@ -655,6 +677,49 @@
         <small>
           Use manual mode for products fulfilled by Nexus. Use automatic mode when the uploaded n8n workflow should run after setup.
         </small>
+      </div>
+
+      <div>
+        <label>Runtime behavior</label>
+        <select class="select" name="runtime_trigger_mode">
+          <option value="setup_complete">Run after buyer setup</option>
+          <option value="on_demand">On demand / question triggered</option>
+          <option value="scheduled_interval">Run on a schedule</option>
+          <option value="subscription_monthly">Monthly output</option>
+          <option value="manual">Manual delivery</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Run cadence</label>
+        <select class="select" name="runtime_run_frequency">
+          <option value="manual">Only when triggered</option>
+          <option value="on_demand">On demand</option>
+          <option value="every_30_minutes">Every 30 minutes</option>
+          <option value="hourly">Hourly</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+
+      <div>
+        <label>No-change behavior</label>
+        <select class="select" name="runtime_no_change_policy">
+          <option value="no_output">No dashboard output unless something changed</option>
+          <option value="status_event">Log a status event only</option>
+          <option value="empty_output">Show a “no change” output</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Customer response</label>
+        <select class="select" name="runtime_response_mode">
+          <option value="dashboard_output">Dashboard output</option>
+          <option value="instant_message">Instant answer/message</option>
+          <option value="alert_only">Alert only when triggered</option>
+          <option value="webhook_ack">Webhook acknowledgement</option>
+        </select>
       </div>
 
       <div class="full workflow-source-panel workflow-source-make hidden">
@@ -1590,6 +1655,7 @@
       }
 
       const setupSchema = this.requireJsonField("setup_schema", []);
+      const runtimeEventSchema = this.requireJsonField("runtime_event_schema", []);
       const credentialSchema = this.requireJsonField("credential_schema", []);
       const workflowPlaceholderMappings = this.requireJsonField("workflow_placeholder_mappings", []);
       const n8nWorkflowJson = this.requireJsonField("n8n_workflow_json", null);
@@ -1664,6 +1730,11 @@
         customizations: this.collectCustomizations(formData),
 
         runtime_type: String(formData.get("runtime_type") || existingProduct.runtime_type || "manual"),
+        runtime_trigger_mode: String(formData.get("runtime_trigger_mode") || existingProduct.runtime_trigger_mode || "legacy"),
+        runtime_run_frequency: String(formData.get("runtime_run_frequency") || existingProduct.runtime_run_frequency || "manual"),
+        runtime_no_change_policy: String(formData.get("runtime_no_change_policy") || existingProduct.runtime_no_change_policy || "no_output"),
+        runtime_response_mode: String(formData.get("runtime_response_mode") || existingProduct.runtime_response_mode || "dashboard_output"),
+        runtime_event_schema: runtimeEventSchema,
         workflow_source_platform: workflowProvider,
 
         runtime_webhook_url: existingProduct.runtime_webhook_url || "",
@@ -1773,6 +1844,7 @@
       };
 
       writeJsonField("setup_schema", product.setup_schema || []);
+      writeJsonField("runtime_event_schema", product.runtime_event_schema || []);
       writeJsonField("credential_schema", product.credential_schema || []);
       writeJsonField("workflow_placeholder_mappings", product.workflow_placeholder_mappings || []);
       writeJsonField("detected_placeholders", product.detected_placeholders || {});
