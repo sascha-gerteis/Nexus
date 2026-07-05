@@ -409,6 +409,11 @@
                 <div class="full"><label>On-demand request schema JSON</label><textarea class="textarea code-textarea" name="runtime_event_schema" rows="5" placeholder='[{"name":"question","label":"Question","type":"textarea","required":true}]'></textarea></div>
                 <div class="full"><label>Credential schema JSON</label><textarea class="textarea code-textarea" name="credential_schema" rows="6" placeholder='[{"name":"api_key","label":"API key","type":"secret","required":true}]'></textarea></div>
                 <div class="full"><label>Workflow placeholder mappings JSON</label><textarea class="textarea code-textarea" name="workflow_placeholder_mappings" rows="7" placeholder='[{"placeholder":"[[CompanyWebsite]]","source":"setup","key":"company_url"}]'></textarea></div>
+                <div class="full">
+                  <div class="developer-generated-mapping-panel" id="developerGeneratedMappingPanel">
+                    Upload or paste a workflow JSON. Nexus will auto-detect setup placeholders, credential placeholders, and mappings here.
+                  </div>
+                </div>
                 <input type="hidden" name="detected_placeholders" value="{}">
                 <input type="hidden" name="placeholder_validation_status" value="not_checked">
                 <input type="hidden" name="placeholder_validation_errors" value="[]">
@@ -1034,6 +1039,13 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     </article>
   </section>
 
+  <div class="modal-backdrop" id="productModal">
+    <div class="modal">
+      <div class="modal-side" id="modalSide"></div>
+      <div class="modal-main" id="modalMain"></div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
   <script src="/assets/js/nexus-ui.js?v=20260702-workflow-import-health"></script>
 <script src="/assets/js/nexus-db.js?v=20260704-output-body-repair"></script>
@@ -1431,6 +1443,224 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return state.account?.developer || state.account?.data?.developer || {};
     }
 
+    function normalizeWorkspaceKey(value = "") {
+      const aliases = {
+        main_website: "company_url",
+        company_website: "company_url",
+        company_site: "company_url",
+        business_website: "company_url",
+        business_site: "company_url",
+        buyer_website: "company_url",
+        client_website: "company_url",
+        customer_website: "company_url",
+        competitor_websites: "competitor_urls",
+        competitor_sites: "competitor_urls",
+        competitors: "competitor_urls",
+        competitor_list: "competitor_urls",
+        market_or_region: "market_region",
+        target_market: "market_region",
+        target_audience: "target_customer",
+        ideal_customer: "target_customer",
+        customer_persona: "target_customer",
+        buyer_persona: "target_customer",
+        apify_key: "apify_token",
+        apify_api_key: "apify_token",
+        apify_access_token: "apify_token",
+        openai_key: "openai_api_key",
+        openai_token: "openai_api_key",
+        open_ai_api_key: "openai_api_key",
+        gpt_key: "openai_api_key"
+      };
+      const key = String(value || "")
+        .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      return aliases[key] || key;
+    }
+
+    function mappingSourceForName(rawName = "") {
+      const text = String(rawName || "").toLowerCase();
+      if (/secret|credential|token|api[_\s-]*key|apikey|access[_\s-]*key|password|bearer|auth/.test(text)) {
+        return "secret";
+      }
+      return "setup";
+    }
+
+    function mappingFromPlaceholder(fullPlaceholder = "", inner = "") {
+      const cleanInner = String(inner || "").trim().replace(/^['"`]|['"`]$/g, "");
+      if (!cleanInner || cleanInner.startsWith("$") || /\$json|\$node|\$\(|Nexus Runtime Context/i.test(cleanInner)) {
+        return null;
+      }
+
+      if (/^NEXUS_(SETUP|SECRET|CUSTOMER|ORDER|SYSTEM)\./i.test(cleanInner)) {
+        return null;
+      }
+
+      let source = "";
+      let key = "";
+      const pipeMatch = cleanInner.match(/^([a-z0-9_\s.-]+)\|([a-z0-9_.\s-]+)$/i);
+      const dotMatch = cleanInner.match(/^([a-z0-9_\s-]+)\.([a-z0-9_.\s-]+)$/i);
+
+      if (pipeMatch) {
+        source = pipeMatch[1];
+        key = pipeMatch[2];
+      } else if (dotMatch) {
+        source = dotMatch[1];
+        key = dotMatch[2];
+      } else {
+        key = cleanInner;
+        source = mappingSourceForName(cleanInner);
+      }
+
+      const normalizedSource = /secret|credential|token|key|auth/i.test(source) ? "secret" : "setup";
+      const normalizedKey = normalizeWorkspaceKey(key);
+      if (!normalizedKey) return null;
+
+      return {
+        placeholder: fullPlaceholder,
+        source: normalizedSource,
+        key: normalizedKey
+      };
+    }
+
+    function inferWorkflowPlaceholderMappings(workflow) {
+      const text = workflow && typeof workflow === "object" ? JSON.stringify(workflow) : String(workflow || "");
+      if (!text.trim()) return [];
+
+      const mappings = new Map();
+      const add = (placeholder, inner) => {
+        const mapping = mappingFromPlaceholder(placeholder, inner);
+        if (!mapping) return;
+        mappings.set(mapping.placeholder, mapping);
+      };
+
+      for (const match of text.matchAll(/\[\[\s*([A-Za-z0-9_.:|\-\s]+?)\s*\]\]/g)) {
+        add(match[0], match[1]);
+      }
+
+      for (const match of text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)) {
+        add(match[0], match[1]);
+      }
+
+      return [...mappings.values()].sort((a, b) => `${a.source}:${a.key}`.localeCompare(`${b.source}:${b.key}`));
+    }
+
+    function mergeWorkflowPlaceholderMappings(existing = [], generated = []) {
+      const output = [];
+      const seen = new Set();
+      const existingList = Array.isArray(existing) ? existing : [];
+      const generatedList = Array.isArray(generated) ? generated : [];
+
+      [...existingList, ...generatedList].forEach((item) => {
+        const placeholder = String(item?.placeholder || "").trim();
+        const source = String(item?.source || "").trim();
+        const key = String(item?.key || "").trim();
+        if (!placeholder || !source || !key || seen.has(placeholder)) return;
+        seen.add(placeholder);
+        output.push({ placeholder, source, key });
+      });
+
+      return output;
+    }
+
+    function syncGeneratedWorkflowMappingsToForm({ silent = true } = {}) {
+      const form = document.getElementById("developerProductForm");
+      if (!form) return [];
+
+      let workflow = null;
+      try {
+        workflow = jsonField(new FormData(form), "n8n_workflow_json", null);
+      } catch {
+        return [];
+      }
+
+      const current = (() => {
+        try {
+          return jsonField(new FormData(form), "workflow_placeholder_mappings", []);
+        } catch {
+          return [];
+        }
+      })();
+      const generated = inferWorkflowPlaceholderMappings(workflow);
+      const merged = mergeWorkflowPlaceholderMappings(current, generated);
+      const field = form.elements.workflow_placeholder_mappings;
+
+      if (field && JSON.stringify(current) !== JSON.stringify(merged)) {
+        field.value = JSON.stringify(merged, null, 2);
+        if (!silent && generated.length) {
+          NexusUI.toast(`Nexus mapped ${generated.length} workflow placeholder${generated.length === 1 ? "" : "s"}.`);
+        }
+      }
+
+      renderGeneratedMappingPanel({
+        ...selectedProduct(),
+        setup_schema: (() => {
+          try { return jsonField(new FormData(form), "setup_schema", []); } catch { return []; }
+        })(),
+        credential_schema: (() => {
+          try { return jsonField(new FormData(form), "credential_schema", []); } catch { return []; }
+        })(),
+        workflow_placeholder_mappings: merged,
+        detected_placeholders: (() => {
+          try { return jsonField(new FormData(form), "detected_placeholders", {}); } catch { return {}; }
+        })()
+      });
+
+      return merged;
+    }
+
+    function renderGeneratedMappingPanel(product = selectedProduct()) {
+      const root = document.getElementById("developerGeneratedMappingPanel");
+      if (!root) return;
+
+      const setup = schemaArray(product?.setup_schema);
+      const credentials = schemaArray(product?.credential_schema);
+      const mappings = schemaArray(product?.workflow_placeholder_mappings);
+      const importResult = product?.n8n_last_import_result && typeof product.n8n_last_import_result === "object"
+        ? product.n8n_last_import_result
+        : {};
+      const autoSetup = Array.isArray(importResult.auto_added_setup_fields) ? importResult.auto_added_setup_fields : [];
+      const autoCredentials = Array.isArray(importResult.auto_added_credential_fields) ? importResult.auto_added_credential_fields : [];
+
+      if (!setup.length && !credentials.length && !mappings.length && !autoSetup.length && !autoCredentials.length) {
+        root.innerHTML = `
+          <strong>Generated setup and mappings</strong>
+          <p>Upload or paste a workflow JSON, then save/import. Nexus will show detected buyer questions, credentials, and placeholder mappings here.</p>
+        `;
+        return;
+      }
+
+      const chip = (label, value, className = "") => `
+        <span class="${className}"><strong>${NexusUI.escapeHtml(label)}</strong>${NexusUI.escapeHtml(value)}</span>
+      `;
+
+      root.innerHTML = `
+        <div class="developer-generated-mapping-head">
+          <div>
+            <strong>Generated setup and mappings</strong>
+            <p>Nexus uses these to replace workflow placeholders with buyer setup answers and saved developer credentials.</p>
+          </div>
+          <button class="btn btn-secondary btn-small" type="button" onclick="syncGeneratedWorkflowMappingsToForm({ silent: false })">Refresh mappings</button>
+        </div>
+        <div class="developer-generated-mapping-stats">
+          ${chip("Buyer fields", String(setup.length))}
+          ${chip("Credential fields", String(credentials.length))}
+          ${chip("Mappings", String(mappings.length))}
+          ${autoSetup.length ? chip("Auto setup", String(autoSetup.length), "good") : ""}
+          ${autoCredentials.length ? chip("Auto credentials", String(autoCredentials.length), "good") : ""}
+        </div>
+        ${mappings.length ? `
+          <div class="developer-generated-mapping-list">
+            ${mappings.slice(0, 8).map((mapping) => `
+              <code>${NexusUI.escapeHtml(mapping.placeholder)} -> ${NexusUI.escapeHtml(mapping.source)}.${NexusUI.escapeHtml(mapping.key)}</code>
+            `).join("")}
+            ${mappings.length > 8 ? `<small>+${mappings.length - 8} more mappings in the JSON field.</small>` : ""}
+          </div>
+        ` : ""}
+      `;
+    }
+
     function openModalElement(element) {
       if (!element) return;
       element.classList.add("open");
@@ -1488,6 +1718,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       updateDeveloperImportResult(null);
       renderMakeImportResult(null);
       renderDeveloperSheetAccessPanel(null);
+      renderGeneratedMappingPanel(null);
       updateDeveloperWorkflowProviderUI();
       updateDeveloperPricingLabels();
     }
@@ -1569,6 +1800,134 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (select) select.value = state.selectedProductId;
     }
 
+    function developerPreviewProductFromForm() {
+      const saved = selectedProduct() || {};
+      const payload = productPayload();
+      const developer = getDeveloper();
+      const displayName = developer.display_name || developer.name || "Your developer profile";
+
+      return {
+        ...saved,
+        ...payload,
+        id: saved.id || payload.id || "draft-preview",
+        status: saved.status || "draft",
+        rating: saved.rating || 5,
+        review_count: saved.review_count || 0,
+        sales_count: saved.sales_count || 0,
+        developers: {
+          ...(saved.developers || {}),
+          id: developer.id || saved.developer_id || "",
+          display_name: displayName,
+          handle: developer.handle || saved.developers?.handle || "",
+          type: developer.type || saved.developers?.type || "Approved Nexus developer",
+          avatar_letter: developer.avatar_letter || saved.developers?.avatar_letter || "NX"
+        },
+        reviews: saved.reviews || []
+      };
+    }
+
+    function developerPreviewInfoBlock(title, items) {
+      return NexusUI.infoBlock(title, Array.isArray(items) ? items : [items].filter(Boolean));
+    }
+
+    function previewDeveloperProduct() {
+      try {
+        const product = developerPreviewProductFromForm();
+        const developer = product.developers || {};
+        const freshness = NexusUI.productFreshness?.(product) || {
+          tested: "After approval",
+          updated: "Draft preview",
+          maintainer: developer.display_name || "Approved developer"
+        };
+
+        const side = `
+          <div class="modal-head">
+            <div>
+              <span class="${NexusUI.pillClass(product.color)}">${NexusUI.escapeHtml(product.badge || product.category || "Automation")}</span>
+              <h2>${NexusUI.escapeHtml(product.title || "Untitled product")}</h2>
+              <p>${NexusUI.escapeHtml(product.long_description || product.short_description || "Add a buyer-facing description before publishing.")}</p>
+            </div>
+            <button class="close" onclick="NexusUI.closeModal()">Close</button>
+          </div>
+
+          <div class="developer-mini">
+            <div class="avatar">${NexusUI.escapeHtml(developer.avatar_letter || "NX")}</div>
+            <div>
+              <strong>${NexusUI.escapeHtml(developer.display_name || "Your developer profile")}</strong>
+              <span>${NexusUI.escapeHtml(developer.type || "Approved Nexus developer")} &middot; Draft preview</span>
+            </div>
+          </div>
+
+          <div class="price-box">
+            <span>Price</span>
+            <strong>${NexusUI.money(product)}</strong>
+            ${NexusUI.productAllowsGuidedInstall?.(product) && NexusUI.guidedInstallFeeMoney?.(product) ? `
+              <small>Guided install: + ${NexusUI.guidedInstallFeeMoney(product)}</small>
+            ` : ""}
+          </div>
+
+          <div class="product-maintenance-panel">
+            <div><span>Last tested</span><strong>${NexusUI.escapeHtml(freshness.tested)}</strong></div>
+            <div><span>Last updated</span><strong>${NexusUI.escapeHtml(freshness.updated)}</strong></div>
+            <div><span>Maintained by</span><strong>${NexusUI.escapeHtml(freshness.maintainer)}</strong></div>
+          </div>
+
+          ${developerPreviewInfoBlock("Problem it solves", product.problem)}
+          ${developerPreviewInfoBlock("Business outcome", product.outcome)}
+          ${developerPreviewInfoBlock("Who this is for", product.who_it_is_for)}
+          ${developerPreviewInfoBlock("Outputs", product.outputs)}
+          ${developerPreviewInfoBlock("Required inputs", product.required_inputs)}
+        `;
+
+        const main = `
+          <div class="developer-preview-note">
+            <strong>Customer-view preview</strong>
+            <span>This is how the product modal will feel to buyers after Nexus approval. Checkout and messages are disabled in preview.</span>
+          </div>
+          <div class="preview-shell">
+            <div class="browser-bar">
+              <span class="browser-dot red"></span>
+              <span class="browser-dot yellow"></span>
+              <span class="browser-dot green-dot"></span>
+              <span>nexus.ai / live-preview</span>
+            </div>
+            <div class="preview-window" id="livePreview">
+              ${NexusUI.renderPreview(product)}
+            </div>
+          </div>
+          <div class="card">
+            <h3>Ready to use this automation?</h3>
+            <p>In the live marketplace, buyers can choose checkout, setup path, and developer messaging from here.</p>
+            <div class="hero-actions" style="justify-content:flex-start">
+              <button class="btn btn-primary" type="button" disabled>Buy / choose setup</button>
+              <button class="btn btn-secondary" type="button" disabled>Message developer</button>
+            </div>
+          </div>
+        `;
+
+        NexusUI.openModal(side, main);
+      } catch (error) {
+        NexusUI.toast(error.message || "Could not render product preview.");
+      }
+    }
+
+    function developerReadinessChecklist(product) {
+      const setupCount = schemaArray(product?.setup_schema).length;
+      const mappingCount = schemaArray(product?.workflow_placeholder_mappings).length;
+      const previewReady = Boolean(product?.preview_base64 || product?.preview_image_url || product?.preview_code || product?.preview_description);
+      const imported = product?.listing_type === "custom_request" || product?.n8n_import_status === "imported";
+      const tested = product?.listing_type === "custom_request" || isPassingTestStatus(product?.n8n_last_test_status);
+      const realTested = product?.listing_type === "custom_request" || isLiveProductStatus(product?.status) || hasRealPassingTest(product);
+
+      return [
+        { label: "Buyer setup", value: setupCount ? `${setupCount} fields` : "Needs fields", ok: setupCount > 0 || product?.listing_type === "custom_request" },
+        { label: "Mappings", value: mappingCount ? `${mappingCount} mapped` : "Auto on save", ok: mappingCount > 0 || product?.listing_type === "custom_request" },
+        { label: "Preview", value: previewReady ? "Ready" : "Add output", ok: previewReady },
+        { label: "Import", value: imported ? "Imported" : "Needed", ok: imported },
+        { label: "Run check", value: tested && realTested ? "Passed" : tested ? "Real run needed" : "Needed", ok: tested && realTested }
+      ];
+    }
+
     function renderSelectedProductSummary(product = selectedProduct()) {
       const root = document.getElementById("developerSelectedProductSummary");
       if (!root) return;
@@ -1586,18 +1945,36 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const readiness = productReadiness(product);
       const healthStatus = NexusUI.workflowHealthStatus?.(product) || product.health_status || "";
       const healthLabel = NexusUI.workflowHealthLabel?.(healthStatus) || healthStatus;
+      const checklist = developerReadinessChecklist(product);
+      const editorButton = product.n8n_import_status === "imported" && product.n8n_workflow_id
+        ? `<button class="btn btn-secondary btn-small" type="button" onclick="openEmbeddedWorkflowEditor('${NexusUI.escapeAttribute(product.id || "")}')">Edit workflow</button>`
+        : "";
       root.innerHTML = `
-        <div>
-          <strong>${NexusUI.escapeHtml(product.title || "Untitled product")}</strong>
-          <p>${NexusUI.escapeHtml(readiness.detail)}</p>
+        <div class="developer-selected-product-main">
+          <div>
+            <strong>${NexusUI.escapeHtml(product.title || "Untitled product")}</strong>
+            <p>${NexusUI.escapeHtml(readiness.detail)}</p>
+          </div>
+          <div class="developer-product-meta">
+            <span class="${statusClass(product.status)}">${NexusUI.escapeHtml(productStatusText(product.status || "draft"))}</span>
+            <span class="${readiness.className}">${NexusUI.escapeHtml(readiness.label)}</span>
+            <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
+            ${product.guided_install_enabled ? `<span>Guided install enabled</span>` : ""}
+            <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
+            ${healthStatus ? `<span>Health: ${NexusUI.escapeHtml(healthLabel)}</span>` : ""}
+          </div>
+          <div class="developer-readiness-strip">
+            ${checklist.map((item) => `
+              <span class="${item.ok ? "good" : "attention"}">
+                <strong>${NexusUI.escapeHtml(item.label)}</strong>
+                ${NexusUI.escapeHtml(item.value)}
+              </span>
+            `).join("")}
+          </div>
         </div>
-        <div class="developer-product-meta">
-          <span class="${statusClass(product.status)}">${NexusUI.escapeHtml(productStatusText(product.status || "draft"))}</span>
-          <span class="${readiness.className}">${NexusUI.escapeHtml(readiness.label)}</span>
-          <span>${NexusUI.escapeHtml(productPriceLabel(product))}</span>
-          ${product.guided_install_enabled ? `<span>Guided install enabled</span>` : ""}
-          <span>${NexusUI.escapeHtml(product.n8n_last_test_status || "not tested")}</span>
-          ${healthStatus ? `<span>Health: ${NexusUI.escapeHtml(healthLabel)}</span>` : ""}
+        <div class="developer-selected-actions">
+          <button class="btn btn-primary btn-small" type="button" onclick="previewDeveloperProduct()">Preview customer view</button>
+          ${editorButton}
         </div>
       `;
     }
@@ -3896,6 +4273,16 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const setupFeeAmount = Number(formData.get("setup_fee_amount") || 0);
       const detectedPlaceholders = jsonField(formData, "detected_placeholders", {});
       const sheetAccessConfig = jsonField(formData, "sheet_access_config", {});
+      const n8nWorkflowJson = jsonField(formData, "n8n_workflow_json", null);
+      const setupSchema = jsonField(formData, "setup_schema", []);
+      const runtimeEventSchema = jsonField(formData, "runtime_event_schema", []);
+      const credentialSchema = jsonField(formData, "credential_schema", []);
+      const currentMappings = jsonField(formData, "workflow_placeholder_mappings", []);
+      const generatedMappings = inferWorkflowPlaceholderMappings(n8nWorkflowJson);
+      const workflowPlaceholderMappings = mergeWorkflowPlaceholderMappings(currentMappings, generatedMappings);
+      if (form.elements.workflow_placeholder_mappings && JSON.stringify(currentMappings) !== JSON.stringify(workflowPlaceholderMappings)) {
+        form.elements.workflow_placeholder_mappings.value = JSON.stringify(workflowPlaceholderMappings, null, 2);
+      }
       if (
         sheetAccessConfig &&
         typeof sheetAccessConfig === "object" &&
@@ -3947,11 +4334,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         runtime_no_change_policy: String(formData.get("runtime_no_change_policy") || "no_output"),
         runtime_response_mode: String(formData.get("runtime_response_mode") || "dashboard_output"),
         workflow_source_platform: String(formData.get("workflow_provider") || "n8n"),
-        n8n_workflow_json: jsonField(formData, "n8n_workflow_json", null),
-        setup_schema: jsonField(formData, "setup_schema", []),
-        runtime_event_schema: jsonField(formData, "runtime_event_schema", []),
-        credential_schema: jsonField(formData, "credential_schema", []),
-        workflow_placeholder_mappings: jsonField(formData, "workflow_placeholder_mappings", []),
+        n8n_workflow_json: n8nWorkflowJson,
+        setup_schema: setupSchema,
+        runtime_event_schema: runtimeEventSchema,
+        credential_schema: credentialSchema,
+        workflow_placeholder_mappings: workflowPlaceholderMappings,
         detected_placeholders: detectedPlaceholders,
         sheet_access_config: sheetAccessConfig,
         placeholder_validation_status: String(formData.get("placeholder_validation_status") || "not_checked"),
@@ -4017,6 +4404,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       updateDeveloperPricingLabels();
       updateDeveloperImportResult(product);
       renderSelectedProductSummary(product);
+      renderGeneratedMappingPanel(product);
       state.testProfile = null;
       renderDeveloperTestDataPanel(product, null);
       loadDeveloperTestProfile(product?.id);
@@ -4082,6 +4470,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
               </div>
               <div class="developer-product-actions">
                 <button class="btn btn-secondary btn-small" type="button" data-edit-product="${NexusUI.escapeAttribute(product.id || "")}">Open</button>
+                <button class="btn btn-secondary btn-small" type="button" data-preview-product="${NexusUI.escapeAttribute(product.id || "")}">Preview</button>
                 ${
                   product.listing_type !== "custom_request"
                     ? `<button class="btn btn-secondary btn-small" type="button" data-test-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id && product.n8n_workflow_json ? "" : "disabled"}>Test</button>`
@@ -4109,6 +4498,16 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         button.addEventListener("click", () => {
           const product = state.products.find((item) => String(item.id || "") === button.dataset.editProduct);
           if (product) fillProduct(product);
+        });
+      });
+
+      root.querySelectorAll("[data-preview-product]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const product = state.products.find((item) => String(item.id || "") === button.dataset.previewProduct);
+          if (product) {
+            fillProduct(product);
+            previewDeveloperProduct();
+          }
         });
       });
 
@@ -4552,6 +4951,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         upsertStateProduct(product);
         updateDeveloperImportResult(product, silent ? "Draft saved before import." : "Draft saved.");
         renderSelectedProductSummary(product);
+        renderGeneratedMappingPanel(product);
         renderProducts();
         renderCredentialProductSelect();
       }
@@ -5004,6 +5404,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (data?.generated_workflow_json) {
           document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
           renderDeveloperSheetAccessPanel(selectedProduct());
+          syncGeneratedWorkflowMappingsToForm();
           NexusUI.toast(`${sourceLabel} converted. Next: Save, import & test.`);
         } else {
           NexusUI.toast(data?.message || `${sourceLabel} scanned.`);
@@ -5038,6 +5439,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (data?.generated_workflow_json) {
           document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
           renderDeveloperSheetAccessPanel(selectedProduct());
+          syncGeneratedWorkflowMappingsToForm();
         }
         NexusUI.toast(data?.message || "HTTP substitute saved.");
         await loadProducts();
@@ -5665,6 +6067,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         try {
           document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(JSON.parse(await file.text()), null, 2);
           renderDeveloperSheetAccessPanel(selectedProduct());
+          syncGeneratedWorkflowMappingsToForm({ silent: false });
         } catch (error) {
           NexusUI.toast("That file is not valid JSON.");
         }
@@ -5672,6 +6075,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       document.querySelector("#developerProductForm [name='n8n_workflow_json']")?.addEventListener("input", function () {
         renderDeveloperSheetAccessPanel(selectedProduct());
+        syncGeneratedWorkflowMappingsToForm();
       });
 
       document.getElementById("developerSheetAccessPanel")?.addEventListener("input", function (event) {

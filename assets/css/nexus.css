@@ -12963,6 +12963,12 @@ body.developer-modal-open::before {
   background: linear-gradient(135deg, #f8fbff, #ffffff);
 }
 
+.developer-selected-product-main {
+  display: grid;
+  gap: .7rem;
+  min-width: 0;
+}
+
 .developer-selected-product-summary strong {
   display: block;
   color: var(--navy);
@@ -12975,6 +12981,112 @@ body.developer-modal-open::before {
   color: var(--muted);
   line-height: 1.45;
   font-size: .92rem;
+}
+
+.developer-selected-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+  flex: 0 0 auto;
+}
+
+.developer-readiness-strip,
+.developer-generated-mapping-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+}
+
+.developer-readiness-strip span,
+.developer-generated-mapping-stats span {
+  display: inline-grid;
+  gap: .1rem;
+  min-height: 48px;
+  padding: .45rem .65rem;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  color: #475569;
+  background: #fff;
+  font-size: .78rem;
+  font-weight: 850;
+}
+
+.developer-readiness-strip span strong,
+.developer-generated-mapping-stats span strong {
+  color: var(--navy);
+  font-size: .72rem;
+  text-transform: uppercase;
+}
+
+.developer-readiness-strip .good,
+.developer-generated-mapping-stats .good {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #047857;
+}
+
+.developer-readiness-strip .attention {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.developer-generated-mapping-panel {
+  display: grid;
+  gap: .75rem;
+  padding: .85rem;
+  border: 1px dashed #bfdbfe;
+  border-radius: 16px;
+  background: #f8fbff;
+  color: var(--muted);
+}
+
+.developer-generated-mapping-panel strong {
+  color: var(--navy);
+}
+
+.developer-generated-mapping-panel p {
+  margin: .2rem 0 0;
+}
+
+.developer-generated-mapping-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.developer-generated-mapping-list {
+  display: grid;
+  gap: .35rem;
+}
+
+.developer-generated-mapping-list code {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: .45rem .55rem;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--navy);
+  font-size: .78rem;
+}
+
+.developer-preview-note {
+  display: grid;
+  gap: .2rem;
+  margin-bottom: 1rem;
+  padding: .8rem .95rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  background: #f8fbff;
+  color: var(--muted);
+}
+
+.developer-preview-note strong {
+  color: var(--navy);
 }
 
 .developer-editor-head,
@@ -14472,6 +14584,17 @@ body.developer-guide-open {
   .developer-selected-product-summary {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .developer-selected-actions,
+  .developer-generated-mapping-head {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .developer-selected-actions .btn,
+  .developer-generated-mapping-head .btn {
+    width: 100%;
   }
 
   .sheet-access-head {
