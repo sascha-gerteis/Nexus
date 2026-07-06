@@ -2561,21 +2561,19 @@ body[data-page="home"] main {
 }
 
 body[data-page="home"] .home-hero { order: 1; }
-body[data-page="home"] .home-featured-section { order: 2; }
-body[data-page="home"] .home-quiz-section { order: 3; }
-body[data-page="home"] .home-product-system-section { order: 4; }
-body[data-page="home"] .home-buyer-trust-section { order: 5; }
-body[data-page="home"] .home-bundles-section { order: 6; }
+body[data-page="home"] .home-company-section { order: 2; }
+body[data-page="home"] .home-featured-section { order: 3; }
+body[data-page="home"] .home-quiz-section { order: 4; }
+body[data-page="home"] .home-product-system-section { order: 5; }
+body[data-page="home"] .home-buyer-trust-section { order: 6; }
 body[data-page="home"] .home-problem-section { order: 7; }
 body[data-page="home"] .home-how-section { order: 8; }
 body[data-page="home"] .home-pilot-section { order: 9; }
-body[data-page="home"] .home-trust-section { order: 10; }
-body[data-page="home"] .home-alternatives-section { order: 11; }
-body[data-page="home"] .home-category-section { order: 12; }
-body[data-page="home"] .home-two-sided-section { order: 13; }
-body[data-page="home"] .home-buyer-faq-section { order: 14; }
-body[data-page="home"] .home-roadmap-section { order: 15; }
-body[data-page="home"] .home-final-cta { order: 16; }
+body[data-page="home"] .home-category-section { order: 10; }
+body[data-page="home"] .home-two-sided-section { order: 11; }
+body[data-page="home"] .home-buyer-faq-section { order: 12; }
+body[data-page="home"] .home-roadmap-section { order: 13; }
+body[data-page="home"] .home-final-cta { order: 14; }
 
 .home-hero {
   padding: 7.2rem 0 4.9rem;
@@ -2662,6 +2660,123 @@ body[data-page="home"] .home-final-cta { order: 16; }
   font-size: 0.84rem;
   line-height: 1.55;
   margin: 0;
+}
+
+/* Company proof */
+
+.home-company-section,
+.about-company-section {
+  background: #fff;
+  border-bottom: 1px solid #e8f1f8;
+  padding: 1.35rem 0;
+}
+
+.home-company-marquee-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
+  align-items: stretch;
+  border: 1px solid #dbeafe;
+  border-radius: 24px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(0, 194, 255, 0.1), transparent 36%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: var(--shadow2);
+}
+
+.home-company-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 124px;
+  padding: 1rem 1.15rem;
+  background: rgba(255, 255, 255, 0.74);
+  border-right: 1px solid #dbeafe;
+}
+
+.home-company-label .eyebrow {
+  margin: 0;
+}
+
+.home-company-label strong {
+  color: var(--navy);
+  font-size: 1.06rem;
+  line-height: 1.22;
+  letter-spacing: -0.03em;
+  font-weight: 950;
+}
+
+.home-logo-marquee {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  min-height: 124px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);
+}
+
+.home-logo-marquee-track {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: max-content;
+  padding: 0.75rem;
+  animation: nexusLogoMarquee 22s linear infinite;
+  will-change: transform;
+}
+
+.home-logo-marquee:hover .home-logo-marquee-track {
+  animation-play-state: paused;
+}
+
+.home-logo-marquee-item {
+  flex: 0 0 310px;
+  min-height: 94px;
+  border: 1px solid #dbeafe;
+  border-radius: 20px;
+  display: grid;
+  gap: 0.45rem;
+  place-items: center;
+  padding: 0.8rem 1rem;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.home-logo-marquee-item span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.home-partner-logo {
+  display: block;
+  width: min(100%, 260px);
+  max-height: 68px;
+  object-fit: contain;
+}
+
+.triple-b-logo {
+  max-height: 78px;
+  mix-blend-mode: multiply;
+}
+
+@keyframes nexusLogoMarquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-50% - 0.425rem));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-logo-marquee-track {
+    animation: none;
+    flex-wrap: wrap;
+    width: 100%;
+  }
 }
 
 /* Problem */
@@ -3827,6 +3942,7 @@ body[data-page="marketplace"] .marketplace-trust-strip span {
   .home-system-grid,
   .home-audience-grid,
   .home-trust-grid,
+  .home-company-marquee-panel,
   .home-buyer-trust-grid,
   .home-pilot-card {
     grid-template-columns: 1fr;
@@ -3861,6 +3977,29 @@ body[data-page="marketplace"] .marketplace-trust-strip span {
 
   .home-hero-content p {
     margin-left: 0;
+  }
+
+  .home-company-label {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #dbeafe;
+  }
+
+  .home-logo-marquee {
+    min-height: 112px;
+  }
+
+  .home-logo-marquee-item {
+    flex-basis: 255px;
+    min-height: 86px;
+  }
+
+  .home-partner-logo {
+    max-height: 56px;
+  }
+
+  .triple-b-logo {
+    max-height: 66px;
   }
 
   .home-hero-actions,

@@ -20,7 +20,7 @@ function numberValue(value: unknown) {
 
 function productCurrency(value: unknown) {
   const currency = cleanString(value).toUpperCase();
-  return ["THB", "USD", "EUR", "GBP", "JPY"].includes(currency) ? currency : "THB";
+  return ["THB", "USD", "EUR", "GBP", "JPY"].includes(currency) ? currency : "USD";
 }
 
 function runtimeTriggerMode(value: unknown) {

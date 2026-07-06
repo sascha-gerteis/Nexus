@@ -10,10 +10,11 @@ const NexusUI = (() => {
     { code: "ar", label: "???????" },
     { code: "fr", label: "Français" }
   ];
-  const SUPPORTED_CURRENCIES = ["THB", "USD", "EUR", "GBP", "JPY"];
+  const DEFAULT_CURRENCY = "USD";
+  const SUPPORTED_CURRENCIES = ["USD", "THB", "EUR", "GBP", "JPY"];
   const CURRENCY_OPTIONS = [
-    { code: "THB", label: "THB" },
     { code: "USD", label: "USD" },
+    { code: "THB", label: "THB" },
     { code: "EUR", label: "EUR" },
     { code: "GBP", label: "GBP" },
     { code: "JPY", label: "JPY" }
@@ -329,13 +330,13 @@ const FX_CACHE_TTL_MS = 15 * 60 * 1000;
   }
 
   function getCurrency() {
-    const stored = String(localStorage.getItem("nexus_currency") || "THB").toUpperCase();
-    return SUPPORTED_CURRENCIES.includes(stored) ? stored : "THB";
+    const stored = String(localStorage.getItem("nexus_currency") || DEFAULT_CURRENCY).toUpperCase();
+    return SUPPORTED_CURRENCIES.includes(stored) ? stored : DEFAULT_CURRENCY;
   }
 
  function setCurrency(currency) {
-  const requested = String(currency || "THB").toUpperCase();
-  const normalized = SUPPORTED_CURRENCIES.includes(requested) ? requested : "THB";
+  const requested = String(currency || DEFAULT_CURRENCY).toUpperCase();
+  const normalized = SUPPORTED_CURRENCIES.includes(requested) ? requested : DEFAULT_CURRENCY;
 
   localStorage.setItem("nexus_currency", normalized);
 

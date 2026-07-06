@@ -3424,7 +3424,7 @@ placeholderValidationErrors = parseJsonField("placeholder_validation_errors", []
       featured: formData.get("featured") === "on",
 
       pricing_type: String(formData.get("pricing_type") || "custom_quote"),
-        currency: String(formData.get("currency") || "THB"),
+        currency: String(formData.get("currency") || "USD"),
         guided_install_enabled:
           String(formData.get("listing_type") || "standard") === "standard" &&
           formData.get("guided_install_enabled") === "on",

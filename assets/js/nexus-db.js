@@ -1782,10 +1782,13 @@ async function callNexusFunction(functionName, payload = {}) {
           continue;
         }
 
+        const rawErrorMessage = data.error || data.message || `Function ${functionName} failed.`;
+        const friendlyMessage = friendlyNexusFunctionError(rawErrorMessage);
+
         return {
           data: null,
           error: {
-            message: data.error || `Function ${functionName} failed.`,
+            message: friendlyMessage,
             details: data,
           },
         };
@@ -1800,7 +1803,7 @@ async function callNexusFunction(functionName, payload = {}) {
     return {
       data: null,
       error: {
-        message: lastData?.error || `Function ${functionName} failed.`,
+        message: friendlyNexusFunctionError(lastData?.error || `Function ${functionName} failed.`),
         details: lastData || { status: lastResponse?.status || 0 },
       },
     };
@@ -1813,6 +1816,18 @@ async function callNexusFunction(functionName, payload = {}) {
       },
     };
   }
+}
+
+function friendlyNexusFunctionError(message) {
+  const raw = String(message || "");
+  if (
+    /runtime_event_schema/i.test(raw) &&
+    /schema cache|could not find|column/i.test(raw)
+  ) {
+    return "Nexus needs a product runtime database refresh before this product can save. Admin: run supabase/runtime_event_schema_hotfix.sql in the Supabase SQL editor, then retry the save.";
+  }
+
+  return raw;
 }
 
 async function syncStripeProduct(automationId) {

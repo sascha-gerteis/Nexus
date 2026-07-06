@@ -35,7 +35,7 @@ const SITE_URL = cleanSiteUrl(Deno.env.get("SITE_URL") || PRODUCTION_SITE_URL);
 
 const FX_API_BASE_URL = "https://api.frankfurter.dev";
 type SupportedCheckoutCurrency = "usd" | "thb" | "eur" | "gbp" | "jpy";
-const SUPPORTED_CHECKOUT_CURRENCIES: SupportedCheckoutCurrency[] = ["thb", "usd", "eur", "gbp", "jpy"];
+const SUPPORTED_CHECKOUT_CURRENCIES: SupportedCheckoutCurrency[] = ["usd", "thb", "eur", "gbp", "jpy"];
 const ZERO_DECIMAL_STRIPE_CURRENCIES = new Set<SupportedCheckoutCurrency>(["jpy"]);
 
 function fallbackFxRates(): Record<SupportedCheckoutCurrency, number> {
@@ -108,8 +108,8 @@ async function pauseInvalidCheckoutProduct(adminClient: any, product: any) {
 }
 
 function normalizeCurrency(value: unknown): SupportedCheckoutCurrency {
-  const currency = String(value || "THB").trim().toLowerCase() as SupportedCheckoutCurrency;
-  return SUPPORTED_CHECKOUT_CURRENCIES.includes(currency) ? currency : "thb";
+  const currency = String(value || "USD").trim().toLowerCase() as SupportedCheckoutCurrency;
+  return SUPPORTED_CHECKOUT_CURRENCIES.includes(currency) ? currency : "usd";
 }
 
 function normalizePricingType(value: unknown) {
@@ -1148,7 +1148,7 @@ Deno.serve(async (req) => {
     const bundleId = cleanString(body.bundle_id);
     const installType = normalizeInstallType(body.install_type || "self_serve");
     const selectedCustomization = String(body.selected_customization || "");
-    const currency = normalizeCurrency(body.currency || "THB");
+    const currency = normalizeCurrency(body.currency || "USD");
 
     const buyerName = String(body.buyer_name || user.user_metadata?.full_name || "");
     const buyerEmail = String(body.buyer_email || user.email || "");
