@@ -51,6 +51,8 @@ const NexusDB = (() => {
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const AUTH_CACHE_TTL_MS = 30 * 1000;
   const QUERY_CACHE_TTL_MS = 20 * 1000;
+  const AUTH_REQUEST_TIMEOUT_MS = 8000;
+  const FUNCTION_REQUEST_TIMEOUT_MS = 20000;
   const PUBLIC_AUTOMATION_CARD_SELECT = `
     id,
     created_at,
@@ -113,6 +115,18 @@ const NexusDB = (() => {
     clearAuthCaches();
   });
 
+  function withTimeout(promise, timeoutMs, label) {
+    let timeoutId;
+
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`${label || "Request"} timed out. Check your connection and refresh.`));
+      }, timeoutMs);
+    });
+
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+  }
+
   async function getUser() {
     const { data, error } = await getSession();
 
@@ -140,10 +154,12 @@ const NexusDB = (() => {
     }
 
     const sessionRequest = forceRefresh
-      ? supabase.auth.refreshSession().then((result) => (
-          result?.data?.session ? result : supabase.auth.getSession()
+      ? withTimeout(supabase.auth.refreshSession(), AUTH_REQUEST_TIMEOUT_MS, "Auth session refresh").then((result) => (
+          result?.data?.session
+            ? result
+            : withTimeout(supabase.auth.getSession(), AUTH_REQUEST_TIMEOUT_MS, "Auth session")
         ))
-      : supabase.auth.getSession();
+      : withTimeout(supabase.auth.getSession(), AUTH_REQUEST_TIMEOUT_MS, "Auth session");
 
     sessionCache.promise = sessionRequest
       .then((result) => {
@@ -1758,15 +1774,24 @@ async function callNexusFunction(functionName, payload = {}) {
         ? (await getSession({ forceRefresh: true }))?.data?.session?.access_token
         : session?.access_token;
 
-      const response = await fetch(`${getFunctionsBaseUrl()}/${functionName}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": token ? `Bearer ${token}` : `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FUNCTION_REQUEST_TIMEOUT_MS);
+      let response;
+
+      try {
+        response = await fetch(`${getFunctionsBaseUrl()}/${functionName}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": token ? `Bearer ${token}` : `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const data = await response.json().catch(() => ({}));
       lastResponse = response;
@@ -1808,10 +1833,14 @@ async function callNexusFunction(functionName, payload = {}) {
       },
     };
   } catch (error) {
+    const message = error?.name === "AbortError"
+      ? `${functionName} timed out. Check your connection and try again.`
+      : error.message || `Could not call ${functionName}.`;
+
     return {
       data: null,
       error: {
-        message: error.message || `Could not call ${functionName}.`,
+        message,
         details: error,
       },
     };
@@ -1970,6 +1999,20 @@ async function preferAutomationCredential(automationId, credentialId, slots = []
     automation_id: automationId,
     credential_id: credentialId,
     slots
+  });
+}
+
+async function startGoogleOAuthConnection(payload = {}) {
+  return callNexusFunction("oauth-connections", {
+    action: "start_google",
+    ...payload
+  });
+}
+
+async function listOAuthConnections(payload = {}) {
+  return callNexusFunction("oauth-connections", {
+    action: "list",
+    ...payload
   });
 }
 
@@ -2291,12 +2334,17 @@ async function revokeN8nEditorSession(sessionId) {
 }
 
 async function startN8nWorkflowTest(automationId, options = {}) {
-  if (automationId && !options.skip_import) {
+  if (automationId && (options.import_before_test || options.repair_before_test)) {
     const repair = await importN8nWorkflow(automationId);
     if (repair?.error) return repair;
   }
 
-  const { skip_import: _skipImport, ...testOptions } = options || {};
+  const {
+    skip_import: _skipImport,
+    import_before_test: _importBeforeTest,
+    repair_before_test: _repairBeforeTest,
+    ...testOptions
+  } = options || {};
   return callNexusFunction("test-n8n-workflow", {
     mode: "start",
     automation_id: automationId,
@@ -2956,6 +3004,8 @@ async function listMakeImportMappings(payload = {}) {
     scanAutomationCredentials,
     applyAutomationCredentials,
     preferAutomationCredential,
+    startGoogleOAuthConnection,
+    listOAuthConnections,
     listCredentialProviders,
     getDeveloperStripeStatus,
     refreshDeveloperStripeAccount,
@@ -2980,6 +3030,7 @@ async function listMakeImportMappings(payload = {}) {
     trackAnalyticsEvent,
     getAdminAnalytics,
     getDeveloperAnalytics,
+    functionsBaseUrl: getFunctionsBaseUrl,
 
     upsertBuyerProfile,
     getBuyerProfile,

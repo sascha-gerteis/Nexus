@@ -3120,12 +3120,20 @@ function inferMakeSetupKeysFromText(text) {
     return;
   }
 
-  if (product.listing_type !== "custom_request" && !product.n8n_workflow_json) {
+  const isPythonProduct = String(product.workflow_source_platform || "").toLowerCase() === "python" ||
+    String(product.runtime_type || "").toLowerCase() === "python_runner";
+
+  if (product.listing_type !== "custom_request" && isPythonProduct && !String(product.python_script_code || "").trim()) {
+    NexusUI.toast("This developer product needs a Python script before approval.");
+    return;
+  }
+
+  if (product.listing_type !== "custom_request" && !isPythonProduct && !product.n8n_workflow_json) {
     NexusUI.toast("This developer product needs an attached n8n workflow before approval.");
     return;
   }
 
-  if (product.listing_type !== "custom_request" && product.n8n_workflow_json && product.n8n_import_status !== "imported") {
+  if (product.listing_type !== "custom_request" && !isPythonProduct && product.n8n_workflow_json && product.n8n_import_status !== "imported") {
     NexusUI.toast("Importing workflow before approval...");
     const { error: importError } = await NexusDB.importN8nWorkflow(id);
 
@@ -3140,6 +3148,7 @@ function inferMakeSetupKeysFromText(text) {
 
   if (
     product.listing_type !== "custom_request" &&
+    !isPythonProduct &&
     !isAdminPassingWorkflowTest(product.n8n_last_test_status)
   ) {
     NexusUI.toast("Run a successful technical test before approving this developer product.");
@@ -3148,6 +3157,7 @@ function inferMakeSetupKeysFromText(text) {
 
   if (
     product.listing_type !== "custom_request" &&
+    !isPythonProduct &&
     !isAdminLiveProductStatus(product.status) &&
     !hasAdminRealPassingWorkflowTest(product)
   ) {

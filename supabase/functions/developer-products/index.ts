@@ -13,6 +13,10 @@ function cleanString(value: unknown) {
   return String(value || "").trim();
 }
 
+function rawText(value: unknown) {
+  return String(value ?? "");
+}
+
 function numberValue(value: unknown) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -168,6 +172,7 @@ function cleanWorkflowMappings(value: unknown) {
       if (!placeholder || !source || !key) return null;
 
       return {
+        ...item,
         placeholder,
         source,
         key,
@@ -482,7 +487,8 @@ function hasAttachedWorkflowFlow(product: any) {
   if (cleanString(product?.listing_type) === "custom_request") return true;
 
   return Boolean(
-    product?.n8n_workflow_json ||
+    cleanString(product?.python_script_code) ||
+      product?.n8n_workflow_json ||
       cleanString(product?.n8n_workflow_id) ||
       cleanString(product?.runtime_webhook_url || product?.n8n_webhook_url)
   );
@@ -631,17 +637,24 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
   const workflowJson = listingType === "custom_request"
     ? null
     : cleanWorkflowJson(body.n8n_workflow_json);
-  const requestedRuntimeType = cleanString(body.runtime_type);
-  const workflowSourcePlatform = ["make", "zapier", "manual"].includes(cleanString(body.workflow_source_platform))
-    ? cleanString(body.workflow_source_platform)
+  const requestedRuntimeType = cleanString(body.runtime_type).toLowerCase();
+  const requestedWorkflowSourcePlatform = cleanString(body.workflow_source_platform).toLowerCase();
+  const workflowSourcePlatform = requestedWorkflowSourcePlatform === "python_runner" || requestedRuntimeType === "python_runner"
+    ? "python"
+    : ["make", "zapier", "python", "manual"].includes(requestedWorkflowSourcePlatform)
+    ? requestedWorkflowSourcePlatform
     : "n8n";
+  const isPythonProduct = listingType === "standard" && workflowSourcePlatform === "python";
+  const pythonScriptCode = rawText(body.python_script_code).trim();
   const runtimeType = listingType === "custom_request"
     ? "manual"
-    : workflowJson
-      ? "n8n_managed"
-      : requestedRuntimeType === "n8n_managed"
+    : isPythonProduct
+      ? "python_runner"
+      : workflowJson
         ? "n8n_managed"
-        : "manual";
+        : ["n8n_managed", "python_runner"].includes(requestedRuntimeType)
+          ? requestedRuntimeType
+          : "manual";
   const requestedTriggerMode = runtimeTriggerMode(body.runtime_trigger_mode);
   const triggerMode = listingType === "custom_request" || runtimeType === "manual"
     ? "manual"
@@ -659,7 +672,7 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
       ? "not_checked"
       : "not_checked";
 
-  return {
+  const payload: Record<string, unknown> = {
     developer_id: developerId,
     title,
     slug,
@@ -728,12 +741,22 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     runtime_no_change_policy: runtimeNoChangePolicy(body.runtime_no_change_policy),
     runtime_response_mode: runtimeResponseMode(body.runtime_response_mode),
     workflow_source_platform: listingType === "custom_request" ? "manual" : workflowSourcePlatform,
+    ...(isPythonProduct
+      ? {
+        runtime_webhook_url: `${SUPABASE_URL}/functions/v1/run-python-automation`,
+        python_script_code: pythonScriptCode,
+        python_requirements: rawText(body.python_requirements).trim(),
+        python_entrypoint: cleanString(body.python_entrypoint) || "run",
+        python_timeout_seconds: Math.max(5, Math.min(300, Math.round(numberValue(body.python_timeout_seconds) || 120))),
+      }
+      : {}),
     runtime_output_mode: "standard",
     setup_schema: cleanSchema(body.setup_schema),
     runtime_event_schema: cleanSchema(body.runtime_event_schema),
     credential_schema: cleanSchema(body.credential_schema),
     workflow_placeholder_mappings: cleanWorkflowMappings(body.workflow_placeholder_mappings),
     detected_placeholders: detectedPlaceholders,
+    sheet_access_config: sheetAccessConfig,
     placeholder_validation_status: placeholderValidationStatus,
     placeholder_validation_errors: placeholderValidationErrors,
     n8n_workflow_json: workflowJson,
@@ -743,6 +766,8 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
 
     updated_at: nowIso(),
   };
+
+  return payload;
 }
 
 async function createProductReviewNotification(adminClient: any, developer: any, product: any) {
@@ -843,8 +868,16 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
   const workflowJsonChanged = existingProduct
     ? stableJson(existingProduct.n8n_workflow_json) !== stableJson(payload.n8n_workflow_json)
     : Boolean(payload.n8n_workflow_json);
+  const isPythonPayload = payload.workflow_source_platform === "python" || payload.runtime_type === "python_runner";
 
-  if (submitForReview && payload.listing_type === "standard" && !payload.n8n_workflow_json) {
+  if (submitForReview && payload.listing_type === "standard" && isPythonPayload && !cleanString(payload.python_script_code)) {
+    return {
+      error: "Add a Python script before submitting this product for review.",
+      status: 400,
+    };
+  }
+
+  if (submitForReview && payload.listing_type === "standard" && !isPythonPayload && !payload.n8n_workflow_json) {
     return {
       error: "Upload or paste the n8n workflow JSON before submitting this workflow product for review.",
       status: 400,
@@ -858,14 +891,14 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
     };
   }
 
-  if (submitForReview && payload.listing_type === "standard" && workflowJsonChanged) {
+  if (submitForReview && payload.listing_type === "standard" && !isPythonPayload && workflowJsonChanged) {
     return {
       error: "Save the latest workflow draft, import it to n8n, and run a successful technical test before submitting for review.",
       status: 400,
     };
   }
 
-  if (submitForReview && payload.listing_type === "standard" && existingProduct) {
+  if (submitForReview && payload.listing_type === "standard" && existingProduct && !isPythonPayload) {
     const imported = existingProduct.n8n_import_status === "imported" &&
       cleanString(existingProduct.n8n_workflow_id) &&
       cleanString(existingProduct.runtime_webhook_url || existingProduct.n8n_webhook_url);
@@ -916,7 +949,7 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
     };
   }
 
-  if (workflowJsonChanged) {
+  if (!isPythonPayload && workflowJsonChanged) {
     Object.assign(payload, {
       runtime_webhook_url: null,
       runtime_webhook_path: null,

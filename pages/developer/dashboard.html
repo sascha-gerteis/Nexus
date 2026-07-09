@@ -178,6 +178,14 @@
               Select a product from the list, or create a new draft.
             </div>
 
+            <div class="developer-onboarding-card">
+              <div>
+                <strong>First product?</strong>
+                <p>Start with one clear buyer outcome, one reliable workflow, and one sample output. Nexus can auto-detect setup fields and mappings after import, then you can edit them before review.</p>
+              </div>
+              <button class="btn btn-secondary btn-small" type="button" onclick="openDeveloperWorkflowGuide()">View builder guide</button>
+            </div>
+
             <details class="developer-form-section developer-details-section developer-editor-section compact">
               <summary>
                 <span>
@@ -187,12 +195,20 @@
               </summary>
               <div class="developer-field-grid">
                 <div><label>Title</label><input class="input" name="title" required></div>
-                <div><label>Slug</label><input class="input" name="slug"></div>
+                <div>
+                  <label>Slug</label>
+                  <input class="input" name="slug" placeholder="social-reporting-workflow">
+                  <p class="developer-field-help">Used in the product URL. Keep it lowercase with hyphens; leave blank to generate it from the title.</p>
+                </div>
                 <div><label>Listing type</label><select class="select" name="listing_type"><option value="standard">Standard product</option><option value="custom_request">Custom request</option></select></div>
                 <div><label>Pricing</label><select class="select" name="pricing_type"><option value="one_time">One-time</option><option value="monthly">Monthly</option><option value="setup_fee">Setup fee</option><option value="custom_quote">Custom quote</option></select></div>
                 <div><label>Currency</label><select class="select" name="currency"><option value="USD">USD</option><option value="THB">THB</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="JPY">JPY</option></select></div>
                 <div><label id="developerPriceAmountLabel">Price</label><input class="input" name="price_amount" type="number" step="0.01" min="0"></div>
-                <div><label id="developerSetupFeeAmountLabel">Guided install fee</label><input class="input" name="setup_fee_amount" type="number" step="0.01" min="0" placeholder="Optional"></div>
+                <div>
+                  <label id="developerSetupFeeAmountLabel">Guided install fee</label>
+                  <input class="input" name="setup_fee_amount" type="number" step="0.01" min="0" placeholder="Optional">
+                  <p class="developer-field-help">Optional extra charged only when the buyer chooses guided install at checkout. Leave empty or 0 for no extra fee.</p>
+                </div>
                 <div><label>Category</label><input class="input" name="category"></div>
                 <div><label>Badge</label><input class="input" name="badge"></div>
                 <div><label>Icon letters</label><input class="input" name="icon" maxlength="3" placeholder="AI"></div>
@@ -233,12 +249,12 @@
                 </span>
               </summary>
               <div class="developer-field-grid">
-                <div class="full"><label>Who it is for</label><textarea class="textarea" name="who_it_is_for" rows="3" placeholder="One item per line"></textarea></div>
-                <div class="full"><label>Outputs delivered</label><textarea class="textarea" name="outputs" rows="3" placeholder="One output per line"></textarea></div>
-                <div class="full"><label>Required inputs</label><textarea class="textarea" name="required_inputs" rows="3" placeholder="One input per line"></textarea></div>
-                <div class="full"><label>Required tools</label><textarea class="textarea" name="required_tools" rows="3" placeholder="Google Sheets, Slack, HubSpot..."></textarea></div>
-                <div class="full"><label>Setup steps</label><textarea class="textarea" name="setup_steps" rows="3" placeholder="One setup step per line"></textarea></div>
-                <div class="full"><label>Trust points</label><textarea class="textarea" name="trust_points" rows="3" placeholder="What makes this reliable? One point per line"></textarea></div>
+                <div class="full"><label>Who it is for</label><textarea class="textarea" name="who_it_is_for" rows="3" placeholder="Marketing teams that need weekly channel reporting&#10;Founders comparing competitors before launch&#10;Operations teams tracking recurring manual work"></textarea></div>
+                <div class="full"><label>Outputs delivered</label><textarea class="textarea" name="outputs" rows="3" placeholder="Executive-ready PDF or dashboard report&#10;Slack/email alert when a condition is met&#10;Clean spreadsheet with source links and next steps"></textarea></div>
+                <div class="full"><label>Required inputs</label><textarea class="textarea" name="required_inputs" rows="3" placeholder="Company website URL&#10;Competitor URLs or social profiles&#10;Reporting period, market, or target customer"></textarea></div>
+                <div class="full"><label>Required tools</label><textarea class="textarea" name="required_tools" rows="3" placeholder="Google Sheets, Gmail, Slack, HubSpot&#10;Apify, OpenAI, Gemini, Airtable&#10;Buyer-provided URL or account access if needed"></textarea></div>
+                <div class="full"><label>Setup steps</label><textarea class="textarea" name="setup_steps" rows="3" placeholder="Buyer submits setup form&#10;Nexus binds developer credentials securely&#10;Workflow runs a technical check before delivery"></textarea></div>
+                <div class="full"><label>Trust points</label><textarea class="textarea" name="trust_points" rows="3" placeholder="Output preview shown before purchase&#10;Workflow must pass Nexus technical review&#10;Developer-owned keys are stored outside the workflow JSON"></textarea></div>
               </div>
             </details>
 
@@ -272,6 +288,7 @@
                     <option value="n8n">n8n - available now</option>
                     <option value="make">Make.com - beta import assistant</option>
                     <option value="zapier">Zapier - beta import assistant</option>
+                    <option value="python">Python script - beta</option>
                     <option value="manual">Manual / Nexus fulfilled</option>
                   </select>
                 </div>
@@ -279,6 +296,7 @@
                   <label>Automation mode</label>
                   <select class="select" name="runtime_type">
                     <option value="n8n_managed">Automatic with hosted n8n</option>
+                    <option value="python_runner">Automatic with hosted Python runner</option>
                     <option value="manual">Manual / custom fulfillment</option>
                   </select>
                 </div>
@@ -356,6 +374,39 @@
                   <label>n8n workflow JSON</label>
                   <input class="input" id="workflowUpload" type="file" accept=".json,application/json">
                   <textarea class="textarea code-textarea" name="n8n_workflow_json" rows="10" placeholder="Paste exported n8n workflow JSON"></textarea>
+                </div>
+                <div class="full developer-workflow-source-panel developer-workflow-source-python hidden">
+                  <div class="make-import-assistant">
+                    <div class="make-import-head">
+                      <div>
+                        <h3>Python script runner</h3>
+                        <p>Paste a Python script with a <code>run(context)</code> function. Nexus passes buyer setup, customer, event, and schedule data into <code>context</code>, then displays the returned output in the buyer dashboard.</p>
+                      </div>
+                      <span class="pill blue">Beta</span>
+                    </div>
+                    <div class="developer-field-grid">
+                      <div class="full">
+                        <div class="developer-field-label-row">
+                          <label>Python script</label>
+                          <button class="btn btn-secondary btn-small" type="button" id="openPythonEditorButton">Open code editor</button>
+                        </div>
+                        <textarea class="textarea code-textarea" name="python_script_code" rows="12" placeholder='def run(context):&#10;    inputs = context["inputs"]&#10;    credentials = context["credentials"]&#10;    name = inputs.get("company_name", "Buyer")&#10;    return {&#10;        "title": "Automation output",&#10;        "summary": f"Report for {name}",&#10;        "content_html": f"&lt;h1&gt;Hello {name}&lt;/h1&gt;",&#10;        "content_json": {"used_private_key": bool(credentials.get("api_key"))}&#10;    }'></textarea>
+                      </div>
+                      <div class="full">
+                        <label>Extra Python packages</label>
+                        <textarea class="textarea code-textarea" name="python_requirements" rows="4" placeholder="requests==2.32.3&#10;beautifulsoup4==4.12.3"></textarea>
+                        <small class="field-help">Keep this short. Common packages like requests, pandas, BeautifulSoup, OpenAI, Gemini, and httpx are already included in the runner image.</small>
+                      </div>
+                      <div>
+                        <label>Entrypoint function</label>
+                        <input class="input" name="python_entrypoint" value="run" placeholder="run">
+                      </div>
+                      <div>
+                        <label>Timeout seconds</label>
+                        <input class="input" name="python_timeout_seconds" type="number" min="5" max="300" step="1" value="120">
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <input type="hidden" name="sheet_access_config" value="{}">
                 <div class="full developer-sheet-access-panel hidden" id="developerSheetAccessPanel">
@@ -471,6 +522,10 @@
                 <aside class="credential-panel">
                   <h3>Credential vault</h3>
                   <p>Add or update developer-owned keys, then apply them to the selected product workflow.</p>
+                  <div class="developer-security-note">
+                    <strong>Credential security</strong>
+                    <p>Do not paste live API keys into workflow JSON. Nexus stores developer-owned credentials separately, syncs them to hosted n8n when checks or customer runs need them, and never shows them to buyers.</p>
+                  </div>
 
                   <div id="developerCredentialForm" class="credential-form-grid">
                     <input type="hidden" data-credential-name="id">
@@ -532,6 +587,17 @@
                       </div>
                     </div>
                     <div class="full provider-native-fields" data-provider-fields="google_oauth" hidden>
+                      <div class="oauth-connect-card">
+                        <div>
+                          <strong>Connect Google in Nexus</strong>
+                          <p>Use this for Gmail and other Google OAuth account nodes. Nexus stores the connection securely, creates the matching n8n credential server-side, then binds it during the workflow check.</p>
+                        </div>
+                        <button class="btn btn-primary btn-small" type="button" id="connectGoogleCredentialButton">Connect Google</button>
+                      </div>
+                      <div class="runtime-import-result compact" id="googleOAuthConnectionStatus" hidden></div>
+                      <details class="oauth-advanced-fields">
+                        <summary><strong>Advanced manual OAuth fields</strong></summary>
+                        <p class="muted">Only use these if Nexus support asks you to paste an existing OAuth refresh token manually.</p>
                       <div class="credential-form-grid">
                         <div class="full">
                           <label>Google OAuth client ID</label>
@@ -554,7 +620,8 @@
                           <input class="input" data-credential-name="oauth_scope" placeholder="Google scopes required by this node">
                         </div>
                       </div>
-                      <p class="muted">Use this for Gmail, Google Sheets, and Google Drive account credentials. Resource values like sheet URL, sheet ID, folder ID, or mailbox filters still belong in the workflow node or Nexus setup fields.</p>
+                      </details>
+                      <p class="muted">Resource values like sheet URL, sheet ID, folder ID, or mailbox filters still belong in the workflow node or Nexus setup fields.</p>
                     </div>
                     <div class="full provider-native-fields" data-provider-fields="google_service_account" hidden>
                       <div class="credential-form-grid">
@@ -949,6 +1016,25 @@
         </section>
 
         <section class="developer-guide-section">
+          <h3>Good first products</h3>
+          <div class="developer-guide-grid">
+            <div>
+              <strong>Weekly report</strong>
+              <p>Pulls a few URLs, sheets, or social profiles and returns one clean summary with next steps.</p>
+            </div>
+            <div>
+              <strong>Lead or inquiry digest</strong>
+              <p>Turns form submissions, emails, or CRM rows into a short management-ready report.</p>
+            </div>
+            <div>
+              <strong>Monitor and alert</strong>
+              <p>Checks a source on a schedule and only notifies the buyer when something meaningful changes.</p>
+            </div>
+          </div>
+          <p class="developer-guide-note">A strong first product has one buyer, one outcome, clear setup fields, and a visible sample output.</p>
+        </section>
+
+        <section class="developer-guide-section">
           <h3>Dynamic values you can use</h3>
           <div class="developer-guide-code-grid">
             <div>
@@ -1039,6 +1125,49 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     </article>
   </section>
 
+  <section class="developer-editor-modal wide python-editor-modal" id="pythonCodeEditorModal" aria-hidden="true">
+    <div class="developer-modal-head">
+      <div>
+        <h3>Python code editor</h3>
+        <p>Edit the script, package list, entrypoint, and timeout for the selected product. Save here before running a technical test.</p>
+      </div>
+      <button class="btn btn-secondary btn-small" type="button" onclick="closePythonCodeEditor()">Close</button>
+    </div>
+    <div class="python-editor-grid">
+      <div class="python-editor-main">
+        <label>Script</label>
+        <textarea class="textarea code-textarea python-editor-code" id="pythonEditorCode" spellcheck="false"></textarea>
+      </div>
+      <aside class="python-editor-side">
+        <label>Extra packages</label>
+        <textarea class="textarea code-textarea" id="pythonEditorRequirements" rows="5" spellcheck="false"></textarea>
+        <div class="developer-field-grid compact-grid">
+          <div>
+            <label>Entrypoint</label>
+            <input class="input" id="pythonEditorEntrypoint" value="run">
+          </div>
+          <div>
+            <label>Timeout</label>
+            <input class="input" id="pythonEditorTimeout" type="number" min="5" max="300" step="1" value="120">
+          </div>
+        </div>
+        <div class="credential-action-row">
+          <button class="btn btn-secondary btn-small" type="button" id="savePythonEditorButton">Save script</button>
+          <button class="btn btn-primary btn-small" type="button" id="runPythonEditorButton">Save & run test</button>
+        </div>
+        <div class="python-editor-help">
+          <strong>How Python credentials work</strong>
+          <p>Use <code>context["inputs"]</code> for buyer setup values and <code>context["credentials"]</code> for developer-owned keys saved in Nexus technical test data. Buyer-owned secrets should be setup fields with type <code>secret</code>.</p>
+          <pre><code>api_key = context["credentials"].get("openai_api_key")
+company_url = context["inputs"].get("company_url")</code></pre>
+        </div>
+        <div class="python-editor-log" id="pythonEditorLog">
+          Save and run a Python technical test to see stdout, stderr, and returned output here.
+        </div>
+      </aside>
+    </div>
+  </section>
+
   <div class="modal-backdrop" id="productModal">
     <div class="modal">
       <div class="modal-side" id="modalSide"></div>
@@ -1048,9 +1177,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
   <div class="toast" id="toast"></div>
   <script src="/assets/js/nexus-ui.js?v=20260702-workflow-import-health"></script>
-<script src="/assets/js/nexus-db.js?v=20260704-output-body-repair"></script>
+<script src="/assets/js/nexus-db.js?v=20260708-nexusdb-bootfix"></script>
   <script>
-    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, testProfile: null, revealedCredentials: {}, workflowPollers: {} };
+    const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, pendingCredentialSlot: null, testProfile: null, revealedCredentials: {}, workflowPollers: {} };
 
     const developerGuideSnippets = {
       setupSchema: JSON.stringify([
@@ -1372,7 +1501,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
     function focusMissingTechnicalTestField() {
       const root = document.getElementById("developerTechnicalTestDataPanel");
-      const fields = Array.from(root?.querySelectorAll("[data-test-setup-name]") || []);
+      const fields = Array.from(root?.querySelectorAll("[data-test-setup-name], [data-test-secret-name]") || []);
       const missing = fields.find((field) => field.required && !String(field.value || "").trim()) || fields[0];
       if (missing) {
         setTimeout(() => {
@@ -1385,7 +1514,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     async function openTechnicalTestDataBlocker(message = "") {
       openProductWorkspaceSection("developerProductCredentialsSection", { scrollTargetId: "developerTechnicalTestDataPanel" });
       const product = selectedProduct();
-      const hasRenderedFields = document.querySelector("[data-test-setup-name]");
+      const hasRenderedFields = document.querySelector("[data-test-setup-name], [data-test-secret-name]");
       if (product?.id && !hasRenderedFields) {
         await loadDeveloperTestProfile(product.id);
       }
@@ -1546,6 +1675,111 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       return [...mappings.values()].sort((a, b) => `${a.source}:${a.key}`.localeCompare(`${b.source}:${b.key}`));
     }
 
+    function fieldLabelFromKey(key = "") {
+      return String(key || "")
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (char) => char.toUpperCase()) || "Field";
+    }
+
+    function fieldTypeFromKey(key = "", source = "setup") {
+      const text = String(key || "").toLowerCase();
+      if (source === "credential" || /api[_-]?key|token|secret|password|credential/.test(text)) return "secret";
+      if (/url|website|link|uri/.test(text)) return "url";
+      if (/email/.test(text)) return "email";
+      if (/count|number|max|min|amount|price|cost|limit|days|hours|minutes|interval|timeout|quantity/.test(text)) return "number";
+      if (/prompt|description|message|content|notes|summary|bio|instructions/.test(text)) return "textarea";
+      return "text";
+    }
+
+    function inferredSchemaField(key = "", source = "setup") {
+      const name = normalizeWorkspaceKey(key);
+      if (!name) return null;
+      const type = fieldTypeFromKey(name, source);
+      return {
+        name,
+        label: fieldLabelFromKey(name),
+        type,
+        required: true,
+        description: source === "credential"
+          ? "Developer-owned key passed to Python as context.credentials."
+          : source === "event"
+            ? "On-demand event value passed to Python as context.event."
+            : "Buyer setup value passed to Python as context.inputs.",
+      };
+    }
+
+    function mergeSchemaFields(existing = [], generated = []) {
+      const output = [];
+      const byName = new Set();
+      const add = (field) => {
+        const name = normalizeWorkspaceKey(field?.name);
+        if (!name || byName.has(name)) return;
+        byName.add(name);
+        output.push({ ...field, name });
+      };
+      (Array.isArray(existing) ? existing : []).forEach(add);
+      (Array.isArray(generated) ? generated : []).forEach(add);
+      return output;
+    }
+
+    function inferPythonSchemasFromCode(code = "") {
+      const text = String(code || "");
+      const setupKeys = new Set();
+      const credentialKeys = new Set();
+      const eventKeys = new Set();
+      const addKey = (set, key) => {
+        const normalized = normalizeWorkspaceKey(key);
+        if (normalized) set.add(normalized);
+      };
+
+      const scan = (regex, set) => {
+        for (const match of text.matchAll(regex)) {
+          addKey(set, match[1] || match[2] || match[3] || "");
+        }
+      };
+
+      scan(/context\s*\[\s*["'](?:setup|inputs)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, setupKeys);
+      scan(/context\s*\[\s*["'](?:setup|inputs)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, setupKeys);
+      scan(/context\s*\.get\s*\(\s*["'](?:setup|inputs)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, setupKeys);
+
+      scan(/context\s*\[\s*["'](?:credentials|secrets)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, credentialKeys);
+      scan(/context\s*\[\s*["'](?:credentials|secrets)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, credentialKeys);
+      scan(/context\s*\.get\s*\(\s*["'](?:credentials|secrets)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, credentialKeys);
+
+      scan(/context\s*\[\s*["'](?:event|trigger|request)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, eventKeys);
+      scan(/context\s*\[\s*["'](?:event|trigger|request)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, eventKeys);
+      scan(/context\s*\.get\s*\(\s*["'](?:event|trigger|request)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, eventKeys);
+
+      const setup = [...setupKeys].map((key) => inferredSchemaField(key, "setup")).filter(Boolean);
+      const credentials = [...credentialKeys].map((key) => inferredSchemaField(key, "credential")).filter(Boolean);
+      const events = [...eventKeys].map((key) => inferredSchemaField(key, "event")).filter(Boolean);
+
+      return {
+        setup,
+        credentials,
+        events,
+        mappings: [
+          ...setup.map((field) => ({
+            placeholder: `context.inputs.${field.name}`,
+            source: "setup",
+            key: field.name,
+          })),
+          ...credentials.map((field) => ({
+            placeholder: `context.credentials.${field.name}`,
+            source: "secret",
+            key: field.name,
+          })),
+          ...events.map((field) => ({
+            placeholder: `context.event.${field.name}`,
+            source: "event",
+            key: field.name,
+          })),
+        ],
+      };
+    }
+
     function mergeWorkflowPlaceholderMappings(existing = [], generated = []) {
       const output = [];
       const seen = new Set();
@@ -1568,16 +1802,20 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const form = document.getElementById("developerProductForm");
       if (!form) return [];
 
+      const formData = productFormData(form);
+      const provider = normalizeWorkflowProvider(formData.get("workflow_provider") || form.elements.workflow_provider?.value || "n8n");
       let workflow = null;
       try {
-        workflow = jsonField(new FormData(form), "n8n_workflow_json", null);
+        workflow = provider === "python"
+          ? String(formData.get("python_script_code") || "")
+          : jsonField(formData, "n8n_workflow_json", null);
       } catch {
         return [];
       }
 
       const current = (() => {
         try {
-          return jsonField(new FormData(form), "workflow_placeholder_mappings", []);
+          return jsonField(formData, "workflow_placeholder_mappings", []);
         } catch {
           return [];
         }
@@ -1596,14 +1834,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       renderGeneratedMappingPanel({
         ...selectedProduct(),
         setup_schema: (() => {
-          try { return jsonField(new FormData(form), "setup_schema", []); } catch { return []; }
+          try { return jsonField(formData, "setup_schema", []); } catch { return []; }
         })(),
         credential_schema: (() => {
-          try { return jsonField(new FormData(form), "credential_schema", []); } catch { return []; }
+          try { return jsonField(formData, "credential_schema", []); } catch { return []; }
         })(),
         workflow_placeholder_mappings: merged,
         detected_placeholders: (() => {
-          try { return jsonField(new FormData(form), "detected_placeholders", {}); } catch { return {}; }
+          try { return jsonField(formData, "detected_placeholders", {}); } catch { return {}; }
         })()
       });
 
@@ -1622,11 +1860,17 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         : {};
       const autoSetup = Array.isArray(importResult.auto_added_setup_fields) ? importResult.auto_added_setup_fields : [];
       const autoCredentials = Array.isArray(importResult.auto_added_credential_fields) ? importResult.auto_added_credential_fields : [];
+      const detectedPlaceholders = product?.detected_placeholders && typeof product.detected_placeholders === "object" && !Array.isArray(product.detected_placeholders)
+        ? product.detected_placeholders
+        : {};
+      const variableCount = Number(importResult.variables_detected || importResult.variable_count || importResult.placeholder_count || 0)
+        || Object.keys(detectedPlaceholders).filter((key) => !key.startsWith("_")).length
+        || mappings.length;
 
       if (!setup.length && !credentials.length && !mappings.length && !autoSetup.length && !autoCredentials.length) {
         root.innerHTML = `
           <strong>Generated setup and mappings</strong>
-          <p>Upload or paste a workflow JSON, then save/import. Nexus will show detected buyer questions, credentials, and placeholder mappings here.</p>
+          <p>Upload or paste a workflow JSON, then save/import. Nexus will show detected variables, buyer questions, credentials, and placeholder mappings here.</p>
         `;
         return;
       }
@@ -1644,6 +1888,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           <button class="btn btn-secondary btn-small" type="button" onclick="syncGeneratedWorkflowMappingsToForm({ silent: false })">Refresh mappings</button>
         </div>
         <div class="developer-generated-mapping-stats">
+          ${chip("Variables detected", String(variableCount), variableCount ? "good" : "")}
           ${chip("Buyer fields", String(setup.length))}
           ${chip("Credential fields", String(credentials.length))}
           ${chip("Mappings", String(mappings.length))}
@@ -1701,6 +1946,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       form.elements.runtime_no_change_policy.value = "no_output";
       form.elements.runtime_response_mode.value = "dashboard_output";
       form.elements.workflow_provider.value = "n8n";
+      if (form.elements.python_script_code) form.elements.python_script_code.value = "";
+      if (form.elements.python_requirements) form.elements.python_requirements.value = "";
+      if (form.elements.python_entrypoint) form.elements.python_entrypoint.value = "run";
+      if (form.elements.python_timeout_seconds) form.elements.python_timeout_seconds.value = "120";
       form.elements.setup_schema.value = "[]";
       if (form.elements.runtime_event_schema) form.elements.runtime_event_schema.value = "[]";
       form.elements.credential_schema.value = "[]";
@@ -1751,15 +2000,21 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const form = document.getElementById("developerProductForm");
       if (!form) return;
 
-      const provider = String(form.elements.workflow_provider?.value || "n8n");
+      const provider = normalizeWorkflowProvider(form.elements.workflow_provider?.value || "n8n");
+      if (form.elements.workflow_provider && form.elements.workflow_provider.value !== provider) {
+        form.elements.workflow_provider.value = provider;
+      }
       const sourceProvider = provider === "zapier" ? "zapier" : "make";
       const sourceLabel = sourceProvider === "zapier" ? "Zapier" : "Make.com";
       const sourceName = sourceProvider === "zapier" ? "Zapier workflow" : "Make blueprint";
       const makeSections = document.querySelectorAll(".developer-workflow-source-make");
       const n8nSections = document.querySelectorAll(".developer-workflow-source-n8n");
+      const pythonSections = document.querySelectorAll(".developer-workflow-source-python");
       const makeUpload = document.getElementById("makeBlueprintUpload");
       const workflowUpload = document.getElementById("workflowUpload");
       const workflowJson = form.elements.n8n_workflow_json;
+      const importButton = document.getElementById("importDeveloperWorkflowButton");
+      const importResult = document.getElementById("developerN8nImportResult");
       const assistantTitle = document.getElementById("sourceImportAssistantTitle");
       const assistantCopy = document.getElementById("sourceImportAssistantCopy");
       const uploadLabel = document.getElementById("sourceBlueprintUploadLabel");
@@ -1769,13 +2024,31 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
       makeSections.forEach((section) => section.classList.toggle("hidden", !["make", "zapier"].includes(provider)));
       n8nSections.forEach((section) => section.classList.toggle("hidden", provider !== "n8n"));
+      pythonSections.forEach((section) => section.classList.toggle("hidden", provider !== "python"));
 
       if (form.elements.runtime_type) {
-        form.elements.runtime_type.value = provider === "manual" ? "manual" : "n8n_managed";
+        form.elements.runtime_type.value = provider === "manual"
+          ? "manual"
+          : provider === "python"
+            ? "python_runner"
+            : "n8n_managed";
       }
       if (makeUpload) makeUpload.disabled = !["make", "zapier"].includes(provider);
       if (workflowUpload) workflowUpload.disabled = provider !== "n8n";
-      if (workflowJson) workflowJson.disabled = provider === "manual";
+      if (workflowJson) workflowJson.disabled = provider === "manual" || provider === "python";
+      if (form.elements.python_script_code) form.elements.python_script_code.disabled = provider !== "python";
+      if (form.elements.python_requirements) form.elements.python_requirements.disabled = provider !== "python";
+      if (form.elements.python_entrypoint) form.elements.python_entrypoint.disabled = provider !== "python";
+      if (form.elements.python_timeout_seconds) form.elements.python_timeout_seconds.disabled = provider !== "python";
+      if (importButton) {
+        importButton.disabled = provider === "manual";
+        importButton.textContent = provider === "python" ? "Save Python & test" : "Save, import & test";
+      }
+      if (importResult && provider === "python") {
+        importResult.textContent = "Python products run through the Nexus Python runner. Save the draft, add setup fields if buyers need to provide inputs, then submit for Nexus review.";
+      } else if (importResult && provider === "manual") {
+        importResult.textContent = "Manual products do not need a hosted workflow import.";
+      }
       if (assistantTitle) assistantTitle.textContent = `${sourceLabel} import assistant`;
       if (assistantCopy) {
         assistantCopy.textContent = sourceProvider === "zapier"
@@ -1792,6 +2065,95 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
 
     function selectedProduct() {
       return state.products.find((product) => String(product.id || "") === String(state.selectedProductId || "")) || null;
+    }
+
+    function syncPythonEditorFromForm() {
+      const form = document.getElementById("developerProductForm");
+      if (!form) return;
+      const script = document.getElementById("pythonEditorCode");
+      const requirements = document.getElementById("pythonEditorRequirements");
+      const entrypoint = document.getElementById("pythonEditorEntrypoint");
+      const timeout = document.getElementById("pythonEditorTimeout");
+      if (script) script.value = form.elements.python_script_code?.value || "";
+      if (requirements) requirements.value = form.elements.python_requirements?.value || "";
+      if (entrypoint) entrypoint.value = form.elements.python_entrypoint?.value || "run";
+      if (timeout) timeout.value = form.elements.python_timeout_seconds?.value || "120";
+      updatePythonEditorLog(selectedProduct());
+    }
+
+    function syncPythonEditorToForm(options = {}) {
+      const modal = document.getElementById("pythonCodeEditorModal");
+      if (!options.force && !modal?.classList.contains("open")) return;
+      const form = document.getElementById("developerProductForm");
+      if (!form) return;
+      const script = document.getElementById("pythonEditorCode");
+      const requirements = document.getElementById("pythonEditorRequirements");
+      const entrypoint = document.getElementById("pythonEditorEntrypoint");
+      const timeout = document.getElementById("pythonEditorTimeout");
+      if (form.elements.python_script_code && script) form.elements.python_script_code.value = script.value;
+      if (form.elements.python_requirements && requirements) form.elements.python_requirements.value = requirements.value;
+      if (form.elements.python_entrypoint && entrypoint) form.elements.python_entrypoint.value = entrypoint.value || "run";
+      if (form.elements.python_timeout_seconds && timeout) form.elements.python_timeout_seconds.value = timeout.value || "120";
+    }
+
+    function openPythonCodeEditor() {
+      const form = document.getElementById("developerProductForm");
+      if (form?.elements?.workflow_provider) form.elements.workflow_provider.value = "python";
+      updateDeveloperWorkflowProviderUI();
+      syncPythonEditorFromForm();
+      openModalElement(document.getElementById("pythonCodeEditorModal"));
+      setTimeout(() => document.getElementById("pythonEditorCode")?.focus(), 80);
+    }
+
+    function closePythonCodeEditor() {
+      syncPythonEditorToForm({ force: true });
+      closeModalElement(document.getElementById("pythonCodeEditorModal"));
+    }
+
+    function pythonLastResult(product = selectedProduct()) {
+      const result = product?.n8n_last_test_result;
+      return result && typeof result === "object" ? result : {};
+    }
+
+    function formatPythonRuntimeLog(product = selectedProduct()) {
+      const result = pythonLastResult(product);
+      const output = result.runtime_output && typeof result.runtime_output === "object" ? result.runtime_output : {};
+      const logs = result.runtime_logs && typeof result.runtime_logs === "object" ? result.runtime_logs : {};
+      const title = output.title || output.output?.title || "";
+      const summary = output.summary || output.output?.summary || "";
+      const stdout = logs.stdout || output.runtime?.stdout || output.stdout || "";
+      const stderr = logs.stderr || output.runtime?.stderr || output.stderr || "";
+      const exitCode = logs.exit_code ?? output.runtime?.exit_code ?? output.exit_code ?? "";
+      const duration = logs.duration_seconds ?? output.runtime?.duration_seconds ?? output.duration_seconds ?? "";
+      const outputJson = (() => {
+        if (!Object.keys(output).length) return "";
+        try {
+          return JSON.stringify(output, null, 2);
+        } catch {
+          return "";
+        }
+      })();
+
+      if (!Object.keys(result).length) {
+        return "No Python technical test has run yet.";
+      }
+
+      return `
+        <div><strong>Status:</strong> ${NexusUI.escapeHtml(result.status || "unknown")}</div>
+        ${result.error_message || result.message ? `<div><strong>Message:</strong> ${NexusUI.escapeHtml(result.error_message || result.message)}</div>` : ""}
+        ${title ? `<div><strong>Output title:</strong> ${NexusUI.escapeHtml(title)}</div>` : ""}
+        ${summary ? `<div><strong>Summary:</strong> ${NexusUI.escapeHtml(summary)}</div>` : ""}
+        ${duration !== "" || exitCode !== "" ? `<div><strong>Runtime:</strong> ${NexusUI.escapeHtml(`${duration || "?"}s, exit ${exitCode === "" ? "?" : exitCode}`)}</div>` : ""}
+        ${stdout ? `<details open><summary>stdout</summary><pre>${NexusUI.escapeHtml(stdout)}</pre></details>` : ""}
+        ${stderr ? `<details open><summary>stderr</summary><pre>${NexusUI.escapeHtml(stderr)}</pre></details>` : ""}
+        ${outputJson ? `<details><summary>Returned output JSON</summary><pre>${NexusUI.escapeHtml(outputJson)}</pre></details>` : ""}
+      `;
+    }
+
+    function updatePythonEditorLog(product = selectedProduct()) {
+      const root = document.getElementById("pythonEditorLog");
+      if (!root) return;
+      root.innerHTML = formatPythonRuntimeLog(product);
     }
 
     function setSelectedProductId(id = "") {
@@ -2214,6 +2576,38 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       `;
     }
 
+    function renderTechnicalSecretField(field, values = {}) {
+      const name = String(field?.name || "").trim();
+      if (!name) return "";
+
+      const hasSavedValue = Object.prototype.hasOwnProperty.call(values || {}, name) && String(values[name] ?? "").trim();
+      const type = String(field.type || "secret").toLowerCase();
+      const required = field.required !== false;
+      const description = field.description
+        ? `<small>${NexusUI.escapeHtml(field.description)}</small>`
+        : "";
+      const placeholder = hasSavedValue
+        ? "Saved secret on file. Leave blank to keep it, or enter a new value."
+        : field.placeholder || "Paste a developer-owned test key";
+      const common = `
+        data-test-secret-name="${NexusUI.escapeAttribute(name)}"
+        ${required ? "required" : ""}
+      `;
+
+      const control = type === "textarea" || type === "json" || type === "object"
+        ? `<textarea class="textarea code-textarea" rows="4" ${common} placeholder="${NexusUI.escapeAttribute(placeholder)}"></textarea>`
+        : `<input class="input" type="password" ${common} placeholder="${NexusUI.escapeAttribute(placeholder)}" autocomplete="off">`;
+
+      return `
+        <label>
+          <span>${NexusUI.escapeHtml(field.label || name)}${required ? " *" : ""}</span>
+          ${control}
+          ${description}
+          <small class="technical-test-real-note">${hasSavedValue ? "A value is saved for this technical test profile." : "Saved into the technical test profile and passed to Python as context.credentials."}</small>
+        </label>
+      `;
+    }
+
     function collectTechnicalTestValues() {
       const values = {};
       document.querySelectorAll("[data-test-setup-name]").forEach((field) => {
@@ -2222,6 +2616,24 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         values[key] = field.value;
       });
       return values;
+    }
+
+    function collectTechnicalTestSecretValues(existingValues = {}) {
+      const values = { ...objectValue(existingValues) };
+      document.querySelectorAll("[data-test-secret-name]").forEach((field) => {
+        const key = String(field.dataset.testSecretName || "").trim();
+        if (!key) return;
+        const nextValue = field.value;
+        if (String(nextValue || "").trim()) {
+          values[key] = nextValue;
+        }
+      });
+      return values;
+    }
+
+    function technicalCredentialSchema(product = selectedProduct()) {
+      const provider = normalizeWorkflowProvider(product?.workflow_source_platform || product?.runtime_type, product);
+      return provider === "python" ? schemaArray(product?.credential_schema) : [];
     }
 
     function renderDeveloperTestDataPanel(product = selectedProduct(), profile = state.testProfile, loadingMessage = "") {
@@ -2245,14 +2657,16 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
 
       const setupSchema = schemaArray(product.setup_schema);
+      const credentialSchema = technicalCredentialSchema(product);
       const values = profile?.setup_values || {};
+      const secretValues = profile?.secret_values || {};
       const realFields = setupSchema.filter(setupFieldNeedsRealTestValue);
       const profileLabel = profile?.id
         ? `Saved ${formatRunDate(profile.updated_at || profile.created_at)}`
         : "Not saved yet";
       const busy = /loading|running/i.test(String(loadingMessage || ""));
 
-      if (!setupSchema.length) {
+      if (!setupSchema.length && !credentialSchema.length) {
         root.innerHTML = `
           <div class="technical-test-head">
             <div>
@@ -2274,11 +2688,32 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         return;
       }
 
+      const setupBlock = setupSchema.length ? `
+        <div class="technical-test-grid">
+          ${setupSchema.map((field) => renderTechnicalTestField(field, values)).join("")}
+        </div>
+      ` : `
+        <div class="technical-test-warning neutral">
+          <strong>No buyer setup fields</strong>
+          <p>This product does not need buyer input for the technical run.</p>
+        </div>
+      `;
+
+      const credentialBlock = credentialSchema.length ? `
+        <div class="technical-test-warning neutral">
+          <strong>Developer credentials for Python</strong>
+          <p>These values are only for the technical test profile. Your script reads them from <code>context["credentials"]</code>. Buyer-owned secrets should be setup fields, not developer credentials.</p>
+        </div>
+        <div class="technical-test-grid">
+          ${credentialSchema.map((field) => renderTechnicalSecretField(field, secretValues)).join("")}
+        </div>
+      ` : "";
+
       root.innerHTML = `
         <div class="technical-test-head">
           <div>
             <h3>Technical test data</h3>
-            <p>Save realistic buyer setup values before running the workflow check. Google Sheets, Drive, files, tabs, and ranges must be real resources your saved credential can access.</p>
+            <p>Save realistic buyer setup values and developer-owned Python keys before running the workflow check. The runner passes setup as <code>context["inputs"]</code> and developer keys as <code>context["credentials"]</code>.</p>
           </div>
           <span class="${profile?.id ? "pill green" : "pill orange"}">${NexusUI.escapeHtml(profileLabel)}</span>
         </div>
@@ -2289,9 +2724,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
             <p>${NexusUI.escapeHtml(realFields.map((field) => field.label || field.name).join(", "))} must point to a sheet/file/range that the saved credential can access.</p>
           </div>
         ` : ""}
-        <div class="technical-test-grid">
-          ${setupSchema.map((field) => renderTechnicalTestField(field, values)).join("")}
-        </div>
+        ${setupBlock}
+        ${credentialBlock}
         <div class="credential-action-row">
           <button class="btn btn-secondary btn-small" type="button" id="loadDeveloperTestDataButton" ${busy ? "disabled" : ""}>Reload saved test data</button>
           <button class="btn btn-primary btn-small" type="button" id="saveDeveloperTestDataButton" ${busy ? "disabled" : ""}>Save & run real test</button>
@@ -2334,12 +2768,19 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
 
       const values = collectTechnicalTestValues();
+      const secretValues = collectTechnicalTestSecretValues(state.testProfile?.secret_values || {});
       const missingRequired = schemaArray(product.setup_schema)
         .filter((field) => (field.required || setupFieldNeedsRealTestValue(field)) && !String(values[field.name] ?? "").trim())
         .map((field) => field.label || field.name);
+      const missingSecrets = technicalCredentialSchema(product)
+        .filter((field) => field.required !== false && !String(secretValues[field.name] ?? "").trim())
+        .map((field) => field.label || field.name);
 
-      if (missingRequired.length) {
-        const message = `Add test values for: ${missingRequired.join(", ")}`;
+      if (missingRequired.length || missingSecrets.length) {
+        const parts = [];
+        if (missingRequired.length) parts.push(`test values for: ${missingRequired.join(", ")}`);
+        if (missingSecrets.length) parts.push(`Python credentials for: ${missingSecrets.join(", ")}`);
+        const message = `Add ${parts.join("; ")}`;
         NexusUI.toast(message);
         openProductWorkspaceSection("developerProductCredentialsSection", { scrollTargetId: "developerTechnicalTestDataPanel" });
         setTechnicalTestInlineMessage(message, "error");
@@ -2351,7 +2792,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         const { data, error } = await NexusDB.saveAutomationTestProfile(product.id, {
           name: "Default test profile",
           setup_values: values,
-          secret_values: {}
+          secret_values: secretValues
         });
         if (error) throw new Error(error.message || "Could not save test data.");
         state.testProfile = data?.profile || null;
@@ -2385,7 +2826,17 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         return;
       }
 
-      if (product.n8n_import_status !== "imported" || !product.n8n_workflow_id) {
+      const workflowProvider = normalizeWorkflowProvider(product.workflow_source_platform || product.runtime_type, product);
+      const isPythonProduct = workflowProvider === "python";
+
+      if (isPythonProduct && !String(product.python_script_code || "").trim()) {
+        const message = "Save the Python script before running a real test.";
+        NexusUI.toast(message);
+        focusProductFormField("python_script_code", message);
+        return;
+      }
+
+      if (!isPythonProduct && (product.n8n_import_status !== "imported" || !product.n8n_workflow_id)) {
         const message = "Import the workflow before running a real test.";
         NexusUI.toast(message);
         focusProductFormField("n8n_workflow_json", message);
@@ -2404,6 +2855,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       try {
         const started = await NexusDB.startN8nWorkflowTest(automationId, {
           force_new: true,
+          skip_credential_binding: true,
+          preserve_hosted_workflow: true,
           reason: "real_test_profile"
         });
         if (started.error) throw new Error(started.error.message || "Real workflow test failed to start.");
@@ -2513,7 +2966,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     function developerStatusMessage(developer) {
       const status = String(developer?.status || "active").toLowerCase();
       if (status === "pending") {
-        return "Nexus is reviewing your developer account. You can prepare drafts, but cannot submit products yet.";
+        return "Nexus is reviewing your developer account, usually within 1-2 business days. While you wait, complete your profile, prepare product drafts, and run workflow checks. Product submission unlocks after approval.";
       }
       if (status === "hidden") {
         return "This developer account is not currently public. Contact Nexus if this looks wrong.";
@@ -2603,6 +3056,18 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         };
       }
 
+      const workflowProvider = normalizeWorkflowProvider(product?.workflow_source_platform || product?.runtime_type, product);
+      const isPythonProduct = workflowProvider === "python";
+
+      if (isPythonProduct) {
+        if (!String(product?.python_script_code || "").trim()) {
+          return {
+            label: "Script missing",
+            className: "pill red",
+            detail: "Save Python code before this can be reviewed."
+          };
+        }
+      } else {
       if (!product?.n8n_workflow_json) {
         return {
           label: "Workflow missing",
@@ -2617,6 +3082,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           className: "pill orange",
           detail: "Import the workflow to Nexus n8n before review."
         };
+      }
       }
 
       const healthIssue = productHealthIssue(product);
@@ -2645,9 +3111,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
 
       return {
-        label: "Runtime ready",
+        label: isPythonProduct ? "Python ready" : "Runtime ready",
         className: "pill green",
-        detail: "Workflow imported and technical test passed."
+        detail: isPythonProduct ? "Python script saved and technical test passed." : "Workflow imported and technical test passed."
       };
     }
 
@@ -2918,8 +3384,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const cleanProvider = String(provider || "").trim().toLowerCase();
       const cleanType = String(n8nType || "").trim().toLowerCase();
       if (cleanProvider === "openai") return "openai";
-      if (["google_sheets", "google_drive", "google_calendar", "google_docs", "google_analytics", "google_ads", "gmail"].includes(cleanProvider)) return "google_oauth";
       if (cleanProvider === "google_service_account") return "google_service_account";
+      if (["google_sheets", "google_drive", "google_docs"].includes(cleanProvider)) return "google_service_account";
+      if (["google_calendar", "google_analytics", "google_ads", "gmail"].includes(cleanProvider)) return "google_oauth";
+      if (["googlesheetsoauth2api", "googledriveoauth2api", "googledocsoauth2api"].includes(cleanType)) return "google_service_account";
+      if (cleanType === "gmailoauth2") return "google_oauth";
       if (cleanType.includes("oauth2") || ["microsoft", "microsoft_outlook", "microsoft_excel", "microsoft_onedrive", "salesforce", "hubspot_oauth", "slack_oauth", "paypal"].includes(cleanProvider)) return "oauth_account";
       if (["smtp", "imap"].includes(cleanProvider) || ["smtp", "imap"].includes(cleanType)) return "email_server";
       if (["postgres", "mysql", "mongodb", "redis"].includes(cleanProvider) || ["postgres", "mysql", "mongodb", "redis"].includes(cleanType)) return "database";
@@ -2937,6 +3406,139 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (cleanProvider === "google_analytics") return "https://www.googleapis.com/auth/analytics.readonly";
       if (cleanProvider === "google_ads") return "https://www.googleapis.com/auth/adwords";
       return "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file";
+    }
+
+    function currentCredentialSlotForForm() {
+      const form = document.getElementById("developerCredentialForm");
+      if (!form) return state.pendingCredentialSlot || {};
+
+      const provider = form.querySelector("[data-credential-name='provider']")?.value || "";
+      const n8nType = form.querySelector("[data-credential-name='n8n_credential_type']")?.value || "";
+      const pending = state.pendingCredentialSlot || {};
+      const pendingType = pending.n8n_credential_type || pending.credential_key || "";
+      const pendingProvider = pending.provider || providerForCredentialType(pendingType) || "";
+
+      if (
+        pending &&
+        (
+          !n8nType ||
+          String(pendingType || "").toLowerCase() === String(n8nType || "").toLowerCase() ||
+          String(preferredCredentialProviderForSlot(pending, pendingProvider, pendingType) || "").toLowerCase() === String(provider || "").toLowerCase()
+        )
+      ) {
+        return pending;
+      }
+
+      const slots = state.lastCredentialScan?.slots || [];
+      return slots.find((slot) => {
+        const slotType = slot.n8n_credential_type || slot.credential_key || "";
+        const slotProvider = preferredCredentialProviderForSlot(slot, slot.provider || providerForCredentialType(slotType), slotType);
+        return String(slotType || "").toLowerCase() === String(n8nType || "").toLowerCase() ||
+          String(slotProvider || "").toLowerCase() === String(provider || "").toLowerCase();
+      }) || pending || {};
+    }
+
+    function googleOAuthStatus(message, kind = "") {
+      const root = document.getElementById("googleOAuthConnectionStatus");
+      if (!root) return;
+      root.hidden = false;
+      root.className = `runtime-import-result compact${kind === "error" ? " error" : ""}${kind === "success" ? " success" : ""}`;
+      root.textContent = message;
+    }
+
+    async function handleGoogleOAuthMessage(event) {
+      const payload = event?.data || {};
+      if (!payload || payload.type !== "nexus:google-oauth-complete") return;
+
+      if (payload.ok === false || payload.error) {
+        googleOAuthStatus(payload.error || payload.message || "Google connection failed.", "error");
+        NexusUI.toast(payload.error || payload.message || "Google connection failed.");
+        return;
+      }
+
+      googleOAuthStatus(payload.warning || payload.message || "Google connected. Reloading credentials...", payload.warning ? "" : "success");
+      NexusUI.toast(payload.warning || "Google account connected.");
+      await loadCredentials();
+      if (state.selectedProductId) {
+        await scanCurrentProductCredentials();
+      }
+    }
+
+    async function connectGoogleCredential(button = null) {
+      const form = document.getElementById("developerCredentialForm");
+      if (!form) return;
+
+      const provider = form.querySelector("[data-credential-name='provider']")?.value || "gmail";
+      const n8nType = form.querySelector("[data-credential-name='n8n_credential_type']")?.value || credentialProviderDefaults[provider] || "gmailOAuth2";
+      const label = form.querySelector("[data-credential-name='label']")?.value || `${providerLabelForProvider(provider)} account`;
+      const scope = form.querySelector("[data-credential-name='oauth_scope']")?.value || defaultGoogleScope(provider);
+      const slot = currentCredentialSlotForForm();
+
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Opening Google...";
+      }
+      googleOAuthStatus("Opening a secure Google connection window...");
+
+      const popupFeatures = "width=720,height=760,menubar=no,toolbar=no,location=yes,status=no";
+      const popup = window.open("about:blank", "nexus_google_oauth", popupFeatures);
+      if (popup) {
+        try {
+          popup.document.write(`
+            <!doctype html>
+            <title>Connecting Google</title>
+            <style>
+              body{font-family:Inter,Arial,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f3f8ff;color:#08234a}
+              main{max-width:420px;padding:28px;text-align:center}
+              strong{display:block;font-size:22px;margin-bottom:10px}
+              p{font-size:15px;line-height:1.5;color:#60718f}
+            </style>
+            <main>
+              <strong>Opening Google...</strong>
+              <p>Nexus is preparing the secure authorization link.</p>
+            </main>
+          `);
+          popup.document.close();
+        } catch {}
+      }
+
+      try {
+        const { data, error } = await NexusDB.startGoogleOAuthConnection({
+          provider,
+          n8n_credential_type: n8nType,
+          label,
+          scope,
+          automation_id: state.selectedProductId || "",
+          slot,
+          return_url: `${location.pathname}${location.search}${location.hash}`,
+        });
+
+        if (error) throw new Error(error.message || "Could not start Google connection.");
+        if (!data?.auth_url) throw new Error("Google connection URL was not returned.");
+
+        if (popup && !popup.closed) {
+          popup.location.href = data.auth_url;
+        } else {
+          location.href = data.auth_url;
+          return;
+        }
+
+        googleOAuthStatus("Complete Google authorization in the popup. Nexus will refresh this panel when it returns.");
+      } catch (error) {
+        if (popup && !popup.closed) {
+          try {
+            popup.close();
+          } catch {}
+        }
+        googleOAuthStatus(error.message || "Could not start Google connection.", "error");
+        NexusUI.toast(error.message || "Could not start Google connection.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "Connect Google";
+        }
+      }
     }
 
     function clearCredentialSecretInputs(form) {
@@ -3126,12 +3728,18 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         : slot.provider_label || providerLabelForProvider(provider) || "Provider";
       const nodeName = slot.node_name || "workflow";
       const label = `${providerLabel} account - ${nodeName}`;
+      state.pendingCredentialSlot = {
+        ...slot,
+        provider,
+        provider_label: providerLabel,
+        n8n_credential_type: effectiveN8nType || credentialProviderDefaults[provider] || "",
+      };
 
       form.querySelector("[data-credential-name='id']").value = "";
       form.querySelector("[data-credential-name='provider']").value = provider;
       form.querySelector("[data-credential-name='label']").value = label;
       form.querySelector("[data-credential-name='n8n_credential_type']").value = effectiveN8nType || credentialProviderDefaults[provider] || "";
-      form.querySelector("[data-credential-name='n8n_credential_id']").value = "";
+      form.querySelector("[data-credential-name='n8n_credential_id']").value = slot.current_id || "";
       form.querySelector("[data-credential-name='n8n_credential_name']").value = slot.current_name || label;
       clearCredentialSecretInputs(form);
       renderCredentialProviderFields();
@@ -3187,6 +3795,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       form.querySelectorAll("[data-credential-name]").forEach((field) => {
         field.value = "";
       });
+      state.pendingCredentialSlot = null;
       form.querySelector("[data-credential-name='provider']").value = "google_gemini";
       form.querySelector("[data-credential-name='n8n_credential_type']").value = credentialProviderDefaults.google_gemini;
       renderCredentialProviderFields();
@@ -3219,8 +3828,13 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       if (group === "google_oauth" && googleScope && !googleScope.value) {
         googleScope.value = defaultGoogleScope(provider);
       }
+      const googleStatus = document.getElementById("googleOAuthConnectionStatus");
+      if (googleStatus && group !== "google_oauth") {
+        googleStatus.hidden = true;
+        googleStatus.textContent = "";
+      }
       if (group === "google_service_account" && googleScope && !googleScope.value) {
-        googleScope.value = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive";
+        googleScope.value = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify";
       }
     }
 
@@ -3573,7 +4187,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           ? "Credential edit form loaded with the revealed secret."
           : "Credential selected. The secret is revealed, but this provider uses a different field layout.");
       } else {
-        NexusUI.toast("Credential selected. Use View first if you want to edit the existing secret value.");
+        const group = credentialProviderFieldGroup(credential.provider, credential.n8n_credential_type);
+        NexusUI.toast(group === "email_server"
+          ? "SMTP credential selected. Enter the SMTP password again and save to repair the stored Nexus secret."
+          : "Credential selected. Use View first if you want to edit the existing secret value.");
       }
 
       const credentialSection = document.getElementById("developerProductCredentialsSection");
@@ -3874,7 +4491,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         const firstError = group.errors[0]?.message || "";
         const setupHints = Array.from(new Set(group.slots.flatMap((slot) => Array.isArray(slot.setup_hints) ? slot.setup_hints : []).filter(Boolean))).join(" ");
         const nativeFallbackCopy = nativeEditorGroup && missing
-          ? `This is a native n8n account credential. Open the workflow editor, open ${nodeNames[0] || "the node"}, set/select the credential account there, save, then sync and run the check.`
+          ? `This is a native account credential. Use Add ${group.provider} account here first. For Google/Gmail, Nexus will show a Connect Google button and then bind it to this workflow.`
           : "";
         const savedMatches = matchingCredentialsForGroup(group);
         const selectedCredentialId = group.bindings.map((binding) => binding.developer_credential_id).find(Boolean) || "";
@@ -4076,6 +4693,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
 
       setSelectedProductId(automationId);
+      const product = selectedProduct();
+      if (normalizeWorkflowProvider(product?.workflow_source_platform, product) === "python") {
+        clearCredentialWorkspace("Python products use the Technical test data panel above. Add developer-owned keys to the product credential schema, save real test credentials there, then run the Python check.");
+        return;
+      }
 
       const root = document.getElementById("developerCredentialScanResult");
       if (root) root.innerHTML = "Scanning workflow credentials...";
@@ -4103,6 +4725,8 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     async function runCredentialUpdateTest(automationId) {
       const started = await NexusDB.startN8nWorkflowTest(automationId, {
         force_new: true,
+        skip_credential_binding: true,
+        preserve_hosted_workflow: true,
         reason: "credential_update"
       });
       if (started.error) throw new Error(started.error.message || "Workflow test failed to start.");
@@ -4155,14 +4779,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         return;
       }
 
-      if (root) root.innerHTML = "Credentials bound in Nexus. Updating hosted n8n workflow...";
-      const importResult = await NexusDB.importN8nWorkflow(automationId);
-      if (importResult.error) {
-        if (root) root.innerHTML = `<div class="error">${NexusUI.escapeHtml(importResult.error.message || "Credentials were saved, but hosted n8n update failed.")}</div>`;
-        return;
-      }
-
-      if (root) root.innerHTML = "Hosted n8n workflow updated. Running full technical test...";
+      if (root) root.innerHTML = "Credentials bound in the hosted n8n workflow. Running full technical test...";
       try {
         const testResult = await runCredentialUpdateTest(automationId);
         data.test_result = testResult;
@@ -4188,13 +4805,50 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       NexusUI.toast(data?.message || "Credentials checked.");
       renderCredentialSlots({
         ...data,
-        message: "Credentials applied, hosted n8n workflow updated, and technical test passed."
+        message: "Credentials applied to the hosted n8n workflow and the technical test passed."
       });
       await loadProducts();
     }
 
     function jsonField(formData, name, fallback) {
       return parseJson(formData.get(name), fallback);
+    }
+
+    function productFormData(form) {
+      const formData = new FormData(form);
+      [
+        "workflow_provider",
+        "runtime_type",
+        "n8n_workflow_json",
+        "python_script_code",
+        "python_requirements",
+        "python_entrypoint",
+        "python_timeout_seconds",
+        "setup_schema",
+        "runtime_event_schema",
+        "credential_schema",
+        "workflow_placeholder_mappings",
+        "detected_placeholders",
+        "sheet_access_config",
+        "placeholder_validation_status",
+        "placeholder_validation_errors"
+      ].forEach((name) => {
+        const field = form?.elements?.[name];
+        if (field && typeof field.value !== "undefined") {
+          formData.set(name, field.value);
+        }
+      });
+
+      return formData;
+    }
+
+    function normalizeWorkflowProvider(value = "", product = null) {
+      const source = String(value || product?.workflow_source_platform || "").toLowerCase();
+      const runtimeType = String(product?.runtime_type || "").toLowerCase();
+      if (source === "python" || source === "python_runner" || runtimeType === "python_runner" || String(product?.python_script_code || "").trim()) return "python";
+      if (source === "make" || source === "zapier" || source === "manual" || source === "n8n") return source;
+      if (product?.make_blueprint) return "make";
+      return "n8n";
     }
 
     function workflowEditorUrl(automationId) {
@@ -4225,7 +4879,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         return;
       }
 
-      const imported = product.n8n_import_status === "imported";
+      const workflowProvider = normalizeWorkflowProvider(product.workflow_source_platform || product.runtime_type, product);
+      const isPythonProduct = workflowProvider === "python";
+      const imported = isPythonProduct
+        ? Boolean(String(product.python_script_code || "").trim())
+        : product.n8n_import_status === "imported";
       const tested = isPassingTestStatus(product.n8n_last_test_status);
       const realTested = hasRealPassingTest(product);
       const importClass = imported ? "success" : "error";
@@ -4234,12 +4892,14 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       const testDetail = product.n8n_last_test_error || (tested && !isLiveProductStatus(product.status) && !realTested
         ? "Structural check passed, but review needs one real run. Use Save & run real test in Technical test data."
         : (!tested && imported
-          ? "Run a full technical test. Nexus validates credentials through the real n8n execution."
+          ? (isPythonProduct
+            ? "Run a Python technical test with saved Technical test data."
+            : "Run a full technical test. Nexus validates credentials through the real n8n execution.")
           : ""));
       const messageClass = /fail|error|could not|did not pass|invalid|missing|not found|blocked/i.test(message)
         ? "error"
         : "success";
-      const editorButton = imported && product.n8n_workflow_id
+      const editorButton = !isPythonProduct && imported && product.n8n_workflow_id
         ? `
           <div class="credential-action-row" style="margin-top:.7rem">
             <button class="btn btn-secondary btn-small" type="button" onclick="openEmbeddedWorkflowEditor('${NexusUI.escapeAttribute(product.id || "")}')">
@@ -4248,40 +4908,113 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           </div>
         `
         : "";
+      const importResult = product.n8n_last_import_result && typeof product.n8n_last_import_result === "object"
+        ? product.n8n_last_import_result
+        : {};
+      const workflowNodeCount = (() => {
+        const workflow = product.n8n_normalized_workflow_json || product.n8n_workflow_json || null;
+        if (!workflow) return 0;
+        if (typeof workflow === "object" && Array.isArray(workflow.nodes)) return workflow.nodes.length;
+        if (typeof workflow === "string") {
+          try {
+            const parsed = JSON.parse(workflow);
+            return Array.isArray(parsed.nodes) ? parsed.nodes.length : 0;
+          } catch {
+            return 0;
+          }
+        }
+        return 0;
+      })();
+      const detectedPlaceholders = product.detected_placeholders && typeof product.detected_placeholders === "object" && !Array.isArray(product.detected_placeholders)
+        ? product.detected_placeholders
+        : {};
+      const nodesDetected = Number(importResult.nodes_detected || importResult.node_count || importResult.nodes_count || 0)
+        || (Array.isArray(importResult.nodes) ? importResult.nodes.length : 0)
+        || workflowNodeCount;
+      const mappingsDetected = schemaArray(product.workflow_placeholder_mappings).length;
+      const variablesDetected = Number(importResult.variables_detected || importResult.variable_count || importResult.placeholder_count || 0)
+        || Object.keys(detectedPlaceholders).filter((key) => !key.startsWith("_")).length
+        || mappingsDetected;
+      const setupDetected = schemaArray(product.setup_schema).length;
+      const credentialsDetected = schemaArray(product.credential_schema).length;
+      const pythonLogHtml = isPythonProduct && imported
+        ? `
+          <details class="python-runtime-log" ${product.n8n_last_test_result ? "open" : ""}>
+            <summary>Last Python run log</summary>
+            <div>${formatPythonRuntimeLog(product)}</div>
+          </details>
+        `
+        : "";
+      const importSignals = imported ? `
+        <div class="developer-import-success-grid">
+          <span><strong>${NexusUI.escapeHtml(String(isPythonProduct ? "1" : (nodesDetected || "0")))}</strong> ${isPythonProduct ? "script saved" : "nodes detected"}</span>
+          <span><strong>${NexusUI.escapeHtml(String(variablesDetected || "0"))}</strong> variables detected</span>
+          <span><strong>${NexusUI.escapeHtml(String(setupDetected || "0"))}</strong> buyer fields</span>
+          <span><strong>${NexusUI.escapeHtml(String(credentialsDetected || "0"))}</strong> credential fields</span>
+        </div>
+      ` : "";
 
       root.innerHTML = `
         ${message ? `<div class="${messageClass}">${NexusUI.escapeHtml(message)}</div>` : ""}
         <div class="${importClass}">
-          <strong>Import:</strong>
-          ${NexusUI.escapeHtml(imported ? "Imported to hosted n8n" : product.n8n_import_status || "Not imported")}
-          ${product.n8n_workflow_id ? `<br><small>Workflow ID: ${NexusUI.escapeHtml(product.n8n_workflow_id)}</small>` : ""}
+          <strong>${isPythonProduct ? "Python script:" : "Import:"}</strong>
+          ${NexusUI.escapeHtml(imported ? (isPythonProduct ? "Saved for Python runner" : "Imported to hosted n8n") : (isPythonProduct ? "No script saved" : (product.n8n_import_status || "Not imported")))}
+          ${!isPythonProduct && product.n8n_workflow_id ? `<br><small>Workflow ID: ${NexusUI.escapeHtml(product.n8n_workflow_id)}</small>` : ""}
         </div>
+        ${importSignals}
         <div class="${testClass}" style="margin-top:.55rem">
           <strong>Technical test:</strong>
           ${NexusUI.escapeHtml(testStatus)}
           ${testDetail ? `<br><small>${NexusUI.escapeHtml(testDetail)}</small>` : ""}
         </div>
+        ${pythonLogHtml}
         ${editorButton}
       `;
+      updatePythonEditorLog(product);
     }
 
     function productPayload() {
       const form = document.getElementById("developerProductForm");
-      const formData = new FormData(form);
+      const formData = productFormData(form);
+      const workflowProvider = normalizeWorkflowProvider(formData.get("workflow_provider") || form.elements.workflow_provider?.value || "n8n");
       const selectedCurrency = String(formData.get("currency") || "USD").toUpperCase();
       const priceAmount = Number(formData.get("price_amount") || 0);
       const setupFeeAmount = Number(formData.get("setup_fee_amount") || 0);
       const detectedPlaceholders = jsonField(formData, "detected_placeholders", {});
       const sheetAccessConfig = jsonField(formData, "sheet_access_config", {});
-      const n8nWorkflowJson = jsonField(formData, "n8n_workflow_json", null);
-      const setupSchema = jsonField(formData, "setup_schema", []);
-      const runtimeEventSchema = jsonField(formData, "runtime_event_schema", []);
-      const credentialSchema = jsonField(formData, "credential_schema", []);
+      const rawN8nWorkflowJson = jsonField(formData, "n8n_workflow_json", null);
+      const pythonScriptCode = String(formData.get("python_script_code") || "");
+      const n8nWorkflowJson = ["python", "manual"].includes(workflowProvider) ? null : rawN8nWorkflowJson;
+      let setupSchema = jsonField(formData, "setup_schema", []);
+      let runtimeEventSchema = jsonField(formData, "runtime_event_schema", []);
+      let credentialSchema = jsonField(formData, "credential_schema", []);
       const currentMappings = jsonField(formData, "workflow_placeholder_mappings", []);
-      const generatedMappings = inferWorkflowPlaceholderMappings(n8nWorkflowJson);
+      const pythonInference = workflowProvider === "python"
+        ? inferPythonSchemasFromCode(pythonScriptCode)
+        : { setup: [], credentials: [], mappings: [] };
+      const generatedMappings = workflowProvider === "python"
+        ? pythonInference.mappings
+        : inferWorkflowPlaceholderMappings(n8nWorkflowJson);
       const workflowPlaceholderMappings = mergeWorkflowPlaceholderMappings(currentMappings, generatedMappings);
       if (form.elements.workflow_placeholder_mappings && JSON.stringify(currentMappings) !== JSON.stringify(workflowPlaceholderMappings)) {
         form.elements.workflow_placeholder_mappings.value = JSON.stringify(workflowPlaceholderMappings, null, 2);
+      }
+      if (workflowProvider === "python") {
+        const mergedSetupSchema = mergeSchemaFields(setupSchema, pythonInference.setup);
+        const mergedRuntimeEventSchema = mergeSchemaFields(runtimeEventSchema, pythonInference.events);
+        const mergedCredentialSchema = mergeSchemaFields(credentialSchema, pythonInference.credentials);
+        if (form.elements.setup_schema && JSON.stringify(setupSchema) !== JSON.stringify(mergedSetupSchema)) {
+          form.elements.setup_schema.value = JSON.stringify(mergedSetupSchema, null, 2);
+        }
+        if (form.elements.runtime_event_schema && JSON.stringify(runtimeEventSchema) !== JSON.stringify(mergedRuntimeEventSchema)) {
+          form.elements.runtime_event_schema.value = JSON.stringify(mergedRuntimeEventSchema, null, 2);
+        }
+        if (form.elements.credential_schema && JSON.stringify(credentialSchema) !== JSON.stringify(mergedCredentialSchema)) {
+          form.elements.credential_schema.value = JSON.stringify(mergedCredentialSchema, null, 2);
+        }
+        setupSchema = mergedSetupSchema;
+        runtimeEventSchema = mergedRuntimeEventSchema;
+        credentialSchema = mergedCredentialSchema;
       }
       if (
         sheetAccessConfig &&
@@ -4328,13 +5061,17 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         preview_code: String(formData.get("preview_code") || ""),
         preview_image_url: String(formData.get("preview_image_url") || ""),
         preview_base64: String(formData.get("preview_base64") || ""),
-        runtime_type: String(formData.get("runtime_type") || "n8n_managed"),
+        runtime_type: workflowProvider === "python" ? "python_runner" : String(formData.get("runtime_type") || "n8n_managed"),
         runtime_trigger_mode: String(formData.get("runtime_trigger_mode") || "setup_complete"),
         runtime_run_frequency: String(formData.get("runtime_run_frequency") || "manual"),
         runtime_no_change_policy: String(formData.get("runtime_no_change_policy") || "no_output"),
         runtime_response_mode: String(formData.get("runtime_response_mode") || "dashboard_output"),
-        workflow_source_platform: String(formData.get("workflow_provider") || "n8n"),
+        workflow_source_platform: workflowProvider,
         n8n_workflow_json: n8nWorkflowJson,
+        python_script_code: pythonScriptCode,
+        python_requirements: String(formData.get("python_requirements") || ""),
+        python_entrypoint: String(formData.get("python_entrypoint") || "run"),
+        python_timeout_seconds: Number(formData.get("python_timeout_seconds") || 120),
         setup_schema: setupSchema,
         runtime_event_schema: runtimeEventSchema,
         credential_schema: credentialSchema,
@@ -4381,7 +5118,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         form.elements.setup_fee_amount.value = productSetupFeeValue(product) || "";
       }
       if (form.elements.workflow_provider) {
-        form.elements.workflow_provider.value = product.workflow_source_platform || (product.make_blueprint ? "make" : "n8n");
+        form.elements.workflow_provider.value = normalizeWorkflowProvider(product.workflow_source_platform, product);
       }
       const makeBlueprint = document.getElementById("makeBlueprintJson");
       if (makeBlueprint) {
@@ -4403,6 +5140,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       updateDeveloperWorkflowProviderUI();
       updateDeveloperPricingLabels();
       updateDeveloperImportResult(product);
+      if (document.getElementById("pythonCodeEditorModal")?.classList.contains("open")) {
+        syncPythonEditorFromForm();
+      } else {
+        updatePythonEditorLog(product);
+      }
       renderSelectedProductSummary(product);
       renderGeneratedMappingPanel(product);
       state.testProfile = null;
@@ -4412,7 +5154,9 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       renderCredentialProductSelect();
       if ((state.credentials || []).length) renderCredentialList();
 
-      if (product?.id && product.listing_type !== "custom_request") {
+      if (normalizeWorkflowProvider(product?.workflow_source_platform, product) === "python") {
+        clearCredentialWorkspace("Python products use the Technical test data panel above. Save setup fields and developer-owned credentials there before running the Python check.");
+      } else if (product?.id && product.listing_type !== "custom_request") {
         clearCredentialWorkspace("Loading credentials for this product...");
         setTimeout(() => scanCurrentProductCredentials(), 0);
       } else {
@@ -4446,6 +5190,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       root.innerHTML = (state.products || []).map((product) => `
         ${(() => {
               const readiness = productReadiness(product);
+              const provider = normalizeWorkflowProvider(product.workflow_source_platform || product.runtime_type, product);
+              const canTestProduct = product.id && (
+                provider === "python"
+                  ? String(product.python_script_code || "").trim()
+                  : product.n8n_workflow_json
+              );
               const healthStatus = NexusUI.workflowHealthStatus?.(product) || product.health_status || "";
               const healthLabel = NexusUI.workflowHealthLabel?.(healthStatus) || healthStatus;
               return `
@@ -4473,7 +5223,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
                 <button class="btn btn-secondary btn-small" type="button" data-preview-product="${NexusUI.escapeAttribute(product.id || "")}">Preview</button>
                 ${
                   product.listing_type !== "custom_request"
-                    ? `<button class="btn btn-secondary btn-small" type="button" data-test-product="${NexusUI.escapeAttribute(product.id || "")}" ${product.id && product.n8n_workflow_json ? "" : "disabled"}>Test</button>`
+                    ? `<button class="btn btn-secondary btn-small" type="button" data-test-product="${NexusUI.escapeAttribute(product.id || "")}" ${canTestProduct ? "" : "disabled"}>Test</button>`
                     : ""
                 }
                 ${
@@ -4524,7 +5274,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       });
 
       root.querySelectorAll("[data-test-product]").forEach((button) => {
-        button.addEventListener("click", () => importAndTestProduct(button.dataset.testProduct, button));
+        button.addEventListener("click", () => testProductFromList(button.dataset.testProduct, button));
       });
 
       root.querySelectorAll("[data-edit-workflow]").forEach((button) => {
@@ -4564,6 +5314,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         }
       }
       return [];
+    }
+
+    function objectValue(value) {
+      return value && typeof value === "object" && !Array.isArray(value) ? value : {};
     }
 
     function latestSetupAnswers(row) {
@@ -4989,6 +5743,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       renderProducts();
       if (String(state.selectedProductId || "") === String(automationId || "")) {
         renderSelectedProductSummary(product);
+        updatePythonEditorLog(product);
         if (message) updateDeveloperImportResult(product, message);
       }
     }
@@ -5068,6 +5823,49 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       }
     }
 
+    async function testPythonProduct(product, button = null) {
+      if (!product?.id) {
+        NexusUI.toast("Save or select a Python product first.");
+        return;
+      }
+
+      fillProduct(product);
+      await loadDeveloperTestProfile(product.id);
+
+      const latest = selectedProduct() || product;
+      if (!String(latest.python_script_code || "").trim()) {
+        const message = "Save the Python script before running a technical test.";
+        NexusUI.toast(message);
+        focusProductFormField("python_script_code", message);
+        return;
+      }
+
+      if (!state.testProfile?.id) {
+        const message = "Save Technical test data first, then run the Python check.";
+        NexusUI.toast(message);
+        await openTechnicalTestDataBlocker(message);
+        return;
+      }
+
+      await runDeveloperRealTest(product.id, button);
+    }
+
+    async function testProductFromList(id, button = null) {
+      const product = state.products.find((item) => String(item.id || "") === String(id || ""));
+      if (!product) {
+        NexusUI.toast("Product not found.");
+        return;
+      }
+
+      const provider = normalizeWorkflowProvider(product.workflow_source_platform || product.runtime_type, product);
+      if (provider === "python") {
+        await testPythonProduct(product, button);
+        return;
+      }
+
+      await importAndTestProduct(id, button, product);
+    }
+
     async function importAndTestProduct(id, button = null, productOverride = null) {
       const product = productOverride || state.products.find((item) => String(item.id || "") === String(id || ""));
 
@@ -5103,11 +5901,32 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         if (importError) throw new Error(importError.message || "Workflow import failed.");
         importData = data || null;
 
+        if (button) button.textContent = "Checking credentials...";
+        updateDeveloperImportResult(product, "Workflow imported. Checking required credentials before running...");
+        const credentialScan = await NexusDB.scanAutomationCredentials(product.id);
+        if (credentialScan.error) {
+          throw new Error(credentialScan.error.message || "Workflow imported, but credential scan failed.");
+        }
+
+        updateLocalProductSummary(credentialScan.data?.product);
+        renderCredentialWorkflowList();
+        renderCredentialSlots(credentialScan.data);
+
+        if (credentialScan.data?.errors?.length) {
+          const firstError = credentialScan.data.errors.map((item) => item?.message).find(Boolean);
+          finalStatusMessage = firstError || "Workflow imported. Connect or sync the missing credentials, then press Apply credentials & run check.";
+          NexusUI.toast(finalStatusMessage);
+          updateDeveloperImportResult(product, finalStatusMessage);
+          return;
+        }
+
         if (button) button.textContent = "Testing...";
         updateDeveloperImportResult(product, "Workflow imported. Starting technical test...");
 
         const started = await NexusDB.startN8nWorkflowTest(product.id, {
           force_new: true,
+          skip_credential_binding: true,
+          preserve_hosted_workflow: true,
           reason: "manual_import_test"
         });
         if (started.error) throw new Error(started.error.message || "Workflow test failed to start.");
@@ -5981,6 +6800,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
     });
 
     document.addEventListener("DOMContentLoaded", async function () {
+      try {
       const { data: sessionData } = await NexusDB.getSession();
       const user = sessionData?.session?.user || null;
       if (!user) {
@@ -6023,7 +6843,7 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           publicProfileLink.setAttribute("aria-disabled", "true");
           publicProfileLink.addEventListener("click", function (event) {
             event.preventDefault();
-            NexusUI.toast("Your public profile will be available after Nexus approves your developer account.");
+            NexusUI.toast("Your public profile goes live after Nexus approval, usually within 1-2 business days. You can keep preparing drafts meanwhile.");
           });
         }
       }
@@ -6120,8 +6940,58 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         scanMakeBlueprint(this);
       });
 
+      document.getElementById("openPythonEditorButton")?.addEventListener("click", openPythonCodeEditor);
+      document.getElementById("savePythonEditorButton")?.addEventListener("click", async function () {
+        const button = this;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Saving...";
+        try {
+          syncPythonEditorToForm({ force: true });
+          const product = await saveProductDraft({ silent: true });
+          if (product) {
+            fillProduct(product);
+            syncPythonEditorFromForm();
+          }
+          NexusUI.toast("Python script saved.");
+        } catch (error) {
+          NexusUI.toast(error.message || "Could not save Python script.");
+        } finally {
+          button.disabled = false;
+          button.textContent = originalText || "Save script";
+        }
+      });
+      document.getElementById("runPythonEditorButton")?.addEventListener("click", async function () {
+        const button = this;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Running...";
+        try {
+          syncPythonEditorToForm({ force: true });
+          const product = await saveProductDraft({ silent: true });
+          if (!product?.id) throw new Error("Save the Python product before testing.");
+          await loadDeveloperTestProfile(product.id);
+          if (!state.testProfile?.id) {
+            const message = "Save Technical test data first, then run the Python check.";
+            updateDeveloperImportResult(product, message);
+            updatePythonEditorLog(product);
+            NexusUI.toast(message);
+            await openTechnicalTestDataBlocker(message);
+            return;
+          }
+          await runDeveloperRealTest(product.id, button);
+          updatePythonEditorLog(selectedProduct() || product);
+        } catch (error) {
+          NexusUI.toast(error.message || "Could not run Python test.");
+        } finally {
+          button.disabled = false;
+          button.textContent = originalText || "Save & run test";
+        }
+      });
+
       document.getElementById("saveProductDraft").addEventListener("click", async function () {
         try {
+          syncPythonEditorToForm();
           await saveProductDraft();
           await loadProducts();
         } catch (error) {
@@ -6129,7 +6999,39 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         }
       });
 
-      document.getElementById("importDeveloperWorkflowButton").addEventListener("click", function () {
+      document.getElementById("importDeveloperWorkflowButton").addEventListener("click", async function () {
+        const form = document.getElementById("developerProductForm");
+        const provider = normalizeWorkflowProvider(form?.elements?.workflow_provider?.value || "n8n");
+
+        if (provider === "python") {
+          const button = this;
+          const originalText = button.textContent;
+          button.disabled = true;
+          button.textContent = "Saving...";
+          try {
+            syncPythonEditorToForm();
+            const product = await saveProductDraft({ silent: true });
+            if (!product?.id) throw new Error("Save the Python product before testing.");
+            updateDeveloperImportResult(product, "Python script saved. Checking test data...");
+            await loadDeveloperTestProfile(product.id);
+            if (state.testProfile?.id) {
+              await runDeveloperRealTest(product.id, button);
+            } else {
+              const message = "Python script saved. Save Technical test data, then run the Python check.";
+              updateDeveloperImportResult(product, message);
+              NexusUI.toast(message);
+              await openTechnicalTestDataBlocker(message);
+            }
+          } catch (error) {
+            NexusUI.toast(error.message || "Could not save Python draft.");
+            updateDeveloperImportResult(selectedProduct(), error.message || "Could not save Python draft.");
+          } finally {
+            button.disabled = false;
+            button.textContent = originalText || "Save Python & test";
+          }
+          return;
+        }
+
         importAndTestCurrentProduct(this);
       });
 
@@ -6141,6 +7043,11 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
           typeField.value = credentialProviderDefaults[this.value] || "";
         }
         renderCredentialProviderFields();
+      });
+
+      window.addEventListener("message", handleGoogleOAuthMessage);
+      document.getElementById("connectGoogleCredentialButton")?.addEventListener("click", function () {
+        connectGoogleCredential(this);
       });
 
       document.getElementById("developerShowRevokedCredentials")?.addEventListener("change", loadCredentials);
@@ -6207,6 +7114,10 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
       activeTab(initialTab);
       loadMessages();
       loadWallet();
+      } catch (error) {
+        console.error("Developer dashboard startup failed:", error);
+        NexusUI.toast(error.message || "Could not load developer dashboard. Refresh and try again.");
+      }
     });
   </script>
 </body>

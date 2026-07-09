@@ -24,7 +24,7 @@ begin
 
   alter table public.automations
     add constraint automations_workflow_source_platform_check
-    check (workflow_source_platform in ('n8n', 'make', 'zapier', 'manual'));
+    check (workflow_source_platform in ('n8n', 'make', 'zapier', 'python', 'manual'));
 
   alter table public.automations
     drop constraint if exists automations_make_import_status_check;

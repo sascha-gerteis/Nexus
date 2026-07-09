@@ -3852,6 +3852,7 @@ Deno.serve(async (req) => {
       n8nApiKey,
       credentialSecret: env("NEXUS_CREDENTIAL_SECRET"),
       syncMissingN8nCredentials: true,
+      allowExistingNativeN8nCredentials: true,
     });
 
     productForImport.n8n_workflow_json = credentialBinding.ok

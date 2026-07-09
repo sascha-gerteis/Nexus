@@ -441,6 +441,36 @@ function normalizeSecretFields(body: any) {
   return {};
 }
 
+function credentialPayloadHasSecretValue(payload: Record<string, any>) {
+  const secretishKeys = new Set([
+    "access_token",
+    "api_key",
+    "api_token",
+    "auth_token",
+    "client_secret",
+    "connection_string",
+    "consumer_secret",
+    "oauth_access_token",
+    "oauth_client_secret",
+    "oauth_refresh_token",
+    "password",
+    "private_key",
+    "refresh_token",
+    "secret",
+    "secret_access_key",
+    "service_account_json",
+    "service_account_private_key",
+    "session_token",
+    "token",
+  ]);
+
+  return Object.entries(payload || {}).some(([key, value]) => {
+    const cleanKey = cleanString(key).toLowerCase();
+    const cleanValue = cleanString(value);
+    return Boolean(cleanValue && secretishKeys.has(cleanKey));
+  });
+}
+
 async function getUserFromRequest(req: Request, supabaseUrl: string, anonKey: string) {
   const authHeader = req.headers.get("Authorization") || "";
   if (!authHeader.startsWith("Bearer ")) return null;
@@ -611,9 +641,33 @@ async function saveCredential(adminClient: any, operator: any, body: any) {
       throw new Error("Missing NEXUS_CREDENTIAL_SECRET. Add it in Supabase Function secrets first.");
     }
 
-    encryptedPayload = await encryptCredentialPayload(secretFields, credentialSecret);
-    fingerprint = await credentialFingerprint(secretFields);
-    lastFour = lastFourFromSecretPayload(secretFields);
+    const existingSecretFields = existing?.encrypted_payload
+      ? await decryptCredentialPayload(existing.encrypted_payload, credentialSecret)
+      : {};
+    const mergedSecretFields = {
+      ...existingSecretFields,
+      ...secretFields,
+    };
+
+    if (!credentialPayloadHasSecretValue(mergedSecretFields)) {
+      if (
+        existing?.encrypted_payload &&
+        credentialPayloadHasSecretValue(existingSecretFields) &&
+        (suppliedN8nCredentialId || cleanString(existing?.n8n_credential_id))
+      ) {
+        encryptedPayload = existing?.encrypted_payload || null;
+        fingerprint = existing?.fingerprint || null;
+        lastFour = existing?.last_four || null;
+      } else {
+        throw new Error(
+          "Add the actual secret value before saving this credential. Non-secret settings like host, port, SSL, or secure mode cannot be saved by themselves.",
+        );
+      }
+    } else {
+      encryptedPayload = await encryptCredentialPayload(mergedSecretFields, credentialSecret);
+      fingerprint = await credentialFingerprint(mergedSecretFields);
+      lastFour = lastFourFromSecretPayload(mergedSecretFields);
+    }
   } else if (!existing && !cleanString(body.n8n_credential_id)) {
     throw new Error("Add an API key/token or an existing n8n credential ID.");
   }
@@ -836,6 +890,15 @@ async function revealCredential(
     credential.encrypted_payload,
     env("NEXUS_CREDENTIAL_SECRET"),
   );
+
+  if (
+    Object.keys(secretFields).length &&
+    !credentialPayloadHasSecretValue(secretFields)
+  ) {
+    throw new Error(
+      "This credential only contains non-secret settings, not the actual key/password. n8n may still have the synced account, but Nexus cannot reveal a secret it no longer has. Edit it once and re-enter the real secret value.",
+    );
+  }
 
   return {
     credential,
@@ -1194,7 +1257,7 @@ async function applyAutomation(adminClient: any, operator: any, body: any) {
 
   return {
     ...result,
-    product,
+    product: result.product || product,
   };
 }
 

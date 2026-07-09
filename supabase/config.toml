@@ -42,3 +42,9 @@ verify_jwt = false
 
 [functions.analytics-events]
 verify_jwt = false
+
+[functions.oauth-connections]
+verify_jwt = false
+
+[functions.run-python-automation]
+verify_jwt = false

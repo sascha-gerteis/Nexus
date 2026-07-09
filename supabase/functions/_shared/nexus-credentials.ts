@@ -96,9 +96,31 @@ export async function credentialFingerprint(payload: Record<string, any>) {
 }
 
 export function lastFourFromSecretPayload(payload: Record<string, any>) {
-  const firstValue = Object.values(payload || {})
-    .map((value) => cleanString(value))
-    .find(Boolean);
+  const secretPriority = [
+    "api_key",
+    "openai_api_key",
+    "api_token",
+    "token",
+    "access_token",
+    "refresh_token",
+    "password",
+    "client_secret",
+    "consumer_secret",
+    "auth_token",
+    "private_key",
+    "service_account_private_key",
+    "secret_access_key",
+    "session_token",
+    "connection_string",
+    "service_account_json",
+  ];
+
+  const firstValue = secretPriority
+    .map((key) => cleanString(payload?.[key]))
+    .find(Boolean) || Object.entries(payload || {})
+      .filter(([key]) => !["secure", "ssl"].includes(cleanString(key).toLowerCase()))
+      .map(([_key, value]) => cleanString(value))
+      .find(Boolean);
 
   return firstValue ? firstValue.slice(-4) : "";
 }
@@ -534,6 +556,7 @@ const PROVIDER_PRESETS = [
     setupHints: [
       "Gmail nodes need OAuth access for the mailbox that sends or reads mail.",
       "Use scopes that match the action, such as gmail.send or gmail.modify.",
+      "If Google shows redirect_uri_mismatch, add the Nexus n8n editor proxy callback URL to the Google OAuth client.",
     ],
   },
   {
@@ -2313,6 +2336,10 @@ function nativeCredentialManualSetupMessage(slot: any, credentialType: string, e
     ? "n8n requires this account to be completed through its native OAuth/account setup."
     : rawError;
 
+  if (lower(credentialType).includes("google") || lower(credentialType) === "gmailoauth2" || lower(provider).includes("google") || lower(provider).includes("gmail")) {
+    return `${provider} uses a native Google OAuth account on "${node}". Use the Nexus credential panel's Connect Google button for this node, then press Apply credentials & run check. ${cleanReason ? `Original n8n response: ${cleanReason} ` : ""}${hints ? `${hints} ` : ""}If Connect Google is unavailable, open "${node}"${nodeType ? ` (${nodeType})` : ""} in the locked editor only as a temporary fallback.`;
+  }
+
   return `${provider} uses n8n's native credential account setup on "${node}". ${cleanReason ? `${cleanReason} ` : ""}${hints ? `${hints} ` : ""}Click Edit workflow, open "${node}"${nodeType ? ` (${nodeType})` : ""}, use Set up credential / select ${provider} account, save the workflow, then click Sync changes and Run check.`;
 }
 
@@ -2425,6 +2452,14 @@ export async function syncCredentialToN8n(options: {
   const existingCredentialMatchesType =
     Boolean(credential.n8n_credential_id) &&
     cleanString(credential.n8n_credential_type) === credentialType;
+
+  if (
+    existingCredentialMatchesType &&
+    isNativeN8nCredentialSlot(normalizedSlot, credentialType) &&
+    requiresNativeAccountSetup(normalizedSlot, credentialType)
+  ) {
+    return credential;
+  }
 
   if (existingCredentialMatchesType && !credential.encrypted_payload) {
     return credential;
@@ -3085,6 +3120,76 @@ async function updateHostedN8nWorkflow(
   );
 }
 
+function normalizeN8nCredentialSummary(item: any) {
+  const value = item?.data && typeof item.data === "object" ? item.data : item;
+
+  return {
+    id: cleanString(value?.id || value?.credentialId || value?.credential_id),
+    name: cleanString(value?.name || value?.credentialName || value?.credential_name),
+    type: cleanString(value?.type || value?.credentialType || value?.credential_type),
+  };
+}
+
+function n8nCredentialSummaryRows(payload: any) {
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.credentials)
+        ? payload.credentials
+        : [];
+
+  return rows
+    .map(normalizeN8nCredentialSummary)
+    .filter((row) => row.id || row.name);
+}
+
+async function listN8nCredentialSummaries(n8nBaseUrl: string, n8nApiKey: string) {
+  const payload = await n8nRequest(
+    n8nBaseUrl,
+    n8nApiKey,
+    "/api/v1/credentials",
+    { method: "GET" },
+    { api_area: "credential" },
+  );
+
+  return n8nCredentialSummaryRows(payload);
+}
+
+function n8nCredentialTypeMatches(summary: any, credentialType: string) {
+  const summaryType = cleanString(summary?.type);
+  const wantedType = cleanString(credentialType);
+  return !summaryType || !wantedType || summaryType === wantedType;
+}
+
+function findLiveN8nCredentialSummary(
+  summaries: any[],
+  credentialType: string,
+  credentialId = "",
+  credentialName = "",
+) {
+  const id = cleanString(credentialId);
+  const name = cleanString(credentialName);
+
+  if (id) {
+    const byId = summaries.find((summary) => (
+      cleanString(summary?.id) === id &&
+      n8nCredentialTypeMatches(summary, credentialType)
+    ));
+    if (byId) return byId;
+  }
+
+  if (name) {
+    const byName = summaries.find((summary) => (
+      cleanString(summary?.name) === name &&
+      n8nCredentialTypeMatches(summary, credentialType)
+    ));
+    if (byName) return byName;
+  }
+
+  return null;
+}
+
 export async function bindAutomationCredentials(options: {
   adminClient: SupabaseAdminClient;
   product: any;
@@ -3161,11 +3266,67 @@ export async function bindAutomationCredentials(options: {
   let boundWorkflow = workflow;
   const bindings: any[] = [];
   const errors: any[] = [];
+  let preserveHostedWorkflowForNativeCredentials = false;
   const reusableNativeCredentials = new Map<string, any>();
   const nativeReuseKey = (slot: any) => [
     slotProvider(slot) || slot?.provider || slot?.provider_label || "provider",
     slot?.n8n_credential_type || slot?.credential_key || "credential",
   ].map(cleanString).join(":");
+  let liveN8nCredentialSummaries: any[] | null = null;
+  let liveN8nCredentialLookupFailed = false;
+  const getLiveN8nCredentialSummaries = async () => {
+    if (liveN8nCredentialSummaries) return liveN8nCredentialSummaries;
+
+    try {
+      liveN8nCredentialSummaries = await listN8nCredentialSummaries(n8nBaseUrl, n8nApiKey);
+    } catch (error) {
+      liveN8nCredentialLookupFailed = true;
+      console.warn("Could not list n8n credentials:", error instanceof Error ? error.message : error);
+      liveN8nCredentialSummaries = [];
+    }
+
+    return liveN8nCredentialSummaries;
+  };
+
+  /*
+    Native account credentials can be selected in n8n itself. Before binding,
+    pre-resolve the live n8n credential IDs that actually exist so duplicate
+    Gmail/Google/etc nodes can reuse the working account instead of preserving
+    an old credential ID on one node.
+  */
+  if (allowExistingNativeN8nCredentials) {
+    const summaries = await getLiveN8nCredentialSummaries();
+
+    if (!liveN8nCredentialLookupFailed) {
+      for (const slot of slots) {
+        const credentialType = cleanString(slot.n8n_credential_type || slot.credential_key);
+        if (!isNativeN8nCredentialSlot(slot, credentialType)) continue;
+
+        const liveCredential = findLiveN8nCredentialSummary(
+          summaries,
+          credentialType,
+          cleanString(slot.current_id),
+          cleanString(slot.current_name),
+        );
+
+        if (!liveCredential) continue;
+
+        const liveId = cleanString(liveCredential.id || slot.current_id);
+        if (!liveId) continue;
+
+        reusableNativeCredentials.set(nativeReuseKey(slot), {
+          id: "",
+          label: cleanString(liveCredential.name || slot.current_name || slot.provider_label || "n8n account credential"),
+          provider: slot.provider,
+          provider_label: slot.provider_label,
+          n8n_credential_type: cleanString(liveCredential.type || credentialType),
+          n8n_credential_id: liveId,
+          n8n_credential_name: cleanString(liveCredential.name || slot.current_name || "n8n account credential"),
+          manual_n8n_credential: true,
+        });
+      }
+    }
+  }
 
   for (const slot of slots) {
     let credential = bestCredentialForSlot(credentials, slot, previousBindings);
@@ -3173,13 +3334,47 @@ export async function bindAutomationCredentials(options: {
     const existingNativeCredentialId = cleanString(slot.current_id);
     const existingNativeCredentialName = cleanString(slot.current_name);
     const nativeN8nSlot = isNativeN8nCredentialSlot(slot, slot.n8n_credential_type || slot.credential_key);
+    const reusableNativeCredential = nativeN8nSlot
+      ? reusableNativeCredentials.get(nativeReuseKey(slot))
+      : null;
     const canUseExistingNativeCredential = Boolean(
       allowExistingNativeN8nCredentials &&
       nativeN8nSlot &&
       (existingNativeCredentialId || existingNativeCredentialName),
     );
 
-    if (canUseExistingNativeCredential && (!credential || !credential.n8n_credential_id)) {
+    /*
+      Native account credentials such as Gmail OAuth can be selected directly in
+      the locked n8n editor. When the live workflow already has one attached,
+      that live reference must win over any older Nexus binding; otherwise Nexus
+      can accidentally PUT the workflow back with a stale credential ID.
+    */
+    if (
+      canUseExistingNativeCredential &&
+      reusableNativeCredential?.n8n_credential_id &&
+      cleanString(reusableNativeCredential.n8n_credential_id) !== existingNativeCredentialId
+    ) {
+      credential = reusableNativeCredential;
+    } else if (canUseExistingNativeCredential && existingNativeCredentialId) {
+      /*
+        Important: do not keep the saved Nexus credential row as the active
+        object here, even if the IDs match. Native OAuth credentials are owned
+        by n8n once the user selects them in the editor. Treat the live workflow
+        reference as manual so the sync path never recreates or swaps it with a
+        stale Nexus DB credential.
+      */
+      credential = {
+        id: "",
+        label: existingNativeCredentialName || slot.provider_label || "n8n account credential",
+        provider: slot.provider,
+        provider_label: slot.provider_label,
+        n8n_credential_type: slot.n8n_credential_type || slot.credential_key,
+        n8n_credential_id: existingNativeCredentialId,
+        n8n_credential_name: existingNativeCredentialName || "n8n account credential",
+        manual_n8n_credential: true,
+      };
+      reusableNativeCredentials.set(nativeReuseKey(slot), credential);
+    } else if (canUseExistingNativeCredential && (!credential || !credential.n8n_credential_id)) {
       credential = {
         id: "",
         label: existingNativeCredentialName || slot.provider_label || "n8n account credential",
@@ -3198,6 +3393,22 @@ export async function bindAutomationCredentials(options: {
       if (reusableCredential?.n8n_credential_id) {
         credential = reusableCredential;
       }
+    }
+
+    if (
+      nativeN8nSlot &&
+      allowExistingNativeN8nCredentials &&
+      credential?.n8n_credential_id &&
+      !credential.manual_n8n_credential &&
+      !existingNativeCredentialId &&
+      !reusableNativeCredentials.get(nativeReuseKey(slot))?.n8n_credential_id
+    ) {
+      /*
+        A stored Nexus credential ID for Gmail/Google OAuth/etc can be stale
+        after credentials are recreated inside n8n. If the live workflow does
+        not currently point to that credential, do not push it back into n8n.
+      */
+      credential = null;
     }
 
     if (credential && syncMissingN8nCredentials && !usesNexusProxy && !credential.manual_n8n_credential) {
@@ -3231,6 +3442,55 @@ export async function bindAutomationCredentials(options: {
           message: error instanceof Error ? error.message : String(error),
         });
         continue;
+      }
+    }
+
+    if (
+      credential?.n8n_credential_id &&
+      nativeN8nSlot &&
+      allowExistingNativeN8nCredentials &&
+      requiresNativeAccountSetup(slot, slot.n8n_credential_type || slot.credential_key)
+    ) {
+      const credentialType = cleanString(slot.n8n_credential_type || slot.credential_key || credential.n8n_credential_type);
+      const credentialId = cleanString(credential.n8n_credential_id);
+      const credentialName = cleanString(credential.n8n_credential_name || credential.label || existingNativeCredentialName);
+      const summaries = await getLiveN8nCredentialSummaries();
+      const liveCredential = findLiveN8nCredentialSummary(summaries, credentialType, credentialId, credentialName);
+
+      if (liveCredential) {
+        const liveId = cleanString(liveCredential.id) || credentialId;
+        const liveName = cleanString(liveCredential.name) || credentialName;
+        const liveType = cleanString(liveCredential.type) || credentialType;
+        credential = {
+          ...credential,
+          n8n_credential_id: liveId,
+          n8n_credential_name: liveName,
+          n8n_credential_type: liveType,
+        };
+        if (cleanString(credential.id) && liveId && liveId !== credentialId) {
+          try {
+            await adminClient
+              .from("developer_credentials")
+              .update({
+                n8n_credential_id: liveId,
+                n8n_credential_name: liveName,
+                n8n_credential_type: liveType,
+                status: "active",
+                last_error: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", credential.id);
+          } catch (error) {
+            console.warn("Could not persist resolved n8n credential id:", error instanceof Error ? error.message : error);
+          }
+        }
+        reusableNativeCredentials.set(nativeReuseKey(slot), credential);
+      } else {
+        // OAuth/native n8n credentials can be created through the embedded editor and
+        // already be attached to the workflow even when the credential summary list
+        // does not expose a matching row. Preserve the workflow reference and let
+        // the real technical run be the source of truth.
+        reusableNativeCredentials.set(nativeReuseKey(slot), credential);
       }
     }
 
@@ -3293,6 +3553,36 @@ export async function bindAutomationCredentials(options: {
 
     const nodeSummaryText = slot.summary?.title || slot.summary?.url || "";
     const slotCredentialType = slot.n8n_credential_type || slot.credential_key;
+    if (
+      allowExistingNativeN8nCredentials &&
+      isNativeN8nCredentialSlot(slot, slotCredentialType) &&
+      requiresNativeAccountSetup(slot, slotCredentialType)
+    ) {
+      /*
+        n8n's public workflow API can hide native OAuth account credentials
+        (Gmail, Google OAuth, etc.) even when the account is selected and works
+        in the editor. If Nexus treats that hidden value as "missing", it can
+        PUT the credential-less workflow back to n8n and break a manually fixed
+        workflow. Preserve the hosted workflow and let the real technical run be
+        the approval gate.
+      */
+      preserveHostedWorkflowForNativeCredentials = true;
+      bindings.push({
+        node_name: slot.node_name,
+        node_type: slot.node_type,
+        provider: slot.provider || null,
+        provider_label: slot.provider_label || null,
+        credential_key: slot.credential_key,
+        n8n_credential_type: slot.n8n_credential_type || slot.credential_key,
+        n8n_credential_id: null,
+        n8n_credential_name: existingNativeCredentialName || "Native n8n account credential",
+        developer_credential_id: null,
+        manual_n8n_credential: true,
+        native_credential_hidden_by_n8n_api: true,
+      });
+      continue;
+    }
+
     const missingMessage = isNativeN8nCredentialSlot(slot, slotCredentialType) && requiresNativeAccountSetup(slot, slotCredentialType)
       ? nativeCredentialManualSetupMessage(slot, slot.n8n_credential_type || slot.credential_key, null)
       : `Next: add a ${slot.provider_label || slot.provider || "developer"} credential for ${slot.node_name} (${slot.n8n_credential_type || slot.credential_key || "n8n credential"})${nodeSummaryText ? ` using ${nodeSummaryText}` : ""}, then press Apply credentials & run check.${importedCredentialNote}`;
@@ -3321,7 +3611,11 @@ export async function bindAutomationCredentials(options: {
   let hostedUpdate: any = null;
   let hostedUpdateError = "";
 
-  if (updateHostedWorkflow && cleanString(product?.n8n_workflow_id)) {
+  if (
+    updateHostedWorkflow &&
+    cleanString(product?.n8n_workflow_id) &&
+    !preserveHostedWorkflowForNativeCredentials
+  ) {
     try {
       hostedUpdate = await updateHostedN8nWorkflow(
         n8nBaseUrl,
@@ -3357,6 +3651,15 @@ export async function bindAutomationCredentials(options: {
     n8n_last_test_result: null,
     n8n_last_tested_at: null,
   };
+
+  if (preserveHostedWorkflowForNativeCredentials) {
+    automationPatch.n8n_last_import_result = {
+      ...(product.n8n_last_import_result || {}),
+      native_oauth_credentials_preserved_in_hosted_n8n: true,
+      native_oauth_preserved_at: new Date().toISOString(),
+      message: "Nexus preserved the hosted n8n workflow because native OAuth credentials may be hidden by the n8n API.",
+    };
+  }
 
   if (!errors.length) {
     automationPatch[workflowJsonColumn] = boundWorkflow;

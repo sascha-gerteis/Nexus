@@ -61,12 +61,12 @@
   </main>
 
   <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
-  <script src="/assets/js/nexus-db.js?v=20260704-output-body-repair"></script>
+  <script src="/assets/js/nexus-db.js?v=20260708-nexusdb-bootfix"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const automationId = params.get("automation_id") || params.get("id") || "";
     const returnTo = params.get("return") || "";
-    const editorBuild = "20260704-submit-output-legacy-body-repair";
+    const editorBuild = "20260708-editor-save-before-sync";
     let editorSession = null;
     let editorProduct = null;
     let editorCredentialScan = null;
@@ -348,7 +348,7 @@
         <div class="workflow-helper-section">
           <h3>Credentials in this flow</h3>
           <div class="workflow-helper-note">
-            This section is informational. Do not paste API keys into n8n. Nexus owns credential storage and blocks credential writes in this editor. The full technical run is the approval gate.
+            API-key credentials should be managed in Nexus. Native account credentials such as Gmail or Google OAuth can be created or selected inside this locked editor when n8n requires it. Nexus still blocks global credential pages and deletion.
           </div>
           ${credentialRows(scan)}
         </div>
@@ -435,6 +435,12 @@
       renderWorkflowHelper();
     }
 
+    async function refreshWorkflowHelperAfterWrite() {
+      await refreshWorkflowHelper({ silent: true });
+      await wait(900);
+      await refreshWorkflowHelper({ silent: true });
+    }
+
     function wait(ms) {
       return new Promise((resolve) => setTimeout(resolve, ms));
     }
@@ -511,6 +517,66 @@
       });
     }
 
+    function reloadEditorFrame() {
+      const frame = document.getElementById("workflowEditorFrame");
+      if (!frame?.src) return;
+      try {
+        const url = new URL(frame.src);
+        url.searchParams.set("client_v", `${Date.now()}`);
+        frame.src = url.toString();
+      } catch {
+        frame.src = frame.src;
+      }
+    }
+
+    window.addEventListener("message", async (event) => {
+      const data = event?.data || {};
+      if (!data || data.type !== "nexus:n8n-oauth-complete") return;
+
+      if (data.ok) {
+        setStatus("Credential connected. Select it on each required node, save the workflow in n8n, then sync changes.", "success");
+        NexusUI.toast("Credential connected.");
+        await refreshWorkflowHelper({ silent: true });
+      } else {
+        const message = data.error || "Credential connection did not finish.";
+        setStatus(message, "error");
+        NexusUI.toast(message);
+      }
+    });
+
+    function requestEditorSaveBeforeSync(timeoutMs = 2800) {
+      const frame = document.getElementById("workflowEditorFrame");
+      if (!frame?.contentWindow) return Promise.resolve(false);
+
+      const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      return new Promise((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener("message", onMessage);
+          resolve(false);
+        }, timeoutMs);
+
+        function onMessage(event) {
+          const data = event?.data || {};
+          if (!data || data.type !== "nexus:n8n-save-attempted" || data.requestId !== requestId) return;
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          window.removeEventListener("message", onMessage);
+          resolve(true);
+        }
+
+        window.addEventListener("message", onMessage);
+        frame.contentWindow.postMessage({
+          source: "nexus-workflow-editor",
+          type: "nexus:save-workflow-before-sync",
+          requestId
+        }, "*");
+      });
+    }
+
     async function openEditor() {
       console.info(`[Nexus] Workflow editor build ${editorBuild}`);
       if (!automationId) {
@@ -519,14 +585,7 @@
         return;
       }
 
-      setStatus("Repairing Nexus runtime nodes before opening editor...", "info");
-      const repaired = await NexusDB.importN8nWorkflow(automationId);
-      if (repaired.error) {
-        setStatus(repaired.error.message || "Could not repair workflow before opening editor.", "error");
-        NexusUI.toast(repaired.error.message || "Could not repair workflow before opening editor.");
-        return;
-      }
-      editorProduct = repaired.data?.product || editorProduct;
+      setStatus("Opening locked workflow editor...", "info");
 
       const { data, error } = await NexusDB.createN8nEditorSession(automationId);
       if (error) {
@@ -568,29 +627,21 @@
       button.textContent = "Syncing...";
 
       try {
+        setStatus("Saving embedded n8n changes before syncing...", "info");
+        await requestEditorSaveBeforeSync();
+        await wait(650);
         const { data, error } = await NexusDB.syncN8nEditorWorkflow(automationId);
         if (error) throw new Error(error.message || "Could not sync workflow.");
         editorProduct = data?.product || editorProduct;
-
-        /*
-          Pulling from n8n is not enough: developers may have edited around the
-          Nexus-managed trigger/context/output nodes, and older imports can keep
-          a stale HTTP Request body shape. Re-run the importer after every sync
-          so the hosted workflow is rewritten with the current Nexus runtime
-          contract before any technical test.
-        */
-        const normalized = await NexusDB.importN8nWorkflow(automationId);
-        if (normalized.error) {
-          throw new Error(normalized.error.message || "Workflow synced, but Nexus could not repair the runtime nodes.");
-        }
-        editorProduct = normalized.data?.product || data?.product || editorProduct;
         latestTestResult = null;
-        setStatus("Workflow synced and Nexus runtime nodes repaired. Run a fresh technical check before submitting.", "success");
-        NexusUI.toast("Workflow synced and repaired.");
-        await refreshWorkflowHelper({ silent: true });
+        setStatus("Workflow synced from n8n. Run a fresh technical check before submitting.", "success");
+        NexusUI.toast("Workflow synced from n8n.");
+        await refreshWorkflowHelperAfterWrite();
+        return true;
       } catch (error) {
         setStatus(error.message || "Could not sync workflow.", "error");
         NexusUI.toast(error.message || "Could not sync workflow.");
+        return false;
       } finally {
         button.disabled = false;
         button.textContent = original;
@@ -604,20 +655,27 @@
       button.textContent = "Starting...";
 
       try {
-        await syncWorkflow();
+        const synced = await syncWorkflow();
+        if (!synced) {
+          throw new Error("Sync failed, so Nexus did not start a technical check. Save the workflow in n8n, then try Run check again.");
+        }
+
         const started = await NexusDB.startN8nWorkflowTest(automationId, {
           force_new: true,
+          skip_import: true,
+          skip_credential_binding: true,
+          preserve_hosted_workflow: true,
           reason: "embedded_editor_check"
         });
         if (started.error) throw new Error(started.error.message || "Could not start workflow check.");
         latestTestResult = started.data || { status: "running" };
-        await refreshWorkflowHelper({ silent: true });
+        await refreshWorkflowHelperAfterWrite();
         setStatus("Technical check started. Nexus is waiting for n8n to finish.", "success");
         NexusUI.toast("Technical check started.");
         button.textContent = "Checking...";
         const result = await pollWorkflowCheck(started.data || {});
         latestTestResult = result;
-        await refreshWorkflowHelper({ silent: true });
+        await refreshWorkflowHelperAfterWrite();
         if (isPassingStatus(result.status)) {
           setStatus("Technical check passed. This workflow is ready for product review if the helper checklist is green.", "success");
           NexusUI.toast("Workflow check passed.");

@@ -1502,6 +1502,88 @@ function classifyImmediateWebhookError(message: string) {
   };
 }
 
+async function triggerPythonRunner(params: {
+  customerAutomation: any;
+  automation: any;
+  order: any;
+  user: any;
+  setupAnswers: Record<string, string>;
+  secrets: Record<string, string>;
+  savedCredentialKeys: string[];
+  submissionId: string;
+}) {
+  const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
+  const supabaseUrl = env("SUPABASE_URL").replace(/\/+$/, "");
+  const callbackUrl = buildCallbackUrl();
+  const setupPayload = expandBuyerSetupAliases(params.setupAnswers || {});
+
+  if (!supabaseUrl || !runtimeSecret) {
+    throw new Error("Missing SUPABASE_URL or NEXUS_RUNTIME_SECRET Supabase secrets for Python runtime.");
+  }
+
+  const payload = {
+    customer_automation_id: params.customerAutomation.id,
+    automation_id: params.customerAutomation.automation_id,
+    order_id: params.customerAutomation.order_id,
+    buyer_id: params.customerAutomation.buyer_id,
+
+    setup: setupPayload,
+    secrets: params.secrets || {},
+
+    customer: buildCustomerPayload(params.user, params.customerAutomation, params.order),
+    system: {
+      customer_automation_id: params.customerAutomation.id,
+      automation_id: params.customerAutomation.automation_id,
+      order_id: params.customerAutomation.order_id,
+      buyer_id: params.customerAutomation.buyer_id,
+
+      callback_url: callbackUrl,
+      runtime_secret: runtimeSecret,
+      setup_submission_id: params.submissionId,
+      saved_credential_keys: params.savedCredentialKeys || [],
+      runtime_type: "python_runner",
+    },
+  };
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/run-python-automation`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nexus-runtime-secret": runtimeSecret,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const responseText = await response.text();
+  let responseBody: any = {};
+
+  try {
+    responseBody = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    responseBody = {
+      raw_response: responseText,
+    };
+  }
+
+  if (!response.ok || responseBody?.ok === false) {
+    throw new Error(
+      `Python runtime failed (${response.status}): ${
+        responseBody?.message ||
+        responseBody?.error ||
+        responseBody?.runner?.error ||
+        responseText ||
+        "Unknown Python runtime error"
+      }`,
+    );
+  }
+
+  return {
+    response,
+    responseBody,
+    executionId: "",
+  };
+}
+
 async function loadLatestSetupSubmission(adminClient: any, customerAutomationId: string, buyerId: string) {
   const { data, error } = await adminClient
     .from("automation_setup_submissions")
@@ -1878,6 +1960,7 @@ Deno.serve(async (req) => {
     }
 
     let runtimeType = getRuntimeType(customerAutomation, automation);
+    let isPythonRuntime = runtimeType === "python_runner";
 
     const hasManagedWorkflowTemplate = Boolean(
       customerAutomation.n8n_workflow_id ||
@@ -1888,7 +1971,7 @@ Deno.serve(async (req) => {
         order?.runtime_webhook_url,
     );
 
-    if (runtimeType === "n8n_managed" || hasManagedWorkflowTemplate) {
+    if (!isPythonRuntime && (runtimeType === "n8n_managed" || hasManagedWorkflowTemplate)) {
       try {
         const provisionResult = await provisionCustomerWorkflowBeforeTrigger({
           supabaseUrl,
@@ -1901,6 +1984,7 @@ Deno.serve(async (req) => {
         }
 
         runtimeType = getRuntimeType(customerAutomation, automation);
+        isPythonRuntime = runtimeType === "python_runner";
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error || "");
         const classification = await recordTriggerError(
@@ -1933,11 +2017,12 @@ Deno.serve(async (req) => {
 
     const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
 
-    const shouldTriggerN8n =
+    const shouldTriggerRuntime =
+      isPythonRuntime ||
       runtimeType === "n8n_managed" ||
       Boolean(webhookUrl);
 
-    if (!shouldTriggerN8n || !webhookUrl) {
+    if (!shouldTriggerRuntime || (!isPythonRuntime && !webhookUrl)) {
       await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
         status: "setup_submitted",
         runtime_status: "not_started",
@@ -1961,22 +2046,33 @@ Deno.serve(async (req) => {
     let triggerResult: any = null;
 
     try {
-      triggerResult = await triggerN8nWebhook({
-        webhookUrl,
-        customerAutomation,
-        automation,
-        order,
-        user: isAdmin || isDeveloper ? null : user,
-        setupAnswers,
-        secrets: savedSecrets,
-        savedCredentialKeys,
-        submissionId: submission.id,
-      });
+      triggerResult = isPythonRuntime
+        ? await triggerPythonRunner({
+          customerAutomation,
+          automation,
+          order,
+          user: isAdmin || isDeveloper ? null : user,
+          setupAnswers,
+          secrets: savedSecrets,
+          savedCredentialKeys,
+          submissionId: submission.id,
+        })
+        : await triggerN8nWebhook({
+          webhookUrl,
+          customerAutomation,
+          automation,
+          order,
+          user: isAdmin || isDeveloper ? null : user,
+          setupAnswers,
+          secrets: savedSecrets,
+          savedCredentialKeys,
+          submissionId: submission.id,
+        });
     } catch (error) {
       let message = error instanceof Error ? error.message : String(error);
       let activationRetry: any = null;
 
-      if (isUnregisteredN8nWebhookError(message)) {
+      if (!isPythonRuntime && isUnregisteredN8nWebhookError(message)) {
         activationRetry = await activateRuntimeWorkflow(customerAutomation, automation, order);
 
         if (activationRetry?.ok) {
@@ -2095,12 +2191,15 @@ Deno.serve(async (req) => {
       created_by: "runtime",
     });
 
-    const n8nCheckResult = await checkN8nExecutionAfterTrigger(customerAutomation.id);
+    const n8nCheckResult = isPythonRuntime
+      ? { checked: false, reason: "Python runner handles execution and callback status." }
+      : await checkN8nExecutionAfterTrigger(customerAutomation.id);
 
     return jsonResponse({
       ok: true,
       status: "submitted_and_triggered",
-      triggered_n8n: true,
+      triggered_n8n: !isPythonRuntime,
+      triggered_python: isPythonRuntime,
       submission_id: submission.id,
       setup_keys: Object.keys(setupAnswers),
       credential_keys_available: Object.keys(savedSecrets),

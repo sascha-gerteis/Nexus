@@ -1,6 +1,9 @@
 const EDITOR_COOKIE = "nexus_n8n_editor_token";
 const SESSION_CACHE_TTL_MS = 30_000;
+const CREDENTIAL_REF_CACHE_TTL_MS = 15_000;
 const sessionCache = new Map();
+const workflowCredentialRefCache = new Map();
+const sessionCredentialRefCache = new Map();
 
 export default {
   async fetch(request, env, ctx) {
@@ -21,9 +24,11 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/healthz") return jsonResponse({ status: "ok" }, 200, request, env);
 
   const route = parseEditorRoute(url);
+  const stateContext = decodeEditorState(url.searchParams.get("state"));
   const token = route.token ||
     cleanString(url.searchParams.get("editor_token")) ||
-    readCookie(request.headers.get("Cookie") || "", EDITOR_COOKIE);
+    readCookie(request.headers.get("Cookie") || "", EDITOR_COOKIE) ||
+    stateContext.token;
 
   if (!token) {
     return jsonResponse({ ok: false, error: "Missing editor token." }, 403, request, env);
@@ -31,15 +36,15 @@ async function handleRequest(request, env, ctx) {
 
   const session = await loadSession(token, env);
   const targetPath = normalizeTargetPath(route.targetPath || url.pathname, session.n8n_workflow_id);
-  const targetSearch = route.targetPath ? url.search : cleanProxySearch(url.searchParams);
+  const targetSearch = cleanProxySearch(url.searchParams, stateContext);
 
   const stub = startupStubResponse(request, targetPath, env);
-  if (stub) return withEditorCookie(stub, token, route.token);
+  if (stub) return withEditorCookie(stub, token, route.token, session, env, request);
 
-  if (isCredentialWritePath(targetPath, request.method)) {
+  if (isCredentialDeletePath(targetPath, request.method)) {
     return jsonResponse({
       ok: false,
-      error: "Credentials are managed in Nexus. Add or update API keys in the product credential panel, apply them to this workflow, then run the Nexus check.",
+      error: "Credential deletion is blocked in the locked Nexus editor.",
       blocked_by_nexus: true,
       path: targetPath,
     }, 403, request, env);
@@ -91,13 +96,35 @@ async function handleRequest(request, env, ctx) {
     ctx.waitUntil(markWorkflowEdited(session, targetPath, env));
   }
 
+  if (isOAuthCallbackPath(targetPath)) {
+    if (upstream.status < 400) {
+      workflowCredentialRefCache.clear();
+      sessionCredentialRefCache.delete(session.id);
+      await rememberRecentlyTouchedCredentialRefs(session.id, session.n8n_cookie, env);
+    }
+
+    const text = upstream.status >= 400 ? await upstream.text().catch(() => "") : "";
+    const response = oauthCallbackCompleteResponse({
+      ok: upstream.status < 400,
+      status: upstream.status,
+      error: text ? text.slice(0, 700) : "",
+    }, request, env);
+    return withEditorCookie(response, token, route.token, session, env, request);
+  }
+
   if (upstream.status >= 300 && upstream.status < 400) {
     const location = upstream.headers.get("Location") || `/workflow/${encodeURIComponent(session.n8n_workflow_id)}`;
-    const nextUrl = new URL(location, requiredEnv(env, "N8N_BASE_URL"));
+    const rewrittenLocation = rewriteOAuthRedirectLocation(location, request, env, token);
+    const nextUrl = new URL(rewrittenLocation, requiredEnv(env, "N8N_BASE_URL"));
+    const upstreamOrigin = safeOrigin(env.N8N_BASE_URL);
+    const proxyOrigin = new URL(request.url).origin;
+    if (nextUrl.origin !== upstreamOrigin && nextUrl.origin !== proxyOrigin) {
+      return redirectResponse(nextUrl.toString(), token, request, env, session);
+    }
     const nextPath = forbiddenPath(nextUrl.pathname)
       ? `/workflow/${encodeURIComponent(session.n8n_workflow_id)}`
       : `${nextUrl.pathname}${nextUrl.search}`;
-    return redirectResponse(nextPath, token, request, env);
+    return redirectResponse(nextPath, token, request, env, session);
   }
 
   if (upstream.status >= 400 && apiLikePath(targetPath)) {
@@ -133,17 +160,49 @@ async function handleRequest(request, env, ctx) {
       status: upstream.status,
       headers: responseHeaders(upstream, request, env, "application/json; charset=utf-8"),
     });
-    return withEditorCookie(response, token, route.token);
+    return withEditorCookie(response, token, route.token, session, env, request);
   }
 
-  if (upstream.ok && contentType.includes("application/json") && shouldRewriteN8nJson(targetPath)) {
+  if (
+    upstream.ok &&
+    contentType.includes("application/json") &&
+    shouldFilterCredentialJson(targetPath) &&
+    String(request.method || "GET").toUpperCase() === "GET"
+  ) {
     const text = await upstream.text();
-    const rewritten = rewriteN8nJsonText(text, request, env);
+    const refs = await workflowCredentialRefs(session.n8n_workflow_id, session.n8n_cookie, env, session.id);
+    const rewritten = filterCredentialJsonText(text, refs);
     const response = new Response(rewritten, {
       status: upstream.status,
       headers: responseHeaders(upstream, request, env, "application/json; charset=utf-8"),
     });
-    return withEditorCookie(response, token, route.token);
+    return withEditorCookie(response, token, route.token, session, env, request);
+  }
+
+  if (
+    upstream.ok &&
+    contentType.includes("application/json") &&
+    shouldRememberCredentialJson(targetPath) &&
+    ["POST", "PATCH", "PUT"].includes(String(request.method || "").toUpperCase())
+  ) {
+    const text = await upstream.text();
+    rememberSessionCredentialRefs(session.id, text);
+    workflowCredentialRefCache.clear();
+    const response = new Response(text, {
+      status: upstream.status,
+      headers: responseHeaders(upstream, request, env, "application/json; charset=utf-8"),
+    });
+    return withEditorCookie(response, token, route.token, session, env, request);
+  }
+
+  if (upstream.ok && contentType.includes("application/json") && shouldRewriteN8nJson(targetPath)) {
+    const text = await upstream.text();
+    const rewritten = rewriteN8nJsonText(text, request, env, token);
+    const response = new Response(rewritten, {
+      status: upstream.status,
+      headers: responseHeaders(upstream, request, env, "application/json; charset=utf-8"),
+    });
+    return withEditorCookie(response, token, route.token, session, env, request);
   }
 
   if (isHtmlRequest(request, upstream, targetPath)) {
@@ -155,14 +214,14 @@ async function handleRequest(request, env, ctx) {
         headers: responseHeaders(upstream, request, env, "text/html; charset=utf-8"),
       },
     );
-    return withEditorCookie(response, token, true);
+    return withEditorCookie(response, token, true, session, env, request);
   }
 
   const response = new Response(upstream.body, {
     status: upstream.status,
     headers: responseHeaders(upstream, request, env, contentType),
   });
-  return withEditorCookie(response, token, route.token || tokenFromQuery(request));
+  return withEditorCookie(response, token, route.token || tokenFromQuery(request), session, env, request);
 }
 
 function parseEditorRoute(url) {
@@ -185,11 +244,14 @@ function normalizeTargetPath(path, workflowId) {
   return safe;
 }
 
-function cleanProxySearch(searchParams) {
+function cleanProxySearch(searchParams, stateContext = null) {
   const next = new URLSearchParams(searchParams);
   next.delete("editor_token");
   next.delete("editor_v");
   next.delete("client_v");
+  if (stateContext?.originalState) {
+    next.set("state", stateContext.originalState);
+  }
   const value = next.toString();
   return value ? `?${value}` : "";
 }
@@ -200,6 +262,13 @@ function buildUpstreamRequest(request, cookie, bodyOverride) {
   headers.set("Cookie", cookie);
   headers.set("User-Agent", request.headers.get("User-Agent") || "Nexus n8n editor proxy");
   headers.set("X-Requested-With", request.headers.get("X-Requested-With") || "XMLHttpRequest");
+  try {
+    const url = new URL(request.url);
+    headers.set("X-Forwarded-Host", url.host);
+    headers.set("X-Forwarded-Proto", url.protocol.replace(":", ""));
+  } catch (_error) {
+    // Best-effort forwarding hints for OAuth callbacks.
+  }
 
   const contentType = request.headers.get("Content-Type");
   if (contentType || !["GET", "HEAD"].includes(request.method)) {
@@ -466,6 +535,14 @@ function supabaseHeaders(serviceRoleKey, json = false) {
 function startupStubResponse(request, targetPath, env) {
   const method = request.method.toUpperCase();
   const path = targetPath.toLowerCase().replace(/\/+$/, "") || "/";
+  const editorScopes = lockedEditorScopes();
+  const lockedProject = {
+    id: "nexus-locked-project",
+    name: "Nexus locked editor",
+    type: "personal",
+    role: "project:personalOwner",
+    scopes: editorScopes,
+  };
 
   if (path === "/healthz") return jsonResponse({ status: "ok" }, 200, request, env);
   if (path === "/rest/events/session-started") return jsonResponse({ ok: true }, 200, request, env);
@@ -508,16 +585,11 @@ function startupStubResponse(request, targetPath, env) {
   }
   if (path.startsWith("/rest/projects")) {
     if (path.endsWith("/count")) return jsonResponse({ data: { count: 0 }, count: 0 }, 200, request, env);
+    if (path.endsWith("/my-projects")) {
+      return jsonResponse({ data: [lockedProject], count: 1 }, 200, request, env);
+    }
     if (path.endsWith("/personal")) {
-      return jsonResponse({
-        data: {
-          id: "nexus-locked-project",
-          name: "Nexus locked editor",
-          type: "personal",
-          role: "project:personalOwner",
-          scopes: [],
-        },
-      }, 200, request, env);
+      return jsonResponse({ data: lockedProject }, 200, request, env);
     }
     return jsonResponse({ data: [], count: 0 }, 200, request, env);
   }
@@ -531,10 +603,19 @@ function startupStubResponse(request, targetPath, env) {
           email: "locked-editor@nexus.local",
           createdAt: new Date(0).toISOString(),
           updatedAt: new Date(0).toISOString(),
-          isOwner: false,
-          role: "global:member",
-          globalRole: { name: "member", scope: "global" },
-          projectRelations: [],
+          isOwner: true,
+          role: "global:owner",
+          globalRole: { name: "owner", scope: "global" },
+          scopes: editorScopes,
+          globalScopes: editorScopes,
+          projectRelations: [
+            {
+              projectId: lockedProject.id,
+              project: lockedProject,
+              role: lockedProject.role,
+              scopes: editorScopes,
+            },
+          ],
           personalizationAnswers: {},
           settings: {},
         },
@@ -542,7 +623,6 @@ function startupStubResponse(request, targetPath, env) {
     }
     return jsonResponse({ data: [], count: 0 }, 200, request, env);
   }
-  if (path.startsWith("/rest/credentials")) return jsonResponse({ data: [], count: 0 }, 200, request, env);
   if (path.startsWith("/rest/variables")) return jsonResponse({ data: [], count: 0 }, 200, request, env);
   if (path === "/api/banners" || path === "/api/whats-new") return jsonResponse([], 200, request, env);
   if (path.startsWith("/api/versions/")) return jsonResponse([], 200, request, env);
@@ -550,10 +630,38 @@ function startupStubResponse(request, targetPath, env) {
   return null;
 }
 
+function lockedEditorScopes() {
+  return [
+    "workflow:read",
+    "workflow:update",
+    "workflow:execute",
+    "workflow:share",
+    "credential:read",
+    "credential:list",
+    "credential:create",
+    "credential:update",
+    "credential:share",
+    "credential:test",
+    "credential:move",
+    "credentials:read",
+    "credentials:list",
+    "credentials:create",
+    "credentials:update",
+    "credentials:share",
+    "credentials:test",
+    "credentials:move",
+    "project:read",
+    "project:list",
+    "tag:read",
+    "node:read",
+    "execution:read",
+    "execution:stop",
+  ];
+}
+
 function forbiddenPath(path) {
   const safe = path.toLowerCase();
   return [
-    "/credentials",
     "/executions",
     "/execution",
     "/projects",
@@ -576,9 +684,9 @@ function forbiddenPath(path) {
   ].some((blocked) => safe === blocked || safe.startsWith(`${blocked}/`) || safe.startsWith(blocked));
 }
 
-function isCredentialWritePath(path, method) {
+function isCredentialDeletePath(path, method) {
   const safe = String(path || "").toLowerCase();
-  return safe.startsWith("/rest/credentials") && !["GET", "HEAD"].includes(String(method || "").toUpperCase());
+  return safe.startsWith("/rest/credentials") && String(method || "").toUpperCase() === "DELETE";
 }
 
 function staticAssetPath(path) {
@@ -660,11 +768,51 @@ function allowedProxyPath(path, method, workflowId) {
   if (staticAssetPath(path)) return true;
   if (path === `/workflow/${workflowId}` || path === `/workflow/${encodeURIComponent(workflowId)}`) return true;
   if (path.startsWith(`/workflow/${workflowId}/`) || path.startsWith(`/workflow/${encodeURIComponent(workflowId)}/`)) return true;
+  if (allowedCredentialUiPath(path, method)) return true;
   if (allowedWorkflowRestPath(path, workflowId)) return ["GET", "HEAD", "POST", "PATCH", "PUT"].includes(method);
   if (allowedExecutionPath(path, method, workflowId)) return true;
+  if (allowedCredentialPath(path, method)) return true;
+  if (allowedOAuthCredentialPath(path, method)) return true;
   if (allowedReadOnlyRestPath(path, method)) return true;
   if (forbiddenPath(path)) return false;
   return false;
+}
+
+function allowedCredentialUiPath(path, method) {
+  const methodName = String(method || "GET").toUpperCase();
+  if (!["GET", "HEAD"].includes(methodName)) return false;
+
+  const safe = String(path || "").toLowerCase().replace(/\/+$/, "") || "/";
+  return safe === "/credentials" ||
+    safe.startsWith("/credentials/") ||
+    safe === "/credential" ||
+    safe.startsWith("/credential/");
+}
+
+function allowedCredentialPath(path, method) {
+  const methodName = String(method || "GET").toUpperCase();
+  if (!["GET", "HEAD", "POST", "PATCH", "PUT"].includes(methodName)) return false;
+
+  const safe = String(path || "").toLowerCase().replace(/\/+$/, "") || "/";
+  return safe === "/rest/credentials" ||
+    safe.startsWith("/rest/credentials/") ||
+    safe === "/rest/credential-types" ||
+    safe.startsWith("/rest/credential-types/");
+}
+
+function allowedOAuthCredentialPath(path, method) {
+  const methodName = String(method || "GET").toUpperCase();
+  if (!["GET", "HEAD", "POST"].includes(methodName)) return false;
+
+  const safe = String(path || "").toLowerCase().replace(/\/+$/, "") || "/";
+  return safe.startsWith("/rest/oauth2-credential") ||
+    safe.startsWith("/rest/oauth1-credential");
+}
+
+function isOAuthCallbackPath(path) {
+  const safe = String(path || "").toLowerCase().replace(/\/+$/, "") || "/";
+  return safe === "/rest/oauth2-credential/callback" ||
+    safe === "/rest/oauth1-credential/callback";
 }
 
 function isWebSocketRequest(request) {
@@ -750,6 +898,235 @@ function shouldFilterExecutionJson(path) {
     safe.startsWith("/rest/executions-current/") ||
     /^\/rest\/executions\/[^/]+$/i.test(String(path || "")) ||
     /^\/rest\/execution\/[^/]+$/i.test(String(path || ""));
+}
+
+function shouldFilterCredentialJson(path) {
+  const safe = String(path || "").toLowerCase().replace(/\/+$/, "") || "/";
+  return safe === "/rest/credentials" || safe.startsWith("/rest/credentials/");
+}
+
+function shouldRememberCredentialJson(path) {
+  const safe = String(path || "").toLowerCase().replace(/\/+$/, "") || "/";
+  return safe === "/rest/credentials" || safe.startsWith("/rest/credentials/");
+}
+
+async function workflowCredentialRefs(workflowId, cookie, env, sessionId = "") {
+  const key = `${workflowId}:${String(cookie || "").slice(0, 32)}`;
+  const cached = workflowCredentialRefCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    mergeSessionCredentialRefs(cached.refs, sessionId);
+    return cached.refs;
+  }
+
+  const refs = {
+    ids: new Set(),
+    names: new Set(),
+    namesByType: new Set(),
+    types: new Set(),
+  };
+
+  try {
+    const workflowUrl = `${cleanBaseUrl(requiredEnv(env, "N8N_BASE_URL"))}/rest/workflows/${encodeURIComponent(workflowId)}`;
+    const response = await fetch(workflowUrl, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Cookie: cookie,
+      },
+    });
+    if (!response.ok) throw new Error(`n8n workflow read failed ${response.status}`);
+
+    const payload = await response.json();
+    const workflow = payload?.data || payload?.workflow || payload;
+    collectCredentialRefsFromWorkflow(workflow, refs);
+  } catch (_error) {
+    /*
+      Fail closed: if the workflow cannot be inspected, expose no credential
+      metadata to the embedded editor.
+    */
+  }
+
+  workflowCredentialRefCache.set(key, {
+    refs,
+    expiresAt: Date.now() + CREDENTIAL_REF_CACHE_TTL_MS,
+  });
+  mergeSessionCredentialRefs(refs, sessionId);
+  return refs;
+}
+
+function rememberSessionCredentialRefs(sessionId, text) {
+  const safeSessionId = cleanString(sessionId);
+  if (!safeSessionId || !text) return;
+
+  const refs = sessionCredentialRefCache.get(safeSessionId)?.refs || {
+    ids: new Set(),
+    names: new Set(),
+    namesByType: new Set(),
+    types: new Set(),
+  };
+
+  try {
+    collectCredentialRefsFromPayload(JSON.parse(text), refs);
+    sessionCredentialRefCache.set(safeSessionId, {
+      refs,
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    });
+  } catch (_error) {
+    // Ignore malformed credential responses; the normal workflow refs still apply.
+  }
+}
+
+async function rememberRecentlyTouchedCredentialRefs(sessionId, cookie, env) {
+  const safeSessionId = cleanString(sessionId);
+  if (!safeSessionId || !cookie) return;
+
+  const refs = sessionCredentialRefCache.get(safeSessionId)?.refs || {
+    ids: new Set(),
+    names: new Set(),
+    namesByType: new Set(),
+    types: new Set(),
+  };
+
+  try {
+    const response = await fetch(`${cleanBaseUrl(requiredEnv(env, "N8N_BASE_URL"))}/rest/credentials`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Cookie: cookie,
+      },
+    });
+    if (!response.ok) return;
+
+    const payload = await response.json();
+    const rows = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.credentials)
+          ? payload.credentials
+          : [];
+    const cutoff = Date.now() - 30 * 60 * 1000;
+    for (const row of rows) {
+      const value = row?.data && typeof row.data === "object" ? row.data : row;
+      const touchedAt = Date.parse(value?.updatedAt || value?.updated_at || value?.createdAt || value?.created_at || "");
+      if (!Number.isFinite(touchedAt) || touchedAt < cutoff) continue;
+      addCredentialRefFromValue(value, refs);
+    }
+    sessionCredentialRefCache.set(safeSessionId, {
+      refs,
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    });
+  } catch (_error) {
+    // Best effort only: if n8n does not return a credential list, workflow refs still apply.
+  }
+}
+
+function mergeSessionCredentialRefs(refs, sessionId) {
+  const safeSessionId = cleanString(sessionId);
+  if (!safeSessionId) return refs;
+
+  const cached = sessionCredentialRefCache.get(safeSessionId);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    sessionCredentialRefCache.delete(safeSessionId);
+    return refs;
+  }
+
+  for (const key of ["ids", "names", "namesByType", "types"]) {
+    cached.refs[key]?.forEach((value) => refs[key].add(value));
+  }
+  return refs;
+}
+
+function collectCredentialRefsFromPayload(payload, refs) {
+  if (!payload) return;
+  if (Array.isArray(payload)) {
+    payload.forEach((item) => collectCredentialRefsFromPayload(item, refs));
+    return;
+  }
+  if (typeof payload !== "object") return;
+
+  addCredentialRefFromValue(payload, refs);
+  if (payload.data) collectCredentialRefsFromPayload(payload.data, refs);
+  if (payload.credential) collectCredentialRefsFromPayload(payload.credential, refs);
+  if (payload.credentials) collectCredentialRefsFromPayload(payload.credentials, refs);
+}
+
+function addCredentialRefFromValue(value, refs) {
+  if (!value || typeof value !== "object") return;
+  const item = value.data && typeof value.data === "object" ? value.data : value;
+  const id = cleanString(item.id || item.credentialId || item.credential_id);
+  const name = cleanString(item.name || item.credentialName || item.credential_name);
+  const type = cleanString(item.type || item.credentialType || item.credential_type);
+  if (id) refs.ids.add(id);
+  if (name) refs.names.add(name);
+  if (type) refs.types.add(type);
+  if (name && type) refs.namesByType.add(`${type}:${name}`);
+}
+
+function collectCredentialRefsFromWorkflow(workflow, refs) {
+  const nodes = Array.isArray(workflow?.nodes)
+    ? workflow.nodes
+    : Array.isArray(workflow?.data?.nodes)
+      ? workflow.data.nodes
+      : [];
+
+  for (const node of nodes) {
+    const credentials = asPlainObject(node?.credentials);
+    for (const [credentialType, credential] of Object.entries(credentials)) {
+      const item = asPlainObject(credential);
+      const id = cleanString(item.id);
+      const name = cleanString(item.name);
+      const type = cleanString(item.type || credentialType);
+      if (id) refs.ids.add(id);
+      if (name) refs.names.add(name);
+      if (type) refs.types.add(type);
+      if (name && type) refs.namesByType.add(`${type}:${name}`);
+    }
+  }
+}
+
+function filterCredentialJsonText(text, refs) {
+  try {
+    const value = JSON.parse(text);
+    return JSON.stringify(filterCredentialPayload(value, refs));
+  } catch (_error) {
+    return text;
+  }
+}
+
+function filterCredentialPayload(value, refs) {
+  if (Array.isArray(value)) return value.filter((item) => credentialMatchesRefs(item, refs));
+  if (!value || typeof value !== "object") return value;
+
+  if (Array.isArray(value.data)) {
+    const data = value.data.filter((item) => credentialMatchesRefs(item, refs));
+    return { ...value, data, count: typeof value.count === "number" ? data.length : value.count };
+  }
+
+  if (Array.isArray(value.credentials)) {
+    const credentials = value.credentials.filter((item) => credentialMatchesRefs(item, refs));
+    return { ...value, credentials, count: typeof value.count === "number" ? credentials.length : value.count };
+  }
+
+  if (value.data && typeof value.data === "object") {
+    return credentialMatchesRefs(value.data, refs) ? value : { ...value, data: null };
+  }
+
+  return credentialMatchesRefs(value, refs) ? value : {};
+}
+
+function credentialMatchesRefs(item, refs) {
+  const value = item?.data && typeof item.data === "object" ? item.data : item;
+  if (!value || typeof value !== "object") return false;
+
+  const id = cleanString(value.id || value.credentialId || value.credential_id);
+  const name = cleanString(value.name || value.credentialName || value.credential_name);
+  const type = cleanString(value.type || value.credentialType || value.credential_type);
+
+  if (id && refs.ids.has(id)) return true;
+  if (name && refs.names.has(name)) return true;
+  if (name && type && refs.namesByType.has(`${type}:${name}`)) return true;
+  return false;
 }
 
 function filterExecutionJsonText(text, workflowId) {
@@ -874,7 +1251,6 @@ function injectEditorLock(html, workflowId, token, env) {
       [data-test-id*="main-sidebar"],
       [data-test-id*="side-menu"],
       [data-test-id*="project"],
-      [data-test-id*="credentials"],
       [data-test-id*="workflow-publish-button"],
       [data-test-id*="workflow-activate-switch"],
       [data-test-id*="github"],
@@ -910,7 +1286,7 @@ function injectEditorLock(html, workflowId, token, env) {
         const editorToken = ${JSON.stringify(token)};
         const editorPrefix = ${JSON.stringify(editorPrefix)};
         const upstreamOrigin = ${JSON.stringify(upstreamOrigin)};
-        const blocked = /\\/(credentials|executions|execution|projects|project|settings|users|user|variables|admin|workflows)(\\/|$)/i;
+        const blocked = /\\/(executions|execution|projects|project|settings|users|user|variables|admin|workflows)(\\/|$)/i;
         const proxyPath = /\\/(rest|api|types|assets|static|icons|fonts|js|css|browser|vendor|healthz|node-translation-headers|community-node-types)(\\/|$)/i;
         const nativePushState = history.pushState.bind(history);
         const nativeReplaceState = history.replaceState.bind(history);
@@ -960,6 +1336,113 @@ function injectEditorLock(html, workflowId, token, env) {
         XMLHttpRequest.prototype.open = function(method, url, ...rest) {
           return nativeOpen.call(this, method, tokenizedUrl(url), ...rest);
         };
+        if (window.EventSource) {
+          const NativeEventSource = window.EventSource;
+          window.EventSource = function(url, config) {
+            return new NativeEventSource(tokenizedUrl(url), config);
+          };
+          window.EventSource.prototype = NativeEventSource.prototype;
+        }
+        if (window.WebSocket) {
+          const NativeWebSocket = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            return protocols === undefined
+              ? new NativeWebSocket(tokenizedUrl(url))
+              : new NativeWebSocket(tokenizedUrl(url), protocols);
+          };
+          window.WebSocket.prototype = NativeWebSocket.prototype;
+        }
+        function wait(ms) {
+          return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+        function isVisible(element) {
+          if (!element) return false;
+          const style = window.getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            Number(style.opacity || "1") > 0 &&
+            rect.width > 0 &&
+            rect.height > 0;
+        }
+        function textOf(element) {
+          return String(element && (element.innerText || element.textContent || element.getAttribute("aria-label") || "") || "").trim();
+        }
+        function clickVisibleSaveButton() {
+          const selectors = [
+            'button[data-test-id*="save" i]',
+            'button[aria-label*="save" i]',
+            '[role="button"][aria-label*="save" i]',
+            'button',
+            '[role="button"]'
+          ];
+          const buttons = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
+          const seen = new Set();
+          for (const button of buttons) {
+            if (seen.has(button)) continue;
+            seen.add(button);
+            if (!isVisible(button)) continue;
+            const label = textOf(button);
+            if (!/\\bsave\\b|save changes|savedraft|save draft/i.test(label)) continue;
+            if (/publish|execute|run|delete|remove|cancel|close/i.test(label)) continue;
+            try {
+              button.click();
+              return true;
+            } catch (_error) {}
+          }
+          return false;
+        }
+        function dispatchKeyboardSave() {
+          for (const target of [document.activeElement, document.body, window]) {
+            try {
+              target.dispatchEvent(new KeyboardEvent("keydown", {
+                key: "s",
+                code: "KeyS",
+                ctrlKey: true,
+                bubbles: true,
+                cancelable: true
+              }));
+            } catch (_error) {}
+            try {
+              target.dispatchEvent(new KeyboardEvent("keydown", {
+                key: "s",
+                code: "KeyS",
+                metaKey: true,
+                bubbles: true,
+                cancelable: true
+              }));
+            } catch (_error) {}
+          }
+        }
+        window.addEventListener("message", (event) => {
+          const data = event && event.data ? event.data : {};
+          if (!data) return;
+          if (data.type === "nexus:save-workflow-before-sync") {
+            (async () => {
+              dispatchKeyboardSave();
+              await wait(200);
+              const clicked = clickVisibleSaveButton();
+              await wait(1500);
+              try {
+                if (window.parent && window.parent !== window) {
+                  window.parent.postMessage({
+                    source: "nexus-n8n-editor",
+                    type: "nexus:n8n-save-attempted",
+                    requestId: data.requestId || "",
+                    clicked
+                  }, "*");
+                }
+              } catch (_error) {}
+            })();
+            return;
+          }
+          if (data.type !== "nexus:n8n-oauth-complete") return;
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage(data, "*");
+            }
+          } catch (_error) {}
+        });
         document.addEventListener("click", (event) => {
           const link = event.target && event.target.closest && event.target.closest("a[href]");
           if (!link) return;
@@ -990,20 +1473,177 @@ function shouldRewriteN8nJson(path) {
     safe === "/rest/frontend-settings" ||
     safe === "/rest/login" ||
     safe.startsWith("/rest/module-settings") ||
+    safe.startsWith("/rest/oauth2-credential") ||
+    safe.startsWith("/rest/oauth1-credential") ||
     safe.startsWith("/rest/versions");
 }
 
-function rewriteN8nJsonText(text, request, env) {
+function rewriteOAuthRedirectLocation(location, request, env, token = "") {
+  const upstreamBase = cleanBaseUrl(env.N8N_BASE_URL);
+  if (!upstreamBase || !location) return location;
+
+  const proxyBase = new URL(request.url).origin;
+  let rewritten = replaceUrlVariants(String(location), upstreamBase, proxyBase);
+  const upstreamOrigin = safeOrigin(upstreamBase);
+  if (upstreamOrigin && upstreamOrigin !== upstreamBase) {
+    rewritten = replaceUrlVariants(rewritten, upstreamOrigin, proxyBase);
+  }
+  rewritten = rewriteOAuthCallbackParamsToProxy(rewritten, proxyBase, upstreamBase, upstreamOrigin);
+  return wrapEditorTokenInOAuthState(rewritten, token);
+}
+
+function rewriteN8nJsonText(text, request, env, token = "") {
   const upstreamBase = cleanBaseUrl(env.N8N_BASE_URL);
   if (!upstreamBase || !text) return text;
 
   const proxyBase = new URL(request.url).origin;
-  let rewritten = text.split(upstreamBase).join(proxyBase);
+  let rewritten = replaceUrlVariants(text, upstreamBase, proxyBase);
   const upstreamOrigin = safeOrigin(upstreamBase);
   if (upstreamOrigin && upstreamOrigin !== upstreamBase) {
-    rewritten = rewritten.split(upstreamOrigin).join(proxyBase);
+    rewritten = replaceUrlVariants(rewritten, upstreamOrigin, proxyBase);
   }
-  return rewritten;
+  rewritten = rewriteOAuthCallbackParamsToProxy(rewritten, proxyBase, upstreamBase, upstreamOrigin);
+  return wrapEditorTokenInOAuthState(rewritten, token);
+}
+
+function rewriteOAuthCallbackParamsToProxy(value, proxyBase, upstreamBase, upstreamOrigin = "") {
+  let source = String(value || "");
+  const proxy = cleanBaseUrl(proxyBase);
+  const upstream = cleanBaseUrl(upstreamBase);
+  const upstreamRoot = cleanBaseUrl(upstreamOrigin || upstreamBase);
+  if (!proxy || !upstream) return source;
+
+  const pairs = [
+    ["/rest/oauth2-credential/callback", "/rest/oauth2-credential/callback"],
+    ["/rest/oauth1-credential/callback", "/rest/oauth1-credential/callback"],
+  ];
+
+  for (const [upstreamPath, proxyPath] of pairs) {
+    source = restoreCallbackValue(source, `${upstream}${upstreamPath}`, `${proxy}${proxyPath}`);
+    if (upstreamRoot && upstreamRoot !== upstream) {
+      source = restoreCallbackValue(source, `${upstreamRoot}${upstreamPath}`, `${proxy}${proxyPath}`);
+    }
+  }
+
+  return source;
+}
+
+function restoreUpstreamOAuthCallbackParams(value, proxyBase, upstreamBase, upstreamOrigin = "") {
+  let source = String(value || "");
+  const proxy = cleanBaseUrl(proxyBase);
+  const upstream = cleanBaseUrl(upstreamBase);
+  const upstreamRoot = cleanBaseUrl(upstreamOrigin || upstreamBase);
+  if (!proxy || !upstream) return source;
+
+  const pairs = [
+    ["/rest/oauth2-credential/callback", "/rest/oauth2-credential/callback"],
+    ["/rest/oauth1-credential/callback", "/rest/oauth1-credential/callback"],
+  ];
+
+  for (const [proxyPath, upstreamPath] of pairs) {
+    source = restoreCallbackValue(source, `${proxy}${proxyPath}`, `${upstream}${upstreamPath}`);
+    if (upstreamRoot && upstreamRoot !== upstream) {
+      source = restoreCallbackValue(source, `${proxy}${proxyPath}`, `${upstreamRoot}${upstreamPath}`);
+    }
+  }
+
+  return source;
+}
+
+function restoreCallbackValue(value, proxyCallback, upstreamCallback) {
+  const rawProxy = cleanString(proxyCallback);
+  const rawUpstream = cleanString(upstreamCallback);
+  if (!rawProxy || !rawUpstream) return value;
+
+  return String(value || "")
+    .split(`redirect_uri=${encodeURIComponent(rawProxy)}`).join(`redirect_uri=${encodeURIComponent(rawUpstream)}`)
+    .split(`redirect_uri=${encodeURIComponent(rawProxy).toLowerCase()}`).join(`redirect_uri=${encodeURIComponent(rawUpstream)}`)
+    .split(`oauth_callback=${encodeURIComponent(rawProxy)}`).join(`oauth_callback=${encodeURIComponent(rawUpstream)}`)
+    .split(`oauth_callback=${encodeURIComponent(rawProxy).toLowerCase()}`).join(`oauth_callback=${encodeURIComponent(rawUpstream)}`)
+    .split(`redirect_uri=${rawProxy}`).join(`redirect_uri=${rawUpstream}`)
+    .split(`oauth_callback=${rawProxy}`).join(`oauth_callback=${rawUpstream}`);
+}
+
+function isExternalOAuthAuthorizationUrl(value) {
+  const source = String(value || "");
+  return /https?:\/\/[^"'\\\s]*(accounts\.google\.com|oauth|authorize)[^"'\\\s]*[?&](redirect_uri|oauth_callback)=/i.test(source);
+}
+
+function wrapEditorTokenInOAuthState(value, token) {
+  const rawToken = cleanString(token);
+  const source = String(value || "");
+  if (!rawToken || !source || !/state=/i.test(source) || !/(oauth|redirect_uri|oauth_callback)/i.test(source)) {
+    return source;
+  }
+
+  return source.replace(/([?&]state=)([^&"'\\\s]+)/gi, (_match, prefix, encodedState) => {
+    const currentState = decodeParam(encodedState);
+    if (!currentState || decodeEditorState(currentState).token) {
+      return `${prefix}${encodedState}`;
+    }
+    return `${prefix}${encodeURIComponent(encodeEditorState(rawToken, currentState))}`;
+  });
+}
+
+function encodeEditorState(token, originalState) {
+  const payload = JSON.stringify({
+    t: token,
+    s: originalState || "",
+  });
+  return `nexus_editor:${base64UrlEncode(payload)}`;
+}
+
+function decodeEditorState(value) {
+  const raw = cleanString(value);
+  if (!raw || !raw.startsWith("nexus_editor:")) {
+    return { token: "", originalState: "" };
+  }
+
+  try {
+    const json = base64UrlDecode(raw.slice("nexus_editor:".length));
+    const parsed = JSON.parse(json);
+    return {
+      token: cleanString(parsed?.t),
+      originalState: cleanString(parsed?.s),
+    };
+  } catch (_error) {
+    return { token: "", originalState: "" };
+  }
+}
+
+function decodeParam(value) {
+  try {
+    return decodeURIComponent(String(value || "").replace(/\+/g, "%20"));
+  } catch (_error) {
+    return String(value || "");
+  }
+}
+
+function base64UrlEncode(value) {
+  return btoa(unescape(encodeURIComponent(value)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value) {
+  const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return decodeURIComponent(escape(atob(padded)));
+}
+
+function replaceUrlVariants(value, from, to) {
+  const source = String(value || "");
+  const rawFrom = cleanString(from);
+  const rawTo = cleanString(to);
+  if (!rawFrom || !rawTo) return source;
+
+  const encodedFrom = encodeURIComponent(rawFrom);
+  const encodedTo = encodeURIComponent(rawTo);
+  return source
+    .split(rawFrom).join(rawTo)
+    .split(encodedFrom).join(encodedTo)
+    .split(encodedFrom.toLowerCase()).join(encodedTo);
 }
 
 function responseHeaders(upstream, request, env, contentType) {
@@ -1044,7 +1684,75 @@ function jsonResponse(data, status = 200, request, env) {
   return new Response(JSON.stringify(data), { status, headers });
 }
 
-function redirectResponse(location, token, request, env) {
+function oauthCallbackCompleteResponse(result, request, env) {
+  const ok = Boolean(result?.ok);
+  const message = ok
+    ? "Credential connected. You can close this window."
+    : `Credential connection failed (${result?.status || "unknown"}).`;
+  const error = ok ? "" : String(result?.error || "n8n rejected the credential callback.").slice(0, 700);
+  const payload = safeScriptJson({
+    source: "nexus-n8n-editor",
+    type: "nexus:n8n-oauth-complete",
+    ok,
+    error,
+  });
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${ok ? "Credential connected" : "Credential connection failed"}</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, Arial, sans-serif; background: #eef7ff; color: #082041; }
+    main { width: min(520px, calc(100vw - 32px)); padding: 28px; border: 1px solid #cfe4ff; border-radius: 20px; background: #fff; box-shadow: 0 18px 50px rgba(8, 32, 65, .12); }
+    h1 { margin: 0 0 10px; font-size: 26px; line-height: 1.15; }
+    p { margin: 0 0 18px; color: #61718b; line-height: 1.5; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 14px; border-radius: 12px; background: #fff1f1; color: #991b1b; }
+    button { border: 0; border-radius: 999px; padding: 12px 18px; color: #fff; background: linear-gradient(135deg, #2563ff, #11b5ef); font-weight: 800; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${ok ? "Credential connected" : "Credential connection failed"}</h1>
+    <p>${htmlEscape(message)} ${ok ? "The Nexus editor will refresh automatically." : "Return to Nexus and try again."}</p>
+    ${error ? `<pre>${htmlEscape(error)}</pre>` : ""}
+    <button type="button" onclick="window.close()">Close window</button>
+  </main>
+  <script>
+    const payload = ${payload};
+    function notifyEditor() {
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(payload, "*");
+        }
+      } catch (_error) {}
+      try {
+        if (window.opener && !window.opener.closed && window.opener.parent) {
+          window.opener.parent.postMessage(payload, "*");
+        }
+      } catch (_error) {}
+      if (payload.ok) {
+        setTimeout(() => {
+          try { window.close(); } catch (_error) {}
+        }, 900);
+      }
+    }
+    notifyEditor();
+  </script>
+</body>
+</html>`;
+  const headers = new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+  });
+  addCorsHeaders(headers, request, env);
+  return new Response(html, { status: ok ? 200 : 502, headers });
+}
+
+function redirectResponse(location, token, request, env, session) {
   const safeLocation = tokenizedRedirectLocation(location, token, request);
   const headers = new Headers({
     Location: safeLocation,
@@ -1053,7 +1761,7 @@ function redirectResponse(location, token, request, env) {
   });
   addCorsHeaders(headers, request, env);
   const response = new Response(null, { status: 302, headers });
-  return withEditorCookie(response, token, true);
+  return withEditorCookie(response, token, true, session, env, request);
 }
 
 function tokenizedRedirectLocation(location, token, request) {
@@ -1118,18 +1826,63 @@ function frameAncestorsPolicy(env = {}) {
   return `frame-ancestors ${Array.from(allowed).join(" ")}; base-uri 'none';`;
 }
 
-function withEditorCookie(response, token, shouldSet) {
+function withEditorCookie(response, token, shouldSet, session, env, request) {
   if (!shouldSet) return response;
   const headers = new Headers(response.headers);
   headers.append(
     "Set-Cookie",
     `${EDITOR_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=3600`,
   );
+  appendMirroredN8nCookies(headers, session?.n8n_cookie, request, env);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
   });
+}
+
+function appendMirroredN8nCookies(headers, cookieHeader, request, env) {
+  const cookie = cleanString(cookieHeader);
+  if (!cookie || !request || !env?.N8N_BASE_URL) return;
+
+  let proxyHost = "";
+  let n8nHost = "";
+  try {
+    proxyHost = new URL(request.url).hostname.toLowerCase();
+    n8nHost = new URL(env.N8N_BASE_URL).hostname.toLowerCase();
+  } catch (_error) {
+    return;
+  }
+
+  const domain = sharedCookieDomain(proxyHost, n8nHost);
+  if (!domain) return;
+
+  cookie
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => /^[^=\s]+=[\s\S]*$/.test(part))
+    .forEach((pair) => {
+      headers.append(
+        "Set-Cookie",
+        `${pair}; Domain=${domain}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=3600`,
+      );
+    });
+}
+
+function sharedCookieDomain(hostA, hostB) {
+  const a = cleanString(hostA).toLowerCase().split(".").filter(Boolean);
+  const b = cleanString(hostB).toLowerCase().split(".").filter(Boolean);
+  if (a.length < 2 || b.length < 2) return "";
+
+  const suffix = [];
+  while (a.length && b.length && a[a.length - 1] === b[b.length - 1]) {
+    suffix.unshift(a.pop());
+    b.pop();
+  }
+
+  if (suffix.length < 2) return "";
+  const domain = `.${suffix.join(".")}`;
+  return hostA.endsWith(domain.slice(1)) && hostB.endsWith(domain.slice(1)) ? domain : "";
 }
 
 function tokenFromQuery(request) {
@@ -1143,6 +1896,24 @@ function tokenFromQuery(request) {
 function wantsHtml(request) {
   const accept = request.headers.get("Accept") || "";
   return accept.includes("text/html") && !accept.includes("application/json");
+}
+
+function safeScriptJson(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+function htmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function contentTypeForPath(path) {

@@ -1,10 +1,16 @@
 name = "nexus-n8n-editor-proxy"
 main = "src/worker.js"
 compatibility_date = "2026-06-19"
+workers_dev = true
+preview_urls = true
 
-# Recommended production route:
+# Production OAuth setup:
+# 1. Add editor.nexus-ai.software as a Cloudflare Worker custom domain.
+# 2. Confirm editor.nexus-ai.software resolves in DNS.
+# 3. Then set Supabase N8N_EDITOR_PROXY_URL=https://editor.nexus-ai.software.
+#
 # routes = [
-#   { pattern = "editor.nexus-ai.software/*", custom_domain = true }
+#   { pattern = "editor.nexus-ai.software", custom_domain = true }
 # ]
 
 [vars]

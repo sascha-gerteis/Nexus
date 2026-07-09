@@ -27,8 +27,23 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)")
         super().end_headers()
 
+def create_server():
+    hosts = ("127.0.0.1", "localhost")
+    ports = (8000, 8001, 8002, 8010, 8080)
+    last_error = None
+
+    for host in hosts:
+        for port in ports:
+            try:
+                return ThreadingHTTPServer((host, port), NoCacheHandler), host, port
+            except OSError as error:
+                last_error = error
+
+    raise last_error
+
+
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("localhost", 8000), NoCacheHandler)
-    print("Nexus dev server running at http://localhost:8000")
+    server, host, port = create_server()
+    print(f"Nexus dev server running at http://{host}:{port}")
     print("Cache disabled. Stop with Ctrl+C.")
     server.serve_forever()

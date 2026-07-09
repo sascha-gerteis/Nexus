@@ -104,12 +104,17 @@ async function saveDefaultProfile(adminClient: any, params: {
   }
 
   if (existing?.id) {
+    const nextSecretValues = {
+      ...asObject(existing.secret_values),
+      ...params.secretValues,
+    };
+
     const { data, error } = await adminClient
       .from("automation_test_profiles")
       .update({
         developer_id: params.automation.developer_id || null,
         setup_values: params.setupValues,
-        secret_values: params.secretValues,
+        secret_values: nextSecretValues,
         is_default: true,
         updated_at: now,
       })

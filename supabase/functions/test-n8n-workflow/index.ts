@@ -61,6 +61,11 @@ function sourcePlatform(value: unknown) {
   return "";
 }
 
+function isPythonAutomation(automation: any) {
+  return lower(automation?.workflow_source_platform) === "python" ||
+    lower(automation?.runtime_type) === "python_runner";
+}
+
 function assignIfUseful(target: Record<string, unknown>, key: string, value: unknown) {
   if (target[key] !== undefined && cleanString(target[key])) return;
   if (value === undefined || value === null) return;
@@ -501,6 +506,18 @@ function missingRealTestFields(setupSchema: any[], testProfile: any) {
     .map(realTestFieldLabel);
 }
 
+function missingCredentialTestFields(credentialSchema: any[], testProfile: any) {
+  const savedSecrets = asObject(testProfile?.secret_values);
+  return credentialSchema
+    .filter((field) => field?.required !== false)
+    .filter((field) => {
+      const key = cleanString(field?.name);
+      if (!key) return false;
+      return !cleanString(savedSecrets[key]);
+    })
+    .map(realTestFieldLabel);
+}
+
 function buildSetupFromSchema(setupSchema: any[]) {
   const setup: Record<string, unknown> = {};
 
@@ -625,10 +642,19 @@ function buildTestSetupAndSecrets(automation: any, testProfile: any) {
   const setupSchema = schemaWithInferredWorkflowSetupFields(normalizeSchema(automation.setup_schema), automation);
   const credentialSchema = normalizeSchema(automation.credential_schema);
   const missingRealFields = missingRealTestFields(setupSchema, testProfile);
+  const missingCredentialFields = isPythonAutomation(automation)
+    ? missingCredentialTestFields(credentialSchema, testProfile)
+    : [];
 
   if (missingRealFields.length) {
     throw new Error(
       `This workflow needs real technical test data before Nexus can run it. Save real values for: ${missingRealFields.join(", ")}. For Google Sheets or Drive, the saved service account must have access to the exact sheet, tab, file, or range used in the test.`,
+    );
+  }
+
+  if (missingCredentialFields.length) {
+    throw new Error(
+      `This Python workflow needs developer-owned credentials before Nexus can run it. Save credential values for: ${missingCredentialFields.join(", ")}. Python scripts read these values from context["credentials"].`,
     );
   }
 
@@ -703,6 +729,25 @@ async function n8nFetch(path: string, options: RequestInit = {}) {
   }
 
   return data;
+}
+
+async function fetchLiveN8nWorkflow(workflowId: string) {
+  const id = cleanString(workflowId);
+  if (!id) return null;
+
+  try {
+    const data = await n8nFetch(`/api/v1/workflows/${encodeURIComponent(id)}`, {
+      method: "GET",
+    });
+
+    return data?.data && typeof data.data === "object" ? data.data : data;
+  } catch (error) {
+    console.warn(
+      "Could not fetch live n8n workflow before technical test:",
+      error instanceof Error ? error.message : String(error || ""),
+    );
+    return null;
+  }
 }
 
 async function getExecutionById(executionId: string) {
@@ -1625,10 +1670,260 @@ function publicRunPayload(testRun: any, extra: Record<string, unknown> = {}) {
   };
 }
 
+function pythonRunnerOutput(data: any) {
+  const runner = asObject(data?.runner);
+  return asObject(runner.output || data?.output);
+}
+
+function pythonRunnerError(data: any) {
+  const runner = asObject(data?.runner);
+  const output = pythonRunnerOutput(data);
+  return pickFirstUsefulString(
+    output.error_message,
+    runner.error,
+    data?.error,
+    asObject(runner.callback).body?.error,
+    asObject(data?.runner_response).error,
+    "Python automation failed.",
+  );
+}
+
+function pythonRunnerLogSummary(data: any) {
+  const runner = asObject(data?.runner);
+  const output = pythonRunnerOutput(data);
+  const runtime = asObject(output.runtime || runner.runtime);
+
+  return {
+    stdout: cleanString(runtime.stdout || output.stdout || runner.stdout),
+    stderr: cleanString(runtime.stderr || output.stderr || runner.stderr),
+    exit_code: runtime.exit_code ?? output.exit_code ?? runner.exit_code ?? null,
+    duration_seconds: runtime.duration_seconds ?? output.duration_seconds ?? runner.duration_seconds ?? null,
+  };
+}
+
+async function startPythonTestRun(adminClient: any, automation: any, userId: string, options: Record<string, unknown> = {}) {
+  const forceNew = Boolean(options.force_new || options.forceNew);
+
+  if (!cleanString(automation.python_script_code)) {
+    throw new Error("This Python product has no script saved. Save the Python script before running a technical test.");
+  }
+
+  if (!forceNew) {
+    const { data: existingRunning } = await adminClient
+      .from("automation_test_runs")
+      .select("*")
+      .eq("automation_id", automation.id)
+      .eq("status", "running")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingRunning) {
+      return publicRunPayload(existingRunning, {
+        reused_existing_run: true,
+        message: "A Python technical test is already running. Nexus resumed the existing run instead of starting a new one.",
+      });
+    }
+  }
+
+  const now = new Date().toISOString();
+  const testId = crypto.randomUUID();
+
+  const { data: testRun, error } = await adminClient
+    .from("automation_test_runs")
+    .insert({
+      automation_id: automation.id,
+      developer_id: automation.developer_id || null,
+      test_id: testId,
+      n8n_workflow_id: automation.n8n_workflow_id || "python_runner",
+      status: "running",
+      started_at: now,
+      last_checked_at: now,
+      elapsed_seconds: 0,
+      created_by: userId || null,
+      created_at: now,
+      updated_at: now,
+    })
+    .select()
+    .single();
+
+  if (error || !testRun) {
+    throw new Error(error?.message || "Could not create Python automation test run.");
+  }
+
+  const started = publicRunPayload(testRun, {
+    ok: true,
+    status: "running",
+    runtime_type: "python_runner",
+    message: "Python technical test started.",
+  });
+  await updateAutomationTestResult(adminClient, automation.id, started);
+
+  const startedAt = Date.now();
+
+  try {
+    const testProfile = await loadDefaultTestProfile(adminClient, automation.id);
+    const testData = buildTestSetupAndSecrets(automation, testProfile);
+    const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
+    const supabaseUrl = cleanBaseUrl(env("SUPABASE_URL"));
+
+    if (!supabaseUrl || !runtimeSecret) {
+      throw new Error("Missing SUPABASE_URL or NEXUS_RUNTIME_SECRET Supabase secrets for Python testing.");
+    }
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/run-python-automation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-nexus-runtime-secret": runtimeSecret,
+      },
+      body: JSON.stringify({
+        automation_id: automation.id,
+        run_id: testRun.id,
+        run_key: `python-test:${automation.id}:${testId}`,
+        customer_automation_id: `TEST_PYTHON_RUN_${testId}`,
+        order_id: `TEST_ORDER_${testId}`,
+        buyer_id: `TEST_BUYER_${testId}`,
+        setup: testData.setup,
+        secrets: testData.secrets,
+        customer: {
+          id: `TEST_BUYER_${testId}`,
+          email: "developer-test@nexus.local",
+          name: "Nexus Python Test",
+          order_id: `TEST_ORDER_${testId}`,
+        },
+        system: {
+          test_mode: true,
+          technical_test_only: true,
+          test_id: testId,
+          test_run_id: testRun.id,
+          customer_automation_id: `TEST_PYTHON_RUN_${testId}`,
+          automation_id: automation.id,
+          order_id: `TEST_ORDER_${testId}`,
+          buyer_id: `TEST_BUYER_${testId}`,
+          runtime_type: "python_runner",
+          used_test_profile: testData.used_test_profile,
+          test_profile_id: testData.test_profile_id,
+          test_profile_name: testData.test_profile_name,
+        },
+        event: {
+          type: "manual_test",
+          source: "developer_dashboard",
+        },
+        technical_test_only: true,
+        callback_url: "",
+      }),
+    });
+
+    const text = await response.text();
+    let data: any = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { raw_response: text };
+    }
+
+    const runner = asObject(data?.runner);
+    const output = pythonRunnerOutput(data);
+    const callback = asObject(runner.callback);
+    const runtimeLogs = pythonRunnerLogSummary(data);
+    const passed = response.ok && data?.ok !== false && runner.ok !== false && lower(runner.status || output.status) !== "error";
+    const elapsedSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+    const errorMessage = passed ? "" : pythonRunnerError(data);
+
+    const finished = await updateTestRun(adminClient, testRun.id, {
+      status: passed ? "passed" : "failed",
+      finished_at: new Date().toISOString(),
+      last_checked_at: new Date().toISOString(),
+      elapsed_seconds: elapsedSeconds,
+      error_node: passed ? null : "Python runner",
+      error_message: passed ? null : errorMessage,
+      error_details: passed ? {} : { response_status: response.status, runner, output, callback },
+      webhook_response: {
+        ok: passed,
+        runtime_type: "python_runner",
+        used_test_profile: testData.used_test_profile,
+        test_profile_id: testData.test_profile_id,
+        test_profile_name: testData.test_profile_name,
+        runner,
+        output,
+        callback,
+      },
+      raw_execution: {
+        runtime_type: "python_runner",
+        response_status: response.status,
+        response_body: data,
+      },
+    });
+
+    const result = publicRunPayload(finished, {
+      ok: passed,
+      status: passed ? "passed" : "failed",
+      runtime_type: "python_runner",
+      runtime_output: output,
+      runtime_logs: runtimeLogs,
+      runner_status: runner.status || output.status || (passed ? "success" : "error"),
+      used_test_profile: testData.used_test_profile,
+      test_profile_id: testData.test_profile_id,
+      test_profile_name: testData.test_profile_name,
+      message: passed
+        ? "Python technical test passed."
+        : errorMessage,
+    });
+
+    await updateAutomationTestResult(adminClient, automation.id, result);
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const elapsedSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+    const failed = await updateTestRun(adminClient, testRun.id, {
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      last_checked_at: new Date().toISOString(),
+      elapsed_seconds: elapsedSeconds,
+      error_node: "Python runner",
+      error_message: message,
+      error_details: { message },
+    });
+
+    const result = publicRunPayload(failed, {
+      ok: false,
+      status: "failed",
+      runtime_type: "python_runner",
+      message,
+    });
+
+    await updateAutomationTestResult(adminClient, automation.id, result);
+    return result;
+  }
+}
+
 async function startTestRun(adminClient: any, automation: any, userId: string, options: Record<string, unknown> = {}) {
+  if (isPythonAutomation(automation)) {
+    return startPythonTestRun(adminClient, automation, userId, options);
+  }
+
   const workflowId = cleanString(automation.n8n_workflow_id);
   const webhookUrl = pickFirstString(automation.runtime_webhook_url, automation.n8n_webhook_url);
   const forceNew = Boolean(options.force_new || options.forceNew);
+  const runReason = cleanString(options.reason);
+  const preserveHostedWorkflow = Boolean(
+    options.preserve_hosted_workflow ||
+      options.preserveHostedWorkflow ||
+      options.use_live_n8n ||
+      options.useLiveN8n ||
+      options.skip_credential_binding ||
+      options.skipCredentialBinding ||
+      [
+        "embedded_editor_check",
+        "real_test_profile",
+        "manual_import_test",
+        "credential_update",
+        "manual_test_data_run",
+        "real_test_data_run",
+        "test_data_run",
+      ].includes(runReason),
+  );
 
   if (!workflowId) {
     throw new Error("This automation has no n8n_workflow_id. Import the workflow first.");
@@ -1657,6 +1952,40 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
         reused_existing_run: true,
         message: "A technical test is already running. Nexus resumed the existing run instead of starting a new one.",
       });
+    }
+  }
+
+  if (!preserveHostedWorkflow) {
+    /*
+      Import/apply-credential flows may intentionally bind credentials before a
+      run. Plain editor/test-data runs must not touch the hosted workflow:
+      developers may have selected native n8n OAuth accounts manually, and
+      rebinding here can overwrite that working state with stale saved JSON.
+    */
+    const liveWorkflow = await fetchLiveN8nWorkflow(workflowId);
+    const workflowInput = liveWorkflow || automation.n8n_normalized_workflow_json || automation.n8n_workflow_json;
+    const workflowJsonColumn = liveWorkflow || automation.n8n_normalized_workflow_json
+      ? "n8n_normalized_workflow_json"
+      : "n8n_workflow_json";
+    const credentialBinding = await bindAutomationCredentials({
+      adminClient,
+      product: automation,
+      n8nBaseUrl: cleanBaseUrl(env("N8N_BASE_URL")),
+      n8nApiKey: env("N8N_API_KEY"),
+      credentialSecret: env("NEXUS_CREDENTIAL_SECRET"),
+      syncMissingN8nCredentials: true,
+      workflowInput,
+      workflowJsonColumn,
+      updateHostedWorkflow: true,
+      allowExistingNativeN8nCredentials: Boolean(liveWorkflow),
+    });
+
+    if (!credentialBinding.ok) {
+      const firstError = credentialBinding.errors?.[0]?.message;
+      throw new Error(
+        firstError ||
+          "Add or sync the required developer credentials, then run the technical check again.",
+      );
     }
   }
 
@@ -1690,31 +2019,6 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
   let deactivationResult: unknown = null;
 
   try {
-    const workflowInput = automation.n8n_normalized_workflow_json || automation.n8n_workflow_json;
-    const workflowJsonColumn = automation.n8n_normalized_workflow_json
-      ? "n8n_normalized_workflow_json"
-      : "n8n_workflow_json";
-    const credentialBinding = await bindAutomationCredentials({
-      adminClient,
-      product: automation,
-      n8nBaseUrl: cleanBaseUrl(env("N8N_BASE_URL")),
-      n8nApiKey: env("N8N_API_KEY"),
-      credentialSecret: env("NEXUS_CREDENTIAL_SECRET"),
-      syncMissingN8nCredentials: true,
-      workflowInput,
-      workflowJsonColumn,
-      updateHostedWorkflow: true,
-      allowExistingNativeN8nCredentials: true,
-    });
-
-    if (!credentialBinding.ok) {
-      const firstError = credentialBinding.errors?.[0]?.message;
-      throw new Error(
-        firstError ||
-          "Add or sync the required developer credentials, then run the technical check again.",
-      );
-    }
-
     if (deactivateAfterTest) {
       activationResult = await activateWorkflow(workflowId);
     }
@@ -1738,6 +2042,8 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
         used_test_profile: Boolean(testProfile?.id),
         test_profile_id: testProfile?.id || null,
         test_profile_name: testProfile?.name || null,
+        preserved_hosted_workflow: preserveHostedWorkflow,
+        credential_binding_skipped: preserveHostedWorkflow,
         temporary_activation: deactivateAfterTest,
         activation_result: activationResult,
         deactivation_result: deactivationResult,

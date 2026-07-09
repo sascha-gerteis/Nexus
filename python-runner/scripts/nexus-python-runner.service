@@ -1,0 +1,18 @@
+[Unit]
+Description=Nexus Python Runner
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/nexus-python-runner
+EnvironmentFile=/opt/nexus-python-runner/.env
+ExecStart=/opt/nexus-python-runner/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8088
+Restart=always
+RestartSec=5
+User=root
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

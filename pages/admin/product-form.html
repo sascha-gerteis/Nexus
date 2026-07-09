@@ -658,6 +658,7 @@
           <option value="n8n">n8n - available now</option>
           <option value="make">Make.com - beta import assistant</option>
           <option value="zapier">Zapier - beta import assistant</option>
+          <option value="python">Python script - beta</option>
           <option value="pipedream" disabled>Pipedream - coming soon</option>
           <option value="manual">Manual / Nexus fulfilled</option>
         </select>
@@ -672,6 +673,7 @@
         <select class="select" name="runtime_type" id="runtimeTypeSelect">
           <option value="manual">Manual first / Nexus fulfilled</option>
           <option value="n8n_managed">Automatic with n8n</option>
+          <option value="python_runner">Automatic with Python runner</option>
         </select>
 
         <small>
@@ -779,6 +781,37 @@
         <small>
           Nexus scans this JSON for placeholders and imports it into hosted n8n after the product is saved.
         </small>
+      </div>
+
+      <div class="full workflow-source-panel workflow-source-python hidden">
+        <div class="make-import-assistant">
+          <div class="make-import-head">
+            <div>
+              <h3>Python script runner</h3>
+              <p>Paste a Python script with a <code>run(context)</code> function. Nexus passes buyer setup, customer, event, and schedule data into <code>context</code>, then displays the returned output in the buyer dashboard.</p>
+            </div>
+            <span class="pill blue">Beta</span>
+          </div>
+          <div class="form-grid">
+            <div class="full">
+              <label>Python script</label>
+              <textarea class="textarea code-textarea xlarge" name="python_script_code" placeholder='def run(context):&#10;    setup = context["setup"]&#10;    return {&#10;        "title": "Automation output",&#10;        "summary": "What happened",&#10;        "content_html": "&lt;h1&gt;Result&lt;/h1&gt;",&#10;        "content_json": {"setup": setup}&#10;    }'></textarea>
+            </div>
+            <div class="full">
+              <label>Extra Python packages</label>
+              <textarea class="textarea code-textarea" name="python_requirements" rows="4" placeholder="requests==2.32.3&#10;beautifulsoup4==4.12.3"></textarea>
+              <small>Common packages are already included in the runner image. Add only product-specific packages here.</small>
+            </div>
+            <div>
+              <label>Entrypoint function</label>
+              <input class="input" name="python_entrypoint" value="run" placeholder="run">
+            </div>
+            <div>
+              <label>Timeout seconds</label>
+              <input class="input" name="python_timeout_seconds" type="number" min="5" max="300" step="1" value="120">
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="full workflow-source-panel workflow-source-n8n">
@@ -1103,7 +1136,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260702-workflow-import-health"></script>
-<script src="/assets/js/nexus-db.js?v=20260704-output-body-repair"></script>
+<script src="/assets/js/nexus-db.js?v=20260708-nexusdb-bootfix"></script>
   <script src="/assets/js/nexus-app.js?v=20260702-forgiving-placeholders"></script>
   <script src="/assets/js/nexus-notice.js"></script>
 
@@ -1670,6 +1703,8 @@
 
       if ((workflowProvider === "n8n" || workflowProvider === "make" || workflowProvider === "zapier") && runtimeTypeElement) {
         runtimeTypeElement.value = "n8n_managed";
+      } else if (workflowProvider === "python" && runtimeTypeElement) {
+        runtimeTypeElement.value = "python_runner";
       }
 
       const payload = {
@@ -1736,8 +1771,14 @@
         runtime_response_mode: String(formData.get("runtime_response_mode") || existingProduct.runtime_response_mode || "dashboard_output"),
         runtime_event_schema: runtimeEventSchema,
         workflow_source_platform: workflowProvider,
+        python_script_code: String(formData.get("python_script_code") || ""),
+        python_requirements: String(formData.get("python_requirements") || ""),
+        python_entrypoint: String(formData.get("python_entrypoint") || "run"),
+        python_timeout_seconds: Number(formData.get("python_timeout_seconds") || 120),
 
-        runtime_webhook_url: existingProduct.runtime_webhook_url || "",
+        runtime_webhook_url: workflowProvider === "python" && typeof NexusDB.functionsBaseUrl === "function"
+          ? `${NexusDB.functionsBaseUrl()}/run-python-automation`
+          : existingProduct.runtime_webhook_url || "",
         runtime_webhook_path: existingProduct.runtime_webhook_path || "",
         runtime_output_mode: existingProduct.runtime_output_mode || "standard",
 
@@ -2241,6 +2282,11 @@
       const upload = document.getElementById("n8nWorkflowFile");
       const makeUpload = document.getElementById("adminMakeBlueprintFile");
       const workflowTextarea = document.querySelector("[name='n8n_workflow_json']");
+      const pythonSections = document.querySelectorAll(".workflow-source-python");
+      const pythonScript = document.querySelector("[name='python_script_code']");
+      const pythonRequirements = document.querySelector("[name='python_requirements']");
+      const pythonEntrypoint = document.querySelector("[name='python_entrypoint']");
+      const pythonTimeout = document.querySelector("[name='python_timeout_seconds']");
       const makeSections = document.querySelectorAll(".workflow-source-make");
       const n8nSections = document.querySelectorAll(".workflow-source-n8n");
       const sourcePlatform = provider === "zapier" ? "zapier" : "make";
@@ -2258,8 +2304,10 @@
 
       const showMake = provider === "make" || provider === "zapier";
       const showN8n = provider === "n8n";
+      const showPython = provider === "python";
       makeSections.forEach((section) => section.classList.toggle("hidden", !showMake));
       n8nSections.forEach((section) => section.classList.toggle("hidden", !showN8n));
+      pythonSections.forEach((section) => section.classList.toggle("hidden", !showPython));
       if (sourceTitleNode) sourceTitleNode.textContent = sourceTitle;
       if (sourceCopyNode) sourceCopyNode.textContent = sourceCopy;
       if (sourceUploadLabel) sourceUploadLabel.textContent = `Upload ${sourceLabel} JSON`;
@@ -2282,6 +2330,10 @@
         if (upload) upload.disabled = false;
         if (makeUpload) makeUpload.disabled = true;
         if (workflowTextarea) workflowTextarea.disabled = false;
+        if (pythonScript) pythonScript.disabled = true;
+        if (pythonRequirements) pythonRequirements.disabled = true;
+        if (pythonEntrypoint) pythonEntrypoint.disabled = true;
+        if (pythonTimeout) pythonTimeout.disabled = true;
         return;
       }
 
@@ -2298,6 +2350,30 @@
         if (upload) upload.disabled = true;
         if (makeUpload) makeUpload.disabled = false;
         if (workflowTextarea) workflowTextarea.disabled = false;
+        if (pythonScript) pythonScript.disabled = true;
+        if (pythonRequirements) pythonRequirements.disabled = true;
+        if (pythonEntrypoint) pythonEntrypoint.disabled = true;
+        if (pythonTimeout) pythonTimeout.disabled = true;
+        return;
+      }
+
+      if (provider === "python") {
+        if (runtimeType) runtimeType.value = "python_runner";
+        if (notice) {
+          notice.innerHTML = `
+            <div class="success">
+              <strong>Python runner enabled.</strong> Save the product with a script, setup schema, and preview. Nexus routes buyer setup and scheduled runs through the Python runner.
+            </div>
+          `;
+        }
+        if (importButton) importButton.disabled = true;
+        if (upload) upload.disabled = true;
+        if (makeUpload) makeUpload.disabled = true;
+        if (workflowTextarea) workflowTextarea.disabled = true;
+        if (pythonScript) pythonScript.disabled = false;
+        if (pythonRequirements) pythonRequirements.disabled = false;
+        if (pythonEntrypoint) pythonEntrypoint.disabled = false;
+        if (pythonTimeout) pythonTimeout.disabled = false;
         return;
       }
 
@@ -2314,6 +2390,10 @@
         if (upload) upload.disabled = true;
         if (makeUpload) makeUpload.disabled = true;
         if (workflowTextarea) workflowTextarea.disabled = true;
+        if (pythonScript) pythonScript.disabled = true;
+        if (pythonRequirements) pythonRequirements.disabled = true;
+        if (pythonEntrypoint) pythonEntrypoint.disabled = true;
+        if (pythonTimeout) pythonTimeout.disabled = true;
         return;
       }
 
@@ -2329,6 +2409,10 @@
       if (upload) upload.disabled = true;
       if (makeUpload) makeUpload.disabled = true;
       if (workflowTextarea) workflowTextarea.disabled = true;
+      if (pythonScript) pythonScript.disabled = true;
+      if (pythonRequirements) pythonRequirements.disabled = true;
+      if (pythonEntrypoint) pythonEntrypoint.disabled = true;
+      if (pythonTimeout) pythonTimeout.disabled = true;
     },
 
     inferWorkflowProviderFromRuntime() {
@@ -2339,6 +2423,8 @@
 
       if (this.currentSavedProduct?.workflow_source_platform === "zapier") {
         workflowProvider.value = "zapier";
+      } else if (this.currentSavedProduct?.workflow_source_platform === "python" || runtimeType === "python_runner") {
+        workflowProvider.value = "python";
       } else if (this.currentSavedProduct?.workflow_source_platform === "make" || this.currentSavedProduct?.make_blueprint) {
         workflowProvider.value = "make";
       } else if (runtimeType === "n8n_managed") {
