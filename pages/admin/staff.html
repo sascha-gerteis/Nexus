@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Staff Dashboard | Nexus</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+
+  <style>
+    .staff-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:22px 0}
+    .staff-card{background:#fff;border:1px solid rgba(134,162,196,.28);border-radius:22px;padding:22px;box-shadow:0 14px 38px rgba(15,23,42,.06)}
+    .staff-card strong{display:block;font-size:32px;line-height:1;color:#061f44;margin-top:8px}
+    .staff-card span{color:#65748b;font-weight:800;text-transform:uppercase;font-size:12px}
+    .staff-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:22px}
+    .staff-action{display:flex;flex-direction:column;gap:10px;text-decoration:none;color:#061f44;background:#fff;border:1px solid rgba(134,162,196,.28);border-radius:22px;padding:22px;min-height:150px;box-shadow:0 14px 38px rgba(15,23,42,.06)}
+    .staff-action small{color:#65748b;font-size:15px;line-height:1.45}
+    .staff-action strong{font-size:22px}
+    .staff-note{background:#eef8ff;border:1px solid #b6e6ff;color:#075985;border-radius:18px;padding:16px 18px;margin-top:18px;font-weight:800}
+    .staff-list{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}
+    .staff-list .card{margin:0}
+    .staff-muted{color:#65748b}
+    @media (max-width:1100px){
+      .staff-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .staff-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .staff-list{grid-template-columns:1fr}
+    }
+    @media (max-width:720px){
+      .staff-grid,.staff-actions{grid-template-columns:1fr}
+      .staff-card strong{font-size:28px}
+    }
+  </style>
+</head>
+
+<body data-admin="true" data-admin-page="staff">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Staff</div>
+    </aside>
+
+    <main class="main">
+      <section class="admin-launch-hero">
+        <div>
+          <span class="eyebrow">Staff overview</span>
+          <h1>Operational view for the Nexus team.</h1>
+          <p>
+            View analytics, builders, products, buyer orders, messages, reviews, and intake without access to finance,
+            credentials, product creation, or Nexus-owned profile creation.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/pages/admin/messages.html">Open messages</a>
+          <a class="btn btn-secondary" href="/pages/admin/analytics.html">View analytics</a>
+        </div>
+      </section>
+
+      <div class="staff-note" id="staffRoleNote">
+        Staff access is read-first. Product creation, credential vault, bundles, payouts, and finance stay owner-admin only.
+      </div>
+
+      <section class="staff-grid" id="staffMetrics">
+        <div class="staff-card"><span>Products</span><strong>...</strong></div>
+        <div class="staff-card"><span>Builders</span><strong>...</strong></div>
+        <div class="staff-card"><span>Orders</span><strong>...</strong></div>
+        <div class="staff-card"><span>Open messages</span><strong>...</strong></div>
+      </section>
+
+      <section class="staff-actions">
+        <a class="staff-action" href="/pages/admin/orders.html">
+          <strong>Orders</strong>
+          <small>Track buyer purchases, setup status, guided install requests, and delivery progress.</small>
+        </a>
+        <a class="staff-action" href="/pages/admin/messages.html">
+          <strong>Messages</strong>
+          <small>Reply to buyer and developer conversations from the platform inbox.</small>
+        </a>
+        <a class="staff-action" href="/pages/admin/analytics.html">
+          <strong>Analytics</strong>
+          <small>See platform traffic, product views, profile views, and conversion activity.</small>
+        </a>
+        <a class="staff-action" href="/pages/admin/customer-automations.html">
+          <strong>Customer automations</strong>
+          <small>Check active automations, output history, next runs, and cancellation requests.</small>
+        </a>
+        <a class="staff-action" href="/pages/developers/index.html">
+          <strong>Builders</strong>
+          <small>View public builder profiles and marketplace positioning without approval controls.</small>
+        </a>
+        <a class="staff-action" href="/pages/admin/health.html">
+          <strong>System health</strong>
+          <small>Monitor runtime, email, cron, Supabase function, and automation health signals.</small>
+        </a>
+      </section>
+
+      <section class="staff-list">
+        <div class="card">
+          <h3>Recent products</h3>
+          <div id="staffProducts" class="staff-muted">Loading products...</div>
+        </div>
+        <div class="card">
+          <h3>Recent builders</h3>
+          <div id="staffDevelopers" class="staff-muted">Loading builders...</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
+  <script>
+    const escapeHtml = (value) => String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+    function metricCard(label, value, note = "") {
+      return `
+        <div class="staff-card">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+          ${note ? `<p class="staff-muted">${escapeHtml(note)}</p>` : ""}
+        </div>
+      `;
+    }
+
+    function compactStatus(value) {
+      return String(value || "unknown").replace(/_/g, " ");
+    }
+
+    async function safeCall(fn, fallback) {
+      try {
+        const result = await fn();
+        if (result?.error) throw result.error;
+        return result?.data ?? fallback;
+      } catch (error) {
+        console.warn("Staff dashboard data warning:", error);
+        return fallback;
+      }
+    }
+
+    function renderMiniRows(targetId, rows, emptyLabel, formatter) {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+
+      if (!rows.length) {
+        target.innerHTML = `<p class="staff-muted">${escapeHtml(emptyLabel)}</p>`;
+        return;
+      }
+
+      target.innerHTML = rows.map(formatter).join("");
+    }
+
+    async function listProductsForStaff() {
+      const result = await NexusDB.listAllAutomations();
+      if (!result?.error) return result;
+      return NexusDB.listLiveAutomations ? NexusDB.listLiveAutomations() : result;
+    }
+
+    async function listDevelopersForStaff() {
+      const result = await NexusDB.listAllDevelopers();
+      if (!result?.error) return result;
+      return NexusDB.listDevelopers ? NexusDB.listDevelopers() : result;
+    }
+
+    async function loadStaffDashboard() {
+      const [
+        productCount,
+        developerCount,
+        orderRows,
+        messageThreads,
+        products,
+        developers
+      ] = await Promise.all([
+        safeCall(() => NexusDB.countAutomations(), 0),
+        safeCall(() => NexusDB.countDevelopers(), 0),
+        safeCall(() => NexusDB.listAdminOrders(), []),
+        safeCall(() => NexusDB.listMessageThreads(), []),
+        safeCall(() => listProductsForStaff(), []),
+        safeCall(() => listDevelopersForStaff(), [])
+      ]);
+
+      const threads = Array.isArray(messageThreads)
+        ? messageThreads
+        : Array.isArray(messageThreads?.threads)
+          ? messageThreads.threads
+          : [];
+
+      const openMessages = threads.filter((thread) => {
+        return !thread.admin_last_read_at || new Date(thread.updated_at || 0) > new Date(thread.admin_last_read_at || 0);
+      }).length;
+
+      document.getElementById("staffMetrics").innerHTML = [
+        metricCard("Products", productCount || (products || []).length || 0),
+        metricCard("Builders", developerCount || (developers || []).length || 0),
+        metricCard("Orders", (orderRows || []).length || 0),
+        metricCard("Open messages", openMessages)
+      ].join("");
+
+      renderMiniRows(
+        "staffProducts",
+        (products || []).slice(0, 6),
+        "No products found.",
+        (product) => `
+          <div class="mini-row">
+            <strong>${escapeHtml(product.title || "Untitled product")}</strong>
+            <span>${escapeHtml(compactStatus(product.status))} · ${escapeHtml(product.category || "Uncategorized")}</span>
+          </div>
+        `
+      );
+
+      renderMiniRows(
+        "staffDevelopers",
+        (developers || []).slice(0, 6),
+        "No builders found.",
+        (developer) => `
+          <div class="mini-row">
+            <strong>${escapeHtml(developer.display_name || developer.handle || "Unnamed builder")}</strong>
+            <span>${escapeHtml(compactStatus(developer.status))} · ${escapeHtml(developer.type || "Builder")}</span>
+          </div>
+        `
+      );
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (window.NexusUI?.mountGlobalNav) {
+        await NexusUI.mountGlobalNav();
+      }
+
+      const profile = await NexusDB.requireAdminAccess();
+      if (!profile) return;
+
+      if (window.NexusUI?.mountAdminSidebar) {
+        await NexusUI.mountAdminSidebar({ force: true });
+      }
+
+      if (profile.role === "admin") {
+        document.getElementById("staffRoleNote").textContent =
+          "You are viewing the restricted staff dashboard as owner admin. Owner-only pages remain available from the full admin overview.";
+      }
+
+      await loadStaffDashboard();
+    });
+  </script>
+</body>
+</html>

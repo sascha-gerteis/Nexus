@@ -132,7 +132,17 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (document.body.dataset.page === "login") wireLogin();
 
     if (document.body.dataset.admin === "true") {
-      const profile = await NexusDB.requireAdmin();
+      const staffAllowedAdminPages = new Set([
+        "orders",
+        "analytics",
+        "health",
+        "customer-automations",
+        "messages"
+      ]);
+      const adminPage = document.body.dataset.adminPage || "";
+      const profile = staffAllowedAdminPages.has(adminPage)
+        ? await NexusDB.requireAdminAccess()
+        : await NexusDB.requireAdmin();
       if (!profile) return;
       await renderAdmin();
     }
@@ -597,7 +607,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
             New approved developer products are included automatically when they match.
           </p>
         </div>
-        <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom automation</a>
+        <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom solution</a>
       </div>
       <div class="marketplace-recommendation-grid">
         ${scored.map(marketplaceRecommendationCard).join("")}
@@ -658,14 +668,14 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
           <h3>No close marketplace match yet.</h3>
           <p>
             Nexus did not find a current product with enough domain fit for this process.
-            The best next step is a custom automation review instead of guessing with a weak match.
+            The best next step is a custom request instead of guessing with a weak match.
           </p>
           ${summary ? `<small>Request context: ${NexusUI.escapeHtml(summary)}</small>` : ""}
         </div>
-        <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom automation</a>
+        <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom solution</a>
       </div>
       <div class="success" style="margin-top:1rem">
-        Describe the process once. Nexus will recommend an existing product if one truly fits, or route it as a custom workflow request.
+        Describe the process once. Nexus will recommend an existing product if one truly fits, or route it as a custom request.
       </div>
     `;
   }
@@ -955,10 +965,10 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const ctaHref = isCustomRequest
       ? `/pages/custom-request/index.html?slug=${encodeURIComponent(product.slug)}`
       : `/pages/checkout/index.html?slug=${encodeURIComponent(product.slug)}&step=setup`;
-    const ctaLabel = isCustomRequest ? "Request custom automation" : "Buy / choose setup";
+    const ctaLabel = isCustomRequest ? "Request custom solution" : "Buy / choose setup";
     const ctaText = isCustomRequest
       ? "Tell Nexus what you need and we will review scope, tools, budget, and timeline."
-      : "Buy opens the dedicated setup page where the buyer chooses Self-Serve or Nexus Guided Install.";
+      : "Buy opens the dedicated setup page where the buyer chooses self-serve or guided setup.";
     const isNexusProduct = !product.developer_id || String(product.developers?.handle || "").toLowerCase() === "nexus-internal";
     const messageButton = isNexusProduct
       ? `<a class="btn btn-secondary" href="/pages/contact/index.html">Ask Nexus</a>`
@@ -981,7 +991,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       ${NexusUI.publicReviewsBlock("Product reviews", productReviews)}
 
       <div class="card">
-        <h3>Ready to use this automation?</h3>
+          <h3>Ready to use this product?</h3>
 
         <p>
           ${ctaText}
@@ -1048,7 +1058,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
             <div class="bundle-workflow-preview" id="bundleWorkflowPreview-${index}" hidden></div>
           </article>
         `).join("")
-      : `<div class="card"><h3>No active workflows</h3><p>This bundle needs active products before it can be purchased.</p></div>`;
+      : `<div class="card"><h3>No active products</h3><p>This bundle needs active products before it can be purchased.</p></div>`;
 
     const side = `
       <div class="modal-head">
@@ -1063,13 +1073,13 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       <div class="price-box">
         <span>Bundle price</span>
         <strong>${NexusUI.money(bundle)}</strong>
-        <small>${Number(bundle.discount_percent || 0)}% bundle discount applied to active included workflows.</small>
+        <small>${Number(bundle.discount_percent || 0)}% bundle discount applied to active included products.</small>
       </div>
 
       <div class="product-maintenance-panel">
         <div>
           <span>Included</span>
-          <strong>${products.length} workflows</strong>
+          <strong>${products.length} products</strong>
         </div>
         <div>
           <span>Health</span>
@@ -1088,16 +1098,16 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const main = `
       <div class="bundle-modal-main">
         <div class="card">
-          <h3>Included workflows</h3>
-          <p>Each workflow stays visible in your buyer dashboard after purchase, with its own setup and output history.</p>
+          <h3>Included products</h3>
+          <p>Each product stays visible in your buyer dashboard after purchase, with its own setup and output history.</p>
           <div class="bundle-included-list">${includedHtml}</div>
         </div>
 
         <div class="card">
           <h3>Ready to use this bundle?</h3>
           <p>
-            Checkout creates one bundle order and unlocks the included workflow setup forms in your buyer dashboard.
-            If one included workflow is paused later, Nexus keeps the bundle live with the remaining active workflows and adjusts future pricing.
+            Checkout creates one bundle order and unlocks the included product setup forms in your buyer dashboard.
+            If one included product is paused later, Nexus keeps the bundle live with the remaining active products and adjusts future pricing.
           </p>
           <div class="hero-actions" style="justify-content:flex-start">
             <a class="btn btn-primary" href="/pages/checkout/index.html?bundle=${encodeURIComponent(bundle.slug || "")}&step=setup">Buy bundle</a>
@@ -1410,13 +1420,13 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
         <span class="${NexusUI.pillClass(product.color)}">
           ${NexusUI.escapeHtml(product.badge || product.category || "Custom request")}
         </span>
-        <h2>${NexusUI.escapeHtml(product.title || "Custom automation request")}</h2>
+        <h2>${NexusUI.escapeHtml(product.title || "Custom request")}</h2>
         <p>
           This product is handled as a custom quote, so it does not use Stripe checkout.
           Send the request and Nexus will follow up with the next steps.
         </p>
         <div class="card-actions">
-          <a class="btn btn-primary" href="${requestHref}">Request custom automation</a>
+          <a class="btn btn-primary" href="${requestHref}">Request custom solution</a>
           <a class="btn btn-secondary" href="/pages/marketplace/index.html">Back to marketplace</a>
         </div>
       </div>
@@ -1440,7 +1450,7 @@ function renderSetupChoicePage(root, product) {
   const guidedInstallFee = NexusUI.guidedInstallFeeMoney?.(product) || "";
   const guidedInstallFeeLabel = guidedInstallFee ? `+ ${guidedInstallFee}` : "Included";
   const setupIntro = guidedInstallEnabled
-    ? "Choose how you want this automation set up. After selecting a setup path, you will continue directly to secure Stripe checkout. The setup form comes after payment."
+    ? "Choose how much setup help you want. After selecting a setup path, you will continue to secure checkout. The setup form comes after payment."
     : "This product uses self-serve setup after payment. You will continue directly to secure Stripe checkout, then submit the required setup details from your buyer dashboard.";
   const guidedInstallChoice = guidedInstallEnabled
     ? `
@@ -1451,12 +1461,12 @@ function renderSetupChoicePage(root, product) {
               >
                 <h3>Nexus Guided Install</h3>
                 <p>
-                  Best when Nexus or the product developer should help collect access, configure the workflow, and prepare the automation.
+                  Best when Nexus or the builder should help collect the right details and prepare the product for your business.
                 </p>
 
                 <div class="tags">
                   <span class="tag">Managed setup</span>
-                  <span class="tag">Best for complex cases</span>
+                  <span class="tag">Best when you want help</span>
                   <span class="tag">Guided support</span>
                 </div>
 
@@ -1484,7 +1494,7 @@ function renderSetupChoicePage(root, product) {
         <div>
           <div class="card">
             <span class="${NexusUI.pillClass(product.color)}">
-              ${product.badge || product.category || "Automation"}
+              ${product.badge || product.category || "Product"}
             </span>
 
             <h2>${product.title}</h2>
@@ -1522,9 +1532,9 @@ function renderSetupChoicePage(root, product) {
 
             ${product.is_bundle && Array.isArray(product.bundle_products) ? `
               <div class="bundle-checkout-includes">
-                <strong>Included workflows</strong>
+                <strong>Included products</strong>
                 ${product.bundle_products.map((item) => `
-                  <span>${NexusUI.escapeHtml(item.title || "Automation")}</span>
+                  <span>${NexusUI.escapeHtml(item.title || "Product")}</span>
                 `).join("")}
               </div>
             ` : ""}
@@ -1558,7 +1568,7 @@ function renderSetupChoicePage(root, product) {
                 <div class="tags">
                   <span class="tag">Fastest</span>
                   <span class="tag">Setup form after payment</span>
-                  <span class="tag">Best for simple workflows</span>
+                  <span class="tag">Best when the form is simple</span>
                 </div>
               </div>
 
@@ -2171,7 +2181,11 @@ async function submitCheckoutIntent(event) {
         return;
       }
 
-      window.location.href = "/pages/admin/dashboard.html";
+      const params = new URLSearchParams(location.search);
+      const next = params.get("next") || "/pages/admin/dashboard.html";
+      window.location.href = typeof NexusDB.getRoleLandingPath === "function"
+        ? await NexusDB.getRoleLandingPath(next, "/pages/admin/dashboard.html")
+        : "/pages/admin/dashboard.html";
     });
   }
 

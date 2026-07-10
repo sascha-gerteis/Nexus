@@ -5,6 +5,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
+function isAdminAccessRole(role: unknown) {
+  const value = String(role || "").trim().toLowerCase();
+  return value === "admin" || value === "admin_staff";
+}
+
 async function requireAdmin(req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
 
@@ -35,7 +40,7 @@ async function requireAdmin(req: Request) {
     .eq("id", data.user.id)
     .maybeSingle();
 
-  if (!profile || profile.role !== "admin") {
+  if (!profile || !isAdminAccessRole(profile.role)) {
     return { user: data.user, profile, error: "Admin access required." };
   }
 

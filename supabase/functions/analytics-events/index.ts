@@ -34,6 +34,11 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function isAdminAccessRole(role: unknown) {
+  const value = cleanString(role, 80).toLowerCase();
+  return value === "admin" || value === "admin_staff";
+}
+
 function daysFromBody(body: any) {
   return Math.max(1, Math.min(numberValue(body.days || body.range_days || 30), 365));
 }
@@ -121,7 +126,7 @@ async function getUserFromRequest(req: Request, adminClient: any) {
 
 async function requireAdmin(req: Request, adminClient: any) {
   const auth = await getUserFromRequest(req, adminClient);
-  if (auth.profile?.role !== "admin") throw new Error("Admin access required.");
+  if (!isAdminAccessRole(auth.profile?.role)) throw new Error("Admin access required.");
   return auth;
 }
 
@@ -131,7 +136,7 @@ async function requireDeveloper(req: Request, adminClient: any) {
     throw new Error("Developer access required.");
   }
 
-  if (auth.profile?.role === "admin") {
+  if (isAdminAccessRole(auth.profile?.role)) {
     return { ...auth, developer: null };
   }
 
@@ -331,7 +336,7 @@ async function developerSummary(req: Request, adminClient: any, body: any) {
   const auth: any = await requireDeveloper(req, adminClient);
   const days = daysFromBody(body);
 
-  if (auth.profile?.role === "admin" && body.developer_id) {
+  if (isAdminAccessRole(auth.profile?.role) && body.developer_id) {
     const developerId = cleanString(body.developer_id, 80);
     const events = await fetchEvents(adminClient, days, (query) =>
       query.or(`developer_id.eq.${developerId},profile_developer_id.eq.${developerId}`)

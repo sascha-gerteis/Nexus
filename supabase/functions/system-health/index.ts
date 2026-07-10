@@ -17,6 +17,11 @@ function group(title: string, checks: ReturnType<typeof check>[]) {
   return { title, checks };
 }
 
+function isAdminAccessRole(role: unknown) {
+  const value = String(role || "").trim().toLowerCase();
+  return value === "admin" || value === "admin_staff";
+}
+
 async function requireAdmin(req: Request, adminClient: any) {
   const authHeader = req.headers.get("Authorization") || "";
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
@@ -41,7 +46,7 @@ async function requireAdmin(req: Request, adminClient: any) {
     .eq("id", data.user.id)
     .maybeSingle();
 
-  if (profile?.role !== "admin") {
+  if (!isAdminAccessRole(profile?.role)) {
     return { ok: false, error: "Admin access required." };
   }
 

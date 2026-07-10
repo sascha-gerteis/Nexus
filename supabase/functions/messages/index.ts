@@ -14,6 +14,11 @@ function cleanString(value: unknown) {
   return String(value || "").trim();
 }
 
+function isAdminAccessRole(role: unknown) {
+  const value = cleanString(role).toLowerCase();
+  return value === "admin" || value === "admin_staff";
+}
+
 function previewText(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, 180);
 }
@@ -84,7 +89,7 @@ async function getActor(adminClient: any, user: any) {
 
   if (developerError) throw new Error(developerError.message);
 
-  const role = profile?.role === "admin"
+  const role = isAdminAccessRole(profile?.role)
     ? "admin"
     : developer && profile?.role === "developer"
       ? "developer"

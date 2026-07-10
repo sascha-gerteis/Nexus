@@ -13,6 +13,11 @@ function cleanString(value: unknown) {
   return String(value || "").trim();
 }
 
+function isAdminAccessRole(role: unknown) {
+  const value = cleanString(role).toLowerCase();
+  return value === "admin" || value === "admin_staff";
+}
+
 function subscriptionIsActive(order: any) {
   const paymentStatus = cleanString(order?.payment_status).toLowerCase();
   const subscriptionStatus = cleanString(order?.stripe_subscription_status).toLowerCase();
@@ -108,7 +113,7 @@ async function requireAdmin(req: Request) {
     return { user: null, profile: null, error: error || "Login required." };
   }
 
-  if (!profile || profile.role !== "admin") {
+  if (!profile || !isAdminAccessRole(profile.role)) {
     return { user, profile, error: "Admin access required." };
   }
 

@@ -150,8 +150,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
-  <script src="/assets/js/nexus-db.js?v=20260708-nexusdb-bootfix"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
   <script src="/assets/js/nexus-notice.js"></script>
 
   <script>
@@ -327,7 +327,7 @@
         await NexusUI.mountGlobalNav();
       }
 
-      const profile = await NexusDB.requireAdmin();
+      const profile = await NexusDB.requireAdminAccess();
 
       if (!profile) return;
 

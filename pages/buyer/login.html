@@ -81,8 +81,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260627-launch-trust"></script>
-  <script src="/assets/js/nexus-db.js?v=20260708-nexusdb-bootfix"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -130,8 +130,13 @@
       NexusDB.getSession().then(async function (result) {
         const user = result?.data?.session?.user;
         if (!user) return;
-        await NexusDB.ensureBuyerProfileFromUser(user);
-        location.replace(next);
+        const landing = typeof NexusDB.getRoleLandingPath === "function"
+          ? await NexusDB.getRoleLandingPath(next)
+          : next;
+        if (landing.startsWith("/pages/buyer/")) {
+          await NexusDB.ensureBuyerProfileFromUser(user);
+        }
+        location.replace(landing);
       }).catch(function () {
         // Keep the login form available when the session check fails.
       });
@@ -183,12 +188,15 @@
         }
 
         const user = data?.user;
+        const landing = typeof NexusDB.getRoleLandingPath === "function"
+          ? await NexusDB.getRoleLandingPath(next)
+          : next;
 
-        if (user) {
+        if (user && landing.startsWith("/pages/buyer/")) {
           await NexusDB.ensureBuyerProfileFromUser(user);
         }
 
-        location.href = next;
+        location.href = landing;
       });
     });
   </script>

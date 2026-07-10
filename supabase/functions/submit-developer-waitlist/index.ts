@@ -14,6 +14,11 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function isAdminAccessRole(role: unknown) {
+  const value = cleanString(role, 80).toLowerCase();
+  return value === "admin" || value === "admin_staff";
+}
+
 function normalizeArray(value: unknown) {
   const rawValues = Array.isArray(value)
     ? value
@@ -286,7 +291,7 @@ async function requireAdmin(req: Request, adminClient: any) {
     .eq("id", data.user.id)
     .maybeSingle();
 
-  if (profile?.role !== "admin") {
+  if (!isAdminAccessRole(profile?.role)) {
     return { user: data.user, error: "Admin access required." };
   }
 

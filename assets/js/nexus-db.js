@@ -303,25 +303,100 @@ const NexusDB = (() => {
       .single();
   }
 
-  async function requireAdmin() {
+  const ADMIN_OWNER_ROLE = "admin";
+  const ADMIN_STAFF_ROLE = "admin_staff";
+  const ADMIN_ACCESS_ROLES = new Set([ADMIN_OWNER_ROLE, ADMIN_STAFF_ROLE]);
+
+  function normalizeRole(role) {
+    return String(role || "").trim().toLowerCase();
+  }
+
+  function hasAdminAccess(profile) {
+    return ADMIN_ACCESS_ROLES.has(normalizeRole(profile?.role));
+  }
+
+  function isStaffAdmin(profile) {
+    return normalizeRole(profile?.role) === ADMIN_STAFF_ROLE;
+  }
+
+  function adminLandingPath(profile) {
+    return isStaffAdmin(profile) ? "/pages/admin/staff.html" : "/pages/admin/dashboard.html";
+  }
+
+  async function getRoleLandingPath(nextUrl = "", fallback = "/pages/buyer/dashboard.html") {
+    const safeNext = nextUrl ? safeNextPath(nextUrl, "") : "";
     const { data: user, error: userError } = await getUser();
 
     if (userError || !user) {
-      location.href = "/pages/auth/login.html";
+      return safeNext || fallback;
+    }
+
+    const { data: profile } = await getProfile(user.id);
+    const role = normalizeRole(profile?.role);
+
+    if (role === ADMIN_OWNER_ROLE) {
+      return safeNext && safeNext.startsWith("/pages/admin/")
+        ? safeNext
+        : "/pages/admin/dashboard.html";
+    }
+
+    if (role === ADMIN_STAFF_ROLE) {
+      const staffAdminPages = new Set([
+        "/pages/admin/staff.html",
+        "/pages/admin/orders.html",
+        "/pages/admin/analytics.html",
+        "/pages/admin/health.html",
+        "/pages/admin/customer-automations.html",
+        "/pages/admin/messages.html"
+      ]);
+      const nextPath = String(safeNext || "").split(/[?#]/)[0];
+
+      if (safeNext && staffAdminPages.has(nextPath)) {
+        return safeNext;
+      }
+
+      return "/pages/admin/staff.html";
+    }
+
+    if (role === "developer") {
+      return safeNext && safeNext.startsWith("/pages/developer/")
+        ? safeNext
+        : "/pages/developer/dashboard.html";
+    }
+
+    return safeNext || fallback;
+  }
+
+  async function requireAdminRole({ allowStaff = false } = {}) {
+    const { data: user, error: userError } = await getUser();
+
+    if (userError || !user) {
+      const next = location.pathname + location.search + location.hash;
+      location.href = `/pages/auth/login.html?next=${encodeURIComponent(next)}`;
       return null;
     }
 
     const { data: profile, error: profileError } = await getProfile(user.id);
+    const role = normalizeRole(profile?.role);
+    const allowed = allowStaff ? ADMIN_ACCESS_ROLES.has(role) : role === ADMIN_OWNER_ROLE;
 
-    if (profileError || !profile || profile.role !== "admin") {
+    if (profileError || !profile || !allowed) {
       if (window.NexusUI?.toast) {
-        window.NexusUI.toast("Admin access required.");
+        window.NexusUI.toast(allowStaff ? "Admin access required." : "Owner admin access required.");
       }
-      location.href = "/index.html";
+      location.href = role === ADMIN_STAFF_ROLE ? "/pages/admin/staff.html" : "/index.html";
       return null;
     }
 
     return profile;
+  }
+
+  async function requireAdmin() {
+    return requireAdminRole({ allowStaff: false });
+  }
+
+  async function requireAdminAccess() {
+    return requireAdminRole({ allowStaff: true });
   }
 
   async function requireBuyer(nextUrl = "") {
@@ -1799,8 +1874,8 @@ async function callNexusFunction(functionName, payload = {}) {
 
       if (!response.ok || data.error) {
         const message = String(data.error || data.message || "").toLowerCase();
-        const authFailed = response.status === 401 &&
-          /auth token|jwt|login required|authentication|required|expired|invalid/.test(message);
+        const authFailed = (response.status === 401 || response.status === 403 || response.status === 500) &&
+          /auth token|jwt|login required|authentication|required|expired|invalid|admin access required/.test(message);
 
         if (authFailed && attempt === 0) {
           clearAuthCaches();
@@ -2963,6 +3038,11 @@ async function listMakeImportMappings(payload = {}) {
     getProfile,
     upsertProfile,
     requireAdmin,
+    requireAdminAccess,
+    hasAdminAccess,
+    isStaffAdmin,
+    adminLandingPath,
+    getRoleLandingPath,
     requireBuyer,
     signIn,
     buyerSignIn,

@@ -130,9 +130,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260624-analytics"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
   <script src="/assets/js/nexus-notice.js"></script>
-  <script src="/assets/js/nexus-db.js?v=20260708-nexusdb-bootfix"></script>
+  <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
 
   <script>
     function escapeHtml(value) {
@@ -245,7 +245,7 @@
     document.addEventListener("DOMContentLoaded", async () => {
       await NexusUI.mountGlobalNav?.();
       NexusUI.mountAdminSidebar?.({ force: true });
-      const admin = await NexusDB.requireAdmin();
+      const admin = await NexusDB.requireAdminAccess();
       if (!admin) return;
       await loadAnalytics();
     });

@@ -1237,7 +1237,7 @@ function productColorTheme(color) {
       : `onclick="event.stopPropagation(); location.href='/pages/developers/profile.html?id=${developer.id || ""}'"`;
     const developerCursor = isBundle ? "" : "cursor:pointer";
     const bundleIncludedText = isBundle
-      ? `${bundleProducts.length || product.active_item_count || 0} included workflows`
+      ? `${bundleProducts.length || product.active_item_count || 0} included products`
       : `${escapeHtml(l(localizeRecord(developer, "type", "Verified Operator")))} &middot; &#9733; ${escapeHtml(l(developer.rating || "New"))}`;
 
     return `
@@ -1881,7 +1881,7 @@ Object.assign(I18N.en, {
   nav_developer_login: "Developer login",
   nav_toggle: "Toggle navigation",
   common_explore_marketplace: "Explore marketplace",
-  common_request_custom_automation: "Request custom automation",
+  common_request_custom_automation: "Request custom solution",
   common_join_developer_waitlist: "Join developer waitlist",
   common_message_developer: "Message developer",
   common_message_nexus: "Message Nexus",
@@ -1945,7 +1945,7 @@ const LITERAL_TRANSLATIONS_TH = {
   "Productized and clear": "เป็น Product ชัดเจน",
   "Featured automations": "ออโตเมชันแนะนำ",
   "View full marketplace": "ดูมาร์เก็ตเพลสทั้งหมด",
-  "Request custom automation": "ขอ Custom Automation",
+  "Request custom solution": "ขอ Custom Automation",
   "The marketplace for AI workflows, agents, and automation services.": "มาร์เก็ตเพลสสำหรับ AI Workflow, Agent และ Automation Service",
   "About Nexus AI": "เกี่ยวกับ Nexus AI",
   "Browse marketplace": "ดูมาร์เก็ตเพลส",
@@ -2394,7 +2394,7 @@ const LITERAL_TRANSLATIONS = {
     "Contact": "??????",
     "About": "????????????",
     "Dashboard": "????????",
-    "Request custom automation": "??????????????????????",
+    "Request custom solution": "??????????????????????",
     "Product reviews": "???????????",
     "Developer reviews": "?????????????",
     "Verified purchase": "????????"
@@ -2413,7 +2413,7 @@ const LITERAL_TRANSLATIONS = {
     "Contact": "??",
     "About": "????",
     "Dashboard": "???",
-    "Request custom automation": "???????",
+    "Request custom solution": "???????",
     "Product reviews": "????",
     "Developer reviews": "?????",
     "Verified purchase": "?????"
@@ -2432,7 +2432,7 @@ const LITERAL_TRANSLATIONS = {
     "Contact": "Contacto",
     "About": "Acerca de",
     "Dashboard": "Panel",
-    "Request custom automation": "Solicitar automatizaci�n personalizada",
+    "Request custom solution": "Solicitar automatizaci�n personalizada",
     "Product reviews": "Rese�as del producto",
     "Developer reviews": "Rese�as del desarrollador",
     "Verified purchase": "Compra verificada"
@@ -2451,7 +2451,7 @@ const LITERAL_TRANSLATIONS = {
     "Contact": "??????",
     "About": "????? ???? ???",
     "Dashboard": "????????",
-    "Request custom automation": "????? ??????? ?? ?????? ????",
+    "Request custom solution": "????? ??????? ?? ?????? ????",
     "Product reviews": "???????? ??????",
     "Developer reviews": "?????? ??????",
     "Verified purchase": "???????? ????"
@@ -2470,7 +2470,7 @@ const LITERAL_TRANSLATIONS = {
     "Contact": "?????",
     "About": "?? ???",
     "Dashboard": "???? ??????",
-    "Request custom automation": "???? ????? ?????",
+    "Request custom solution": "???? ????? ?????",
     "Product reviews": "??????? ??????",
     "Developer reviews": "??????? ??????",
     "Verified purchase": "????? ???? ?????"
@@ -2489,7 +2489,7 @@ const LITERAL_TRANSLATIONS = {
     "Contact": "Contact",
     "About": "� propos",
     "Dashboard": "Tableau de bord",
-    "Request custom automation": "Demander une automatisation personnalis�e",
+    "Request custom solution": "Demander une automatisation personnalis�e",
     "Product reviews": "Avis produit",
     "Developer reviews": "Avis d�veloppeur",
     "Verified purchase": "Achat v�rifi�"
@@ -3597,13 +3597,14 @@ async function getNavDestination(active = "") {
       profile = result?.data || null;
     }
 
-    const isAdmin = profile?.role === "admin";
+    const isAdminStaff = profile?.role === "admin_staff";
+    const isAdmin = profile?.role === "admin" || isAdminStaff;
     const isDeveloper = profile?.role === "developer";
 
     if (isAdmin) {
       return {
         label: t("nav_admin"),
-        href: "/pages/admin/dashboard.html",
+        href: isAdminStaff ? "/pages/admin/staff.html" : "/pages/admin/dashboard.html",
         action: "admin",
         isAdmin: true,
         isLoggedIn: true
@@ -4241,11 +4242,24 @@ async function openThreadModal(threadId) {
   `).join("") || `<div class="card"><h3>No messages yet</h3><p>Write the first reply below.</p></div>`;
 }
 
-function adminSidebarSections(active = "") {
+function adminSidebarSections(active = "", options = {}) {
+  const isStaff = Boolean(options.isStaff);
+  const staffAllowedIds = new Set([
+    "staff",
+    "orders",
+    "analytics",
+    "health",
+    "customer-automations",
+    "messages",
+    "marketplace",
+    "logout"
+  ]);
+
   const sections = [
     {
       label: "Core",
       items: [
+        { id: "staff", label: "Staff Overview", href: "/pages/admin/staff.html", staffOnly: true },
         { id: "dashboard", label: "Overview", href: "/pages/admin/dashboard.html" },
         { id: "orders", label: "Orders", href: "/pages/admin/orders.html" },
         { id: "analytics", label: "Analytics", href: "/pages/admin/analytics.html" },
@@ -4283,7 +4297,15 @@ function adminSidebarSections(active = "") {
   ];
 
   return sections.map((section) => {
-    const links = section.items.map((item) => {
+    const visibleItems = section.items.filter((item) => {
+      if (item.staffOnly && !isStaff) return false;
+      if (!isStaff) return true;
+      return staffAllowedIds.has(item.id);
+    });
+
+    if (!visibleItems.length) return "";
+
+    const links = visibleItems.map((item) => {
       const isActive = active === item.id;
       const action = item.action === "logout"
         ? ` onclick="event.preventDefault(); NexusDB.signOut()"`
@@ -4303,7 +4325,7 @@ function adminSidebarSections(active = "") {
   }).join("");
 }
 
-function mountAdminSidebar(options = {}) {
+async function mountAdminSidebar(options = {}) {
   if (document.body?.dataset?.admin !== "true") return;
 
   const sidebar = document.querySelector(".dashboard .sidebar");
@@ -4311,19 +4333,36 @@ function mountAdminSidebar(options = {}) {
 
   const active = document.body.dataset.adminPage || "";
   const language = getLanguage();
+  let isStaff = false;
+
+  try {
+    if (window.NexusDB?.getUser && window.NexusDB?.getProfile) {
+      const userResult = await window.NexusDB.getUser();
+      const user = userResult?.data || null;
+      if (user) {
+        const profileResult = await window.NexusDB.getProfile(user.id);
+        isStaff = profileResult?.data?.role === "admin_staff";
+      }
+    }
+  } catch (error) {
+    console.warn("Could not resolve admin sidebar role:", error);
+  }
+
+  const mode = isStaff ? "staff" : "owner";
 
   if (
     !options.force &&
     sidebar.dataset.nexusSidebarMounted === "true" &&
     sidebar.dataset.nexusSidebarActive === active &&
-    sidebar.dataset.nexusSidebarLanguage === language
+    sidebar.dataset.nexusSidebarLanguage === language &&
+    sidebar.dataset.nexusSidebarMode === mode
   ) {
     return;
   }
 
   sidebar.innerHTML = `
-    <div class="sidebar-title">Nexus Admin</div>
-    ${adminSidebarSections(active)}
+    <div class="sidebar-title">${isStaff ? "Nexus Staff" : "Nexus Admin"}</div>
+    ${adminSidebarSections(active, { isStaff })}
   `;
 
   applyTranslations(sidebar);
@@ -4332,8 +4371,8 @@ function mountAdminSidebar(options = {}) {
   sidebar.dataset.nexusSidebarMounted = "true";
   sidebar.dataset.nexusSidebarActive = active;
   sidebar.dataset.nexusSidebarLanguage = language;
+  sidebar.dataset.nexusSidebarMode = mode;
 }
-
   return {
   q,
   slugify,
