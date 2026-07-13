@@ -718,15 +718,143 @@ const MAKE_COMMON_EXTERNAL_ACTIONS = [
 const ZAPIER_CORE_APP_MAPPINGS = [
   "code by zapier",
   "delay by zapier",
+  "email by zapier",
+  "email parser by zapier",
   "filter by zapier",
   "formatter by zapier",
   "looping by zapier",
   "paths by zapier",
+  "rss by zapier",
   "schedule by zapier",
+  "sms by zapier",
   "storage by zapier",
+  "sub-zap by zapier",
+  "transfer by zapier",
   "webhooks by zapier",
+  "zapier interfaces",
+  "zapier manager",
   "zapier tables",
 ];
+
+const ZAPIER_OPERATIONAL_APP_MAPPINGS: Record<string, Omit<ConverterLocation, "source_module_key" | "app" | "action">> = {
+  "code by zapier": {
+    strategy: "code_node",
+    confidence: "medium",
+    target_n8n_node_type: "n8n-nodes-base.code",
+    target_operation: "run_code",
+    notes: "Zapier Code steps become n8n Code nodes. The developer should review language/runtime differences.",
+  },
+  "delay by zapier": {
+    strategy: "code_node",
+    confidence: "high",
+    target_n8n_node_type: "n8n-nodes-base.wait",
+    target_operation: "wait_or_delay",
+  },
+  "email by zapier": {
+    strategy: "code_node",
+    confidence: "medium",
+    target_n8n_node_type: "n8n-nodes-base.emailSend",
+    target_operation: "send_email",
+  },
+  "email parser by zapier": {
+    strategy: "code_node",
+    confidence: "medium",
+    target_n8n_node_type: "n8n-nodes-base.emailReadImap",
+    target_operation: "parse_inbound_email",
+  },
+  "filter by zapier": {
+    strategy: "code_node",
+    confidence: "high",
+    target_n8n_node_type: "n8n-nodes-base.if",
+    target_operation: "conditional_filter",
+  },
+  "formatter by zapier": {
+    strategy: "code_node",
+    confidence: "medium",
+    target_n8n_node_type: "n8n-nodes-base.set",
+    target_operation: "format_transform",
+    notes: "Formatter text, number, date, line-item, and utility transforms map to Set/Edit Fields plus Code when the formula is custom.",
+  },
+  "looping by zapier": {
+    strategy: "code_node",
+    confidence: "high",
+    target_n8n_node_type: "n8n-nodes-base.splitOut",
+    target_operation: "loop_over_items",
+  },
+  "paths by zapier": {
+    strategy: "code_node",
+    confidence: "high",
+    target_n8n_node_type: "n8n-nodes-base.switch",
+    target_operation: "route_by_condition",
+    notes: "Zapier Paths become n8n Switch/IF branches when path rules are available; otherwise Nexus keeps a safe code placeholder for manual branch review.",
+  },
+  "rss by zapier": {
+    strategy: "code_node",
+    confidence: "medium",
+    target_n8n_node_type: "n8n-nodes-base.rssFeedRead",
+    target_operation: "read_rss_feed",
+  },
+  "schedule by zapier": {
+    strategy: "code_node",
+    confidence: "high",
+    target_n8n_node_type: "n8n-nodes-base.scheduleTrigger",
+    target_operation: "schedule_trigger",
+  },
+  "sms by zapier": {
+    strategy: "code_node",
+    confidence: "medium",
+    target_n8n_node_type: "n8n-nodes-base.twilio",
+    target_operation: "send_sms",
+  },
+  "storage by zapier": {
+    strategy: "code_node",
+    confidence: "medium",
+    target_n8n_node_type: "n8n-nodes-base.code",
+    target_operation: "key_value_storage",
+    notes: "Zapier Storage usually needs a Nexus-compatible data store or Supabase table decision before publishing.",
+  },
+  "sub-zap by zapier": {
+    strategy: "manual_support",
+    confidence: "low",
+    target_n8n_node_type: "n8n-nodes-base.executeWorkflow",
+    target_operation: "call_sub_workflow",
+    notes: "Sub-Zaps need a linked imported workflow; Nexus support should connect the child workflow before reuse.",
+  },
+  "transfer by zapier": {
+    strategy: "manual_support",
+    confidence: "low",
+    target_n8n_node_type: "n8n-nodes-base.code",
+    target_operation: "bulk_migration",
+    notes: "Zapier Transfer is a migration/bulk data movement utility, not a normal live automation step.",
+  },
+  "webhooks by zapier": {
+    strategy: "code_node",
+    confidence: "high",
+    target_n8n_node_type: "n8n-nodes-base.webhook",
+    target_operation: "webhook_or_http_request",
+  },
+  "zapier interfaces": {
+    strategy: "manual_support",
+    confidence: "low",
+    target_n8n_node_type: "n8n-nodes-base.formTrigger",
+    target_operation: "form_or_interface",
+    notes: "Zapier Interfaces include UI screens/forms that need a Nexus setup form or custom frontend equivalent.",
+  },
+  "zapier manager": {
+    strategy: "manual_support",
+    confidence: "low",
+    target_n8n_node_type: "n8n-nodes-base.code",
+    target_operation: "zap_management",
+    notes: "Zapier Manager controls Zapier itself and should not become a customer-facing runtime step without manual review.",
+  },
+  "zapier tables": {
+    strategy: "code_node",
+    confidence: "medium",
+    target_n8n_node_type: "n8n-nodes-base.code",
+    target_operation: "table_storage",
+    notes: "Zapier Tables should map to a Nexus/Supabase data table or supported external database before launch.",
+  },
+};
 
 const ZAPIER_COMMON_EXTERNAL_APPS = [
   "activecampaign",
@@ -1228,51 +1356,115 @@ function platformLabel(value: unknown) {
   return sourcePlatform(value) === "zapier" ? "Zapier" : "Make";
 }
 
-const MAKE_INTERNAL_LOGIC_MODULE_KEYS = [
-  "builtin:basicfeeder",
-  "builtin:break",
-  "builtin:composeastring",
-  "builtin:continue",
-  "builtin:incrementfunction",
-  "builtin:setvariable",
-  "flowcontrol:aggregator",
-  "flowcontrol:break",
-  "flowcontrol:filter",
-  "flowcontrol:iterator",
-  "flowcontrol:repeater",
-  "flowcontrol:router",
-  "gateway:customwebhook",
-  "json:aggregatejson",
-  "json:createjson",
-  "json:parsejson",
-  "math:average",
-  "math:ceil",
-  "math:floor",
-  "math:max",
-  "math:min",
-  "math:round",
-  "text:composeastring",
-  "text:matchpattern",
-  "text:parsehtml",
-  "text:replace",
-  "text:split",
-  "tools:composeastring",
-  "tools:getmultiplevariables",
-  "tools:getvariable",
-  "tools:incrementfunction",
-  "tools:setmultiplevariables",
-  "tools:setvariable",
-  "util:arrayaggregator",
-  "util:iterator",
-  "util:setvariable",
+type ConverterLocation = {
+  source_module_key: string;
+  app?: string;
+  action?: string;
+  strategy: "direct_n8n_node" | "http_request" | "code_node" | "manual_support";
+  confidence: "high" | "medium" | "low";
+  target_n8n_node_type?: string;
+  target_operation?: string;
+  notes?: string;
+};
+
+function operationalLocation(input: {
+  module: string;
+  target: string;
+  operation: string;
+  confidence?: "high" | "medium" | "low";
+  notes?: string;
+}): ConverterLocation {
+  return {
+    source_module_key: normalizeModuleKey(input.module),
+    strategy: "code_node",
+    confidence: input.confidence || "medium",
+    target_n8n_node_type: input.target,
+    target_operation: input.operation,
+    notes: input.notes || "",
+  };
+}
+
+const MAKE_OPERATIONAL_MODULE_MAPPINGS: ConverterLocation[] = [
+  operationalLocation({ module: "gateway:customwebhook", target: "n8n-nodes-base.webhook", operation: "incoming_webhook_trigger", confidence: "high", notes: "Nexus adds the final webhook trigger during import." }),
+  operationalLocation({ module: "gateway:webhook", target: "n8n-nodes-base.webhook", operation: "incoming_webhook_trigger", confidence: "high" }),
+  operationalLocation({ module: "webhooks:customwebhook", target: "n8n-nodes-base.webhook", operation: "incoming_webhook_trigger", confidence: "high" }),
+  operationalLocation({ module: "http:makearequest", target: "n8n-nodes-base.httpRequest", operation: "http_request", confidence: "high" }),
+  operationalLocation({ module: "http:makeapicall", target: "n8n-nodes-base.httpRequest", operation: "http_request", confidence: "high" }),
+  operationalLocation({ module: "http:make-a-request", target: "n8n-nodes-base.httpRequest", operation: "http_request", confidence: "high" }),
+  operationalLocation({ module: "http:make-an-api-call", target: "n8n-nodes-base.httpRequest", operation: "http_request", confidence: "high" }),
+  operationalLocation({ module: "builtin:basicfeeder", target: "n8n-nodes-base.splitOut", operation: "split_items" }),
+  operationalLocation({ module: "builtin:break", target: "n8n-nodes-base.stopAndError", operation: "stop_branch" }),
+  operationalLocation({ module: "builtin:composeastring", target: "n8n-nodes-base.set", operation: "compose_text" }),
+  operationalLocation({ module: "builtin:continue", target: "n8n-nodes-base.noOp", operation: "continue_branch" }),
+  operationalLocation({ module: "builtin:getvariable", target: "n8n-nodes-base.set", operation: "read_variable" }),
+  operationalLocation({ module: "builtin:getmultiplevariables", target: "n8n-nodes-base.set", operation: "read_variables" }),
+  operationalLocation({ module: "builtin:incrementfunction", target: "n8n-nodes-base.code", operation: "increment_counter" }),
+  operationalLocation({ module: "builtin:setvariable", target: "n8n-nodes-base.set", operation: "set_variable" }),
+  operationalLocation({ module: "builtin:setmultiplevariables", target: "n8n-nodes-base.set", operation: "set_variables" }),
+  operationalLocation({ module: "builtin:sleep", target: "n8n-nodes-base.wait", operation: "wait" }),
+  operationalLocation({ module: "builtin:delay", target: "n8n-nodes-base.wait", operation: "wait" }),
+  operationalLocation({ module: "flowcontrol:aggregator", target: "n8n-nodes-base.aggregate", operation: "aggregate_items" }),
+  operationalLocation({ module: "flowcontrol:arrayaggregator", target: "n8n-nodes-base.aggregate", operation: "aggregate_array" }),
+  operationalLocation({ module: "flowcontrol:textaggregator", target: "n8n-nodes-base.aggregate", operation: "aggregate_text" }),
+  operationalLocation({ module: "flowcontrol:break", target: "n8n-nodes-base.stopAndError", operation: "stop_branch" }),
+  operationalLocation({ module: "flowcontrol:commit", target: "n8n-nodes-base.noOp", operation: "commit_error_handler" }),
+  operationalLocation({ module: "flowcontrol:continue", target: "n8n-nodes-base.noOp", operation: "continue_branch" }),
+  operationalLocation({ module: "flowcontrol:filter", target: "n8n-nodes-base.if", operation: "conditional_filter", confidence: "high" }),
+  operationalLocation({ module: "flowcontrol:ignore", target: "n8n-nodes-base.noOp", operation: "ignore_error" }),
+  operationalLocation({ module: "flowcontrol:iterator", target: "n8n-nodes-base.splitOut", operation: "iterate_array", confidence: "high" }),
+  operationalLocation({ module: "flowcontrol:repeater", target: "n8n-nodes-base.loopOverItems", operation: "repeat_loop" }),
+  operationalLocation({ module: "flowcontrol:resume", target: "n8n-nodes-base.noOp", operation: "resume_error_handler" }),
+  operationalLocation({ module: "flowcontrol:rollback", target: "n8n-nodes-base.noOp", operation: "rollback_error_handler" }),
+  operationalLocation({ module: "flowcontrol:router", target: "n8n-nodes-base.switch", operation: "route_by_condition", confidence: "high", notes: "Make routers become n8n Switch/IF branches when route rules are available; otherwise Nexus keeps a safe code placeholder for manual branch review." }),
+  operationalLocation({ module: "flowcontrol:sleep", target: "n8n-nodes-base.wait", operation: "wait" }),
+  operationalLocation({ module: "flowcontrol:throw", target: "n8n-nodes-base.stopAndError", operation: "throw_error" }),
+  operationalLocation({ module: "json:aggregatejson", target: "n8n-nodes-base.aggregate", operation: "aggregate_json" }),
+  operationalLocation({ module: "json:createjson", target: "n8n-nodes-base.set", operation: "create_json" }),
+  operationalLocation({ module: "json:parsejson", target: "n8n-nodes-base.code", operation: "parse_json", confidence: "high" }),
+  operationalLocation({ module: "json:transformtojson", target: "n8n-nodes-base.code", operation: "transform_to_json" }),
+  operationalLocation({ module: "json:validatejson", target: "n8n-nodes-base.code", operation: "validate_json" }),
+  operationalLocation({ module: "text:composeastring", target: "n8n-nodes-base.set", operation: "compose_text" }),
+  operationalLocation({ module: "text:htmltotext", target: "n8n-nodes-base.html", operation: "extract_html_text" }),
+  operationalLocation({ module: "text:matchpattern", target: "n8n-nodes-base.code", operation: "regex_match" }),
+  operationalLocation({ module: "text:parsehtml", target: "n8n-nodes-base.html", operation: "parse_html" }),
+  operationalLocation({ module: "text:replace", target: "n8n-nodes-base.code", operation: "replace_text" }),
+  operationalLocation({ module: "text:split", target: "n8n-nodes-base.code", operation: "split_text" }),
+  operationalLocation({ module: "text:striphtml", target: "n8n-nodes-base.html", operation: "strip_html" }),
+  operationalLocation({ module: "csv:createcsv", target: "n8n-nodes-base.spreadsheetFile", operation: "create_csv" }),
+  operationalLocation({ module: "csv:parsecsv", target: "n8n-nodes-base.spreadsheetFile", operation: "parse_csv" }),
+  operationalLocation({ module: "xml:createxml", target: "n8n-nodes-base.xml", operation: "create_xml" }),
+  operationalLocation({ module: "xml:parsexml", target: "n8n-nodes-base.xml", operation: "parse_xml" }),
+  operationalLocation({ module: "math:average", target: "n8n-nodes-base.code", operation: "average" }),
+  operationalLocation({ module: "math:ceil", target: "n8n-nodes-base.code", operation: "ceil" }),
+  operationalLocation({ module: "math:floor", target: "n8n-nodes-base.code", operation: "floor" }),
+  operationalLocation({ module: "math:max", target: "n8n-nodes-base.code", operation: "max" }),
+  operationalLocation({ module: "math:min", target: "n8n-nodes-base.code", operation: "min" }),
+  operationalLocation({ module: "math:random", target: "n8n-nodes-base.code", operation: "random_number" }),
+  operationalLocation({ module: "math:round", target: "n8n-nodes-base.code", operation: "round" }),
+  operationalLocation({ module: "date:add", target: "n8n-nodes-base.dateTime", operation: "date_add" }),
+  operationalLocation({ module: "date:format", target: "n8n-nodes-base.dateTime", operation: "date_format" }),
+  operationalLocation({ module: "date:parse", target: "n8n-nodes-base.dateTime", operation: "date_parse" }),
+  operationalLocation({ module: "date:subtract", target: "n8n-nodes-base.dateTime", operation: "date_subtract" }),
+  operationalLocation({ module: "tools:arrayaggregator", target: "n8n-nodes-base.aggregate", operation: "aggregate_array" }),
+  operationalLocation({ module: "tools:composeastring", target: "n8n-nodes-base.set", operation: "compose_text" }),
+  operationalLocation({ module: "tools:getmultiplevariables", target: "n8n-nodes-base.set", operation: "read_variables" }),
+  operationalLocation({ module: "tools:getvariable", target: "n8n-nodes-base.set", operation: "read_variable" }),
+  operationalLocation({ module: "tools:incrementfunction", target: "n8n-nodes-base.code", operation: "increment_counter" }),
+  operationalLocation({ module: "tools:iterator", target: "n8n-nodes-base.splitOut", operation: "iterate_array" }),
+  operationalLocation({ module: "tools:repeater", target: "n8n-nodes-base.loopOverItems", operation: "repeat_loop" }),
+  operationalLocation({ module: "tools:setmultiplevariables", target: "n8n-nodes-base.set", operation: "set_variables" }),
+  operationalLocation({ module: "tools:setvariable", target: "n8n-nodes-base.set", operation: "set_variable" }),
+  operationalLocation({ module: "util:arrayaggregator", target: "n8n-nodes-base.aggregate", operation: "aggregate_array" }),
+  operationalLocation({ module: "util:basicfeeder", target: "n8n-nodes-base.splitOut", operation: "split_items" }),
+  operationalLocation({ module: "util:getmultiplevariables", target: "n8n-nodes-base.set", operation: "read_variables" }),
+  operationalLocation({ module: "util:getvariable", target: "n8n-nodes-base.set", operation: "read_variable" }),
+  operationalLocation({ module: "util:iterator", target: "n8n-nodes-base.splitOut", operation: "iterate_array" }),
+  operationalLocation({ module: "util:setmultiplevariables", target: "n8n-nodes-base.set", operation: "set_variables" }),
+  operationalLocation({ module: "util:setvariable", target: "n8n-nodes-base.set", operation: "set_variable" }),
 ];
 
 const MAKE_KNOWN_CONVERTER_LOCATIONS = [
-  ...MAKE_INTERNAL_LOGIC_MODULE_KEYS.map((module) => ({
-    source_module_key: normalizeModuleKey(module),
-    strategy: "code_node",
-    confidence: "medium",
-  })),
+  ...MAKE_OPERATIONAL_MODULE_MAPPINGS,
   ...MAKE_COMMON_EXTERNAL_APPS.flatMap((app) =>
     MAKE_COMMON_EXTERNAL_ACTIONS.map((action) => ({
       source_module_key: normalizeModuleKey(`${app}:${action}`),
@@ -1295,19 +1487,12 @@ const MAKE_KNOWN_CONVERTER_LOCATION_MAP = new Map(
 const ZAPIER_KNOWN_CONVERTER_LOCATIONS = [
   ...ZAPIER_CORE_APP_MAPPINGS.flatMap((app) => {
     const appKey = normalizeModuleKey(app);
-    const strategies: Record<string, { strategy: string; confidence: string }> = {
-      "webhooks by zapier": { strategy: "code_node", confidence: "high" },
-      "schedule by zapier": { strategy: "code_node", confidence: "high" },
-      "filter by zapier": { strategy: "code_node", confidence: "medium" },
-      "formatter by zapier": { strategy: "code_node", confidence: "medium" },
-      "paths by zapier": { strategy: "code_node", confidence: "medium" },
-      "delay by zapier": { strategy: "code_node", confidence: "medium" },
-      "looping by zapier": { strategy: "code_node", confidence: "medium" },
-      "code by zapier": { strategy: "code_node", confidence: "medium" },
-      "storage by zapier": { strategy: "http_request", confidence: "low" },
-      "zapier tables": { strategy: "http_request", confidence: "low" },
+    const strategy = ZAPIER_OPERATIONAL_APP_MAPPINGS[app] || {
+      strategy: "code_node",
+      confidence: "medium",
+      target_n8n_node_type: "n8n-nodes-base.code",
+      target_operation: "zapier_core_step",
     };
-    const strategy = strategies[app] || { strategy: "code_node", confidence: "medium" };
     return [
       {
         source_module_key: appKey,
@@ -1984,12 +2169,31 @@ function builtInMappingFor(group: any) {
     return {
       id: `builtin:${group.source_module_key}`,
       target_strategy: "code_node",
-      target_n8n_node_type: "n8n-nodes-base.code",
-      target_operation: "logic_passthrough",
+      target_n8n_node_type: knownLocation.target_n8n_node_type || "n8n-nodes-base.code",
+      target_operation: knownLocation.target_operation || "logic_passthrough",
       confidence: knownLocation.confidence || "medium",
       status: "global",
       scope: "global",
+      notes: knownLocation.notes || "",
       built_in: true,
+    };
+  }
+
+  if (knownLocation?.strategy === "manual_support") {
+    return {
+      id: `builtin-manual:${group.source_module_key}`,
+      target_strategy: "manual_support",
+      suggested_strategy: "manual_support",
+      target_n8n_node_type: knownLocation.target_n8n_node_type || "",
+      target_operation: knownLocation.target_operation || "",
+      confidence: knownLocation.confidence || "low",
+      status: "known",
+      scope: "global",
+      built_in: true,
+      known_converter_location: true,
+      known_app: knownLocation.app || group.source_app,
+      known_action: knownLocation.action || group.source_action,
+      reason: knownLocation.notes || `Nexus recognizes this ${platformLabel(group.source_platform)} operational step, but it needs manual review before it can become a safe n8n runtime step.`,
     };
   }
 
@@ -2124,6 +2328,8 @@ function summarizeGroups(groups: any[], mappings: any[]) {
         mapping_id: mapping.id,
         target_strategy: mapping.target_strategy,
         target_n8n_node_type: mapping.target_n8n_node_type,
+        target_operation: mapping.target_operation || "",
+        mapping_notes: mapping.notes || "",
         confidence: mapping.confidence || "low",
         mapping_status: mappingStatus,
         mapping_validated: mappingIsValidated,
@@ -2140,6 +2346,8 @@ function summarizeGroups(groups: any[], mappings: any[]) {
         known_converter_location: Boolean(manualMapping?.known_converter_location),
         known_app: manualMapping?.known_app || "",
         known_action: manualMapping?.known_action || "",
+        target_n8n_node_type: manualMapping?.target_n8n_node_type || "",
+        target_operation: manualMapping?.target_operation || "",
         confidence: manualMapping?.confidence || group.confidence || "low",
       });
     }
@@ -2691,14 +2899,19 @@ function buildN8nWorkflow(product: any, groups: any[], mappings: any[], platform
     if (mapping.target_strategy === "http_request") {
       node = makeHttpNode(safeName, index + 1, mapping);
     } else {
+      const suggestedNode = cleanString(mapping.target_n8n_node_type || "n8n-nodes-base.code");
+      const suggestedOperation = cleanString(mapping.target_operation || "logic_passthrough");
+      const mappingNotes = cleanString(mapping.notes || "");
       node = makeCodeNode(
         safeName,
         index + 1,
         [
           `// Converted from ${label} step: ${group.source_module}`,
-          `// This logic node preserves workflow order. Replace with exact n8n logic if the imported ${label} step used custom filters/routes.`,
+          `// Suggested n8n equivalent: ${suggestedNode} (${suggestedOperation}).`,
+          mappingNotes ? `// Notes: ${mappingNotes}` : "",
+          `// This logic node preserves workflow order. Replace with exact n8n logic if the imported ${label} step used custom filters/routes/loops that were not fully described in the source JSON.`,
           "return items;",
-        ].join("\n"),
+        ].filter(Boolean).join("\n"),
       );
     }
 
@@ -3248,6 +3461,8 @@ Deno.serve(async (req) => {
       message: "make-import-assistant is alive.",
       converter_locations: MAKE_KNOWN_CONVERTER_LOCATIONS.length,
       zapier_converter_locations: ZAPIER_KNOWN_CONVERTER_LOCATIONS.length,
+      make_operational_locations: MAKE_OPERATIONAL_MODULE_MAPPINGS.length,
+      zapier_operational_locations: Object.keys(ZAPIER_OPERATIONAL_APP_MAPPINGS).length,
       common_external_apps: MAKE_COMMON_EXTERNAL_APPS.length,
       zapier_common_external_apps: ZAPIER_COMMON_EXTERNAL_APPS.length,
       common_external_actions: MAKE_COMMON_EXTERNAL_ACTIONS.length,

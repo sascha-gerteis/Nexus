@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260703-saved-credentials">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260711-python-robustness">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
   <title>Developer Dashboard | Nexus AI</title>
@@ -1157,9 +1157,12 @@ Where to enter it: Credential vault, not inside the workflow JSON</code></pre>
         </div>
         <div class="python-editor-help">
           <strong>How Python credentials work</strong>
-          <p>Use <code>context["inputs"]</code> for buyer setup values and <code>context["credentials"]</code> for developer-owned keys saved in Nexus technical test data. Buyer-owned secrets should be setup fields with type <code>secret</code>.</p>
+          <p>Use <code>context["inputs"]</code> for buyer setup values and <code>context["credentials"]</code> for developer-owned keys saved in Nexus. The runner accepts <code>run(context)</code>, <code>main(context)</code>, <code>handler(event, context)</code>, async functions, <code>RESULT</code>, or printed JSON/text.</p>
           <pre><code>api_key = context["credentials"].get("openai_api_key")
-company_url = context["inputs"].get("company_url")</code></pre>
+company_url = context["inputs"].get("company_url")
+# Also available:
+# os.getenv("OPENAI_API_KEY")
+# os.getenv("NEXUS_SETUP_COMPANY_URL")</code></pre>
         </div>
         <div class="python-editor-log" id="pythonEditorLog">
           Save and run a Python technical test to see stdout, stderr, and returned output here.
@@ -1743,14 +1746,63 @@ company_url = context["inputs"].get("company_url")</code></pre>
       scan(/context\s*\[\s*["'](?:setup|inputs)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, setupKeys);
       scan(/context\s*\[\s*["'](?:setup|inputs)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, setupKeys);
       scan(/context\s*\.get\s*\(\s*["'](?:setup|inputs)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, setupKeys);
+      scan(/\b(?:setup|inputs)\s*\.get\s*\(\s*["']([^"']+)["']/g, setupKeys);
+      scan(/\b(?:setup|inputs)\s*\[\s*["']([^"']+)["']\s*\]/g, setupKeys);
 
       scan(/context\s*\[\s*["'](?:credentials|secrets)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, credentialKeys);
       scan(/context\s*\[\s*["'](?:credentials|secrets)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, credentialKeys);
       scan(/context\s*\.get\s*\(\s*["'](?:credentials|secrets)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, credentialKeys);
+      scan(/\b(?:credentials|secrets)\s*\.get\s*\(\s*["']([^"']+)["']/g, credentialKeys);
+      scan(/\b(?:credentials|secrets)\s*\[\s*["']([^"']+)["']\s*\]/g, credentialKeys);
 
       scan(/context\s*\[\s*["'](?:event|trigger|request)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, eventKeys);
       scan(/context\s*\[\s*["'](?:event|trigger|request)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, eventKeys);
       scan(/context\s*\.get\s*\(\s*["'](?:event|trigger|request)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, eventKeys);
+      scan(/\b(?:event|trigger|request)\s*\.get\s*\(\s*["']([^"']+)["']/g, eventKeys);
+      scan(/\b(?:event|trigger|request)\s*\[\s*["']([^"']+)["']\s*\]/g, eventKeys);
+
+      const classifyEnvKey = (rawKey) => {
+        const key = String(rawKey || "").trim();
+        if (!key || /^NEXUS_SETUP_JSON$/i.test(key) || /^NEXUS_(SECRETS|CREDENTIALS|EVENT|SYSTEM)_JSON$/i.test(key)) return;
+        const setupMatch = key.match(/^NEXUS_SETUP_(.+)$/i);
+        const secretMatch = key.match(/^NEXUS_(?:SECRET|CREDENTIAL)_(.+)$/i);
+        const eventMatch = key.match(/^NEXUS_(?:EVENT|TRIGGER)_(.+)$/i);
+        if (setupMatch?.[1]) return addKey(setupKeys, setupMatch[1]);
+        if (secretMatch?.[1]) return addKey(credentialKeys, secretMatch[1]);
+        if (eventMatch?.[1]) return addKey(eventKeys, eventMatch[1]);
+        if (/API[_-]?KEY|TOKEN|SECRET|PASSWORD|PRIVATE[_-]?KEY|WEBHOOK[_-]?URL|ACCESS[_-]?KEY|BEARER/i.test(key)) {
+          addKey(credentialKeys, key);
+        }
+      };
+
+      for (const match of text.matchAll(/os\s*\.\s*getenv\s*\(\s*["']([^"']+)["']/g)) classifyEnvKey(match[1]);
+      for (const match of text.matchAll(/os\s*\.\s*environ\s*\.get\s*\(\s*["']([^"']+)["']/g)) classifyEnvKey(match[1]);
+      for (const match of text.matchAll(/os\s*\.\s*environ\s*\[\s*["']([^"']+)["']\s*\]/g)) classifyEnvKey(match[1]);
+
+      scan(/\{\{\s*(?:NEXUS_SETUP|NX_SETUP|SETUP)\s*(?:[|.:=_\-\s]+)\s*([a-zA-Z0-9_. -]+?)\s*\}\}/gi, setupKeys);
+      scan(/\{\{\s*(?:NEXUS_SECRET|NEXUS_CREDENTIAL|NX_SECRET|CREDENTIAL|SECRET)\s*(?:[|.:=_\-\s]+)\s*([a-zA-Z0-9_. -]+?)\s*\}\}/gi, credentialKeys);
+      scan(/\{\{\s*(?:NEXUS_EVENT|NX_EVENT|EVENT|TRIGGER)\s*(?:[|.:=_\-\s]+)\s*([a-zA-Z0-9_. -]+?)\s*\}\}/gi, eventKeys);
+
+      [
+        [/api\.openai\.com|from\s+openai\s+import|import\s+openai|OpenAI\s*\(/i, "openai_api_key"],
+        [/api\.anthropic\.com|from\s+anthropic\s+import|import\s+anthropic|Anthropic\s*\(/i, "anthropic_api_key"],
+        [/api\.apify\.com|apify/i, "apify_token"],
+        [/generativelanguage\.googleapis\.com|google\.generativeai|gemini/i, "gemini_api_key"],
+        [/serpapi/i, "serpapi_api_key"],
+        [/serper/i, "serper_api_key"],
+        [/slack_sdk|hooks\.slack\.com|slack\.com\/api/i, "slack_bot_token"],
+        [/api\.telegram\.org|telegram/i, "telegram_bot_token"],
+        [/api\.sendgrid\.com|sendgrid/i, "sendgrid_api_key"],
+        [/api\.resend\.com|resend/i, "resend_api_key"],
+        [/api\.twilio\.com|twilio/i, "twilio_auth_token"],
+        [/api\.airtable\.com|airtable/i, "airtable_api_key"],
+        [/api\.notion\.com|notion/i, "notion_token"],
+        [/api\.hubapi\.com|hubspot/i, "hubspot_access_token"],
+        [/shopify/i, "shopify_access_token"],
+        [/api\.stripe\.com|stripe/i, "stripe_secret_key"]
+      ].forEach(([pattern, key]) => {
+        if (pattern.test(text)) addKey(credentialKeys, key);
+      });
 
       const setup = [...setupKeys].map((key) => inferredSchemaField(key, "setup")).filter(Boolean);
       const credentials = [...credentialKeys].map((key) => inferredSchemaField(key, "credential")).filter(Boolean);
@@ -6035,7 +6087,7 @@ company_url = context["inputs"].get("company_url")</code></pre>
               ${resolved.map((group) => `
                 <article>
                   <strong>${NexusUI.escapeHtml(group.source_module_label || group.source_module)}</strong>
-                  <span>${NexusUI.escapeHtml(group.target_strategy || "mapped")} | ${NexusUI.escapeHtml(group.mapping_status || "draft")} | used ${NexusUI.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</span>
+                  <span>${NexusUI.escapeHtml(group.target_strategy || "mapped")} | ${NexusUI.escapeHtml(group.target_n8n_node_type || "n8n substitute")} ${group.target_operation ? `(${NexusUI.escapeHtml(group.target_operation)})` : ""} | ${NexusUI.escapeHtml(group.mapping_status || "draft")} | used ${NexusUI.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</span>
                 </article>
               `).join("")}
             </div>
@@ -6091,14 +6143,17 @@ company_url = context["inputs"].get("company_url")</code></pre>
           return "";
         }
       };
+      const supportOnly = String(group.suggested_strategy || "http_request").toLowerCase() === "manual_support";
+      const cardLabel = isEdit ? "HTTP substitute needs test" : (supportOnly ? "Nexus support needed" : "HTTP substitute needed");
       return `
         <article class="make-module-card" data-make-module-card="${key}">
           <div class="make-module-card-head">
             <div>
               <strong>${NexusUI.escapeHtml(group.source_module_label || group.source_module || "Unsupported source step")}</strong>
               <p>${NexusUI.escapeHtml(group.source_app || "Make")} ${group.source_action ? `| ${NexusUI.escapeHtml(group.source_action)}` : ""} | used ${NexusUI.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</p>
+              ${group.target_n8n_node_type ? `<p>Suggested n8n substitute: ${NexusUI.escapeHtml(group.target_n8n_node_type)} ${group.target_operation ? `(${NexusUI.escapeHtml(group.target_operation)})` : ""}</p>` : ""}
             </div>
-            <span class="pill orange">${isEdit ? "HTTP substitute needs test" : "HTTP substitute needed"}</span>
+            <span class="pill orange">${cardLabel}</span>
           </div>
 
           <details>

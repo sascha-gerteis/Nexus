@@ -66,6 +66,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://nexus-ai.software/status/</loc>
+    <lastmod>2026-07-12</lastmod>
+    <priority>0.55</priority>
+  </url>
+  <url>
     <loc>https://nexus-ai.software/pages/buyer-onboarding/index.html</loc>
     <lastmod>2026-06-29</lastmod>
     <priority>0.45</priority>

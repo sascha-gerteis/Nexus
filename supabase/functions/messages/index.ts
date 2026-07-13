@@ -23,6 +23,26 @@ function previewText(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, 180);
 }
 
+function attachmentList(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
+function sanitizeAttachments(value: unknown) {
+  return attachmentList(value)
+    .slice(0, 5)
+    .map((item) => {
+      const attachment = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return {
+        bucket: cleanString(attachment.bucket) || "message-attachments",
+        path: cleanString(attachment.path),
+        file_name: cleanString(attachment.file_name || attachment.name).slice(0, 180) || "attachment",
+        file_type: cleanString(attachment.file_type || attachment.type).slice(0, 120) || "application/octet-stream",
+        file_size: Number(attachment.file_size || attachment.size || 0) || 0,
+      };
+    })
+    .filter((attachment) => attachment.path && attachment.file_size <= 15 * 1024 * 1024);
+}
+
 async function loadProfileRecipient(adminClient: any, profileId: string) {
   if (!profileId) return null;
 
@@ -218,11 +238,12 @@ async function markRead(adminClient: any, actor: any, thread: any) {
   return { error: null, status: 200 };
 }
 
-async function insertMessage(adminClient: any, actor: any, thread: any, body: string) {
+async function insertMessage(adminClient: any, actor: any, thread: any, body: string, attachmentsInput: unknown = []) {
   const text = cleanString(body);
+  const attachments = sanitizeAttachments(attachmentsInput);
 
-  if (text.length < 1) {
-    return { data: null, error: "Write a message first.", status: 400 };
+  if (text.length < 1 && !attachments.length) {
+    return { data: null, error: "Write a message or attach a file first.", status: 400 };
   }
 
   if (text.length > 4000) {
@@ -242,6 +263,7 @@ async function insertMessage(adminClient: any, actor: any, thread: any, body: st
       sender_id: actor.user.id,
       sender_role: senderRole,
       body: text,
+      attachments,
       created_at: nowIso(),
     })
     .select()
@@ -251,7 +273,7 @@ async function insertMessage(adminClient: any, actor: any, thread: any, body: st
 
   const update: Record<string, unknown> = {
     last_message_at: nowIso(),
-    last_message_preview: previewText(text),
+    last_message_preview: previewText(text || `${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`),
     last_sender_role: senderRole,
     updated_at: nowIso(),
   };
@@ -280,7 +302,7 @@ async function insertMessage(adminClient: any, actor: any, thread: any, body: st
   if (threadError) throw new Error(threadError.message);
 
   await markRead(adminClient, actor, updatedThread);
-  await queueMessageNotification(adminClient, actor, updatedThread, message, text);
+  await queueMessageNotification(adminClient, actor, updatedThread, message, text || `${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`);
 
   return {
     data: {
@@ -508,7 +530,7 @@ Deno.serve(async (req) => {
       if (!canAccessThread(actor, thread)) {
         return errorResponse("Message thread not found.", 404);
       }
-      result = await insertMessage(adminClient, actor, thread, cleanString(body.message));
+      result = await insertMessage(adminClient, actor, thread, cleanString(body.message), body.attachments);
     } else if (action === "mark_read") {
       const thread = await loadThread(adminClient, cleanString(body.thread_id));
       const readResult = await markRead(adminClient, actor, thread);

@@ -35,16 +35,26 @@ async function getUserFromRequest(req: Request, supabaseUrl: string, anonKey: st
   return data.user;
 }
 
-async function isAdmin(adminClient: any, userId: string) {
-  const { data, error } = await adminClient
+async function getOperatorContext(adminClient: any, userId: string) {
+  const { data: profile, error } = await adminClient
     .from("profiles")
-    .select("role")
+    .select("id, role")
     .eq("id", userId)
     .maybeSingle();
 
-  if (error) return false;
+  if (error || !profile) return { profile: null, developer: null };
 
-  return data?.role === "admin" || data?.role === "developer";
+  if (profile.role === "developer") {
+    const { data: developer } = await adminClient
+      .from("developers")
+      .select("id, profile_id")
+      .eq("profile_id", userId)
+      .maybeSingle();
+
+    return { profile, developer: developer || null };
+  }
+
+  return { profile, developer: null };
 }
 
 async function loadAutomation(adminClient: any, automationId: string) {
@@ -59,6 +69,15 @@ async function loadAutomation(adminClient: any, automationId: string) {
   }
 
   return data;
+}
+
+function canAccessAutomation(operator: any, automation: any) {
+  const role = cleanString(operator?.profile?.role).toLowerCase();
+  if (role === "admin" || role === "admin_staff") return true;
+  if (role !== "developer") return false;
+
+  const developerId = cleanString(operator?.developer?.id);
+  return Boolean(developerId && cleanString(automation?.developer_id) === developerId);
 }
 
 async function getDefaultProfile(adminClient: any, automationId: string) {
@@ -188,9 +207,9 @@ Deno.serve(async (req) => {
       return errorResponse("Admin login required.", 401);
     }
 
-    const allowed = await isAdmin(adminClient, user.id);
+    const operator = await getOperatorContext(adminClient, user.id);
 
-    if (!allowed) {
+    if (!["admin", "admin_staff", "developer"].includes(cleanString(operator.profile?.role))) {
       return errorResponse("Admin or developer access required.", 403);
     }
 
@@ -203,6 +222,10 @@ Deno.serve(async (req) => {
     }
 
     const automation = await loadAutomation(adminClient, automationId);
+
+    if (!canAccessAutomation(operator, automation)) {
+      return errorResponse("You can only manage test data for your own products.", 403);
+    }
 
     if (mode === "get") {
       const profile = await getDefaultProfile(adminClient, automation.id);

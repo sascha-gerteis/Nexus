@@ -21,6 +21,71 @@ alter table if exists public.profiles
     or role in ('buyer', 'developer', 'admin', 'admin_staff')
   );
 
+create or replace function public.is_admin_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and role = 'admin_staff'
+  );
+$$;
+
+create or replace function public.has_admin_access()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and role in ('admin', 'admin_staff')
+  );
+$$;
+
+drop policy if exists "Staff read profiles" on public.profiles;
+create policy "Staff read profiles"
+on public.profiles for select
+using (public.has_admin_access() or id = auth.uid());
+
+drop policy if exists "Staff read developers" on public.developers;
+create policy "Staff read developers"
+on public.developers for select
+using (public.has_admin_access());
+
+drop policy if exists "Staff read automations" on public.automations;
+create policy "Staff read automations"
+on public.automations for select
+using (public.has_admin_access());
+
+drop policy if exists "Staff read reviews" on public.reviews;
+create policy "Staff read reviews"
+on public.reviews for select
+using (public.has_admin_access());
+
+drop policy if exists "Staff read developer waitlist" on public.developer_waitlist;
+create policy "Staff read developer waitlist"
+on public.developer_waitlist for select
+using (public.has_admin_access());
+
+drop policy if exists "Staff read contact messages" on public.contact_messages;
+create policy "Staff read contact messages"
+on public.contact_messages for select
+using (public.has_admin_access());
+
+drop policy if exists "Staff read checkout intents" on public.checkout_intents;
+create policy "Staff read checkout intents"
+on public.checkout_intents for select
+using (public.has_admin_access());
+
 -- Promote an existing signed-up user to restricted staff.
 -- Change this email before running.
 with target_user as (

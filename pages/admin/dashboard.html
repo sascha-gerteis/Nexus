@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -12,7 +12,7 @@
     rel="stylesheet"
   >
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260710-admin-staff-analytics">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -277,6 +277,22 @@
               </button>
             </div>
           </div>
+
+          <div class="admin-control-card" id="paymentModeCard">
+            <span class="pill orange" id="paymentModePill">Payments</span>
+            <h3>Payment test mode</h3>
+            <p>Switch Checkout to Stripe test mode so you can buy products with a test card without charging real money.</p>
+            <div class="admin-control-stats"><span>Status</span><strong id="paymentModeStatus">Loading...</strong></div>
+            <p id="paymentModeDetails" style="font-size:.86rem;color:var(--muted);margin-top:.65rem">Checking payment environment...</p>
+            <div class="hero-actions" style="justify-content:flex-start;margin-top:.8rem;gap:.5rem">
+              <button class="btn btn-primary btn-small" id="paymentModeEnableTest" type="button" onclick="NexusApp.enablePaymentTestMode()">
+                Turn on test payments
+              </button>
+              <button class="btn btn-secondary btn-small" id="paymentModeDisableTest" type="button" onclick="NexusApp.disablePaymentTestMode()">
+                Return to live payments
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -291,8 +307,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
-  <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
-  <script src="/assets/js/nexus-app.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260712-payment-test-mode"></script>
+  <script src="/assets/js/nexus-db.js?v=20260712-payment-test-mode"></script>
+  <script src="/assets/js/nexus-app.js?v=20260712-payment-test-mode"></script>
 </body>
 </html>

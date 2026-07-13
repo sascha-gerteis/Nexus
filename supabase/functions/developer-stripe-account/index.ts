@@ -395,7 +395,9 @@ async function backfillDeveloperEarningsForPaidOrders(adminClient: any, develope
     throw new Error(ordersError.message);
   }
 
-  const orders = paidOrders || [];
+  const orders = (paidOrders || []).filter((order: any) => {
+    return cleanString(order.payment_environment || "live").toLowerCase() !== "test";
+  });
   if (!orders.length) return result;
 
   const { data: existing, error: existingError } = await adminClient
@@ -880,11 +882,15 @@ async function getAdminFinanceSummary(adminClient: any) {
     throw new Error(payoutError.message);
   }
 
+  const livePaidOrders = (paidOrders || []).filter((order: any) => {
+    return cleanString(order.payment_environment || "live").toLowerCase() !== "test";
+  });
+
   return {
     totals: summarizeEarnings(safeEarnings),
-    order_totals: summarizePaidOrders(paidOrders || [], safeEarnings),
+    order_totals: summarizePaidOrders(livePaidOrders, safeEarnings),
     earnings: safeEarnings,
-    paid_orders: paidOrders || [],
+    paid_orders: livePaidOrders,
     developers: developers || [],
     payout_requests: payoutRequests || [],
     schema_warning: schemaWarning,

@@ -2,15 +2,58 @@ import Stripe from "https://esm.sh/stripe@14.25.0?target=deno";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { safeEnqueueEmail } from "../_shared/nexus-email.ts";
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-  apiVersion: "2024-06-20",
-});
+function createStripeClient(secretKey: string) {
+  return new Stripe(secretKey || "", {
+    apiVersion: "2024-06-20",
+  });
+}
+
+const liveStripe = createStripeClient(Deno.env.get("STRIPE_SECRET_KEY") || "");
+const testStripe = createStripeClient(Deno.env.get("STRIPE_TEST_SECRET_KEY") || Deno.env.get("STRIPE_SECRET_KEY") || "");
 
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") || "";
+const STRIPE_TEST_WEBHOOK_SECRET = Deno.env.get("STRIPE_TEST_WEBHOOK_SECRET") || "";
+
+async function constructStripeWebhookEvent(body: string, signature: string) {
+  const candidates: Array<{ name: "live" | "test"; secret: string }> = [];
+
+  if (STRIPE_WEBHOOK_SECRET) {
+    candidates.push({ name: "live", secret: STRIPE_WEBHOOK_SECRET });
+  }
+
+  if (STRIPE_TEST_WEBHOOK_SECRET) {
+    candidates.push({ name: "test", secret: STRIPE_TEST_WEBHOOK_SECRET });
+  }
+
+  const errors: string[] = [];
+
+  for (const candidate of candidates) {
+    try {
+      const client = candidate.name === "test" ? testStripe : liveStripe;
+      const event = await client.webhooks.constructEventAsync(
+        body,
+        signature,
+        candidate.secret,
+        undefined,
+        cryptoProvider,
+      );
+
+      return {
+        event,
+        stripeClient: event.livemode ? liveStripe : testStripe,
+        environment: event.livemode ? "live" : "test",
+      };
+    } catch (error) {
+      errors.push(`${candidate.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw new Error(errors.join(" | ") || "Stripe webhook secret is not configured.");
+}
 
 const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -207,7 +250,7 @@ async function recordEvent(event: Stripe.Event) {
   });
 }
 
-async function getSubscriptionSnapshot(subscriptionId: string) {
+async function getSubscriptionSnapshot(subscriptionId: string, stripeClient = liveStripe) {
   if (!subscriptionId) {
     return {
       status: "",
@@ -218,7 +261,7 @@ async function getSubscriptionSnapshot(subscriptionId: string) {
   }
 
   try {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const subscription = await stripeClient.subscriptions.retrieve(subscriptionId);
 
     return {
       status: cleanString(subscription.status),
@@ -371,7 +414,7 @@ async function getAutomationProduct(automationId: string) {
   return data;
 }
 
-async function getStripeFeeSnapshot(paymentIntentId = "") {
+async function getStripeFeeSnapshot(paymentIntentId = "", stripeClient = liveStripe) {
   if (!paymentIntentId) {
     return {
       stripeFeeAmount: 0,
@@ -381,7 +424,7 @@ async function getStripeFeeSnapshot(paymentIntentId = "") {
   }
 
   try {
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    const paymentIntent = await stripeClient.paymentIntents.retrieve(paymentIntentId, {
       expand: ["latest_charge.balance_transaction"],
     });
 
@@ -404,7 +447,7 @@ async function getStripeFeeSnapshot(paymentIntentId = "") {
   }
 }
 
-async function getInvoicePaymentSnapshot(invoiceId = "") {
+async function getInvoicePaymentSnapshot(invoiceId = "", stripeClient = liveStripe) {
   if (!invoiceId) {
     return {
       sourceType: "subscription_invoice",
@@ -416,7 +459,7 @@ async function getInvoicePaymentSnapshot(invoiceId = "") {
   }
 
   try {
-    const invoice: any = await stripe.invoices.retrieve(invoiceId, {
+    const invoice: any = await stripeClient.invoices.retrieve(invoiceId, {
       expand: ["payment_intent"],
     });
     const paymentIntent: any = invoice.payment_intent;
@@ -449,6 +492,7 @@ async function recordDeveloperEarningForOrder(
     grossAmount?: number;
     paymentIntentId?: string;
     stripeFeeAmount?: number;
+    stripeClient?: Stripe;
     metadata?: Record<string, unknown>;
   },
 ) {
@@ -466,7 +510,10 @@ async function recordDeveloperEarningForOrder(
         chargeId: "",
         balanceTransactionId: "",
       }
-    : await getStripeFeeSnapshot(options.paymentIntentId || cleanString(order.stripe_payment_intent_id));
+    : await getStripeFeeSnapshot(
+        options.paymentIntentId || cleanString(order.stripe_payment_intent_id),
+        options.stripeClient || liveStripe,
+      );
 
   const grossAmount = roundMoney(
     Number(options.grossAmount || 0) ||
@@ -904,7 +951,7 @@ async function activateBundleSchedulesIfReady(order: any, subscriptionStatus = "
   }
 }
 
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session, stripeClient = liveStripe) {
   const orderId = session.metadata?.order_id;
 
   if (!orderId) {
@@ -925,6 +972,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const isSubscription = session.mode === "subscription";
   const isPaid = session.payment_status === "paid" || isSubscription;
+  const isTestPayment = cleanString(order.payment_environment).toLowerCase() === "test" || session.livemode === false;
 
   const stripeCustomerId =
     typeof session.customer === "string"
@@ -942,7 +990,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       : order.stripe_subscription_id;
 
   const subscriptionSnapshot = isSubscription
-    ? await getSubscriptionSnapshot(stripeSubscriptionId)
+    ? await getSubscriptionSnapshot(stripeSubscriptionId, stripeClient)
     : {
         status: "",
         current_period_start: null,
@@ -979,7 +1027,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  if (!isSubscription && isPaid) {
+  if (!isSubscription && isPaid && !isTestPayment) {
     await recordDeveloperEarningForOrder(
       {
         ...order,
@@ -992,6 +1040,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         sourceId: stripePaymentIntentId || session.id,
         grossAmount: stripeAmountToMajor(session.amount_total || 0) || Number(order.stripe_amount_total || 0),
         paymentIntentId: stripePaymentIntentId,
+        stripeClient,
         metadata: {
           checkout_session_id: session.id,
         },
@@ -999,9 +1048,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     );
   }
 
-  if (isSubscription && isPaid) {
+  if (isSubscription && isPaid && !isTestPayment) {
     const invoiceId = typeof (session as any).invoice === "string" ? (session as any).invoice : "";
-    const invoiceSnapshot = await getInvoicePaymentSnapshot(invoiceId);
+    const invoiceSnapshot = await getInvoicePaymentSnapshot(invoiceId, stripeClient);
 
     await recordDeveloperEarningForOrder(
       {
@@ -1020,6 +1069,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           Number(order.stripe_amount_total || 0),
         paymentIntentId: invoiceSnapshot.paymentIntentId || stripePaymentIntentId,
         stripeFeeAmount: invoiceSnapshot.stripeFeeAmount,
+        stripeClient,
         metadata: {
           checkout_session_id: session.id,
           stripe_invoice_id: invoiceId,
@@ -1167,14 +1217,14 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
   });
 }
 
-async function handleInvoicePaid(invoice: Stripe.Invoice) {
+async function handleInvoicePaid(invoice: Stripe.Invoice, stripeClient = liveStripe) {
   const subscriptionId =
     typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : "";
 
   if (!subscriptionId) return;
 
   const period = getInvoicePeriod(invoice);
-  const subscriptionSnapshot = await getSubscriptionSnapshot(subscriptionId);
+  const subscriptionSnapshot = await getSubscriptionSnapshot(subscriptionId, stripeClient);
 
   const { data: order } = await adminClient
     .from("orders")
@@ -1183,6 +1233,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     .maybeSingle();
 
   if (!order) return;
+  const isTestPayment = cleanString(order.payment_environment).toLowerCase() === "test" || invoice.livemode === false;
 
   await safeUpdateOrder(order.id, {
     payment_status: "paid",
@@ -1208,26 +1259,29 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
   const invoicePaymentIntentId =
     typeof (invoice as any).payment_intent === "string" ? (invoice as any).payment_intent : "";
 
-  await recordDeveloperEarningForOrder(
-    {
-      ...order,
-      payment_status: "paid",
-      stripe_subscription_status: subscriptionSnapshot.status || "active",
-      stripe_payment_intent_id: invoicePaymentIntentId || order.stripe_payment_intent_id,
-    },
-    {
-      sourceType: "subscription_invoice",
-      sourceId: invoice.id,
-      grossAmount: stripeAmountToMajor((invoice as any).amount_paid || 0),
-      paymentIntentId: invoicePaymentIntentId,
-      metadata: {
-        stripe_invoice_id: invoice.id,
-        stripe_subscription_id: subscriptionId,
-        period_start: period.start,
-        period_end: period.end,
+  if (!isTestPayment) {
+    await recordDeveloperEarningForOrder(
+      {
+        ...order,
+        payment_status: "paid",
+        stripe_subscription_status: subscriptionSnapshot.status || "active",
+        stripe_payment_intent_id: invoicePaymentIntentId || order.stripe_payment_intent_id,
       },
-    },
-  );
+      {
+        sourceType: "subscription_invoice",
+        sourceId: invoice.id,
+        grossAmount: stripeAmountToMajor((invoice as any).amount_paid || 0),
+        paymentIntentId: invoicePaymentIntentId,
+        stripeClient,
+        metadata: {
+          stripe_invoice_id: invoice.id,
+          stripe_subscription_id: subscriptionId,
+          period_start: period.start,
+          period_end: period.end,
+        },
+      },
+    );
+  }
 
   await activateScheduleIfReady(
     { ...order, payment_status: "paid", stripe_subscription_status: subscriptionSnapshot.status || "active" },
@@ -1344,15 +1398,12 @@ Deno.serve(async (request) => {
   const body = await request.text();
 
   let event: Stripe.Event;
+  let stripeClient = liveStripe;
 
   try {
-    event = await stripe.webhooks.constructEventAsync(
-      body,
-      signature || "",
-      STRIPE_WEBHOOK_SECRET,
-      undefined,
-      cryptoProvider,
-    );
+    const constructed = await constructStripeWebhookEvent(body, signature || "");
+    event = constructed.event;
+    stripeClient = constructed.stripeClient;
   } catch (error) {
     console.error("Webhook signature verification failed:", error);
 
@@ -1377,7 +1428,7 @@ Deno.serve(async (request) => {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        await handleCheckoutCompleted(session);
+        await handleCheckoutCompleted(session, stripeClient);
         break;
       }
 
@@ -1389,7 +1440,7 @@ Deno.serve(async (request) => {
 
       case "invoice.paid": {
         const invoice = event.data.object as Stripe.Invoice;
-        await handleInvoicePaid(invoice);
+        await handleInvoicePaid(invoice, stripeClient);
         break;
       }
 
@@ -1422,7 +1473,7 @@ Deno.serve(async (request) => {
         const chargeId = typeof dispute.charge === "string" ? dispute.charge : "";
 
         if (chargeId) {
-          const charge = await stripe.charges.retrieve(chargeId);
+          const charge = await stripeClient.charges.retrieve(chargeId);
           await markDeveloperEarningForCharge(charge, "disputed");
         }
 

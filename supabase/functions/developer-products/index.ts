@@ -183,6 +183,229 @@ function cleanWorkflowMappings(value: unknown) {
     .slice(0, 80);
 }
 
+function normalizeWorkspaceKey(value: unknown) {
+  const aliases: Record<string, string> = {
+    main_website: "company_url",
+    company_website: "company_url",
+    company_site: "company_url",
+    business_website: "company_url",
+    business_site: "company_url",
+    buyer_website: "company_url",
+    client_website: "company_url",
+    customer_website: "company_url",
+    competitor_websites: "competitor_urls",
+    competitor_sites: "competitor_urls",
+    competitors: "competitor_urls",
+    competitor_list: "competitor_urls",
+    market_or_region: "market_region",
+    target_market: "market_region",
+    target_audience: "target_customer",
+    ideal_customer: "target_customer",
+    customer_persona: "target_customer",
+    buyer_persona: "target_customer",
+    apify_key: "apify_token",
+    apify_api_key: "apify_token",
+    apify_access_token: "apify_token",
+    openai_key: "openai_api_key",
+    openai_token: "openai_api_key",
+    open_ai_api_key: "openai_api_key",
+    gpt_key: "openai_api_key",
+  };
+
+  const key = cleanString(value)
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+
+  return aliases[key] || key;
+}
+
+function pythonFieldLabelFromKey(key = "") {
+  return cleanString(key)
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .trim() || "Field";
+}
+
+function pythonFieldTypeFromKey(key = "", source = "setup") {
+  const text = cleanString(key).toLowerCase();
+  if (source === "credential" || /api[_-]?key|token|secret|password|credential|private[_-]?key/.test(text)) return "secret";
+  if (/url|website|link|uri/.test(text)) return "url";
+  if (/email/.test(text)) return "email";
+  if (/count|number|max|min|amount|price|cost|limit|days|hours|minutes|interval|timeout|quantity|rows|page/.test(text)) return "number";
+  if (/prompt|description|message|content|notes|summary|bio|instructions|query|keywords|competitor|areas/.test(text)) return "textarea";
+  return "text";
+}
+
+function inferredPythonSchemaField(key = "", source = "setup") {
+  const name = normalizeWorkspaceKey(key);
+  if (!name) return null;
+
+  return {
+    name,
+    label: pythonFieldLabelFromKey(name),
+    type: pythonFieldTypeFromKey(name, source),
+    required: true,
+    placeholder: "",
+    description: source === "credential"
+      ? "Developer-owned credential passed to Python as context.credentials and environment variables."
+      : source === "event"
+        ? "On-demand event value passed to Python as context.event."
+        : "Buyer setup value passed to Python as context.inputs.",
+    options: [],
+  };
+}
+
+function mergeSchemaFields(existing: any[] = [], generated: any[] = []) {
+  const output: any[] = [];
+  const names = new Set<string>();
+
+  const add = (field: any) => {
+    if (!isRecord(field)) return;
+    const name = normalizeWorkspaceKey(field.name);
+    if (!name || names.has(name)) return;
+    names.add(name);
+    output.push({ ...field, name });
+  };
+
+  for (const field of cleanSchema(existing)) add(field);
+  for (const field of generated || []) add(field);
+
+  return output.slice(0, 50);
+}
+
+function mergeWorkflowPlaceholderMappings(existing: any[] = [], generated: any[] = []) {
+  const output: any[] = [];
+  const seen = new Set<string>();
+
+  const add = (item: any) => {
+    if (!isRecord(item)) return;
+    const placeholder = cleanString(item.placeholder).slice(0, 160);
+    const source = cleanString(item.source || item.kind || item.type).toLowerCase();
+    const key = normalizeWorkspaceKey(item.key || item.name);
+    const identity = `${placeholder}:${source}:${key}`;
+    if (!placeholder || !source || !key || seen.has(identity)) return;
+    seen.add(identity);
+    output.push({
+      ...item,
+      placeholder,
+      source,
+      key,
+      description: cleanString(item.description).slice(0, 300),
+    });
+  };
+
+  for (const item of cleanWorkflowMappings(existing)) add(item);
+  for (const item of generated || []) add(item);
+
+  return output.slice(0, 80);
+}
+
+function addPythonKey(target: Set<string>, key: unknown) {
+  const normalized = normalizeWorkspaceKey(key);
+  if (normalized && !["json", "raw", "payload", "context", "data"].includes(normalized)) {
+    target.add(normalized);
+  }
+}
+
+function classifyPythonEnvKey(rawKey: string, setupKeys: Set<string>, credentialKeys: Set<string>, eventKeys: Set<string>) {
+  const key = cleanString(rawKey);
+  if (!key) return;
+
+  if (/^NEXUS_SETUP_JSON$/i.test(key) || /^NEXUS_(SECRETS|CREDENTIALS|EVENT|SYSTEM)_JSON$/i.test(key)) return;
+
+  const setupMatch = key.match(/^NEXUS_SETUP_(.+)$/i);
+  const secretMatch = key.match(/^NEXUS_(?:SECRET|CREDENTIAL)_(.+)$/i);
+  const eventMatch = key.match(/^NEXUS_(?:EVENT|TRIGGER)_(.+)$/i);
+
+  if (setupMatch?.[1]) return addPythonKey(setupKeys, setupMatch[1]);
+  if (secretMatch?.[1]) return addPythonKey(credentialKeys, secretMatch[1]);
+  if (eventMatch?.[1]) return addPythonKey(eventKeys, eventMatch[1]);
+  if (/API[_-]?KEY|TOKEN|SECRET|PASSWORD|PRIVATE[_-]?KEY|WEBHOOK[_-]?URL|ACCESS[_-]?KEY|BEARER/i.test(key)) {
+    return addPythonKey(credentialKeys, key);
+  }
+}
+
+function inferPythonSchemasFromCode(code: string) {
+  const text = rawText(code);
+  const setupKeys = new Set<string>();
+  const credentialKeys = new Set<string>();
+  const eventKeys = new Set<string>();
+
+  const scan = (regex: RegExp, target: Set<string>) => {
+    for (const match of text.matchAll(regex)) {
+      addPythonKey(target, match[1] || match[2] || match[3] || "");
+    }
+  };
+
+  scan(/context\s*\[\s*["'](?:setup|inputs)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, setupKeys);
+  scan(/context\s*\[\s*["'](?:setup|inputs)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, setupKeys);
+  scan(/context\s*\.get\s*\(\s*["'](?:setup|inputs)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, setupKeys);
+  scan(/\b(?:setup|inputs)\s*\.get\s*\(\s*["']([^"']+)["']/g, setupKeys);
+  scan(/\b(?:setup|inputs)\s*\[\s*["']([^"']+)["']\s*\]/g, setupKeys);
+
+  scan(/context\s*\[\s*["'](?:credentials|secrets)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, credentialKeys);
+  scan(/context\s*\[\s*["'](?:credentials|secrets)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, credentialKeys);
+  scan(/context\s*\.get\s*\(\s*["'](?:credentials|secrets)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, credentialKeys);
+  scan(/\b(?:credentials|secrets)\s*\.get\s*\(\s*["']([^"']+)["']/g, credentialKeys);
+  scan(/\b(?:credentials|secrets)\s*\[\s*["']([^"']+)["']\s*\]/g, credentialKeys);
+
+  scan(/context\s*\[\s*["'](?:event|trigger|request)["']\s*\]\s*\.get\s*\(\s*["']([^"']+)["']/g, eventKeys);
+  scan(/context\s*\[\s*["'](?:event|trigger|request)["']\s*\]\s*\[\s*["']([^"']+)["']\s*\]/g, eventKeys);
+  scan(/context\s*\.get\s*\(\s*["'](?:event|trigger|request)["']\s*,\s*\{\s*\}\s*\)\s*\.get\s*\(\s*["']([^"']+)["']/g, eventKeys);
+  scan(/\b(?:event|trigger|request)\s*\.get\s*\(\s*["']([^"']+)["']/g, eventKeys);
+  scan(/\b(?:event|trigger|request)\s*\[\s*["']([^"']+)["']\s*\]/g, eventKeys);
+
+  for (const match of text.matchAll(/os\s*\.\s*getenv\s*\(\s*["']([^"']+)["']/g)) classifyPythonEnvKey(match[1], setupKeys, credentialKeys, eventKeys);
+  for (const match of text.matchAll(/os\s*\.\s*environ\s*\.get\s*\(\s*["']([^"']+)["']/g)) classifyPythonEnvKey(match[1], setupKeys, credentialKeys, eventKeys);
+  for (const match of text.matchAll(/os\s*\.\s*environ\s*\[\s*["']([^"']+)["']\s*\]/g)) classifyPythonEnvKey(match[1], setupKeys, credentialKeys, eventKeys);
+
+  scan(/\{\{\s*(?:NEXUS_SETUP|NX_SETUP|SETUP)\s*(?:[|.:=_\-\s]+)\s*([a-zA-Z0-9_. -]+?)\s*\}\}/gi, setupKeys);
+  scan(/\{\{\s*(?:NEXUS_SECRET|NEXUS_CREDENTIAL|NX_SECRET|CREDENTIAL|SECRET)\s*(?:[|.:=_\-\s]+)\s*([a-zA-Z0-9_. -]+?)\s*\}\}/gi, credentialKeys);
+  scan(/\{\{\s*(?:NEXUS_EVENT|NX_EVENT|EVENT|TRIGGER)\s*(?:[|.:=_\-\s]+)\s*([a-zA-Z0-9_. -]+?)\s*\}\}/gi, eventKeys);
+
+  const providerHints: Array<[RegExp, string]> = [
+    [/api\.openai\.com|from\s+openai\s+import|import\s+openai|OpenAI\s*\(/i, "openai_api_key"],
+    [/api\.anthropic\.com|from\s+anthropic\s+import|import\s+anthropic|Anthropic\s*\(/i, "anthropic_api_key"],
+    [/api\.apify\.com|apify/i, "apify_token"],
+    [/generativelanguage\.googleapis\.com|google\.generativeai|gemini/i, "gemini_api_key"],
+    [/serpapi/i, "serpapi_api_key"],
+    [/serper/i, "serper_api_key"],
+    [/slack_sdk|hooks\.slack\.com|slack\.com\/api/i, "slack_bot_token"],
+    [/api\.telegram\.org|telegram/i, "telegram_bot_token"],
+    [/api\.sendgrid\.com|sendgrid/i, "sendgrid_api_key"],
+    [/api\.resend\.com|resend/i, "resend_api_key"],
+    [/api\.twilio\.com|twilio/i, "twilio_auth_token"],
+    [/api\.airtable\.com|airtable/i, "airtable_api_key"],
+    [/api\.notion\.com|notion/i, "notion_token"],
+    [/api\.hubapi\.com|hubspot/i, "hubspot_access_token"],
+    [/shopify/i, "shopify_access_token"],
+    [/api\.stripe\.com|stripe/i, "stripe_secret_key"],
+  ];
+
+  for (const [pattern, key] of providerHints) {
+    if (pattern.test(text)) addPythonKey(credentialKeys, key);
+  }
+
+  const setup = [...setupKeys].map((key) => inferredPythonSchemaField(key, "setup")).filter(Boolean);
+  const credentials = [...credentialKeys].map((key) => inferredPythonSchemaField(key, "credential")).filter(Boolean);
+  const events = [...eventKeys].map((key) => inferredPythonSchemaField(key, "event")).filter(Boolean);
+
+  return {
+    setup,
+    credentials,
+    events,
+    mappings: [
+      ...setup.map((field: any) => ({ placeholder: `context.inputs.${field.name}`, source: "setup", key: field.name })),
+      ...credentials.map((field: any) => ({ placeholder: `context.credentials.${field.name}`, source: "secret", key: field.name })),
+      ...events.map((field: any) => ({ placeholder: `context.event.${field.name}`, source: "event", key: field.name })),
+    ],
+  };
+}
+
 function cleanJsonObject(value: unknown) {
   const parsed = parseJsonValue(value, {});
   return isRecord(parsed) ? parsed : {};
@@ -671,6 +894,30 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     : workflowJson
       ? "not_checked"
       : "not_checked";
+  const pythonInference = isPythonProduct
+    ? inferPythonSchemasFromCode(pythonScriptCode)
+    : { setup: [], credentials: [], events: [], mappings: [] };
+  const setupSchema = isPythonProduct
+    ? mergeSchemaFields(cleanSchema(body.setup_schema), pythonInference.setup)
+    : cleanSchema(body.setup_schema);
+  const runtimeEventSchema = isPythonProduct
+    ? mergeSchemaFields(cleanSchema(body.runtime_event_schema), pythonInference.events)
+    : cleanSchema(body.runtime_event_schema);
+  const credentialSchema = isPythonProduct
+    ? mergeSchemaFields(cleanSchema(body.credential_schema), pythonInference.credentials)
+    : cleanSchema(body.credential_schema);
+  const workflowPlaceholderMappings = isPythonProduct
+    ? mergeWorkflowPlaceholderMappings(cleanWorkflowMappings(body.workflow_placeholder_mappings), pythonInference.mappings)
+    : cleanWorkflowMappings(body.workflow_placeholder_mappings);
+
+  if (isPythonProduct) {
+    detectedPlaceholders._python_inference = {
+      setup_fields: pythonInference.setup.length,
+      credential_fields: pythonInference.credentials.length,
+      event_fields: pythonInference.events.length,
+      mappings: pythonInference.mappings.length,
+    };
+  }
 
   const payload: Record<string, unknown> = {
     developer_id: developerId,
@@ -751,10 +998,10 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
       }
       : {}),
     runtime_output_mode: "standard",
-    setup_schema: cleanSchema(body.setup_schema),
-    runtime_event_schema: cleanSchema(body.runtime_event_schema),
-    credential_schema: cleanSchema(body.credential_schema),
-    workflow_placeholder_mappings: cleanWorkflowMappings(body.workflow_placeholder_mappings),
+    setup_schema: setupSchema,
+    runtime_event_schema: runtimeEventSchema,
+    credential_schema: credentialSchema,
+    workflow_placeholder_mappings: workflowPlaceholderMappings,
     detected_placeholders: detectedPlaceholders,
     sheet_access_config: sheetAccessConfig,
     placeholder_validation_status: placeholderValidationStatus,

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260626-tutorials">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260712-favorites">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -77,6 +77,7 @@
         <div class="buyer-tabs-shell">
           <div class="buyer-tabs">
             <button class="buyer-tab active" type="button" data-tab="overview">Overview</button>
+            <button class="buyer-tab" type="button" data-tab="saved">Saved products</button>
             <button class="buyer-tab" type="button" data-tab="automations">My Automations</button>
             <button class="buyer-tab buyer-tab-contextual" type="button" data-tab="automation-detail" id="buyerAutomationDetailTab" hidden>Automation detail</button>
             <button class="buyer-tab" type="button" data-tab="outputs">Outputs</button>
@@ -96,6 +97,21 @@
 
             <div id="overviewRoot" class="buyer-overview-dashboard">
               Loading overview...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="saved">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Saved</span>
+                <h2>Saved products</h2>
+                <p>Products you want to compare, revisit, or buy later.</p>
+              </div>
+              <a class="btn btn-secondary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+            </div>
+
+            <div id="buyerSavedProductsList" class="buyer-saved-products-grid">
+              Loading saved products...
             </div>
           </section>
 
@@ -334,10 +350,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
-<script src="/assets/js/nexus-notice.js"></script>
-<script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
-<script src="/assets/js/nexus-app.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260712-favorites"></script>
+<script src="/assets/js/nexus-notice.js?v=20260710-admin-staff-analytics"></script>
+<script src="/assets/js/nexus-db.js?v=20260712-favorites"></script>
+<script src="/assets/js/nexus-app.js?v=20260712-favorites"></script>
 
   <script>
     let dashboardData = {
@@ -995,7 +1011,8 @@ function openAutomationDetail(customerAutomationId) {
         { data: automations },
         { data: events },
         { data: outputs },
-        { data: runs }
+        { data: runs },
+        { data: savedProducts }
       ] = await Promise.all([
         NexusDB.getBuyerProfile(user.id),
         NexusDB.listBuyerOrders(user.id),
@@ -1006,6 +1023,9 @@ function openAutomationDetail(customerAutomationId) {
           : Promise.resolve({ data: [] }),
         NexusDB.listBuyerAutomationRuns
           ? NexusDB.listBuyerAutomationRuns(user.id)
+          : Promise.resolve({ data: [] }),
+        NexusDB.listSavedProducts
+          ? NexusDB.listSavedProducts()
           : Promise.resolve({ data: [] })
       ]);
 
@@ -1015,7 +1035,8 @@ function openAutomationDetail(customerAutomationId) {
         automations: automations || [],
         events: events || [],
         outputs: outputs || [],
-        runs: runs || []
+        runs: runs || [],
+        savedProducts: savedProducts || []
       };
 
       renderDashboard();
@@ -1093,11 +1114,47 @@ function openAutomationDetail(customerAutomationId) {
       }
 
       renderOverview(automations, outputs, events, orders);
+      renderSavedProducts(dashboardData.savedProducts || []);
       renderAutomations(automations, outputs);
       renderAutomationDetail();
       renderOutputs(outputs, automations);
       renderEvents(events);
       renderOrders(orders);
+    }
+
+    async function refreshSavedProducts() {
+      if (typeof NexusDB.listSavedProducts !== "function") return;
+      const { data, error } = await NexusDB.listSavedProducts();
+      if (error) {
+        NexusUI.toast(error.message || "Could not refresh saved products.");
+        return;
+      }
+      dashboardData.savedProducts = data || [];
+      renderSavedProducts(dashboardData.savedProducts);
+    }
+
+    window.NexusBuyerRenderSavedProducts = refreshSavedProducts;
+
+    function renderSavedProducts(products) {
+      const root = document.getElementById("buyerSavedProductsList");
+      if (!root) return;
+
+      if (!products.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No saved products yet</h3>
+            <p>Use the Save button on marketplace cards to keep products here for later.</p>
+            <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse products</a>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = products.map(product => NexusUI.productCard(product, {
+        showSave: true,
+        savedSelected: true,
+        showCompare: false
+      })).join("");
     }
 
     function renderOverview(automations, outputs, events, orders) {
@@ -1872,7 +1929,7 @@ function openAutomationDetail(customerAutomationId) {
       reason.value = "";
 
       if (text) {
-        text.textContent = `Tell Nexus why you want to cancel “${automationName}”. Your request will be reviewed before anything is cancelled.`;
+        text.textContent = `Tell Nexus why you want to cancel "${automationName}". Your request will be reviewed before anything is cancelled.`;
       }
 
       modal.classList.add("open");

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260701-bundle-preview-width">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260711-python-robustness">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -37,7 +37,6 @@
   <a href="/pages/admin/make-imports.html">Import Assistant</a>
   <a href="/pages/admin/customer-automations.html">Cancellation Requests</a>
   <a href="/pages/admin/messages.html">Inquiries</a>
-  <a href="/pages/admin/notifications.html">Notifications</a>
   <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
   <a href="/pages/admin/waitlist.html">Developer Intake</a>
   <a href="/pages/admin/reviews.html">Reviews</a>
@@ -710,7 +709,7 @@
         <select class="select" name="runtime_no_change_policy">
           <option value="no_output">No dashboard output unless something changed</option>
           <option value="status_event">Log a status event only</option>
-          <option value="empty_output">Show a “no change” output</option>
+          <option value="empty_output">Show a "no change" output</option>
         </select>
       </div>
 
@@ -788,7 +787,7 @@
           <div class="make-import-head">
             <div>
               <h3>Python script runner</h3>
-              <p>Paste a Python script with a <code>run(context)</code> function. Nexus passes buyer setup, customer, event, and schedule data into <code>context</code>, then displays the returned output in the buyer dashboard.</p>
+              <p>Paste a Python script. Nexus supports <code>run(context)</code>, <code>main(context)</code>, <code>handler(event, context)</code>, async functions, <code>RESULT</code>, or printed JSON/text. Buyer setup is in <code>context["inputs"]</code>; developer keys are in <code>context["credentials"]</code> and matching environment variables.</p>
             </div>
             <span class="pill blue">Beta</span>
           </div>
@@ -1138,7 +1137,7 @@
   <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
 <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
   <script src="/assets/js/nexus-app.js?v=20260710-admin-staff-analytics"></script>
-  <script src="/assets/js/nexus-notice.js"></script>
+  <script src="/assets/js/nexus-notice.js?v=20260710-admin-staff-analytics"></script>
 
  <script>
   const NexusAdminUI = {
@@ -1263,7 +1262,7 @@
           <div class="admin-runtime-summary-card">
             <span>Next monthly run</span>
             <strong>${this.escapeHtml(nextRunAt ? this.formatRuntimeDate(nextRunAt) : activeCount ? "Waiting for schedule" : "No active schedule")}</strong>
-            <small>${activeCount}/${monthlyCount} active monthly schedules · ${dueCount} due now</small>
+            <small>${activeCount}/${monthlyCount} active monthly schedules - ${dueCount} due now</small>
           </div>
 
           <div class="admin-runtime-summary-card">
@@ -2097,6 +2096,7 @@
 
     makeUnresolvedGroupHtml(group, sessionId) {
       const key = this.escapeHtml(group.source_module_key || "");
+      const supportOnly = String(group.suggested_strategy || "http_request").toLowerCase() === "manual_support";
 
       return `
         <article class="make-module-card" data-admin-make-module-card="${key}">
@@ -2104,8 +2104,9 @@
             <div>
               <strong>${this.escapeHtml(group.source_module_label || group.source_module || "Unsupported source step")}</strong>
               <p>${this.escapeHtml(group.source_app || "Make")} ${group.source_action ? `| ${this.escapeHtml(group.source_action)}` : ""} | used ${this.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</p>
+              ${group.target_n8n_node_type ? `<p>Suggested n8n substitute: ${this.escapeHtml(group.target_n8n_node_type)} ${group.target_operation ? `(${this.escapeHtml(group.target_operation)})` : ""}</p>` : ""}
             </div>
-            <span class="pill orange">HTTP substitute needed</span>
+            <span class="pill orange">${supportOnly ? "Nexus support needed" : "HTTP substitute needed"}</span>
           </div>
           <details>
             <summary><strong>Add HTTP substitute</strong></summary>
@@ -2153,7 +2154,7 @@
           <details class="make-import-details">
             <summary><strong>${resolved.length} resolved group${resolved.length === 1 ? "" : "s"}</strong></summary>
             <div class="make-module-list compact">
-              ${resolved.map((group) => `<article><strong>${this.escapeHtml(group.source_module_label || group.source_module)}</strong><span>${this.escapeHtml(group.target_strategy || "mapped")} | used ${this.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</span></article>`).join("")}
+              ${resolved.map((group) => `<article><strong>${this.escapeHtml(group.source_module_label || group.source_module)}</strong><span>${this.escapeHtml(group.target_strategy || "mapped")} | ${this.escapeHtml(group.target_n8n_node_type || "n8n substitute")} ${group.target_operation ? `(${this.escapeHtml(group.target_operation)})` : ""} | used ${this.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</span></article>`).join("")}
             </div>
           </details>
         ` : ""}

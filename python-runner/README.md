@@ -4,7 +4,16 @@ This service runs developer Python automations outside the main Nexus app. Nexus
 
 ## Runtime Contract
 
-Developer scripts should define:
+Developer scripts can use any of these shapes:
+
+- `def run(context): ...`
+- `def main(context): ...`
+- `def handler(event, context): ...`
+- async versions of the same functions
+- a top-level `RESULT = {...}`
+- printing one JSON object or plain text
+
+Recommended shape:
 
 ```python
 def run(context):
@@ -37,6 +46,14 @@ The `context` object contains:
 - `raw`: the original runtime payload.
 
 Use buyer-owned access details as setup fields, preferably with type `secret`. Use developer-owned API keys in `context["credentials"]`; do not hard-code production keys in the script.
+
+Nexus also exposes convenient environment variables:
+
+- `NEXUS_SETUP_JSON`, `NEXUS_CREDENTIALS_JSON`, `NEXUS_EVENT_JSON`, `NEXUS_SYSTEM_JSON`
+- `NEXUS_SETUP_COMPANY_URL` for a setup field named `company_url`
+- `OPENAI_API_KEY` and `NEXUS_SECRET_OPENAI_API_KEY` for a credential named `openai_api_key`
+
+Returned values can include `title`, `summary`, `content_html`, `content_text`, `content_json`, `file_url`, and `storage_path`. Strings are converted into a simple text output automatically.
 
 ## Deploy On Ubuntu
 

@@ -296,10 +296,19 @@ scenario("Importer normalizes sloppy setup and credential placeholders", () => {
 scenario("Make converter has broad mapping coverage and reusable substitute promotion", () => {
   const makeApps = extractArrayStrings(makeAssistant, "MAKE_COMMON_EXTERNAL_APPS");
   const makeActions = extractArrayStrings(makeAssistant, "MAKE_COMMON_EXTERNAL_ACTIONS");
-  const makeInternal = extractArrayStrings(makeAssistant, "MAKE_INTERNAL_LOGIC_MODULE_KEYS");
-  const estimatedMappings = makeInternal.length + (makeApps.length * makeActions.length);
+  const makeOperationalCount = (makeAssistant.match(/operationalLocation\(\{\s*module:/g) || []).length;
+  const estimatedMappings = makeOperationalCount + (makeApps.length * makeActions.length);
 
   assert(estimatedMappings >= 200, `Expected at least 200 Make mapping locations, found ${estimatedMappings}.`);
+  assert(makeOperationalCount >= 50, `Expected at least 50 Make operational mappings, found ${makeOperationalCount}.`);
+  assert(makeAssistant.includes('module: "flowcontrol:router"'), "Make mappings must include Router.");
+  assert(makeAssistant.includes('target: "n8n-nodes-base.switch"'), "Make Router/Zapier Paths must point to n8n Switch.");
+  assert(makeAssistant.includes('module: "flowcontrol:filter"'), "Make mappings must include Filter.");
+  assert(makeAssistant.includes('target: "n8n-nodes-base.if"'), "Make/Zapier filters must point to n8n IF.");
+  assert(makeAssistant.includes('module: "flowcontrol:iterator"'), "Make mappings must include Iterator.");
+  assert(makeAssistant.includes('target: "n8n-nodes-base.splitOut"'), "Make/Zapier loops must point to Split Out/Loop equivalents.");
+  assert(makeAssistant.includes('module: "flowcontrol:aggregator"'), "Make mappings must include Aggregator.");
+  assert(makeAssistant.includes('target: "n8n-nodes-base.aggregate"'), "Make aggregators must point to n8n Aggregate.");
   assertContainsAll(makeApps, ["openai", "google-gemini", "anthropic", "slack", "hubspot", "salesforce", "airtable"], "Make app mappings");
   assertContainsAll(makeActions, ["create-record", "update-record", "send-message", "create-chat-completion", "make-an-api-call"], "Make action mappings");
   assert(makeAssistant.includes("Workflow test has not passed yet"), "Make reusable mappings must wait for successful technical test.");
@@ -312,7 +321,12 @@ scenario("Zapier converter has core and external mapping coverage", () => {
   const estimatedMappings = (zapierCore.length * 2) + (zapierApps.length * zapierActions.length);
 
   assert(estimatedMappings >= 200, `Expected at least 200 Zapier mapping locations, found ${estimatedMappings}.`);
-  assertContainsAll(zapierCore, ["webhooks by zapier", "formatter by zapier", "filter by zapier", "schedule by zapier"], "Zapier core mappings");
+  assertContainsAll(zapierCore, ["webhooks by zapier", "formatter by zapier", "filter by zapier", "schedule by zapier", "paths by zapier", "looping by zapier", "delay by zapier", "sub-zap by zapier", "zapier interfaces"], "Zapier core mappings");
+  assert(makeAssistant.includes("ZAPIER_OPERATIONAL_APP_MAPPINGS"), "Zapier operational mappings must be explicit.");
+  assert(makeAssistant.includes('"paths by zapier"'), "Zapier mappings must include Paths.");
+  assert(makeAssistant.includes('"delay by zapier"'), "Zapier mappings must include Delay.");
+  assert(makeAssistant.includes('"looping by zapier"'), "Zapier mappings must include Looping.");
+  assert(makeAssistant.includes('"formatter by zapier"'), "Zapier mappings must include Formatter.");
   assertContainsAll(zapierApps, ["openai", "google sheets", "slack", "hubspot", "salesforce", "airtable"], "Zapier app mappings");
   assertContainsAll(zapierActions, ["create record", "update record", "send message", "create chat completion", "api request"], "Zapier action mappings");
 });

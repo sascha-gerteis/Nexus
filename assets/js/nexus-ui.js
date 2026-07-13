@@ -1222,6 +1222,8 @@ function productColorTheme(color) {
       );
     const showCompare = Boolean(cardOptions.showCompare) && !isBundle;
     const compareSelected = Boolean(cardOptions.compareSelected);
+    const showSave = Boolean(cardOptions.showSave) && !isBundle && Boolean(product.id);
+    const saveSelected = Boolean(cardOptions.savedSelected);
     const ctaHref = isBundle
       ? `/pages/checkout/index.html?bundle=${slug}&step=setup`
       : isCustomRequest
@@ -1279,15 +1281,33 @@ function productColorTheme(color) {
           <span class="tag">&#9733; ${escapeHtml(l(product.rating || "New"))} (${escapeHtml(product.review_count || 0)})</span>
         </div>
 
-        ${showCompare ? `
-          <button
-            type="button"
-            class="compare-toggle ${compareSelected ? "active" : ""}"
-            aria-pressed="${compareSelected ? "true" : "false"}"
-            onclick="event.stopPropagation(); NexusApp.toggleCompare('${escapeAttribute(rawSlug)}')"
-          >
-            <span>${compareSelected ? "Selected" : "Compare"}</span>
-          </button>
+        ${showCompare || showSave ? `
+          <div class="product-card-secondary-actions">
+            ${showCompare ? `
+              <button
+                type="button"
+                class="compare-toggle ${compareSelected ? "active" : ""}"
+                aria-pressed="${compareSelected ? "true" : "false"}"
+                onclick="event.stopPropagation(); NexusApp.toggleCompare('${escapeAttribute(rawSlug)}')"
+              >
+                <span>${compareSelected ? "Selected" : "Compare"}</span>
+              </button>
+            ` : ""}
+
+            ${showSave ? `
+              <button
+                type="button"
+                class="favorite-toggle ${saveSelected ? "active" : ""}"
+                aria-pressed="${saveSelected ? "true" : "false"}"
+                aria-label="${saveSelected ? "Remove favorite" : "Favorite product"}"
+                title="${saveSelected ? "Favorited" : "Favorite product"}"
+                onclick="event.stopPropagation(); NexusApp.toggleSavedProduct('${escapeAttribute(product.id || "")}')"
+              >
+                <span aria-hidden="true">${saveSelected ? "&hearts;" : "&#9825;"}</span>
+                <span>${saveSelected ? "Favorited" : "Favorite"}</span>
+              </button>
+            ` : ""}
+          </div>
         ` : ""}
 
         <div class="meta-grid">
@@ -3954,6 +3974,68 @@ function renderThreadList(threads = [], state = {}) {
   }).join("");
 }
 
+function messageAttachments(value) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function attachmentSizeLabel(size) {
+  const bytes = Number(size || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function renderMessageAttachments(message = {}) {
+  const attachments = messageAttachments(message.attachments);
+  if (!attachments.length) return "";
+
+  return `
+    <div class="message-attachments">
+      ${attachments.map((attachment) => {
+        const href = attachment.download_url || attachment.signed_url || attachment.url || "";
+        const name = attachment.file_name || attachment.name || "Attachment";
+        const type = attachment.file_type || attachment.type || "";
+        const size = attachmentSizeLabel(attachment.file_size || attachment.size);
+        const image = href && String(type).toLowerCase().startsWith("image/");
+        return `
+          <a class="message-attachment ${image ? "image" : "file"}" href="${escapeAttribute(href || "#")}" target="_blank" rel="noopener" download="${escapeAttribute(name)}">
+            ${image ? `<img src="${escapeAttribute(href)}" alt="${escapeAttribute(name)}">` : `<span class="message-attachment-icon">File</span>`}
+            <span>
+              <strong>${escapeHtml(name)}</strong>
+              <small>${escapeHtml([type, size].filter(Boolean).join(" / ") || "Attachment")}</small>
+            </span>
+          </a>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+async function hydrateMessageAttachments(threadId, messages = []) {
+  const attachments = messages.flatMap((message) => messageAttachments(message.attachments));
+  if (!attachments.length || typeof NexusDB.signMessageAttachmentUrls !== "function") return messages;
+
+  const { data, error } = await NexusDB.signMessageAttachmentUrls(threadId, attachments);
+  if (error || !Array.isArray(data?.attachments)) return messages;
+
+  const byPath = new Map(data.attachments.map((attachment) => [attachment.path, attachment]));
+  return messages.map((message) => ({
+    ...message,
+    attachments: messageAttachments(message.attachments).map((attachment) => ({
+      ...attachment,
+      ...(byPath.get(attachment.path) || {})
+    }))
+  }));
+}
+
 function renderMessageList(messages = []) {
   if (!messages.length) {
     return `
@@ -3970,7 +4052,8 @@ function renderMessageList(messages = []) {
         <strong>${escapeHtml(senderLabel(message.sender_role))}</strong>
         <span>${escapeHtml(threadDate(message.created_at))}</span>
       </div>
-      <p>${escapeHtml(message.body || "")}</p>
+      ${message.body ? `<p>${escapeHtml(message.body || "")}</p>` : ""}
+      ${renderMessageAttachments(message)}
     </article>
   `).join("");
 }
@@ -4054,7 +4137,14 @@ async function renderMessageCenter(root) {
                 <div class="message-center-loading">Loading conversation...</div>
               </div>
               <form class="message-center-reply" data-message-reply>
-                <textarea class="textarea" name="message" placeholder="Write a reply..." required></textarea>
+                <textarea class="textarea" name="message" placeholder="Write a reply..."></textarea>
+                <div class="message-attachment-picker">
+                  <label class="btn btn-secondary btn-small">
+                    Add files
+                    <input type="file" data-message-files multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip" hidden>
+                  </label>
+                  <span data-message-file-label>No files selected</span>
+                </div>
                 <button class="btn btn-primary" type="submit">Send reply</button>
               </form>
             `
@@ -4087,17 +4177,37 @@ async function renderMessageCenter(root) {
     replyForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const textarea = replyForm.querySelector("textarea");
+      const fileInput = replyForm.querySelector("[data-message-files]");
       const message = String(textarea?.value || "").trim();
-      if (!message) return;
+      const files = Array.from(fileInput?.files || []);
+      if (!message && !files.length) return;
 
-      const button = replyForm.querySelector("button");
+      const button = replyForm.querySelector('button[type="submit"]');
       const originalText = button?.textContent || "Send reply";
       if (button) {
         button.disabled = true;
-        button.textContent = "Sending...";
+        button.textContent = files.length ? "Uploading..." : "Sending...";
       }
 
-      const { error } = await NexusDB.sendThreadMessage(activeThread.id, message);
+      const attachments = [];
+      for (const file of files) {
+        const upload = await NexusDB.createMessageAttachmentUpload(activeThread.id, file);
+        if (upload.error) {
+          if (button) {
+            button.disabled = false;
+            button.textContent = originalText;
+          }
+          toast(upload.error.message || "Could not upload attachment.");
+          return;
+        }
+        attachments.push(upload.data);
+      }
+
+      if (button) button.textContent = "Sending...";
+      const sender = typeof NexusDB.sendThreadMessageWithAttachments === "function"
+        ? NexusDB.sendThreadMessageWithAttachments
+        : NexusDB.sendThreadMessage;
+      const { error } = await sender(activeThread.id, message, attachments);
 
       if (button) {
         button.disabled = false;
@@ -4110,9 +4220,22 @@ async function renderMessageCenter(root) {
       }
 
       if (textarea) textarea.value = "";
+      if (fileInput) fileInput.value = "";
+      const label = replyForm.querySelector("[data-message-file-label]");
+      if (label) label.textContent = "No files selected";
       await loadMessageCenter(root, activeThread.id);
     });
   }
+
+  root.querySelector("[data-message-files]")?.addEventListener("change", (event) => {
+    const files = Array.from(event.target.files || []);
+    const label = root.querySelector("[data-message-file-label]");
+    if (label) {
+      label.textContent = files.length
+        ? `${files.length} file${files.length === 1 ? "" : "s"} selected`
+        : "No files selected";
+    }
+  });
 
   if (activeThread) {
     const body = root.querySelector("[data-message-bodies]");
@@ -4128,7 +4251,8 @@ async function renderMessageCenter(root) {
       return;
     }
 
-    body.innerHTML = renderMessageList(data?.messages || []);
+    const hydratedMessages = await hydrateMessageAttachments(activeThread.id, data?.messages || []);
+    body.innerHTML = renderMessageList(hydratedMessages);
     body.scrollTop = body.scrollHeight;
   }
 
@@ -4251,6 +4375,7 @@ function adminSidebarSections(active = "", options = {}) {
     "health",
     "customer-automations",
     "messages",
+    "waitlist",
     "marketplace",
     "logout"
   ]);

@@ -347,7 +347,8 @@ const NexusDB = (() => {
         "/pages/admin/analytics.html",
         "/pages/admin/health.html",
         "/pages/admin/customer-automations.html",
-        "/pages/admin/messages.html"
+        "/pages/admin/messages.html",
+        "/pages/admin/waitlist.html"
       ]);
       const nextPath = String(safeNext || "").split(/[?#]/)[0];
 
@@ -2120,6 +2121,79 @@ async function sendThreadMessage(threadId, message) {
   });
 }
 
+async function sendThreadMessageWithAttachments(threadId, message, attachments = []) {
+  return callMessages({
+    action: "send_message",
+    thread_id: threadId,
+    message,
+    attachments: Array.isArray(attachments) ? attachments : []
+  });
+}
+
+async function createMessageAttachmentUpload(threadId, file) {
+  if (!file) {
+    return {
+      data: null,
+      error: { message: "Choose a file first." }
+    };
+  }
+
+  const { data, error } = await callNexusFunction("message-attachments", {
+    action: "create_upload",
+    thread_id: threadId,
+    file_name: file.name || "attachment",
+    file_type: file.type || "application/octet-stream",
+    file_size: file.size || 0
+  });
+
+  if (error) return { data: null, error };
+
+  const upload = data?.upload || data;
+  if (!upload?.bucket || !upload?.path || !upload?.token) {
+    return {
+      data: null,
+      error: { message: "Could not prepare file upload." }
+    };
+  }
+
+  const uploadResult = await supabase.storage
+    .from(upload.bucket)
+    .uploadToSignedUrl(upload.path, upload.token, file, {
+      contentType: file.type || "application/octet-stream",
+      upsert: false
+    });
+
+  if (uploadResult.error) {
+    return {
+      data: null,
+      error: uploadResult.error
+    };
+  }
+
+  return {
+    data: {
+      bucket: upload.bucket,
+      path: upload.path,
+      file_name: file.name || upload.file_name || "attachment",
+      file_type: file.type || upload.file_type || "application/octet-stream",
+      file_size: file.size || upload.file_size || 0
+    },
+    error: null
+  };
+}
+
+async function signMessageAttachmentUrls(threadId, attachments = []) {
+  if (!Array.isArray(attachments) || !attachments.length) {
+    return { data: { attachments: [] }, error: null };
+  }
+
+  return callNexusFunction("message-attachments", {
+    action: "sign_urls",
+    thread_id: threadId,
+    attachments
+  });
+}
+
 async function markMessageThreadRead(threadId) {
   return callMessages({
     action: "mark_read",
@@ -2141,6 +2215,126 @@ async function startDeveloperMessageThread(developerId, message = "") {
     developer_id: developerId,
     message
   });
+}
+
+async function listSavedProductIds() {
+  const { data: user, error: userError } = await getUser();
+  if (userError) return { data: [], error: userError };
+  if (!user) return { data: [], error: null };
+
+  const result = await supabase
+    .from("buyer_saved_products")
+    .select("automation_id")
+    .eq("buyer_id", user.id);
+
+  if (result.error && isSchemaError(result.error)) {
+    return { data: [], error: null, missingSchema: true };
+  }
+
+  if (result.error) return result;
+
+  return {
+    data: (result.data || []).map((row) => row.automation_id).filter(Boolean),
+    error: null
+  };
+}
+
+async function listSavedProducts() {
+  const { data: user, error: userError } = await getUser();
+  if (userError) return { data: [], error: userError };
+  if (!user) return { data: [], error: null };
+
+  const savedResult = await supabase
+    .from("buyer_saved_products")
+    .select("automation_id, created_at")
+    .eq("buyer_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (savedResult.error && isSchemaError(savedResult.error)) {
+    return { data: [], error: null, missingSchema: true };
+  }
+
+  if (savedResult.error) return savedResult;
+
+  const savedRows = savedResult.data || [];
+  const ids = savedRows.map((row) => row.automation_id).filter(Boolean);
+  if (!ids.length) return { data: [], error: null };
+
+  const productsResult = await supabase
+    .from("automations")
+    .select("*, developers(*)")
+    .in("id", ids)
+    .eq("status", "live");
+
+  if (productsResult.error) return productsResult;
+
+  const byId = new Map((productsResult.data || []).map((product) => [product.id, product]));
+
+  return {
+    data: savedRows
+      .map((row) => {
+        const product = byId.get(row.automation_id);
+        return product ? { ...product, saved_at: row.created_at } : null;
+      })
+      .filter(Boolean),
+    error: null
+  };
+}
+
+async function toggleSavedProduct(automationId) {
+  const id = String(automationId || "").trim();
+  if (!id) {
+    return { data: null, error: { message: "Product is missing." } };
+  }
+
+  const { data: user, error: userError } = await getUser();
+  if (userError) return { data: null, error: userError };
+  if (!user) {
+    return {
+      data: null,
+      error: { message: "Please log in as a buyer to save products." }
+    };
+  }
+
+  const existing = await supabase
+    .from("buyer_saved_products")
+    .select("id")
+    .eq("buyer_id", user.id)
+    .eq("automation_id", id)
+    .maybeSingle();
+
+  if (existing.error && !isSchemaError(existing.error)) {
+    return existing;
+  }
+
+  if (existing.error && isSchemaError(existing.error)) {
+    return {
+      data: null,
+      error: { message: "Saved products are not installed yet. Run the saved products SQL patch." }
+    };
+  }
+
+  if (existing.data?.id) {
+    const deleted = await supabase
+      .from("buyer_saved_products")
+      .delete()
+      .eq("id", existing.data.id);
+
+    if (deleted.error) return deleted;
+    return { data: { saved: false, automation_id: id }, error: null };
+  }
+
+  const inserted = await supabase
+    .from("buyer_saved_products")
+    .insert({
+      buyer_id: user.id,
+      automation_id: id
+    })
+    .select("id, automation_id")
+    .single();
+
+  if (inserted.error) return inserted;
+  return { data: { saved: true, automation_id: id }, error: null };
 }
 
 async function getDeveloperStripeStatus() {
@@ -2234,6 +2428,28 @@ async function resetDemoMarketplace() {
   });
 }
 
+async function callPaymentMode(payload = {}) {
+  return callNexusFunction("payment-mode", payload);
+}
+
+async function getPaymentModeStatus() {
+  return callPaymentMode({
+    action: "get_status"
+  });
+}
+
+async function enablePaymentTestMode() {
+  return callPaymentMode({
+    action: "enable_test"
+  });
+}
+
+async function disablePaymentTestMode() {
+  return callPaymentMode({
+    action: "disable_test"
+  });
+}
+
 async function getBuyerOrderById(orderId) {
   const { data: user } = await getUser();
 
@@ -2318,6 +2534,65 @@ async function getBuyerCustomerAutomationById(customerAutomationId) {
     .eq("id", customerAutomationId)
     .eq("buyer_id", user.id)
     .maybeSingle();
+}
+
+async function getBuyerCustomerAutomationsByOrderId(orderId) {
+  const { data: user } = await getUser();
+
+  if (!user) {
+    return {
+      data: [],
+      error: { message: "Login required." }
+    };
+  }
+
+  if (!orderId) {
+    return {
+      data: [],
+      error: { message: "Order id is required." }
+    };
+  }
+
+  return supabase
+    .from("customer_automations")
+    .select(`
+      *,
+      automations(
+        id,
+        title,
+        slug,
+        category,
+        icon,
+        color,
+        badge,
+        short_description,
+        long_description,
+        setup_schema,
+        credential_schema,
+        runtime_type,
+        runtime_webhook_url,
+        n8n_workflow_id
+      ),
+      orders(
+        id,
+        bundle_id,
+        payment_status,
+        order_status,
+        automation_id,
+        automation_title,
+        price_display,
+        currency,
+        install_type,
+        selected_customization
+      ),
+      developers(
+        display_name,
+        avatar_letter
+      )
+    `)
+    .eq("order_id", orderId)
+    .eq("buyer_id", user.id)
+    .order("created_at", { ascending: true });
 }
 
 async function getLatestSetupSubmission(customerAutomationId) {
@@ -3068,9 +3343,15 @@ async function listMakeImportMappings(payload = {}) {
     listMessageThreads,
     getMessageThread,
     sendThreadMessage,
+    sendThreadMessageWithAttachments,
+    createMessageAttachmentUpload,
+    signMessageAttachmentUrls,
     markMessageThreadRead,
     startProductMessageThread,
     startDeveloperMessageThread,
+    listSavedProductIds,
+    listSavedProducts,
+    toggleSavedProduct,
     listDeveloperProducts,
     getDeveloperProduct,
     saveDeveloperProduct,
@@ -3100,6 +3381,9 @@ async function listMakeImportMappings(payload = {}) {
     enableDemoMarketplace,
     disableDemoMarketplace,
     resetDemoMarketplace,
+    getPaymentModeStatus,
+    enablePaymentTestMode,
+    disablePaymentTestMode,
     scanMakeImport,
     getMakeImportSession,
     saveMakeHttpSubstitute,
@@ -3180,6 +3464,7 @@ createStripeCheckoutSession,
 getBuyerOrderById,
 getCustomerAutomationByOrderId,
 getBuyerCustomerAutomationById,
+getBuyerCustomerAutomationsByOrderId,
 getLatestSetupSubmission,
 createSetupSubmission,
 listBuyerOutputs,

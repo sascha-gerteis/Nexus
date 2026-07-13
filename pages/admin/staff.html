@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -11,7 +11,7 @@
     rel="stylesheet"
   >
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260710-admin-staff-analytics">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
@@ -101,9 +101,9 @@
           <strong>Customer automations</strong>
           <small>Check active automations, output history, next runs, and cancellation requests.</small>
         </a>
-        <a class="staff-action" href="/pages/developers/index.html">
-          <strong>Builders</strong>
-          <small>View public builder profiles and marketplace positioning without approval controls.</small>
+        <a class="staff-action" href="/pages/admin/waitlist.html">
+          <strong>Developer intake</strong>
+          <small>Review waitlist signups and pending builder accounts without owner-only creation controls.</small>
         </a>
         <a class="staff-action" href="/pages/admin/health.html">
           <strong>System health</strong>
@@ -226,7 +226,7 @@
         (product) => `
           <div class="mini-row">
             <strong>${escapeHtml(product.title || "Untitled product")}</strong>
-            <span>${escapeHtml(compactStatus(product.status))} · ${escapeHtml(product.category || "Uncategorized")}</span>
+            <span>${escapeHtml(compactStatus(product.status))} - ${escapeHtml(product.category || "Uncategorized")}</span>
           </div>
         `
       );
@@ -238,7 +238,7 @@
         (developer) => `
           <div class="mini-row">
             <strong>${escapeHtml(developer.display_name || developer.handle || "Unnamed builder")}</strong>
-            <span>${escapeHtml(compactStatus(developer.status))} · ${escapeHtml(developer.type || "Builder")}</span>
+            <span>${escapeHtml(compactStatus(developer.status))} - ${escapeHtml(developer.type || "Builder")}</span>
           </div>
         `
       );

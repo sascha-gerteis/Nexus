@@ -3,14 +3,18 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { isLegacyNexusProduct } from "../_shared/legacy-nexus-products.ts";
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-  apiVersion: "2024-06-20",
-});
-
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const PRODUCTION_SITE_URL = "https://nexus-ai.software";
+
+function createStripeClient(secretKey: string) {
+  return new Stripe(secretKey || "", {
+    apiVersion: "2024-06-20",
+  });
+}
+
+const liveStripe = createStripeClient(Deno.env.get("STRIPE_SECRET_KEY") || "");
 
 function cleanSiteUrl(value = "") {
   const raw = String(value || "").trim().replace(/\/+$/, "");
@@ -54,6 +58,50 @@ function nowIso() {
 
 function cleanString(value: unknown) {
   return String(value || "").trim();
+}
+
+async function getPaymentMode(adminClient: any) {
+  const liveKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
+  const testKey = Deno.env.get("STRIPE_TEST_SECRET_KEY") || "";
+  let requestedMode = "live";
+
+  try {
+    const { data, error } = await adminClient
+      .from("platform_settings")
+      .select("value")
+      .eq("key", "payment_mode")
+      .maybeSingle();
+
+    if (!error) {
+      requestedMode = cleanString(data?.value?.mode).toLowerCase() === "test" ? "test" : "live";
+    } else if (!/platform_settings|schema cache|relation .* does not exist|could not find/i.test(error.message || "")) {
+      console.warn("Could not read payment mode:", error.message);
+    }
+  } catch (error) {
+    console.warn("Payment mode lookup failed, using live mode:", error);
+  }
+
+  if (requestedMode === "test") {
+    if (!testKey) {
+      throw new Error("Payment test mode is enabled, but STRIPE_TEST_SECRET_KEY is missing.");
+    }
+
+    return {
+      environment: "test" as const,
+      testMode: true,
+      stripeClient: createStripeClient(testKey),
+    };
+  }
+
+  if (!liveKey) {
+    throw new Error("STRIPE_SECRET_KEY is missing.");
+  }
+
+  return {
+    environment: "live" as const,
+    testMode: false,
+    stripeClient: liveStripe,
+  };
 }
 
 function isPassingWorkflowTest(status: unknown) {
@@ -664,7 +712,92 @@ async function requireBuyer(req: Request) {
   return { user: userData.user, error: null };
 }
 
-async function ensureStripePrice(adminClient: any, product: any, currency: SupportedCheckoutCurrency) {
+function isOrderEnvironmentSchemaError(error: any) {
+  const message = [
+    error?.message,
+    error?.details,
+    error?.hint,
+    error?.code,
+  ].filter(Boolean).join(" ");
+
+  return /payment_environment|stripe_livemode|schema cache|could not find .* column/i.test(message);
+}
+
+async function insertOrder(adminClient: any, payload: Record<string, unknown>) {
+  let result = await adminClient
+    .from("orders")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (!result.error || !isOrderEnvironmentSchemaError(result.error)) {
+    return result;
+  }
+
+  const fallback = { ...payload };
+  delete fallback.payment_environment;
+  delete fallback.stripe_livemode;
+
+  result = await adminClient
+    .from("orders")
+    .insert(fallback)
+    .select()
+    .single();
+
+  return result;
+}
+
+function buildInlinePriceData(product: any, currency: SupportedCheckoutCurrency, amount: number, mode: "payment" | "subscription") {
+  const priceData: any = {
+    currency,
+    unit_amount: toStripeUnitAmount(amount, currency),
+    product_data: {
+      name: product.title || "Nexus Automation",
+      description: product.short_description || product.long_description || "",
+      metadata: {
+        automation_id: product.id || "",
+        slug: product.slug || "",
+        source: "nexus_test_checkout",
+      },
+    },
+  };
+
+  if (mode === "subscription") {
+    priceData.recurring = { interval: "month" };
+  }
+
+  return priceData;
+}
+
+async function resolveTestCheckoutPrice(product: any, currency: SupportedCheckoutCurrency) {
+  const mode = getStripeMode(product);
+
+  if (mode === "unsupported") {
+    throw new Error("This product cannot be purchased through Stripe checkout.");
+  }
+
+  const resolvedPrice = await resolveCheckoutAmountForCurrency(product, currency);
+  const amount = resolvedPrice.amount;
+
+  if (!amount || amount <= 0) {
+    throw new Error(getMissingPriceMessage(product, currency));
+  }
+
+  return {
+    priceId: "",
+    amount,
+    unitAmount: toStripeUnitAmount(amount, currency),
+    mode,
+    currency,
+    priceSource: resolvedPrice.source,
+    derivedPrice: resolvedPrice.derived,
+    fxRate: resolvedPrice.fxRate,
+    fxSource: resolvedPrice.fxSource,
+    fxDate: resolvedPrice.fxDate,
+  };
+}
+
+async function ensureStripePrice(adminClient: any, product: any, currency: SupportedCheckoutCurrency, stripeClient = liveStripe) {
   const mode = getStripeMode(product);
 
   if (mode === "unsupported") {
@@ -683,7 +816,7 @@ async function ensureStripePrice(adminClient: any, product: any, currency: Suppo
   let stripeProductId = product.stripe_product_id;
 
   if (!stripeProductId) {
-    const createdProduct = await stripe.products.create({
+    const createdProduct = await stripeClient.products.create({
       name: product.title || "Nexus Automation",
       description: product.short_description || product.long_description || "",
       active: product.status === "live",
@@ -702,7 +835,7 @@ async function ensureStripePrice(adminClient: any, product: any, currency: Suppo
 
   if (priceId) {
     try {
-      const existingPrice = await stripe.prices.retrieve(priceId);
+      const existingPrice = await stripeClient.prices.retrieve(priceId);
 
       const existingCurrencyMatches = existingPrice.currency === currency;
       const existingAmountMatches = existingPrice.unit_amount === expectedUnitAmount;
@@ -760,7 +893,7 @@ async function ensureStripePrice(adminClient: any, product: any, currency: Suppo
       pricePayload.recurring = { interval: "month" };
     }
 
-    const newPrice = await stripe.prices.create(pricePayload);
+    const newPrice = await stripeClient.prices.create(pricePayload);
     priceId = newPrice.id;
 
     const priceIdColumn = getPriceIdColumn(currency);
@@ -916,6 +1049,8 @@ async function loadBundleCheckout(adminClient: any, bundleId: string, currency: 
 
 async function createBundleCheckoutSession(options: {
   adminClient: any;
+  stripeClient: Stripe;
+  paymentEnvironment: "live" | "test";
   user: any;
   bundleId: string;
   installType: string;
@@ -928,6 +1063,8 @@ async function createBundleCheckoutSession(options: {
 }) {
   const {
     adminClient,
+    stripeClient,
+    paymentEnvironment,
     user,
     bundleId,
     currency,
@@ -981,9 +1118,9 @@ async function createBundleCheckoutSession(options: {
     { onConflict: "user_id" },
   );
 
-  const { data: order, error: orderError } = await adminClient
-    .from("orders")
-    .insert({
+  const { data: order, error: orderError } = await insertOrder(
+    adminClient,
+    {
       buyer_id: user.id,
       automation_id: primaryProduct.id,
       developer_id: null,
@@ -1006,6 +1143,8 @@ async function createBundleCheckoutSession(options: {
       stripe_currency: currency,
       stripe_amount_total: checkout.amount,
       stripe_unit_amount: toStripeUnitAmount(checkout.amount, currency),
+      payment_environment: paymentEnvironment,
+      stripe_livemode: paymentEnvironment === "live",
       price_source: checkout.priceSource,
       derived_price: checkout.priceSource !== "bundle_price_override",
       fx_rate: checkout.fxRate,
@@ -1013,9 +1152,8 @@ async function createBundleCheckoutSession(options: {
       fx_date: checkout.fxDate,
       created_at: nowIso(),
       updated_at: nowIso(),
-    })
-    .select()
-    .single();
+    },
+  );
 
   if (orderError) throw new Error(orderError.message);
 
@@ -1056,6 +1194,7 @@ async function createBundleCheckoutSession(options: {
     subtotal_amount: String(checkout.subtotal),
     discount_amount: String(checkout.discountAmount),
     price_source: checkout.priceSource,
+    payment_environment: paymentEnvironment,
     source: "nexus",
   };
 
@@ -1099,7 +1238,7 @@ async function createBundleCheckoutSession(options: {
     sessionParams.subscription_data = { metadata };
   }
 
-  const session = await stripe.checkout.sessions.create(sessionParams);
+  const session = await stripeClient.checkout.sessions.create(sessionParams);
 
   await adminClient
     .from("orders")
@@ -1123,6 +1262,8 @@ async function createBundleCheckoutSession(options: {
     unit_amount: toStripeUnitAmount(checkout.amount, currency),
     price_display: priceDisplay,
     price_source: checkout.priceSource,
+    payment_environment: paymentEnvironment,
+    test_mode: paymentEnvironment === "test",
   });
 }
 
@@ -1161,10 +1302,13 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const paymentMode = await getPaymentMode(adminClient);
 
     if (bundleId) {
       return await createBundleCheckoutSession({
         adminClient,
+        stripeClient: paymentMode.stripeClient,
+        paymentEnvironment: paymentMode.environment,
         user,
         bundleId,
         installType,
@@ -1225,7 +1369,9 @@ Deno.serve(async (req) => {
       fxRate,
       fxSource,
       fxDate,
-    } = await ensureStripePrice(adminClient, product, currency);
+    } = paymentMode.testMode
+      ? await resolveTestCheckoutPrice(product, currency)
+      : await ensureStripePrice(adminClient, product, currency, paymentMode.stripeClient);
 
     const guidedSetupFee = installType === "nexus_guided" && normalizePricingType(product.pricing_type) !== "setup_fee"
       ? await resolveGuidedSetupFeeForCurrency(product, currency)
@@ -1280,9 +1426,9 @@ Deno.serve(async (req) => {
       ? `${basePriceDisplay} + ${guidedSetupFeeDisplay} guided install`
       : basePriceDisplay;
 
-    const { data: order, error: orderError } = await adminClient
-      .from("orders")
-      .insert({
+    const { data: order, error: orderError } = await insertOrder(
+      adminClient,
+      {
         buyer_id: user.id,
         automation_id: product.id,
         developer_id: product.developer_id || product.developers?.id || null,
@@ -1304,21 +1450,22 @@ Deno.serve(async (req) => {
         setup_notes: setupNotes,
 
         stripe_mode: mode,
-stripe_currency: currency,
-stripe_amount_total: checkoutTotalAmount,
-stripe_unit_amount: unitAmount,
+        stripe_currency: currency,
+        stripe_amount_total: checkoutTotalAmount,
+        stripe_unit_amount: unitAmount,
+        payment_environment: paymentMode.environment,
+        stripe_livemode: paymentMode.environment === "live",
 
-price_source: priceSource,
-derived_price: derivedPrice,
-fx_rate: fxRate,
-fx_source: fxSource,
-fx_date: fxDate,
+        price_source: priceSource,
+        derived_price: derivedPrice,
+        fx_rate: fxRate,
+        fx_source: fxSource,
+        fx_date: fxDate,
 
-created_at: nowIso(),
-updated_at: nowIso(),
-      })
-      .select()
-      .single();
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      },
+    );
 
     if (orderError) {
       return errorResponse(orderError.message, 500);
@@ -1345,14 +1492,20 @@ updated_at: nowIso(),
       fx_rate: fxRate ? String(fxRate) : "",
       fx_source: fxSource || "",
       fx_date: fxDate || "",
+      payment_environment: paymentMode.environment,
       source: "nexus",
     };
 
     const lineItems: any[] = [
-      {
-        price: priceId,
-        quantity: 1,
-      },
+      paymentMode.testMode
+        ? {
+            price_data: buildInlinePriceData(product, currency, amount, mode),
+            quantity: 1,
+          }
+        : {
+            price: priceId,
+            quantity: 1,
+          },
     ];
 
     if (guidedSetupFeeAmount > 0) {
@@ -1394,7 +1547,7 @@ updated_at: nowIso(),
       };
     }
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    const session = await paymentMode.stripeClient.checkout.sessions.create(sessionParams);
 
     await adminClient
       .from("orders")
@@ -1421,6 +1574,8 @@ updated_at: nowIso(),
       fx_rate: fxRate,
       fx_source: fxSource,
       fx_date: fxDate,
+      payment_environment: paymentMode.environment,
+      test_mode: paymentMode.testMode,
     });
   } catch (error) {
     console.error(error);

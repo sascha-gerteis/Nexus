@@ -6,6 +6,7 @@ const NexusApp = (() => {
   let selectedCustomizationName = "";
   let marketplaceDrawTimer = null;
   const compareSlugs = new Set();
+  const savedAutomationIds = new Set();
   const MAX_COMPARE_PRODUCTS = 3;
   const RECOMMENDATION_STOP_WORDS = new Set([
     "the", "and", "for", "with", "that", "this", "from", "into", "onto", "about", "what", "when", "where",
@@ -452,10 +453,13 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   }
 
   async function renderMarketplace() {
-    const [{ data, error }, bundleResult] = await Promise.all([
+    const [{ data, error }, bundleResult, savedResult] = await Promise.all([
       NexusDB.listLiveAutomations(),
       typeof NexusDB.listLiveBundles === "function"
         ? NexusDB.listLiveBundles()
+        : Promise.resolve({ data: [], error: null }),
+      typeof NexusDB.listSavedProductIds === "function"
+        ? NexusDB.listSavedProductIds()
         : Promise.resolve({ data: [], error: null })
     ]);
     const grid = document.getElementById("marketplaceGrid");
@@ -470,6 +474,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
     liveAutomations = data || [];
     liveBundles = bundleResult?.data || [];
+    savedAutomationIds.clear();
+    (savedResult?.data || []).forEach((id) => savedAutomationIds.add(String(id)));
     window.NexusMarketplaceProducts = [...liveBundles, ...liveAutomations];
 
     const currency = document.getElementById("marketCurrency");
@@ -536,6 +542,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
         .map((product) => NexusUI.productCard(product, {
           showCompare: !product.is_bundle,
           compareSelected: compareSlugs.has(String(product.slug || "")),
+          showSave: !product.is_bundle,
+          savedSelected: savedAutomationIds.has(String(product.id || "")),
         }))
         .join("") ||
       `<div class="card"><h3>No results</h3><p>Try changing the filters.</p></div>`;
@@ -543,6 +551,37 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     applyTranslationsIfNeeded(grid);
     renderCompareTray();
     forceBuyLinksToCheckoutPage();
+  }
+
+  async function toggleSavedProduct(automationId) {
+    if (!automationId || typeof NexusDB.toggleSavedProduct !== "function") {
+      NexusUI.toast("Could not save this product.");
+      return;
+    }
+
+    const { data, error } = await NexusDB.toggleSavedProduct(automationId);
+    if (error) {
+      NexusUI.toast(error.message || "Log in as a buyer to save products.");
+      if (/log in|login|buyer/i.test(error.message || "")) {
+        setTimeout(() => {
+          location.href = `/pages/buyer/login.html?redirect=${encodeURIComponent(location.pathname + location.search)}`;
+        }, 800);
+      }
+      return;
+    }
+
+    if (data?.saved) {
+      savedAutomationIds.add(String(automationId));
+      NexusUI.toast("Product saved.");
+    } else {
+      savedAutomationIds.delete(String(automationId));
+      NexusUI.toast("Product removed from saved.");
+    }
+
+    drawMarketplace();
+    if (typeof window.NexusBuyerRenderSavedProducts === "function") {
+      window.NexusBuyerRenderSavedProducts();
+    }
   }
 
   function recommendMarketplaceProducts(event) {
@@ -2257,6 +2296,7 @@ async function submitCheckoutIntent(event) {
     }
 
     await renderDemoMarketplaceStatus();
+    await renderPaymentModeStatus();
   }
 
   function setDemoMarketplaceBusy(isBusy) {
@@ -2388,6 +2428,116 @@ async function submitCheckoutIntent(event) {
     NexusUI.toast(data?.message || "Demo marketplace content was reset.");
     await renderAdminDashboard();
     setDemoMarketplaceBusy(false);
+  }
+
+  function setPaymentModeBusy(isBusy) {
+    ["paymentModeEnableTest", "paymentModeDisableTest"].forEach((id) => {
+      const button = document.getElementById(id);
+      if (button) button.disabled = Boolean(isBusy);
+    });
+  }
+
+  async function renderPaymentModeStatus() {
+    const statusEl = document.getElementById("paymentModeStatus");
+    const detailsEl = document.getElementById("paymentModeDetails");
+    const pill = document.getElementById("paymentModePill");
+    const enableButton = document.getElementById("paymentModeEnableTest");
+    const disableButton = document.getElementById("paymentModeDisableTest");
+
+    if (!statusEl || !detailsEl) return;
+
+    if (typeof NexusDB.getPaymentModeStatus !== "function") {
+      statusEl.textContent = "Unavailable";
+      detailsEl.textContent = "Payment mode function is missing.";
+      return;
+    }
+
+    const { data, error } = await NexusDB.getPaymentModeStatus();
+
+    if (error) {
+      statusEl.textContent = "Unavailable";
+      detailsEl.textContent = error.message || "Could not load payment mode.";
+      pill?.classList.remove("green", "orange", "red");
+      pill?.classList.add("red");
+      return;
+    }
+
+    const testMode = Boolean(data?.test_mode_enabled);
+    const missingTestSetup = !data?.test_key_configured || !data?.test_webhook_configured;
+
+    statusEl.textContent = testMode ? "Test mode" : "Live mode";
+    detailsEl.textContent = testMode
+      ? `Stripe test payments are active. Use card ${data?.test_card?.number || "4242 4242 4242 4242"} with any future expiry/CVC. ${missingTestSetup ? "Check test key and test webhook setup before relying on dashboard order updates." : "Test key and webhook are configured."}`
+      : `Live payments are active. Test key: ${data?.test_key_configured ? "configured" : "missing"}. Test webhook: ${data?.test_webhook_configured ? "configured" : "missing"}.`;
+
+    if (pill) {
+      pill.classList.remove("green", "orange", "red");
+      pill.classList.add(testMode ? "red" : "green");
+      pill.textContent = testMode ? "Test payments on" : "Live payments";
+    }
+
+    if (enableButton) enableButton.disabled = testMode || !data?.test_key_configured;
+    if (disableButton) disableButton.disabled = !testMode;
+  }
+
+  async function enablePaymentTestMode() {
+    const confirmed = await NexusUI.confirmDialog({
+      title: "Turn on test payments?",
+      message: "All new Checkout sessions will use Stripe test mode until you turn live payments back on. Use this only while testing.",
+      confirmText: "Turn on test mode"
+    });
+    if (!confirmed) return;
+
+    if (typeof NexusDB.enablePaymentTestMode !== "function") {
+      NexusUI.toast("Payment mode function is missing.");
+      return;
+    }
+
+    setPaymentModeBusy(true);
+    NexusUI.toast("Turning on test payments...");
+
+    const { data, error } = await NexusDB.enablePaymentTestMode();
+
+    if (error) {
+      NexusUI.toast(error.message || "Could not turn on test payments.");
+      setPaymentModeBusy(false);
+      await renderPaymentModeStatus();
+      return;
+    }
+
+    NexusUI.toast(data?.message || "Payment test mode is on.");
+    await renderPaymentModeStatus();
+    setPaymentModeBusy(false);
+  }
+
+  async function disablePaymentTestMode() {
+    const confirmed = await NexusUI.confirmDialog({
+      title: "Return to live payments?",
+      message: "New Checkout sessions will charge real cards again through Stripe live mode.",
+      confirmText: "Use live payments"
+    });
+    if (!confirmed) return;
+
+    if (typeof NexusDB.disablePaymentTestMode !== "function") {
+      NexusUI.toast("Payment mode function is missing.");
+      return;
+    }
+
+    setPaymentModeBusy(true);
+    NexusUI.toast("Returning to live payments...");
+
+    const { data, error } = await NexusDB.disablePaymentTestMode();
+
+    if (error) {
+      NexusUI.toast(error.message || "Could not return to live payments.");
+      setPaymentModeBusy(false);
+      await renderPaymentModeStatus();
+      return;
+    }
+
+    NexusUI.toast(data?.message || "Live payment mode is on.");
+    await renderPaymentModeStatus();
+    setPaymentModeBusy(false);
   }
 
   async function renderAdminFinance() {
@@ -4459,6 +4609,7 @@ if (shouldImportN8n) {
   init,
   openProduct,
   openBundle,
+  toggleSavedProduct,
   toggleBundleWorkflowPreview,
   toggleCompare,
   clearCompare,
@@ -4479,6 +4630,8 @@ if (shouldImportN8n) {
   enableDemoMarketplace,
   disableDemoMarketplace,
   resetDemoMarketplace,
+  enablePaymentTestMode,
+  disablePaymentTestMode,
   updateReviewStatus,
   updatePayoutRequest,
   updateDeveloperApproval,
