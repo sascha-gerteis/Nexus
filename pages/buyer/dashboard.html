@@ -1459,10 +1459,16 @@ function openAutomationDetail(customerAutomationId) {
         return { item, product, order, developerName, latestOutput, state, lane };
       });
 
+      const bundleLaneCounts = {
+        action: bundleRows.filter(row => automationLane(row.state) === "action").length,
+        progress: bundleRows.filter(row => automationLane(row.state) === "progress").length,
+        ready: bundleRows.filter(row => automationLane(row.state) === "ready").length
+      };
+
       const laneCounts = {
-        action: enriched.filter(row => row.lane === "action").length,
-        progress: enriched.filter(row => row.lane === "progress").length,
-        ready: enriched.filter(row => row.lane === "ready").length
+        action: enriched.filter(row => row.lane === "action").length + bundleLaneCounts.action,
+        progress: enriched.filter(row => row.lane === "progress").length + bundleLaneCounts.progress,
+        ready: enriched.filter(row => row.lane === "ready").length + bundleLaneCounts.ready
       };
 
       const sections = [
@@ -1488,25 +1494,6 @@ function openAutomationDetail(customerAutomationId) {
 
       root.innerHTML = `
         <div class="buyer-automation-command">
-          ${
-            bundleRows.length
-              ? `
-                <section class="buyer-bundle-board-section">
-                  <div class="buyer-automation-lane-head">
-                    <div>
-                      <h3>Purchased bundles</h3>
-                      <p>Bundles stay visible here, with each included workflow listed below.</p>
-                    </div>
-                    <strong>${bundleRows.length}</strong>
-                  </div>
-                  <div class="buyer-bundle-board-list">
-                    ${bundleRows.map(renderBundleBoardCard).join("")}
-                  </div>
-                </section>
-              `
-              : ""
-          }
-
           <div class="buyer-automation-summary-grid">
             <article>
               <span>Total items</span>
@@ -1529,6 +1516,25 @@ function openAutomationDetail(customerAutomationId) {
               <p>Producing or ready to produce output.</p>
             </article>
           </div>
+
+          ${
+            bundleRows.length
+              ? `
+                <section class="buyer-bundle-board-section">
+                  <div class="buyer-automation-lane-head">
+                    <div>
+                      <h3>Bundles</h3>
+                      <p>Your purchased packages, followed by the individual workflows inside them.</p>
+                    </div>
+                    <strong>${bundleRows.length}</strong>
+                  </div>
+                  <div class="buyer-bundle-board-list">
+                    ${bundleRows.map(renderBundleBoardCard).join("")}
+                  </div>
+                </section>
+              `
+              : ""
+          }
 
           <div class="buyer-automation-lanes">
             ${
