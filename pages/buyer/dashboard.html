@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260716-buyer-bundle-card">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -771,6 +771,109 @@ function productTitleFromAutomation(item) {
   return item?.name || item?.automations?.title || item?.orders?.automation_title || "Automation";
 }
 
+function parseBundleSnapshot(order) {
+  const snapshot = order?.bundle_snapshot;
+
+  if (!snapshot) return {};
+  if (typeof snapshot === "object") return snapshot;
+
+  try {
+    return JSON.parse(snapshot);
+  } catch (_error) {
+    return {};
+  }
+}
+
+function isBundleOrder(order) {
+  const type = String(order?.order_type || "").toLowerCase();
+  return type === "bundle" || Boolean(order?.bundle_id || parseBundleSnapshot(order).bundle_id);
+}
+
+function orderIdFromAutomation(item) {
+  const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+  return item?.order_id || order.id || "";
+}
+
+function bundleIdFromAutomation(item) {
+  const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+  return item?.bundle_id || order.bundle_id || "";
+}
+
+function buildBuyerBundleRows(orders = [], automations = [], outputs = []) {
+  return (orders || [])
+    .filter(isBundleOrder)
+    .map(order => {
+      const snapshot = parseBundleSnapshot(order);
+      const orderId = order.id || "";
+      const bundleId = order.bundle_id || snapshot.bundle_id || "";
+      const included = (automations || []).filter(item => {
+        const itemOrderId = orderIdFromAutomation(item);
+        const itemBundleId = bundleIdFromAutomation(item);
+
+        return (
+          (orderId && itemOrderId === orderId) ||
+          (bundleId && itemBundleId === bundleId)
+        );
+      });
+
+      const includedIds = new Set(included.map(item => item.id).filter(Boolean));
+      const bundleOutputs = (outputs || [])
+        .filter(output => includedIds.has(output.customer_automation_id))
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const childStates = included.map(item => automationState(item, getLatestOutputForAutomation(outputs, item.id)));
+      const issueCount = childStates.filter(state => state.tone === "red").length;
+      const setupCount = childStates.filter(state => String(state.label || "").toLowerCase().includes("setup") || String(state.label || "").toLowerCase().includes("request needed")).length;
+      const progressCount = childStates.filter(state => automationLane(state) === "progress").length;
+      let state = {
+        label: "Ready",
+        tone: "green",
+        description: "Your bundle workflows are available in this dashboard.",
+        primaryAction: "View bundle setup"
+      };
+
+      if (!included.length) {
+        state = {
+          label: "Preparing",
+          tone: "orange",
+          description: "Nexus is still attaching the included workflows to this bundle order.",
+          primaryAction: "View bundle setup"
+        };
+      } else if (issueCount) {
+        state = {
+          label: "Needs attention",
+          tone: "red",
+          description: `${issueCount} included workflow${issueCount === 1 ? "" : "s"} need attention.`,
+          primaryAction: "View bundle setup"
+        };
+      } else if (setupCount) {
+        state = {
+          label: "Needs setup",
+          tone: "orange",
+          description: "Complete the bundle setup form to start every included workflow.",
+          primaryAction: "Complete bundle setup"
+        };
+      } else if (progressCount) {
+        state = {
+          label: "In progress",
+          tone: "blue",
+          description: "One or more included workflows are being prepared or running.",
+          primaryAction: "View bundle setup"
+        };
+      }
+
+      return {
+        order,
+        snapshot,
+        orderId,
+        bundleId,
+        included,
+        latestOutput: bundleOutputs[0] || null,
+        outputCount: bundleOutputs.length,
+        state
+      };
+    });
+}
+
 function isMonthlyAutomation(item) {
   return String(item?.run_frequency || "").toLowerCase() === "monthly" || isSubscriptionAutomation(item);
 }
@@ -1092,20 +1195,23 @@ function openAutomationDetail(customerAutomationId) {
 
     function renderDashboard() {
       const { profile, orders, automations, events, outputs } = dashboardData;
+      const bundleRows = buildBuyerBundleRows(orders, automations, outputs);
 
       const states = automations.map(item => {
         return automationState(item, getLatestOutputForAutomation(outputs, item.id));
       });
+      const bundleStates = bundleRows.map(row => row.state);
+      const allStates = states.concat(bundleStates);
 
-      const readyCount = states.filter(state => state.label === "Ready" || state.label === "Install complete").length;
-      const issueCount = states.filter(state => state.label === "Issue detected" || state.label === "Blocked").length;
-      const runningCount = states.filter(state => state.label === "Running" || state.label === "Install in progress").length;
-      const setupNeededCount = states.filter(state => state.label === "Needs setup" || state.label === "Install request needed").length;
+      const readyCount = allStates.filter(state => state.label === "Ready" || state.label === "Install complete").length;
+      const issueCount = allStates.filter(state => state.label === "Issue detected" || state.label === "Blocked" || state.label === "Needs attention").length;
+      const runningCount = allStates.filter(state => state.label === "Running" || state.label === "Install in progress" || state.label === "In progress" || state.label === "Preparing").length;
+      const setupNeededCount = allStates.filter(state => state.label === "Needs setup" || state.label === "Install request needed").length;
 
       document.getElementById("buyerWelcome").textContent =
         profile?.name ? `Welcome back, ${profile.name}.` : "Your automation dashboard.";
 
-      document.getElementById("buyerAutomationCount").textContent = automations.length;
+      document.getElementById("buyerAutomationCount").textContent = automations.length + bundleRows.length;
       document.getElementById("buyerReadyCount").textContent = readyCount;
       document.getElementById("buyerOutputCount").textContent = outputs.length;
       document.getElementById("buyerIssueCount").textContent = issueCount;
@@ -1113,7 +1219,7 @@ function openAutomationDetail(customerAutomationId) {
       const mainStatus = document.getElementById("buyerMainStatus");
       const mainStatusText = document.getElementById("buyerMainStatusText");
 
-      if (!automations.length) {
+      if (!automations.length && !bundleRows.length) {
         mainStatus.textContent = "No automations yet";
         mainStatusText.textContent = "Browse the marketplace to purchase your first automation.";
       } else if (issueCount > 0) {
@@ -1180,6 +1286,7 @@ function openAutomationDetail(customerAutomationId) {
       if (!root) return;
 
       const latestOutput = outputs[0] || null;
+      const bundleRows = buildBuyerBundleRows(orders, automations, outputs);
 
       const priorityAutomation = automations.find(item => {
         const state = automationState(item, getLatestOutputForAutomation(outputs, item.id));
@@ -1192,6 +1299,7 @@ function openAutomationDetail(customerAutomationId) {
           state.label === "Install in progress"
         );
       }) || automations[0] || null;
+      const priorityBundle = bundleRows.find(row => row.state.tone !== "green") || bundleRows[0] || null;
 
       const priorityLatestOutput = priorityAutomation
         ? getLatestOutputForAutomation(outputs, priorityAutomation.id)
@@ -1202,6 +1310,10 @@ function openAutomationDetail(customerAutomationId) {
         : null;
 
       const priorityProduct = priorityAutomation?.automations || {};
+      const priorityBundleSetupUrl = priorityBundle?.orderId && priorityBundle?.bundleId
+        ? `/pages/buyer/setup.html?order_id=${encodeURIComponent(priorityBundle.orderId)}&bundle_id=${encodeURIComponent(priorityBundle.bundleId)}`
+        : "/pages/buyer/dashboard.html#automations";
+      const priorityBundleTitle = priorityBundle?.order?.automation_title || priorityBundle?.snapshot?.bundle_title || "Automation bundle";
 
       root.innerHTML = `
         <div class="buyer-overview-two-col">
@@ -1232,6 +1344,29 @@ function openAutomationDetail(customerAutomationId) {
                     </button>
                   </div>
                 `
+                : priorityBundle
+                  ? `
+                    <div class="buyer-focus-title-row">
+                      <div class="automation-icon cyan">PK</div>
+
+                      <div>
+                        <span class="${pillClassFromTone(priorityBundle.state.tone)}">${escapeHtml(priorityBundle.state.label)}</span>
+                        <h3>${escapeHtml(priorityBundleTitle)}</h3>
+                      </div>
+                    </div>
+
+                    <p>${escapeHtml(priorityBundle.state.description)}</p>
+
+                    <div class="buyer-focus-actions">
+                      <a class="btn btn-primary btn-small" href="${priorityBundleSetupUrl}">
+                        ${escapeHtml(priorityBundle.state.primaryAction || "View bundle setup")}
+                      </a>
+
+                      <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('automations')">
+                        View bundle
+                      </button>
+                    </div>
+                  `
                 : `
                   <h3>No automations yet</h3>
                   <p>Buy your first automation from the marketplace to start using Nexus.</p>
@@ -1299,10 +1434,11 @@ function openAutomationDetail(customerAutomationId) {
 
     function renderAutomations(automations, outputs) {
       const root = document.getElementById("buyerAutomationsList");
+      const bundleRows = buildBuyerBundleRows(dashboardData.orders || [], automations, outputs);
 
       if (!root) return;
 
-      if (!automations.length) {
+      if (!automations.length && !bundleRows.length) {
         root.innerHTML = `
           <div class="buyer-empty-clean">
             <h3>No automations yet</h3>
@@ -1352,11 +1488,30 @@ function openAutomationDetail(customerAutomationId) {
 
       root.innerHTML = `
         <div class="buyer-automation-command">
+          ${
+            bundleRows.length
+              ? `
+                <section class="buyer-bundle-board-section">
+                  <div class="buyer-automation-lane-head">
+                    <div>
+                      <h3>Purchased bundles</h3>
+                      <p>Bundles stay visible here, with each included workflow listed below.</p>
+                    </div>
+                    <strong>${bundleRows.length}</strong>
+                  </div>
+                  <div class="buyer-bundle-board-list">
+                    ${bundleRows.map(renderBundleBoardCard).join("")}
+                  </div>
+                </section>
+              `
+              : ""
+          }
+
           <div class="buyer-automation-summary-grid">
             <article>
-              <span>Total automations</span>
-              <strong>${automations.length}</strong>
-              <p>Every purchased automation appears below.</p>
+              <span>Total items</span>
+              <strong>${automations.length + bundleRows.length}</strong>
+              <p>Bundles and purchased workflows appear below.</p>
             </article>
             <article class="${laneCounts.action ? "attention" : ""}">
               <span>Needs action</span>
@@ -1401,6 +1556,85 @@ function openAutomationDetail(customerAutomationId) {
             }
           </div>
         </div>
+      `;
+    }
+
+    function renderBundleBoardCard(row) {
+      const { order, snapshot, included, latestOutput, outputCount, state } = row;
+      const title = order.automation_title || snapshot.bundle_title || "Automation bundle";
+      const setupUrl = row.orderId && row.bundleId
+        ? `/pages/buyer/setup.html?order_id=${encodeURIComponent(row.orderId)}&bundle_id=${encodeURIComponent(row.bundleId)}`
+        : "/pages/buyer/dashboard.html#automations";
+      const workflowNames = included
+        .slice(0, 5)
+        .map(item => productTitleFromAutomation(item))
+        .filter(Boolean);
+      const latestOutputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+      const childReadyCount = included.filter(item => {
+        const childState = automationState(item, getLatestOutputForAutomation(dashboardData.outputs, item.id));
+        return childState.tone === "green";
+      }).length;
+
+      return `
+        <article class="buyer-automation-board-card buyer-bundle-board-card">
+          <div class="buyer-automation-board-main">
+            <div class="automation-icon cyan">PK</div>
+            <div>
+              <div class="buyer-automation-title-row">
+                <span class="pill purple">Bundle</span>
+                <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
+                <span class="buyer-builder-inline">Curated by Nexus</span>
+              </div>
+              <h3>${escapeHtml(title)}</h3>
+              <p>${escapeHtml(state.description)}</p>
+            </div>
+          </div>
+
+          <div class="buyer-automation-board-meta">
+            <div>
+              <span>Included workflows</span>
+              <strong>${included.length || "Preparing"}</strong>
+            </div>
+            <div>
+              <span>Ready</span>
+              <strong>${childReadyCount}/${included.length || 0}</strong>
+            </div>
+            <div>
+              <span>Bundle price</span>
+              <strong>${escapeHtml(orderPriceLabel(order))}</strong>
+            </div>
+            <div>
+              <span>Latest output</span>
+              <strong>${escapeHtml(latestOutput ? dateLabel(latestOutput.created_at) : "Not yet")}</strong>
+            </div>
+          </div>
+
+          ${
+            workflowNames.length
+              ? `
+                <div class="buyer-bundle-workflow-list">
+                  ${workflowNames.map(name => `<span>${escapeHtml(name)}</span>`).join("")}
+                </div>
+              `
+              : ""
+          }
+
+          <div class="buyer-automation-history-strip">
+            <span>${outputCount} output${outputCount === 1 ? "" : "s"}</span>
+            <span>${escapeHtml(orderStatusLabel(order))}</span>
+            <span>${escapeHtml(dateLabel(order.created_at))}</span>
+          </div>
+
+          <div class="buyer-automation-card-actions">
+            <a class="btn btn-primary btn-small" href="${setupUrl}">${escapeHtml(state.primaryAction || "View bundle setup")}</a>
+            ${
+              latestOutputLink
+                ? `<a class="btn btn-secondary btn-small" href="${latestOutputLink}">View latest output</a>`
+                : ""
+            }
+            <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('orders')">View order</button>
+          </div>
+        </article>
       `;
     }
 

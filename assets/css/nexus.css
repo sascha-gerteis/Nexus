@@ -8158,6 +8158,48 @@ body[data-page="checkout"] .site-header {
   font-size: .88rem;
 }
 
+.buyer-bundle-board-section {
+  display: grid;
+  gap: .65rem;
+  padding: .75rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(0, 194, 255, .13), transparent 36%),
+    linear-gradient(135deg, #ffffff, #f3f8ff);
+}
+
+.buyer-bundle-board-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: .65rem;
+}
+
+.buyer-bundle-board-card {
+  border-color: #bfdbfe;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, .78), #ffffff 54%);
+}
+
+.buyer-bundle-workflow-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.buyer-bundle-workflow-list span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: .3rem .48rem;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--navy);
+  font-size: .72rem;
+  font-weight: 900;
+}
+
 .buyer-automation-board-card {
   display: grid;
   gap: .6rem;
