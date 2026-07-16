@@ -156,6 +156,114 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     return liveAutomations.find((product) => String(product.slug || "") === normalized) || null;
   }
 
+  function marketplaceDeepLink() {
+    if (document.body.dataset.page !== "marketplace") return null;
+
+    const params = new URLSearchParams(location.search);
+    const hashParams = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+    const source = params.get("bundle") || params.get("bundle_slug") || hashParams.get("bundle")
+      ? "bundle"
+      : "product";
+    const slug =
+      params.get("product") ||
+      params.get("slug") ||
+      params.get("automation") ||
+      params.get("bundle") ||
+      params.get("bundle_slug") ||
+      hashParams.get("product") ||
+      hashParams.get("slug") ||
+      hashParams.get("automation") ||
+      hashParams.get("bundle") ||
+      "";
+
+    if (!slug) return null;
+
+    return {
+      type: source,
+      slug: decodeURIComponent(slug)
+    };
+  }
+
+  function setMarketplaceShareUrl(type, slug) {
+    if (document.body.dataset.page !== "marketplace" || !slug || !history.replaceState) return;
+
+    const url = new URL(location.href);
+    ["product", "slug", "automation", "bundle", "bundle_slug"].forEach((key) => url.searchParams.delete(key));
+    url.hash = "";
+    url.searchParams.set(type === "bundle" ? "bundle" : "product", slug);
+    history.replaceState({ nexusModal: type, slug }, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function marketplaceShareHref(type, slug) {
+    const url = new URL("/pages/marketplace/index.html", location.origin);
+    url.searchParams.set(type === "bundle" ? "bundle" : "product", slug || "");
+    return url.href;
+  }
+
+  async function copyMarketplaceLink(type, slug) {
+    const href = marketplaceShareHref(type, slug);
+
+    try {
+      await navigator.clipboard.writeText(href);
+      NexusUI.toast(type === "bundle" ? "Bundle link copied." : "Product link copied.");
+    } catch {
+      NexusUI.toast(href);
+    }
+  }
+
+  function clearMarketplaceShareUrl() {
+    if (document.body.dataset.page !== "marketplace" || !history.replaceState) return;
+
+    const url = new URL(location.href);
+    const hadDeepLink = ["product", "slug", "automation", "bundle", "bundle_slug"].some((key) => url.searchParams.has(key)) ||
+      /(^#|\b)(product|slug|automation|bundle)=/.test(location.hash || "");
+
+    if (!hadDeepLink) return;
+
+    ["product", "slug", "automation", "bundle", "bundle_slug"].forEach((key) => url.searchParams.delete(key));
+    url.hash = "";
+    history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function closeMarketplaceModal() {
+    NexusUI.closeModal();
+    clearMarketplaceShareUrl();
+  }
+
+  function wireMarketplaceShareLinks() {
+    if (document.body.dataset.page !== "marketplace") return;
+
+    const modal = document.getElementById("productModal");
+    if (modal && !modal.dataset.shareLinkWired) {
+      modal.dataset.shareLinkWired = "true";
+      modal.addEventListener("click", (event) => {
+        if (event.target.id === "productModal") {
+          clearMarketplaceShareUrl();
+        }
+      });
+    }
+
+    if (!document.body.dataset.shareLinkEscWired) {
+      document.body.dataset.shareLinkEscWired = "true";
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          clearMarketplaceShareUrl();
+        }
+      });
+    }
+  }
+
+  async function openMarketplaceDeepLink() {
+    const link = marketplaceDeepLink();
+    if (!link?.slug) return;
+
+    if (link.type === "bundle") {
+      await openBundle(link.slug);
+    } else {
+      await openProduct(link.slug);
+    }
+  }
+
   function applyTranslationsIfNeeded(root) {
     if (NexusUI.getLanguage?.() !== "en") {
       NexusUI.applyTranslations?.(root);
@@ -482,6 +590,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (currency) currency.innerHTML = NexusUI.currencySwitch();
 
     drawMarketplace();
+    wireMarketplaceShareLinks();
+    await openMarketplaceDeepLink();
 
     document.querySelectorAll("[data-filter]").forEach((element) => {
       element.addEventListener("input", scheduleMarketplaceDraw);
@@ -912,6 +1022,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const product = await fetchProduct(slug);
     if (!product) return;
 
+    setMarketplaceShareUrl("product", product.slug || slug);
+
     const developer = product.developers || {};
     const freshness = NexusUI.productFreshness?.(product) || {
       tested: "June 2026",
@@ -953,7 +1065,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
           <p>${NexusUI.escapeHtml(NexusUI.localizeRecord(product, "long_description", NexusUI.localizeRecord(product, "short_description", "")))}</p>
         </div>
 
-        <button class="close" onclick="NexusUI.closeModal()">Close</button>
+        <button class="close" onclick="NexusApp.closeMarketplaceModal()">Close</button>
       </div>
 
       <div
@@ -1045,6 +1157,10 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
           </a>
 
           ${messageButton}
+
+          <button class="btn btn-secondary" type="button" onclick="NexusApp.copyMarketplaceLink('product', '${NexusUI.escapeAttribute(product.slug || "")}')">
+            Copy link
+          </button>
         </div>
       </div>
     `;
@@ -1067,6 +1183,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     }
 
     activeProduct = bundle;
+    setMarketplaceShareUrl("bundle", bundle.slug || slug);
 
     const products = Array.isArray(bundle.bundle_products) ? bundle.bundle_products : [];
     const bundleHealthStatus = NexusUI.workflowHealthStatus?.(bundle) || bundle.health_status || "unknown";
@@ -1106,7 +1223,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
           <h2>${NexusUI.escapeHtml(bundle.title || "Automation bundle")}</h2>
           <p>${NexusUI.escapeHtml(bundle.long_description || bundle.short_description || "")}</p>
         </div>
-        <button class="close" onclick="NexusUI.closeModal()">Close</button>
+        <button class="close" onclick="NexusApp.closeMarketplaceModal()">Close</button>
       </div>
 
       <div class="price-box">
@@ -1151,6 +1268,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
           <div class="hero-actions" style="justify-content:flex-start">
             <a class="btn btn-primary" href="/pages/checkout/index.html?bundle=${encodeURIComponent(bundle.slug || "")}&step=setup">Buy bundle</a>
             <a class="btn btn-secondary" href="/pages/contact/index.html">Ask Nexus</a>
+            <button class="btn btn-secondary" type="button" onclick="NexusApp.copyMarketplaceLink('bundle', '${NexusUI.escapeAttribute(bundle.slug || "")}')">Copy link</button>
           </div>
         </div>
       </div>
@@ -4609,6 +4727,8 @@ if (shouldImportN8n) {
   init,
   openProduct,
   openBundle,
+  closeMarketplaceModal,
+  copyMarketplaceLink,
   toggleSavedProduct,
   toggleBundleWorkflowPreview,
   toggleCompare,

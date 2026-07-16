@@ -27,12 +27,54 @@ function asObject(value: unknown) {
   return value as Record<string, unknown>;
 }
 
+function isPlainObject(value: unknown) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function parseMaybeJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  if (
+    !((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]")))
+  ) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
 function pickFirstString(...values: unknown[]) {
   for (const value of values) {
     const cleaned = cleanString(value);
     if (cleaned) return cleaned;
   }
   return "";
+}
+
+function latestRunStoppedBeforeN8n(run: any) {
+  if (!run) return false;
+
+  const status = cleanString(run.status).toLowerCase();
+  const executionId = cleanString(run.n8n_execution_id);
+  const message = cleanString(run.error_message).toLowerCase();
+
+  if (status !== "error" || executionId) return false;
+
+  return (
+    message.includes("webhook") ||
+    message.includes("not registered") ||
+    message.includes("requested webhook") ||
+    message.includes("could not be started") ||
+    message.includes("failed to start")
+  );
 }
 
 function getNested(obj: any, path: string) {
@@ -210,7 +252,7 @@ async function isAdmin(adminClient: any, userId: string) {
     .eq("id", userId)
     .maybeSingle();
 
-  return data?.role === "admin" || data?.role === "developer";
+  return data?.role === "admin" || data?.role === "admin_staff" || data?.role === "developer";
 }
 
 async function n8nFetch(path: string) {
@@ -309,6 +351,192 @@ function extractExecutionError(execution: any) {
     errorMessage,
     errorNode,
     rawError: Object.keys(rawError).length ? rawError : asObject(execution),
+  };
+}
+
+function unwrapOutputCandidate(value: unknown): unknown {
+  const outputKeys = [
+    "NEXUS_FINAL_OUTPUT",
+    "Nexus_final_output",
+    "nexus_final_output",
+    "nexusFinalOutput",
+    "final_output",
+    "finalOutput",
+    "automation_output",
+    "automationOutput",
+    "output",
+    "result",
+    "report",
+    "payload",
+    "data",
+    "body",
+  ];
+
+  let current = parseMaybeJson(value);
+
+  for (let index = 0; index < 5; index += 1) {
+    if (Array.isArray(current)) {
+      current = current.length === 1 ? parseMaybeJson(current[0]) : current;
+      continue;
+    }
+
+    if (!isPlainObject(current)) return current;
+
+    const objectValue = current as Record<string, unknown>;
+    const key = outputKeys.find((candidate) => {
+      const candidateValue = objectValue[candidate];
+      return candidateValue !== undefined && candidateValue !== null && cleanString(candidateValue) !== "";
+    });
+
+    if (!key) return current;
+    current = parseMaybeJson(objectValue[key]);
+  }
+
+  return current;
+}
+
+function extractExecutionItems(execution: any, nodeName: string) {
+  const runData =
+    execution?.data?.resultData?.runData ||
+    execution?.resultData?.runData ||
+    execution?.runData ||
+    {};
+  const runs = Array.isArray(runData?.[nodeName]) ? runData[nodeName] : [];
+  const items: any[] = [];
+
+  for (const run of runs.slice().reverse()) {
+    const main = Array.isArray(run?.data?.main) ? run.data.main : [];
+
+    for (const group of main) {
+      if (!Array.isArray(group)) continue;
+
+      for (const item of group) {
+        if (item?.json !== undefined) {
+          items.push(item.json);
+        }
+      }
+    }
+  }
+
+  return items;
+}
+
+function extractFallbackOutputFromExecution(execution: any) {
+  const runData =
+    execution?.data?.resultData?.runData ||
+    execution?.resultData?.runData ||
+    execution?.runData ||
+    {};
+  const nodeNames = Object.keys(runData);
+  const lastNode = pickFirstString(
+    execution?.data?.resultData?.lastNodeExecuted,
+    execution?.resultData?.lastNodeExecuted,
+    execution?.lastNodeExecuted,
+  );
+  const preferredNames = [
+    "NEXUS_FINAL_OUTPUT",
+    "Nexus_final_output",
+    "nexus_final_output",
+    "Nexus Final Output",
+    "Nexus Output",
+    "Nexus output",
+  ];
+  const blockedNames = new Set([
+    "Nexus Submit Output",
+    "Nexus Webhook Trigger",
+    "Nexus Runtime Context",
+  ]);
+  const orderedNames = [
+    ...preferredNames.filter((name) => nodeNames.includes(name)),
+    ...nodeNames
+      .filter((name) =>
+        !blockedNames.has(name) &&
+        name !== lastNode
+      )
+      .reverse(),
+    ...(lastNode && !blockedNames.has(lastNode) ? [lastNode] : []),
+  ];
+
+  for (const nodeName of orderedNames) {
+    const items = extractExecutionItems(execution, nodeName);
+
+    for (const item of items) {
+      const unwrapped = unwrapOutputCandidate(item);
+      const objectValue = isPlainObject(unwrapped) ? unwrapped as Record<string, unknown> : {};
+      const textValue = typeof unwrapped === "string" ? unwrapped : "";
+      const useful = Boolean(
+        textValue ||
+          objectValue.title ||
+          objectValue.summary ||
+          objectValue.content_html ||
+          objectValue.contentHtml ||
+          objectValue.html ||
+          objectValue.content_text ||
+          objectValue.contentText ||
+          objectValue.text ||
+          objectValue.markdown ||
+          Object.keys(objectValue).length,
+      );
+
+      if (useful) {
+        return { nodeName, value: unwrapped };
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildFallbackOutputPayload(customerAutomation: any, execution: any, fallback: any) {
+  const now = new Date().toISOString();
+  const value = fallback?.value;
+  const objectValue = isPlainObject(value) ? value as Record<string, unknown> : {};
+  const textValue = typeof value === "string" ? value : "";
+  const looksLikeHtml = /<[a-z][\s\S]*>/i.test(textValue);
+  const contentHtml = pickFirstString(
+    objectValue.content_html,
+    objectValue.contentHtml,
+    objectValue.html,
+    objectValue.HTML,
+    objectValue.report_html,
+    objectValue.reportHtml,
+    looksLikeHtml ? textValue : "",
+  );
+  const contentText = pickFirstString(
+    objectValue.content_text,
+    objectValue.contentText,
+    objectValue.text,
+    objectValue.markdown,
+    objectValue.output_text,
+    objectValue.outputText,
+    !contentHtml ? textValue : "",
+  );
+  const contentJson = isPlainObject(value) || Array.isArray(value)
+    ? value
+    : (textValue ? { value: textValue } : {});
+
+  return {
+    customer_automation_id: customerAutomation.id,
+    order_id: customerAutomation.order_id || null,
+    buyer_id: customerAutomation.buyer_id,
+    automation_id: customerAutomation.automation_id || null,
+    output_type: pickFirstString(objectValue.output_type, objectValue.outputType) || "report",
+    status: "published",
+    title: pickFirstString(
+      objectValue.title,
+      objectValue.report_title,
+      objectValue.reportTitle,
+      objectValue.name,
+    ) || "Automation output",
+    summary: pickFirstString(objectValue.summary, objectValue.description),
+    content_text: contentText,
+    content_html: contentHtml,
+    content_json: isPlainObject(contentJson) ? contentJson : { value: contentJson },
+    file_url: pickFirstString(objectValue.file_url, objectValue.fileUrl),
+    storage_path: pickFirstString(objectValue.storage_path, objectValue.storagePath),
+    created_by: "runtime",
+    created_at: now,
+    updated_at: now,
   };
 }
 
@@ -440,16 +668,56 @@ async function applyExecutionRunning(adminClient: any, customerAutomation: any, 
   return { status: "running" };
 }
 
-async function applyExecutionSuccess(adminClient: any, customerAutomation: any, execution: any) {
+async function applyExecutionSuccess(
+  adminClient: any,
+  customerAutomation: any,
+  execution: any,
+  options: { forceRecover?: boolean } = {},
+) {
   const now = new Date().toISOString();
 
-  /*
-    Do not create an output here. The normal Nexus Submit Output callback does that.
-    This only marks the execution as checked/successful if n8n reports success.
-  */
+  const { data: existingOutputs } = await adminClient
+    .from("automation_outputs")
+    .select("id")
+    .eq("customer_automation_id", customerAutomation.id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  let recoveredOutput: any = null;
+
+  if (options.forceRecover || !Array.isArray(existingOutputs) || existingOutputs.length === 0) {
+    const fallback = extractFallbackOutputFromExecution(execution);
+
+    if (fallback) {
+      const { data: output, error: outputError } = await adminClient
+        .from("automation_outputs")
+        .insert(buildFallbackOutputPayload(customerAutomation, execution, fallback))
+        .select("id, title")
+        .single();
+
+      if (outputError) {
+        console.warn("n8n execution output recovery skipped:", outputError.message);
+      } else {
+        recoveredOutput = {
+          id: output?.id || null,
+          title: output?.title || "",
+          source_node: fallback.nodeName,
+        };
+      }
+    }
+  }
+
   await adminClient
     .from("customer_automations")
     .update({
+      status: "active",
+      runtime_status: "success",
+      health_status: "healthy",
+      last_output_at: recoveredOutput ? now : customerAutomation.last_output_at || null,
+      last_error_code: null,
+      last_error_node: null,
+      last_error_message: null,
+      last_error_details: {},
       n8n_last_execution_id: cleanString(execution?.id) || customerAutomation.n8n_last_execution_id || null,
       n8n_last_execution_status: "success",
       n8n_last_execution_checked_at: now,
@@ -468,7 +736,28 @@ async function applyExecutionSuccess(adminClient: any, customerAutomation: any, 
     .eq("customer_automation_id", customerAutomation.id)
     .eq("status", "running");
 
-  return { status: "success" };
+  const order = Array.isArray(customerAutomation.orders)
+    ? customerAutomation.orders[0]
+    : customerAutomation.orders;
+
+  if (customerAutomation.order_id && (recoveredOutput || Array.isArray(existingOutputs) && existingOutputs.length > 0)) {
+    await adminClient
+      .from("orders")
+      .update({
+        order_status: "completed",
+        updated_at: now,
+      })
+      .eq("id", customerAutomation.order_id)
+      .eq("payment_status", "paid")
+      .not("order_status", "in", '("cancelled","checkout_expired","payment_failed","refunded")');
+  }
+
+  return {
+    status: "success",
+    recovered_output: recoveredOutput,
+    had_existing_output: Array.isArray(existingOutputs) && existingOutputs.length > 0,
+    order_status_checked: Boolean(order),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -552,14 +841,40 @@ Deno.serve(async (req) => {
       }
     }
 
+    const { data: latestRun } = await adminClient
+      .from("automation_runs")
+      .select("id, status, n8n_execution_id, error_message, created_at, updated_at, finished_at")
+      .eq("customer_automation_id", customerAutomationId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestRunStoppedBeforeN8n(latestRun)) {
+      return jsonResponse({
+        ok: true,
+        customer_automation_id: customerAutomationId,
+        status: "trigger_error_recorded",
+        message: "The latest Nexus run failed before n8n created an execution.",
+        latest_run: latestRun,
+        result: {
+          status: "trigger_error_recorded",
+          error_type: "workflow_start_error",
+          error_code: "WORKFLOW_TRIGGER_FAILED",
+          needs_customer_action: false,
+          customer_message:
+            "This automation could not be started. Nexus has been notified and will review it.",
+          admin_error_message: cleanString(latestRun?.error_message),
+        },
+      });
+    }
+
     const product = Array.isArray(customerAutomation.automations)
       ? customerAutomation.automations[0]
       : customerAutomation.automations || {};
 
     const explicitExecutionId = cleanString(
       body.execution_id ||
-        body.executionId ||
-        customerAutomation.n8n_last_execution_id,
+        body.executionId,
     );
 
     let execution: any = null;
@@ -622,7 +937,9 @@ Deno.serve(async (req) => {
     } else if (["running", "waiting", "new", "unknown"].includes(executionStatus)) {
       result = await applyExecutionRunning(adminClient, customerAutomation, execution);
     } else {
-      result = await applyExecutionSuccess(adminClient, customerAutomation, execution);
+      result = await applyExecutionSuccess(adminClient, customerAutomation, execution, {
+        forceRecover: body.force_recover === true || body.forceRecover === true,
+      });
     }
 
     return jsonResponse({
@@ -631,6 +948,21 @@ Deno.serve(async (req) => {
       n8n_execution_id: cleanString(execution?.id),
       n8n_status: executionStatus,
       result,
+      debug: body.debug_nodes === true || body.debugNodes === true
+        ? {
+          last_node: pickFirstString(
+            execution?.data?.resultData?.lastNodeExecuted,
+            execution?.resultData?.lastNodeExecuted,
+            execution?.lastNodeExecuted,
+          ),
+          run_nodes: Object.keys(
+            execution?.data?.resultData?.runData ||
+              execution?.resultData?.runData ||
+              execution?.runData ||
+              {},
+          ),
+        }
+        : undefined,
     });
   } catch (error) {
     console.error(error);

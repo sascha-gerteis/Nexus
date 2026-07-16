@@ -274,6 +274,46 @@ function buildCallbackUrl() {
   return `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/runtime-submit-output`;
 }
 
+async function provisionCustomerWorkflowBeforeRun(customerAutomationId: string) {
+  if (!SUPABASE_URL || !NEXUS_RUNTIME_SECRET || !customerAutomationId) {
+    return null;
+  }
+
+  const response = await fetch(
+    `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/provision-customer-workflow`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-nexus-runtime-secret": NEXUS_RUNTIME_SECRET,
+      },
+      body: JSON.stringify({
+        customer_automation_id: customerAutomationId,
+      }),
+    },
+  );
+
+  const text = await response.text();
+  let data: any = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok || data?.ok === false) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        data?.raw ||
+        `Could not provision customer workflow before run (${response.status}).`,
+    );
+  }
+
+  return data;
+}
+
 function getRuntimeWebhookUrl(customerAutomation: any, automation: any, order: any) {
   return pickFirstString(
     customerAutomation?.runtime_webhook_url,
@@ -293,6 +333,17 @@ function getRuntimeWebhookPath(customerAutomation: any, automation: any, order: 
     automation?.n8n_webhook_path,
     order?.runtime_webhook_path,
     order?.n8n_webhook_path,
+  );
+}
+
+function hasCustomerRuntimeTarget(customerAutomation: any) {
+  return Boolean(
+    pickFirstString(
+      customerAutomation?.runtime_webhook_url,
+      customerAutomation?.n8n_webhook_url,
+      customerAutomation?.runtime_webhook_path,
+      customerAutomation?.n8n_webhook_path,
+    ),
   );
 }
 
@@ -404,8 +455,8 @@ async function requireOperator(req: Request, body: any, adminClient: any) {
     .eq("id", data.user.id)
     .maybeSingle();
 
-  if (profile?.role === "admin") {
-    return { ok: true, internal: false, user: data.user, role: "admin", developer: null };
+  if (profile?.role === "admin" || profile?.role === "admin_staff") {
+    return { ok: true, internal: false, user: data.user, role: profile.role, developer: null };
   }
 
   if (profile?.role === "developer") {
@@ -710,6 +761,96 @@ function isWebhookNotRegistered(error: unknown) {
     (lower.includes("not registered") || lower.includes("requested webhook"));
 }
 
+function activationFailureNeedsReprovision(error: unknown) {
+  const message = error instanceof Error ? error.message : cleanString(error);
+  const lower = message.toLowerCase();
+
+  return (
+    lower.includes("cannot be activated") ||
+    lower.includes("no trigger node") ||
+    lower.includes("at least one trigger") ||
+    lower.includes("workflow does not exist") ||
+    lower.includes("not found")
+  );
+}
+
+function classifyRuntimeStartError(message: string) {
+  const lower = cleanString(message).toLowerCase();
+  const credentialSignals = [
+    "invalid token",
+    "access token",
+    "oauth",
+    "oauth token",
+    "unauthorized",
+    "authorisation",
+    "authorization",
+    "authentication",
+    "forbidden",
+    "access denied",
+    "access_denied",
+    "permission",
+    "permissions",
+    "scope",
+    "invalid grant",
+    "invalid_grant",
+    "invalid client",
+    "invalid_client",
+    "invalid api key",
+    "api key invalid",
+    "expired token",
+    "token expired",
+    "token has expired",
+    "invalid credentials",
+    "credential",
+  ];
+  const customerInputSignals = [
+    "invalid page id",
+    "invalid object id",
+    "unsupported get request",
+    "invalid url",
+    "invalid channel id",
+    "invalid username",
+    "invalid handle",
+    "missing required field",
+    "required field",
+    "required parameter",
+    "parameter is required",
+  ];
+
+  if (credentialSignals.some((signal) => lower.includes(signal))) {
+    return {
+      needsCustomerAction: true,
+      lastErrorCode: "CUSTOMER_CREDENTIAL_INVALID",
+      status: "setup_error",
+      healthStatus: "needs_customer_action",
+      setupStatus: "needs_update",
+      customerMessage:
+        "The credentials for this automation are invalid, expired, or missing required permissions. Please update your setup details to continue.",
+    };
+  }
+
+  if (customerInputSignals.some((signal) => lower.includes(signal))) {
+    return {
+      needsCustomerAction: true,
+      lastErrorCode: "CUSTOMER_SETUP_INVALID",
+      status: "setup_error",
+      healthStatus: "needs_customer_action",
+      setupStatus: "needs_update",
+      customerMessage:
+        "Some setup details for this automation look incorrect or incomplete. Please review the setup form and submit it again.",
+    };
+  }
+
+  return {
+    needsCustomerAction: false,
+    lastErrorCode: "RUNTIME_START_FAILED",
+    status: "error",
+    healthStatus: "error",
+    setupStatus: "",
+    customerMessage: "This automation could not be started. Nexus has been notified.",
+  };
+}
+
 async function n8nApiRequest(path: string, options: RequestInit = {}) {
   const baseUrl = cleanBaseUrl(N8N_BASE_URL);
   const apiKey = cleanString(N8N_API_KEY);
@@ -854,13 +995,40 @@ async function runCandidate(adminClient: any, row: any, options: {
   eventPayload?: Record<string, unknown>;
 }) {
   const customerAutomation = row;
-  const automation = one(row.automations) || {};
+  let automation = one(row.automations) || {};
   const order = one(row.orders) || {};
-  const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
-  const eligibility = scheduleIsRunnable(customerAutomation, order, webhookUrl);
   const isManualRun = options.action === "run_one" ||
     options.action === "run_latest" ||
     options.action === "run_matching";
+
+  if (!options.dryRun && isManualRun) {
+    const hasN8nTemplate = Boolean(
+      customerAutomation.n8n_workflow_id ||
+        automation?.n8n_workflow_id ||
+        customerAutomation.runtime_webhook_url ||
+        automation?.runtime_webhook_url,
+    );
+
+    if (hasN8nTemplate && !hasCustomerRuntimeTarget(customerAutomation)) {
+      const provisionResult = await provisionCustomerWorkflowBeforeRun(customerAutomation.id);
+      if (provisionResult?.customer_automation) {
+        Object.assign(customerAutomation, provisionResult.customer_automation);
+      }
+      if (provisionResult?.workflow_id) {
+        customerAutomation.n8n_workflow_id = provisionResult.workflow_id;
+      }
+      if (provisionResult?.webhook_path) {
+        customerAutomation.runtime_webhook_path = provisionResult.webhook_path;
+      }
+      if (provisionResult?.webhook_url) {
+        customerAutomation.runtime_webhook_url = provisionResult.webhook_url;
+      }
+      automation = one(customerAutomation.automations) || automation;
+    }
+  }
+
+  let webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
+  const eligibility = scheduleIsRunnable(customerAutomation, order, webhookUrl);
   const frequency = runFrequency(customerAutomation);
   const scheduledFor = isManualRun
     ? nowIso()
@@ -970,12 +1138,67 @@ async function runCandidate(adminClient: any, row: any, options: {
         automation?.n8n_workflow_id,
         order?.n8n_workflow_id,
       );
-      const activation = await activateRuntimeWorkflowById(workflowId);
-      response = await triggerWebhook(webhookUrl, runtimePayload);
-      response.data = {
-        ...(response.data || {}),
-        nexus_activation_retry: activation,
-      };
+      let activation: Record<string, unknown> = {};
+      let shouldReprovision = false;
+
+      try {
+        activation = await activateRuntimeWorkflowById(workflowId);
+      } catch (activationError) {
+        if (!activationFailureNeedsReprovision(activationError)) throw activationError;
+
+        shouldReprovision = true;
+        activation = {
+          ok: false,
+          reprovision_required: true,
+          error: activationError instanceof Error ? activationError.message : cleanString(activationError),
+        };
+      }
+
+      if (!shouldReprovision) {
+        try {
+          response = await triggerWebhook(webhookUrl, runtimePayload);
+          response.data = {
+            ...(response.data || {}),
+            nexus_activation_retry: activation,
+          };
+        } catch (retryError) {
+          if (!isWebhookNotRegistered(retryError)) throw retryError;
+          shouldReprovision = true;
+        }
+      }
+
+      if (shouldReprovision) {
+        const provisionResult = await provisionCustomerWorkflowBeforeRun(customerAutomation.id);
+        if (provisionResult?.customer_automation) {
+          Object.assign(customerAutomation, provisionResult.customer_automation);
+        }
+        if (provisionResult?.workflow_id) {
+          customerAutomation.n8n_workflow_id = provisionResult.workflow_id;
+        }
+        if (provisionResult?.webhook_path) {
+          customerAutomation.runtime_webhook_path = provisionResult.webhook_path;
+        }
+        if (provisionResult?.webhook_url) {
+          customerAutomation.runtime_webhook_url = provisionResult.webhook_url;
+        }
+
+        webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
+        runtimePayload.system.runtime_webhook_path = getRuntimeWebhookPath(customerAutomation, automation, order);
+        runtimePayload.system.n8n_workflow_id = pickFirstString(
+          customerAutomation.n8n_workflow_id,
+          automation?.n8n_workflow_id,
+        );
+
+        response = await triggerWebhook(webhookUrl, runtimePayload);
+        response.data = {
+          ...(response.data || {}),
+          nexus_activation_retry: activation,
+          nexus_reprovision_retry: {
+            workflow_id: provisionResult?.workflow_id || "",
+            webhook_path: provisionResult?.webhook_path || "",
+          },
+        };
+      }
     }
 
     const n8nExecutionId = extractExecutionId(response.data);
@@ -1038,6 +1261,7 @@ async function runCandidate(adminClient: any, row: any, options: {
   } catch (error) {
     const now = nowIso();
     const message = error instanceof Error ? error.message : String(error);
+    const classification = classifyRuntimeStartError(message);
 
     await updateRunRecord(adminClient, run.id, {
       status: "error",
@@ -1049,31 +1273,45 @@ async function runCandidate(adminClient: any, row: any, options: {
       },
     });
 
-    await updateCustomerAutomation(adminClient, customerAutomation.id, {
-      status: "error",
+    const updatePayload: Record<string, unknown> = {
+      status: classification.status,
       runtime_status: "error",
-      health_status: "error",
-      last_error_message: "This automation could not be started. Nexus has been notified.",
+      health_status: classification.healthStatus,
+      last_error_code: classification.lastErrorCode,
+      last_error_message: classification.customerMessage,
       last_error_details: {
         source: "run-scheduled-automations",
         error: message,
       },
+      needs_customer_action: classification.needsCustomerAction,
       last_failed_at: now,
       updated_at: now,
-    });
+    };
+
+    if (classification.setupStatus) {
+      updatePayload.setup_status = classification.setupStatus;
+    }
+
+    await updateCustomerAutomation(adminClient, customerAutomation.id, updatePayload);
 
     await insertAutomationEvent(adminClient, {
       customer_automation_id: customerAutomation.id,
       buyer_id: customerAutomation.buyer_id,
       automation_id: customerAutomation.automation_id,
       order_id: customerAutomation.order_id,
-      event_type: "scheduled_runtime_error",
-      title: `${frequency.replaceAll("_", " ")} automation run failed to start`,
+      event_type: classification.needsCustomerAction
+        ? "customer_action_required"
+        : "scheduled_runtime_error",
+      title: classification.needsCustomerAction
+        ? "Customer action required"
+        : `${frequency.replaceAll("_", " ")} automation run failed to start`,
       message: JSON.stringify({
         run_id: run.id,
         run_key: runKey,
         scheduled_for: scheduledFor,
         error: message,
+        customer_message: classification.customerMessage,
+        needs_customer_action: classification.needsCustomerAction,
       }),
       created_by: "runtime",
     });

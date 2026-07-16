@@ -549,6 +549,9 @@ function updateCustomerWebhookPath(workflow: any, webhookPath: string) {
   }
 
   webhookNode.name = "Nexus Webhook Trigger";
+  webhookNode.type = "n8n-nodes-base.webhook";
+  webhookNode.typeVersion = Number(webhookNode.typeVersion || 0) || 2;
+  webhookNode.disabled = false;
 
   webhookNode.parameters = {
     ...(webhookNode.parameters || {}),
@@ -558,6 +561,145 @@ function updateCustomerWebhookPath(workflow: any, webhookPath: string) {
     options: webhookNode.parameters?.options || {},
   };
 
+  return workflow;
+}
+
+function createNexusRuntimeContextNode(webhookNode: any = null) {
+  const position = Array.isArray(webhookNode?.position)
+    ? [Number(webhookNode.position[0] || 0) + 300, Number(webhookNode.position[1] || 0)]
+    : [300, 0];
+
+  return {
+    parameters: {
+      jsCode: `const incoming = $("Nexus Webhook Trigger").first().json || {};
+const body = incoming.body || {};
+
+return [
+  {
+    json: {
+      ...incoming,
+      body,
+      customer_automation_id: body.customer_automation_id || body.system?.customer_automation_id || "",
+      automation_id: body.automation_id || body.system?.automation_id || "",
+      order_id: body.order_id || body.system?.order_id || "",
+      setup_submission_id: body.setup_submission_id || body.system?.setup_submission_id || "",
+      setup: body.setup || {},
+      secrets: body.secrets || {},
+      customer: body.customer || {},
+      order: body.order || {},
+      system: body.system || {}
+    }
+  }
+];`,
+    },
+    id: crypto.randomUUID(),
+    name: "Nexus Runtime Context",
+    type: "n8n-nodes-base.code",
+    typeVersion: 2,
+    position,
+  };
+}
+
+function isNexusWrapperNode(node: any) {
+  const name = cleanString(node?.name);
+  const type = cleanString(node?.type).toLowerCase();
+  return (
+    name === "Nexus Webhook Trigger" ||
+    name === "Nexus Runtime Context" ||
+    name === "Nexus Submit Output" ||
+    name === "Nexus Prepare Output Payload" ||
+    type.includes("stickynote") ||
+    isWebhookNode(node)
+  );
+}
+
+function hasOutgoingMainConnection(connections: any, sourceName: string) {
+  const main = Array.isArray(connections?.[sourceName]?.main)
+    ? connections[sourceName].main
+    : [];
+
+  return main.some((group: any) => Array.isArray(group) && group.length > 0);
+}
+
+function findFirstProductStartNode(workflow: any) {
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const targetNames = connectedTargetNames(workflow.connections || {});
+  const candidates = nodes
+    .filter((node: any) => node?.name && !isNexusWrapperNode(node))
+    .sort((a: any, b: any) => {
+      const ax = Array.isArray(a.position) ? Number(a.position[0] || 0) : 0;
+      const bx = Array.isArray(b.position) ? Number(b.position[0] || 0) : 0;
+      const ay = Array.isArray(a.position) ? Number(a.position[1] || 0) : 0;
+      const by = Array.isArray(b.position) ? Number(b.position[1] || 0) : 0;
+      return ax - bx || ay - by;
+    });
+
+  return candidates.find((node: any) => !targetNames.has(node.name)) || candidates[0] || null;
+}
+
+function ensureRuntimeContextNode(workflow: any) {
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const webhookNode =
+    nodes.find((node: any) => node?.name === "Nexus Webhook Trigger") ||
+    nodes.find(isWebhookNode);
+
+  if (!webhookNode) {
+    throw new Error("Copied workflow is missing Nexus Webhook Trigger.");
+  }
+
+  let runtimeNode = nodes.find((node: any) => node?.name === "Nexus Runtime Context");
+  if (runtimeNode) {
+    workflow.connections = ensureMainConnection(
+      workflow.connections || {},
+      webhookNode.name,
+      runtimeNode.name,
+      0,
+    );
+
+    if (!hasOutgoingMainConnection(workflow.connections, runtimeNode.name)) {
+      const firstProductNode = findFirstProductStartNode(workflow);
+
+      if (firstProductNode?.name) {
+        workflow.connections = ensureMainConnection(
+          workflow.connections || {},
+          runtimeNode.name,
+          firstProductNode.name,
+          0,
+        );
+      }
+    }
+
+    return workflow;
+  }
+
+  runtimeNode = createNexusRuntimeContextNode(webhookNode);
+  workflow.nodes = [...nodes, runtimeNode];
+
+  const connections = workflow.connections || {};
+  const webhookConnections = connections[webhookNode.name];
+  const oldWebhookMain = Array.isArray(webhookConnections?.main)
+    ? webhookConnections.main
+    : [];
+
+  connections[webhookNode.name] = { ...(webhookConnections || {}), main: [] };
+  ensureMainConnection(connections, webhookNode.name, runtimeNode.name, 0);
+
+  if (oldWebhookMain.length) {
+    connections[runtimeNode.name] = connections[runtimeNode.name] || { main: [] };
+    connections[runtimeNode.name].main = oldWebhookMain;
+  } else {
+    const firstProductNode = findFirstProductStartNode({
+      ...workflow,
+      nodes: [...nodes, runtimeNode],
+      connections,
+    });
+
+    if (firstProductNode?.name) {
+      ensureMainConnection(connections, runtimeNode.name, firstProductNode.name, 0);
+    }
+  }
+
+  workflow.connections = connections;
   return workflow;
 }
 
@@ -744,15 +886,108 @@ function ensureMainConnection(connections: any, sourceName: string, targetName: 
   return connections;
 }
 
-function ensureSubmitOutputUsesRuntimePayload(workflow: any, callbackUrl: string) {
-  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
-  const submitNode = nodes.find((node: any) => node?.name === "Nexus Submit Output");
+function connectedTargetNames(connections: any) {
+  const targets = new Set<string>();
 
-  if (!submitNode) {
-    throw new Error("Master workflow has no Nexus Submit Output node. Re-import the product workflow first.");
+  for (const source of Object.values(connections || {}) as any[]) {
+    const main = Array.isArray(source?.main) ? source.main : [];
+
+    for (const group of main) {
+      if (!Array.isArray(group)) continue;
+
+      for (const connection of group) {
+        if (connection?.node) {
+          targets.add(connection.node);
+        }
+      }
+    }
   }
 
-  workflow.nodes = nodes.filter((node: any) => node?.name !== "Nexus Prepare Output Payload");
+  return targets;
+}
+
+function findBestSubmitSourceNode(workflow: any) {
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const connections = workflow.connections || {};
+  const targetNames = connectedTargetNames(connections);
+  const blockedNames = new Set([
+    "Nexus Webhook Trigger",
+    "Nexus Runtime Context",
+    "Nexus Submit Output",
+    "Nexus Prepare Output Payload",
+  ]);
+
+  const preferredNames = [
+    "NEXUS_FINAL_OUTPUT",
+    "Nexus_final_output",
+    "nexus_final_output",
+    "Nexus Final Output",
+    "Nexus Output",
+    "Nexus output",
+  ];
+
+  for (const name of preferredNames) {
+    const node = nodes.find((candidate: any) => candidate?.name === name);
+    if (node) return node;
+  }
+
+  const terminalNode = [...nodes]
+    .reverse()
+    .find((node: any) =>
+      node?.name &&
+      !blockedNames.has(node.name) &&
+      !isWebhookNode(node) &&
+      !targetNames.has(node.name)
+    );
+
+  if (terminalNode) return terminalNode;
+
+  return [...nodes]
+    .reverse()
+    .find((node: any) =>
+      node?.name &&
+      !blockedNames.has(node.name) &&
+      !isWebhookNode(node)
+    );
+}
+
+function createNexusSubmitOutputNode(sourceNode: any = null) {
+  const position = Array.isArray(sourceNode?.position)
+    ? [Number(sourceNode.position[0] || 0) + 320, Number(sourceNode.position[1] || 0)]
+    : [960, 0];
+
+  return {
+    id: crypto.randomUUID(),
+    name: "Nexus Submit Output",
+    type: "n8n-nodes-base.httpRequest",
+    typeVersion: 4.2,
+    position,
+    parameters: {},
+  };
+}
+
+function ensureSubmitOutputUsesRuntimePayload(workflow: any, callbackUrl: string) {
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  let submitNode = nodes.find((node: any) => node?.name === "Nexus Submit Output");
+
+  if (!submitNode) {
+    const sourceNode = findBestSubmitSourceNode(workflow);
+    submitNode = createNexusSubmitOutputNode(sourceNode);
+    workflow.nodes = [...nodes, submitNode];
+
+    if (sourceNode?.name) {
+      workflow.connections = ensureMainConnection(
+        workflow.connections || {},
+        sourceNode.name,
+        submitNode.name,
+        0,
+      );
+    }
+  }
+
+  workflow.nodes = (Array.isArray(workflow.nodes) ? workflow.nodes : []).filter((node: any) =>
+    node?.name !== "Nexus Prepare Output Payload"
+  );
 
   const connections = workflow.connections || {};
   const incomingSources: string[] = [];
@@ -963,26 +1198,27 @@ async function createWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflow: a
 async function updateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowId: string, workflow: any) {
   const cleanWorkflow = normalizeWorkflowForCreate(workflow);
 
+  /*
+    Use full replacement for customer copies. n8n can keep stale nested node
+    parameters and active webhook handlers when PATCH is used on an active
+    workflow, especially after the master workflow was edited/published in n8n.
+  */
+  return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
+    method: "PUT",
+    body: JSON.stringify(cleanWorkflow),
+  });
+}
+
+async function deactivateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowId: string) {
   try {
-    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
-      method: "PATCH",
-      body: JSON.stringify(cleanWorkflow),
+    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}/deactivate`, {
+      method: "POST",
+      body: JSON.stringify({}),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error || "");
-
-    if (
-      message.includes("404") ||
-      message.toLowerCase().includes("not found") ||
-      message.toLowerCase().includes("could not find")
-    ) {
-      throw error;
-    }
-
-    return await n8nRequest(n8nBaseUrl, n8nApiKey, `/api/v1/workflows/${workflowId}`, {
-      method: "PUT",
-      body: JSON.stringify(cleanWorkflow),
-    });
+    return {
+      deactivate_warning: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -1004,6 +1240,19 @@ async function activateWorkflow(n8nBaseUrl: string, n8nApiKey: string, workflowI
 
     throw error;
   }
+}
+
+function activationFailureNeedsFreshCopy(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const lower = message.toLowerCase();
+
+  return (
+    lower.includes("cannot be activated") ||
+    lower.includes("no trigger node") ||
+    lower.includes("at least one trigger") ||
+    lower.includes("workflow does not exist") ||
+    lower.includes("not found")
+  );
 }
 
 async function loadLatestSetupValues(adminClient: any, customerAutomationId: string) {
@@ -1231,7 +1480,7 @@ Deno.serve(async (req) => {
         .maybeSingle()
       : { data: null };
 
-    const isAdmin = profile?.role === "admin";
+    const isAdmin = profile?.role === "admin" || profile?.role === "admin_staff";
     const isDeveloper = profile?.role === "developer";
     let developerProfile: any = null;
 
@@ -1421,6 +1670,7 @@ const workflowPlaceholderMappings = mergeMappings(
     }`;
 
     workflow = updateCustomerWebhookPath(workflow, webhookPath);
+    workflow = ensureRuntimeContextNode(workflow);
     workflow = ensureSubmitOutputUsesRuntimePayload(workflow, callbackUrl);
 
     /*
@@ -1463,6 +1713,12 @@ const workflowPlaceholderMappings = mergeMappings(
 
     if (customerAutomation.n8n_workflow_id) {
       try {
+        await deactivateWorkflow(
+          n8nBaseUrl,
+          n8nApiKey,
+          customerAutomation.n8n_workflow_id,
+        );
+
         imported = await updateWorkflow(
           n8nBaseUrl,
           n8nApiKey,
@@ -1496,13 +1752,32 @@ const workflowPlaceholderMappings = mergeMappings(
       );
     }
 
-    const workflowId = imported.id || imported.data?.id || customerAutomation.n8n_workflow_id;
+    let workflowId = imported.id || imported.data?.id || customerAutomation.n8n_workflow_id;
 
     if (!workflowId) {
       throw new Error("n8n did not return a customer workflow ID.");
     }
 
-    const activation = await activateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
+    let activation: any;
+    let recreatedInvalidWorkflow = false;
+
+    try {
+      activation = await activateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
+    } catch (error) {
+      if (!activationFailureNeedsFreshCopy(error)) {
+        throw error;
+      }
+
+      recreatedInvalidWorkflow = true;
+      imported = await createWorkflow(n8nBaseUrl, n8nApiKey, workflow);
+      workflowId = imported.id || imported.data?.id;
+
+      if (!workflowId) {
+        throw new Error("n8n did not return a fresh customer workflow ID.");
+      }
+
+      activation = await activateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);
+    }
 
     const now = new Date().toISOString();
     const updatePayload: Record<string, unknown> = {
@@ -1564,7 +1839,11 @@ const workflowPlaceholderMappings = mergeMappings(
       title: customerAutomation.n8n_workflow_id
         ? "Customer workflow updated"
         : "Customer workflow created",
-      message: recreatedDeletedWorkflow
+      message: recreatedInvalidWorkflow
+        ? `The previous customer workflow could not be activated, so Nexus created a fresh customer workflow for ${
+            product.title || "this automation"
+          }.`
+        : recreatedDeletedWorkflow
         ? `The previous customer workflow no longer existed in n8n, so Nexus created a new customer workflow for ${
             product.title || "this automation"
           }.`

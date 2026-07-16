@@ -3766,7 +3766,21 @@ function globalNav(active = "") {
   `;
 }
 
+let globalNavMountPromise = null;
+
 async function mountGlobalNav(options = {}) {
+  if (globalNavMountPromise && !options.force) {
+    return globalNavMountPromise;
+  }
+
+  globalNavMountPromise = mountGlobalNavInner(options).finally(() => {
+    globalNavMountPromise = null;
+  });
+
+  return globalNavMountPromise;
+}
+
+async function mountGlobalNavInner(options = {}) {
   let header = document.getElementById("globalNav");
 
   if (!header) {

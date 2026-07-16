@@ -151,6 +151,7 @@ const checkoutFunction = read("supabase/functions/create-checkout-session/index.
 const sheetAccessSql = read("supabase/sheet_access_modes_install_or_patch.sql");
 const scheduledRunner = read("supabase/functions/run-scheduled-automations/index.ts");
 const submitSetupFunction = read("supabase/functions/submit-automation-setup/index.ts");
+const runtimeSubmitOutput = read("supabase/functions/runtime-submit-output/index.ts");
 const provisionWorkflow = read("supabase/functions/provision-customer-workflow/index.ts");
 const stripeWebhook = read("supabase/functions/stripe-webhook/index.ts");
 
@@ -196,8 +197,18 @@ scenario("Credential scanner traces Set/Edit Fields API key carriers into HTTP n
   assert(credentialsShared.includes("inferred_from_parameter_reference"), "Detected slots must mark upstream parameter-reference credentials.");
   assert(credentialsShared.includes("credential_source_fields"), "Detected slots must keep the source field names that carried credentials.");
   assert(credentialsShared.includes("credential_source_nodes"), "Detected slots must keep the upstream source nodes that carried credentials.");
+  assert(credentialsShared.includes("usesFieldCredentialBinding"), "Field-token workflows must have an explicit field credential binding mode.");
+  assert(credentialsShared.includes('credential_binding_mode: "field"'), "Field-token workflows must bind in Nexus without rewriting node Authorization.");
+  assert(credentialsShared.includes("!fieldCredentialBinding && sourceNodes"), "Field-token workflows must not scrub the source field that carries the token.");
   assert(credentialsShared.includes("scrubCredentialCarrierAssignments"), "Credential apply must scrub raw key values from upstream carrier nodes.");
   assert(credentialsShared.includes("removeCredentialLikeHttpParameters"), "Credential apply must remove raw credential headers/query params from HTTP nodes.");
+});
+
+scenario("Nexus dynamic placeholders are not force-prefixed with equals", () => {
+  assert(importFunction.includes("return `{{ ${path} }}`;"), "Nexus placeholder mapper must emit interpolation placeholders without a leading equals sign.");
+  assert(!importFunction.includes("return expressionMode ? `={{ ${path} }}`"), "Nexus placeholder mapper must not force expression-mode equals prefixes.");
+  assert(!importFunction.includes("return `=${output}`"), "Importer must not auto-prefix runtime placeholders with equals.");
+  assert(importFunction.includes("field-based credentials and setup values should remain exactly"), "Importer should document why field placeholders are not forced into expression mode.");
 });
 
 scenario("Native OpenAI model credentials are treated as openAiApi, not generic HTTP", () => {
@@ -420,6 +431,19 @@ scenario("Runtime modes support one-time, recurring, and on-demand products end-
   assert(scheduledRunner.includes('.not("run_frequency", "in", "(manual,on_demand)")'), "Scheduler must not run manual/on-demand products as timed products.");
   assert(scheduledRunner.includes("buyerOwnsCandidate"), "On-demand runs must be scoped to the buyer's own automation.");
   assert(scheduledRunner.includes("body.event || body.request || body.input"), "On-demand runs must accept event/request payloads.");
+});
+
+scenario("Customer-facing runtime failures route to the right owner", () => {
+  assert(submitSetupFunction.includes("credentialLike && !webhookRegistrationLike"), "Setup submission must classify credential webhook errors before generic n8n/webhook review.");
+  assert(submitSetupFunction.includes("WORKFLOW_RUNTIME_REVIEW_REQUIRED"), "Setup submission must keep missing webhook/runtime errors as Nexus review items.");
+  assert(runtimeSubmitOutput.includes('"forbidden"'), "Runtime callback must classify forbidden provider responses as credential/setup problems.");
+  assert(runtimeSubmitOutput.includes('"invalid_grant"'), "Runtime callback must classify OAuth grant failures.");
+  assert(runtimeSubmitOutput.includes('"token has expired"'), "Runtime callback must classify token expiry variants.");
+  assert(runtimeSubmitOutput.includes("needs_customer_action: classification.needs_customer_action"), "Runtime callback must persist customer-action state.");
+  assert(scheduledRunner.includes("classifyRuntimeStartError"), "Scheduled/manual runner must classify runtime start failures.");
+  assert(scheduledRunner.includes("CUSTOMER_CREDENTIAL_INVALID"), "Scheduled/manual runner must mark customer credential failures.");
+  assert(scheduledRunner.includes("CUSTOMER_SETUP_INVALID"), "Scheduled/manual runner must mark customer setup failures.");
+  assert(scheduledRunner.includes("needs_customer_action: classification.needsCustomerAction"), "Scheduled/manual runner must persist customer-action state.");
 });
 
 console.log("");

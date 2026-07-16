@@ -8,10 +8,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260627-launch-trust">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
 
   <title>Create Buyer Account | Nexus</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -91,8 +91,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
-  <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -101,7 +101,7 @@
       if (typeof NexusDB === "undefined") {
         statusBox.innerHTML = `
           <div class="error">
-            NexusDB failed to load. Check /assets/js/nexus-db.js for errors.
+            NexusDB failed to load. Check /assets/js/nexus-db.js?v=20260714-paid-orders-only for errors.
           </div>
         `;
         return;

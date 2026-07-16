@@ -800,24 +800,24 @@ async function handlePaidBundleOrder(order: any, isPaid: boolean, isSubscription
 
   const { data: existing } = await adminClient
     .from("customer_automations")
-    .select("id")
-    .eq("order_id", order.id)
-    .limit(1);
+    .select("id, automation_id")
+    .eq("order_id", order.id);
 
-  if (existing?.length) {
-    if (isSubscription) {
-      await activateBundleSchedulesIfReady(
-        { ...order, stripe_subscription_status: subscriptionStatus || "active" },
-        subscriptionStatus || "active",
-      );
-    }
-    return;
-  }
+  const existingAutomationIds = new Set(
+    (existing || [])
+      .map((row: any) => cleanString(row.automation_id))
+      .filter(Boolean),
+  );
 
   const entries = await loadBundleOrderProducts(order);
+  let createdCount = 0;
 
   for (const entry of entries) {
     const product = entry.product || {};
+    if (existingAutomationIds.has(cleanString(product.id))) {
+      continue;
+    }
+
     const runtimeType = product.runtime_type || "manual";
     const runFrequency = normalizeProductRunFrequency(product, isSubscription);
     const runtimeWebhookUrl = product.runtime_webhook_url || product.n8n_webhook_url || null;
@@ -860,6 +860,7 @@ async function handlePaidBundleOrder(order: any, isPaid: boolean, isSubscription
     }
 
     if (!customerAutomation) continue;
+    createdCount += 1;
 
     await adminClient.from("automation_events").insert({
       customer_automation_id: customerAutomation.id,
@@ -873,6 +874,15 @@ async function handlePaidBundleOrder(order: any, isPaid: boolean, isSubscription
       created_at: nowIso(),
     });
   }
+
+  if (isSubscription) {
+    await activateBundleSchedulesIfReady(
+      { ...order, stripe_subscription_status: subscriptionStatus || "active" },
+      subscriptionStatus || "active",
+    );
+  }
+
+  if (!createdCount) return;
 
   await adminClient.from("admin_notifications").insert({
     notification_type: "paid_bundle_order",

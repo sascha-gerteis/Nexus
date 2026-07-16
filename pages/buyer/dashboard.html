@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -8,10 +8,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260712-favorites">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
 
   <title>Buyer Dashboard | Nexus</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -77,12 +77,12 @@
         <div class="buyer-tabs-shell">
           <div class="buyer-tabs">
             <button class="buyer-tab active" type="button" data-tab="overview">Overview</button>
-            <button class="buyer-tab" type="button" data-tab="saved">Saved products</button>
             <button class="buyer-tab" type="button" data-tab="automations">My Automations</button>
             <button class="buyer-tab buyer-tab-contextual" type="button" data-tab="automation-detail" id="buyerAutomationDetailTab" hidden>Automation detail</button>
             <button class="buyer-tab" type="button" data-tab="outputs">Outputs</button>
             <button class="buyer-tab" type="button" data-tab="messages">Messages</button>
             <button class="buyer-tab" type="button" data-tab="orders">Orders</button>
+            <button class="buyer-tab" type="button" data-tab="saved">Saved products</button>
             <button class="buyer-tab" type="button" data-tab="tutorials">Tutorials</button>
           </div>
 
@@ -350,10 +350,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260712-favorites"></script>
-<script src="/assets/js/nexus-notice.js?v=20260710-admin-staff-analytics"></script>
-<script src="/assets/js/nexus-db.js?v=20260712-favorites"></script>
-<script src="/assets/js/nexus-app.js?v=20260712-favorites"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+<script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+<script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+<script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
 
   <script>
     let dashboardData = {
@@ -502,6 +502,14 @@ function humanizeSetupStatus(item) {
     }
 
     function getBuyerSetupUrl(item) {
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+      const bundleId = item?.bundle_id || order.bundle_id;
+      const orderId = item?.order_id || order.id;
+
+      if (bundleId && orderId) {
+        return `/pages/buyer/setup.html?order_id=${encodeURIComponent(orderId)}&bundle_id=${encodeURIComponent(bundleId)}`;
+      }
+
       if (isGuidedInstall(item)) {
         return `/pages/buyer/install-request.html?id=${encodeURIComponent(item.id)}`;
       }
@@ -511,6 +519,15 @@ function humanizeSetupStatus(item) {
 
     function getBuyerSetupActionLabel(item) {
       const setupStatus = String(item?.setup_status || "").toLowerCase();
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+
+      if (item?.bundle_id || order.bundle_id) {
+        if (setupStatus === "submitted" || setupStatus === "completed" || setupStatus === "complete") {
+          return "View bundle setup";
+        }
+
+        return "Complete bundle setup";
+      }
 
       if (isGuidedInstall(item)) {
         if (setupStatus === "completed") return "View install request";

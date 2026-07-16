@@ -186,6 +186,40 @@ async function saveBundle(adminClient: any, payload: Record<string, unknown>) {
   return { bundle, items: savedItems || [] };
 }
 
+function calculateBundleDisplayPrices(bundle: Record<string, unknown>, products: Record<string, unknown>[]) {
+  const discountPercent = Math.max(0, Math.min(Number(bundle.discount_percent || 0), 95));
+  const discountMultiplier = 1 - discountPercent / 100;
+  const summedUsd = products.reduce((total, product) => {
+    const currency = cleanString(product.currency || "USD").toUpperCase();
+    const amount = Number(product.price_usd || (currency === "USD" ? product.price : 0) || 0);
+    return total + amount;
+  }, 0);
+  const summedThb = products.reduce((total, product) => {
+    const currency = cleanString(product.currency || "").toUpperCase();
+    const amount = Number(product.price_thb || (currency === "THB" ? product.price : 0) || 0);
+    return total + amount;
+  }, 0);
+  const computedUsd = Math.round(summedUsd * discountMultiplier * 100) / 100;
+  const computedThb = Math.round(summedThb * discountMultiplier);
+  const priceUsd = computedUsd > 0
+    ? computedUsd
+    : Number(bundle.price_usd || bundle.discounted_amount_usd || 0);
+  const priceThb = computedThb > 0
+    ? computedThb
+    : Number(bundle.price_thb || 0);
+  const priceOverride = Number(bundle.price_override || 0);
+
+  return {
+    active_item_count: products.length,
+    base_amount_usd: Math.round(summedUsd * 100) / 100,
+    discounted_amount_usd: priceUsd,
+    price_usd: priceUsd,
+    price_thb: priceThb || null,
+    price: priceOverride || priceUsd || priceThb || Number(bundle.price || 0),
+    price_source: priceOverride ? "bundle_price_override" : "active_bundle_products",
+  };
+}
+
 async function listBundles(adminClient: any) {
   const { data: bundles, error: bundlesError } = await adminClient
     .from("automation_bundles")
@@ -255,9 +289,11 @@ async function listBundles(adminClient: any) {
     const bundleProducts = bundleItems
       .map((item) => item.automations)
       .filter(Boolean);
+    const priceFields = calculateBundleDisplayPrices(bundle, bundleProducts);
 
     return {
       ...bundle,
+      ...priceFields,
       is_bundle: true,
       item_type: "bundle",
       automation_bundle_items: bundleItems,
@@ -378,9 +414,11 @@ async function listPublicBundles(adminClient: any, slug = "") {
     const bundleProducts = bundleItems
       .map((item) => item.automations)
       .filter(Boolean);
+    const priceFields = calculateBundleDisplayPrices(bundle, bundleProducts);
 
     return {
       ...bundle,
+      ...priceFields,
       is_bundle: true,
       item_type: "bundle",
       listing_type: "bundle",

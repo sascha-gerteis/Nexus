@@ -335,6 +335,7 @@ async function listAdminOrders(adminClient: any) {
   const { data: orders, error: ordersError } = await adminClient
     .from("orders")
     .select("*")
+    .eq("payment_status", "paid")
     .order("created_at", { ascending: false })
     .limit(300);
 

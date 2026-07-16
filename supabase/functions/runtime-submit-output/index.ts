@@ -37,6 +37,120 @@ function parseMaybeJson(value: unknown) {
   }
 }
 
+function stripUnsafeText(value: unknown) {
+  const source = cleanString(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+  let output = "";
+
+  for (let index = 0; index < source.length; index += 1) {
+    const code = source.charCodeAt(index);
+    const next = source.charCodeAt(index + 1);
+
+    if (code >= 0xd800 && code <= 0xdbff) {
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        output += source[index] + source[index + 1];
+        index += 1;
+      }
+      continue;
+    }
+
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      continue;
+    }
+
+    output += source[index];
+  }
+
+  return output;
+}
+
+function normalizeBodyObject(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const body = value as Record<string, unknown>;
+  const nestedBody = body.body;
+  const hasDirectRuntimeFields = Boolean(
+    body.customer_automation_id ||
+      body.customerAutomationId ||
+      body.status ||
+      body.output_type ||
+      body.content_html ||
+      body.content_text ||
+      body.title ||
+      body.system,
+  );
+
+  if (
+    !hasDirectRuntimeFields &&
+    nestedBody &&
+    typeof nestedBody === "object" &&
+    !Array.isArray(nestedBody)
+  ) {
+    return nestedBody as Record<string, unknown>;
+  }
+
+  return body;
+}
+
+async function readRequestBody(req: Request) {
+  const rawBody = await req.text().catch(() => "");
+  const trimmed = rawBody.trim();
+
+  if (!trimmed) return { rawBody, parsedBody: null };
+
+  try {
+    return { rawBody, parsedBody: JSON.parse(trimmed) };
+  } catch {
+    const parsed = parseMaybeJson(trimmed);
+    return { rawBody, parsedBody: parsed };
+  }
+}
+
+function safeJsonObject(value: unknown) {
+  const parsed = parseMaybeJson(value);
+
+  if (!parsed || parsed === "") return {};
+
+  try {
+    const cloned = JSON.parse(JSON.stringify(parsed));
+
+    if (cloned && typeof cloned === "object" && !Array.isArray(cloned)) {
+      return cloned as Record<string, unknown>;
+    }
+
+    if (Array.isArray(cloned)) {
+      return { items: cloned };
+    }
+
+    return { value: cloned };
+  } catch {
+    return {};
+  }
+}
+
+function looksLikeJsonStorageError(message: string) {
+  const lower = cleanString(message).toLowerCase();
+  return (
+    lower.includes("invalid json") ||
+    lower.includes("empty or invalid json") ||
+    lower.includes("json input") ||
+    lower.includes("could not serialize") ||
+    lower.includes("unexpected token")
+  );
+}
+
+function compactHtmlFallback(title: string, summary: string, contentText: string) {
+  const escapeHtml = (value: string) =>
+    stripUnsafeText(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head><body style="font-family:Arial,sans-serif;line-height:1.5;padding:24px;color:#111"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(summary)}</p><pre style="white-space:pre-wrap;background:#f6f8fb;border:1px solid #dbe5f4;border-radius:12px;padding:16px">${escapeHtml(contentText || summary || "The automation completed successfully.")}</pre></body></html>`;
+}
+
 function stringifySafe(value: unknown) {
   try {
     if (typeof value === "string") return value;
@@ -147,16 +261,26 @@ function classifyRuntimeError(errorMessage: string, rawError: Record<string, unk
     "permission",
     "permissions",
     "unauthorized",
+    "forbidden",
     "authorisation",
     "authorization",
     "authentication",
+    "access denied",
+    "access_denied",
+    "invalid grant",
+    "invalid_grant",
+    "invalid client",
+    "invalid_client",
     "invalid api key",
     "api key invalid",
     "expired token",
     "token expired",
+    "token has expired",
+    "oauth token",
     "invalid oauth",
     "missing required scope",
     "insufficient scope",
+    "insufficient permissions",
     "does not have permission",
     "missing permissions",
     "cannot be loaded due to missing permissions",
@@ -353,6 +477,96 @@ async function tryUpdateCustomerAutomation(
   return fallbackError || error;
 }
 
+function productLooksHealthPaused(product: Record<string, any>) {
+  const status = cleanString(product?.status).toLowerCase();
+  const healthStatus = cleanString(product?.health_status).toLowerCase();
+
+  if (status !== "paused") return false;
+  if (product?.health_auto_paused_at) return true;
+
+  return [
+    "paused_by_health_check",
+    "needs_recheck",
+    "failed",
+    "error",
+    "warning",
+    "unknown",
+    "",
+  ].includes(healthStatus);
+}
+
+async function tryUpdateParentAutomationAfterSuccess(
+  adminClient: any,
+  customerAutomation: Record<string, any>,
+  now: string,
+) {
+  const automationId = cleanString(customerAutomation?.automation_id);
+  if (!automationId) return null;
+
+  const { data: product, error: loadError } = await adminClient
+    .from("automations")
+    .select("id,status,health_status,health_auto_paused_at,health_previous_status")
+    .eq("id", automationId)
+    .maybeSingle();
+
+  if (loadError || !product) {
+    if (loadError) console.warn("Parent automation health sync skipped:", loadError.message);
+    return null;
+  }
+
+  const nextCheckAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const payload: Record<string, unknown> = {
+    health_status: "healthy",
+    health_last_checked_at: now,
+    health_last_passed_at: now,
+    health_last_failed_at: null,
+    health_failure_reason: null,
+    health_failure_details: {},
+    health_consecutive_failures: 0,
+    health_auto_paused_at: null,
+    health_previous_status: null,
+    health_next_check_at: nextCheckAt,
+    updated_at: now,
+  };
+
+  if (productLooksHealthPaused(product)) {
+    const previousStatus = cleanString(product.health_previous_status).toLowerCase();
+    payload.status = ["live", "active", "published"].includes(previousStatus)
+      ? previousStatus
+      : "live";
+  }
+
+  const { error } = await adminClient
+    .from("automations")
+    .update(payload)
+    .eq("id", automationId);
+
+  if (!error) return null;
+
+  /*
+    Some older databases may not have every health checker column. Keep the
+    runtime callback non-blocking by retrying only the core fields.
+  */
+  const fallbackPayload: Record<string, unknown> = {
+    health_status: "healthy",
+    updated_at: now,
+  };
+
+  if (payload.status) fallbackPayload.status = payload.status;
+
+  const { error: fallbackError } = await adminClient
+    .from("automations")
+    .update(fallbackPayload)
+    .eq("id", automationId);
+
+  if (fallbackError) {
+    console.warn("Parent automation health sync failed:", fallbackError.message || error.message);
+    return fallbackError || error;
+  }
+
+  return null;
+}
+
 async function updateExistingRunFromCallback(
   adminClient: any,
   body: any,
@@ -460,17 +674,14 @@ Deno.serve(async (req) => {
       requestUrl.searchParams.get("customer_automation_id"),
       requestUrl.searchParams.get("customerAutomationId"),
     );
-    const parsedBody = await req.json().catch(() => ({}));
+    const { rawBody, parsedBody } = await readRequestBody(req);
     if (parsedBody === null && !fallbackCustomerAutomationId) {
       return errorResponse(
         "runtime-submit-output received a null JSON body. Reprovision this customer workflow so the Nexus Submit Output node sends its output payload.",
         400,
       );
     }
-    const body =
-      parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
-        ? parsedBody
-        : {};
+    const body: any = normalizeBodyObject(parsedBody);
 
     const bodySecret =
       cleanString(body.runtime_secret) ||
@@ -494,7 +705,7 @@ Deno.serve(async (req) => {
 
     if (!customerAutomationId) {
       return errorResponse(
-        "customer_automation_id is required. The Nexus Submit Output node did not send a valid JSON body.",
+        `customer_automation_id is required. The Nexus Submit Output node did not send a valid JSON body. Received ${rawBody ? "a body without customer_automation_id" : "an empty body"}.`,
         400,
       );
     }
@@ -669,27 +880,76 @@ Deno.serve(async (req) => {
       output_type: outputType,
       status: "published",
 
-      title: outputTitle,
-      summary: cleanString(body.summary),
-      content_text: cleanString(body.content_text),
-      content_html: cleanString(body.content_html || body.html),
-      content_json: asJsonObject(parseMaybeJson(body.content_json) || body.data || {}),
-      file_url: cleanString(body.file_url),
-      storage_path: cleanString(body.storage_path),
+      title: stripUnsafeText(outputTitle),
+      summary: stripUnsafeText(body.summary),
+      content_text: stripUnsafeText(body.content_text),
+      content_html: stripUnsafeText(body.content_html || body.html),
+      content_json: safeJsonObject(body.content_json || body.contentJson || body.data || {}),
+      file_url: stripUnsafeText(body.file_url),
+      storage_path: stripUnsafeText(body.storage_path),
 
       created_by: "runtime",
       created_at: now,
       updated_at: now,
     };
 
-    const { data: output, error: outputError } = await adminClient
+    let { data: output, error: outputError } = await adminClient
       .from("automation_outputs")
       .insert(outputPayload)
       .select()
       .single();
 
-    if (outputError) {
-      return errorResponse(outputError.message, 500);
+    if (outputError && looksLikeJsonStorageError(outputError.message)) {
+      const retryPayload = {
+        ...outputPayload,
+        title: stripUnsafeText(outputPayload.title),
+        summary: stripUnsafeText(outputPayload.summary),
+        content_text: stripUnsafeText(outputPayload.content_text),
+        content_html: stripUnsafeText(outputPayload.content_html),
+        content_json: {},
+      };
+
+      const retry = await adminClient
+        .from("automation_outputs")
+        .insert(retryPayload)
+        .select()
+        .single();
+
+      output = retry.data;
+      outputError = retry.error;
+    }
+
+    if (outputError && looksLikeJsonStorageError(outputError.message)) {
+      const compactPayload = {
+        ...outputPayload,
+        title: stripUnsafeText(outputPayload.title),
+        summary: stripUnsafeText(outputPayload.summary),
+        content_text: stripUnsafeText(outputPayload.content_text || outputPayload.summary),
+        content_html: compactHtmlFallback(
+          stripUnsafeText(outputPayload.title),
+          stripUnsafeText(outputPayload.summary),
+          stripUnsafeText(outputPayload.content_text || outputPayload.summary),
+        ),
+        content_json: {},
+        file_url: "",
+        storage_path: "",
+      };
+
+      const compact = await adminClient
+        .from("automation_outputs")
+        .insert(compactPayload)
+        .select()
+        .single();
+
+      output = compact.data;
+      outputError = compact.error;
+    }
+
+    if (outputError || !output) {
+      return errorResponse(
+        `Could not save automation output: ${outputError?.message || "Unknown database error"}`,
+        500,
+      );
     }
 
     const updateError = await tryUpdateCustomerAutomation(
@@ -716,6 +976,20 @@ Deno.serve(async (req) => {
 
     if (updateError) {
       return errorResponse(updateError.message, 500);
+    }
+
+    await tryUpdateParentAutomationAfterSuccess(adminClient, customerAutomation, now);
+
+    if (customerAutomation.order_id) {
+      await adminClient
+        .from("orders")
+        .update({
+          order_status: "completed",
+          updated_at: now,
+        })
+        .eq("id", customerAutomation.order_id)
+        .eq("payment_status", "paid")
+        .not("order_status", "in", '("cancelled","checkout_expired","payment_failed","refunded")');
     }
 
     const updatedExistingRun = await updateExistingRunFromCallback(adminClient, body, {

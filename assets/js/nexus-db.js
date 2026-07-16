@@ -810,8 +810,14 @@ const NexusDB = (() => {
         const amount = Number(product.price_thb || (currency === "THB" ? product.price : 0) || 0);
         return total + amount;
       }, 0);
-      const priceUsd = Number(bundle.price_usd || bundle.discounted_amount_usd || 0) || Math.round(summedUsd * discountMultiplier * 100) / 100;
-      const priceThb = Number(bundle.price_thb || 0) || Math.round(summedThb * discountMultiplier);
+      const computedPriceUsd = Math.round(summedUsd * discountMultiplier * 100) / 100;
+      const computedPriceThb = Math.round(summedThb * discountMultiplier);
+      const priceUsd = computedPriceUsd > 0
+        ? computedPriceUsd
+        : Number(bundle.price_usd || bundle.discounted_amount_usd || 0);
+      const priceThb = computedPriceThb > 0
+        ? computedPriceThb
+        : Number(bundle.price_thb || 0);
       const price = Number(bundle.price_override || bundle.price || 0) || priceUsd || priceThb || 0;
 
       return {
@@ -1555,6 +1561,7 @@ const NexusDB = (() => {
       .from("orders")
       .select("*, automations(title, slug, category, icon, color), developers(id, display_name, handle, avatar_letter)")
       .eq("buyer_id", userId)
+      .eq("payment_status", "paid")
       .order("created_at", { ascending: false })
       .limit(100);
   }
@@ -1563,6 +1570,7 @@ const NexusDB = (() => {
     return supabase
       .from("orders")
       .select("*, automations(title, slug), developers(display_name, handle)")
+      .eq("payment_status", "paid")
       .order("created_at", { ascending: false })
       .limit(250);
   }
@@ -2480,9 +2488,11 @@ async function getCustomerAutomationByOrderId(orderId) {
 
   return supabase
     .from("customer_automations")
-    .select("*, automations(title, slug, setup_schema, credential_schema, runtime_type), orders(payment_status, order_status, automation_id)")
+    .select("*, automations(title, slug, setup_schema, credential_schema, runtime_type), orders(id, payment_status, order_status, automation_id, automation_title, bundle_id, order_type)")
     .eq("order_id", orderId)
     .eq("buyer_id", user.id)
+    .order("created_at", { ascending: true })
+    .limit(1)
     .maybeSingle();
 }
 async function getBuyerCustomerAutomationById(customerAutomationId) {
@@ -2518,6 +2528,8 @@ async function getBuyerCustomerAutomationById(customerAutomationId) {
       ),
       orders(
         id,
+        bundle_id,
+        order_type,
         payment_status,
         order_status,
         automation_id,
@@ -2768,6 +2780,8 @@ async function listBuyerCustomerAutomations(userId) {
         price_display,
         payment_status,
         order_status,
+        bundle_id,
+        order_type,
         install_type,
         stripe_mode,
         stripe_subscription_id,
@@ -2806,6 +2820,8 @@ async function listBuyerCustomerAutomations(userId) {
         price_display,
         payment_status,
         order_status,
+        bundle_id,
+        order_type,
         install_type,
         created_at
       )

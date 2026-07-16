@@ -2707,6 +2707,27 @@ function credentialSourceFieldSet(slot: any) {
   );
 }
 
+function usesFieldCredentialBinding(slot: any) {
+  const sourceFields = Array.isArray(slot?.credential_source_fields)
+    ? slot.credential_source_fields
+    : [];
+  const sourceNodes = Array.isArray(slot?.credential_source_nodes)
+    ? slot.credential_source_nodes
+    : [];
+  const detectedFrom = cleanString(slot?.detected_from);
+
+  return Boolean(
+    slot?.inferred_from_parameter_reference ||
+    sourceFields.length ||
+    sourceNodes.length ||
+    [
+      "upstream_credential_field",
+      "http_parameter_secret_reference",
+      "env_secret_reference",
+    ].includes(detectedFrom)
+  );
+}
+
 function textReferencesCredentialSource(value: unknown, fieldNames: Set<string>) {
   const text = scanText(value);
   const normalizedText = lower(text);
@@ -2876,6 +2897,7 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
   const normalizedSlot = coerceNativeCredentialSlot(slot);
   const workflow = normalizeWorkflowObject(workflowInput);
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const fieldCredentialBinding = usesFieldCredentialBinding(normalizedSlot);
   const n8nCredentialId = cleanString(credential.n8n_credential_id || normalizedSlot.current_id);
   const n8nCredentialName = cleanString(credential.n8n_credential_name || credential.label || normalizedSlot.current_name);
   const credentialKey = cleanString(
@@ -2893,7 +2915,7 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
     "httpCustomAuth",
   ].includes(credentialKey);
 
-  if (!n8nCredentialId || !credentialKey) return workflow;
+  if ((!n8nCredentialId && !fieldCredentialBinding) || !credentialKey) return workflow;
 
   const sourceNodes = new Set(
     (Array.isArray(normalizedSlot.credential_source_nodes) ? normalizedSlot.credential_source_nodes : [])
@@ -2902,7 +2924,7 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
   );
 
   workflow.nodes = nodes.map((node: any) => {
-    if (sourceNodes.has(cleanString(node?.name))) {
+    if (!fieldCredentialBinding && sourceNodes.has(cleanString(node?.name))) {
       return {
         ...node,
         parameters: scrubCredentialCarrierAssignments(node.parameters, normalizedSlot),
@@ -2910,6 +2932,10 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
     }
 
     if (cleanString(node?.name) !== cleanString(normalizedSlot.node_name)) return node;
+
+    if (fieldCredentialBinding) {
+      return node;
+    }
 
     let parameters = {
       ...asObject(node.parameters),
@@ -3040,6 +3066,10 @@ function requirementRows(product: any, slots: any[], bindings: any[], errors: an
       last_error: error?.message || null,
       metadata: {
         inferred: Boolean(slot.inferred),
+        field_credential: Boolean(binding?.field_credential),
+        credential_binding_mode: binding?.credential_binding_mode || "n8n_credential",
+        credential_source_fields: binding?.credential_source_fields || slot.credential_source_fields || [],
+        credential_source_nodes: binding?.credential_source_nodes || slot.credential_source_nodes || [],
         uses_nexus_proxy: Boolean(slot.uses_nexus_proxy),
         allowed_host: slot.allowed_host || null,
         had_existing_n8n_credential: Boolean(slot.current_id || slot.current_name),
@@ -3331,6 +3361,7 @@ export async function bindAutomationCredentials(options: {
   for (const slot of slots) {
     let credential = bestCredentialForSlot(credentials, slot, previousBindings);
     const usesNexusProxy = Boolean(slot.uses_nexus_proxy);
+    const fieldCredentialBinding = usesFieldCredentialBinding(slot);
     const existingNativeCredentialId = cleanString(slot.current_id);
     const existingNativeCredentialName = cleanString(slot.current_name);
     const nativeN8nSlot = isNativeN8nCredentialSlot(slot, slot.n8n_credential_type || slot.credential_key);
@@ -3411,7 +3442,7 @@ export async function bindAutomationCredentials(options: {
       credential = null;
     }
 
-    if (credential && syncMissingN8nCredentials && !usesNexusProxy && !credential.manual_n8n_credential) {
+    if (credential && syncMissingN8nCredentials && !usesNexusProxy && !credential.manual_n8n_credential && !fieldCredentialBinding) {
       try {
         credential = await syncCredentialToN8n({
           adminClient,
@@ -3507,6 +3538,26 @@ export async function bindAutomationCredentials(options: {
         developer_credential_id: credential.id,
         uses_nexus_proxy: true,
         allowed_host: slot.allowed_host || null,
+      });
+      continue;
+    }
+
+    if (credential && fieldCredentialBinding) {
+      boundWorkflow = applyCredentialToWorkflow(boundWorkflow, slot, credential);
+      bindings.push({
+        node_name: slot.node_name,
+        node_type: slot.node_type,
+        provider: slot.provider || credential.provider || null,
+        provider_label: slot.provider_label || credential.provider_label || null,
+        credential_key: slot.credential_key,
+        n8n_credential_type: slot.n8n_credential_type || slot.credential_key || credential.n8n_credential_type,
+        n8n_credential_id: null,
+        n8n_credential_name: credential.label,
+        developer_credential_id: credential.id,
+        field_credential: true,
+        credential_binding_mode: "field",
+        credential_source_fields: Array.isArray(slot.credential_source_fields) ? slot.credential_source_fields : [],
+        credential_source_nodes: Array.isArray(slot.credential_source_nodes) ? slot.credential_source_nodes : [],
       });
       continue;
     }

@@ -6,9 +6,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260711-python-robustness">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
   <title>Developer Dashboard | Nexus AI</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
@@ -1179,8 +1179,8 @@ company_url = context["inputs"].get("company_url")
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
-<script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+<script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
   <script>
     const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, pendingCredentialSlot: null, testProfile: null, revealedCredentials: {}, workflowPollers: {} };
 
@@ -4536,6 +4536,8 @@ company_url = context["inputs"].get("company_url")
         const missing = group.errors.length > 0;
         const bound = group.bindings.length > 0;
         const nativeEditorGroup = group.slots.some(requiresNativeEditorCredentialSetup);
+        const fieldCredentialGroup = group.bindings.some((binding) => binding.field_credential || binding.credential_binding_mode === "field")
+          || group.slots.some((slot) => slot.inferred_from_parameter_reference || (Array.isArray(slot.credential_source_fields) && slot.credential_source_fields.length));
         const status = missing ? "Missing" : bound ? "Bound" : "Detected only";
         const statusClassName = missing ? "pill red" : bound ? "pill green" : "pill orange";
         const credentialNames = Array.from(new Set(group.bindings.map((binding) => binding.n8n_credential_name || binding.developer_credential_id || "Nexus credential").filter(Boolean)));
@@ -4544,6 +4546,9 @@ company_url = context["inputs"].get("company_url")
         const setupHints = Array.from(new Set(group.slots.flatMap((slot) => Array.isArray(slot.setup_hints) ? slot.setup_hints : []).filter(Boolean))).join(" ");
         const nativeFallbackCopy = nativeEditorGroup && missing
           ? `This is a native account credential. Use Add ${group.provider} account here first. For Google/Gmail, Nexus will show a Connect Google button and then bind it to this workflow.`
+          : "";
+        const fieldCredentialCopy = fieldCredentialGroup
+          ? "Field-based secret: Nexus keeps this token in the field where the workflow uses it and will not change the node Authorization settings."
           : "";
         const savedMatches = matchingCredentialsForGroup(group);
         const selectedCredentialId = group.bindings.map((binding) => binding.developer_credential_id).find(Boolean) || "";
@@ -4599,6 +4604,7 @@ company_url = context["inputs"].get("company_url")
               <div><dt>Credential</dt><dd>${NexusUI.escapeHtml(credentialNames.join(", ") || "Not applied yet")}</dd></div>
             </dl>
             <p class="flow-credential-nodes">${NexusUI.escapeHtml(nodeNames.join(", "))}${group.slots.length > 4 ? ` +${group.slots.length - 4} more` : ""}</p>
+            ${fieldCredentialCopy ? `<p class="muted">${NexusUI.escapeHtml(fieldCredentialCopy)}</p>` : ""}
             ${setupHints ? `<p class="muted">${NexusUI.escapeHtml(setupHints)}</p>` : ""}
             ${nativeFallbackCopy ? `<p class="error">${NexusUI.escapeHtml(nativeFallbackCopy)}</p>` : firstError ? `<p class="error">${NexusUI.escapeHtml(firstError)}</p>` : ""}
             ${savedCredentialPicker}

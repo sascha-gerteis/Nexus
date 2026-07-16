@@ -942,6 +942,18 @@ function bundleCheckoutMode(products: any[]): "payment" | "subscription" {
     : "payment";
 }
 
+function getBundleOverridePriceSource(bundle: any, requestedCurrency: SupportedCheckoutCurrency) {
+  if (Number(bundle?.price_override || 0) > 0) {
+    return {
+      amount: Number(bundle.price_override || 0),
+      currency: normalizeCurrency(bundle.currency || requestedCurrency),
+      source: "bundle_price_override",
+    };
+  }
+
+  return null;
+}
+
 async function loadBundleCheckout(adminClient: any, bundleId: string, currency: SupportedCheckoutCurrency) {
   const { data: bundle, error } = await adminClient
     .from("automation_bundles")
@@ -1014,14 +1026,14 @@ async function loadBundleCheckout(adminClient: any, bundleId: string, currency: 
   let fxSource: string | null = null;
   let fxDate: string | null = null;
 
-  if (Number(bundle.price_override || 0) > 0) {
-    const overrideCurrency = normalizeCurrency(bundle.currency || "USD");
-    const converted = await convertStandaloneAmountForCurrency(Number(bundle.price_override || 0), overrideCurrency, currency);
+  const overridePrice = getBundleOverridePriceSource(bundle, currency);
+  if (overridePrice) {
+    const converted = await convertStandaloneAmountForCurrency(overridePrice.amount, overridePrice.currency, currency);
     amount = converted.amount;
     fxRate = converted.fxRate;
     fxSource = converted.fxSource;
     fxDate = converted.fxDate;
-    priceSource = "bundle_price_override";
+    priceSource = overridePrice.source;
   }
 
   if (!amount || amount <= 0) {
@@ -1086,6 +1098,7 @@ async function createBundleCheckoutSession(options: {
     discount_amount: checkout.discountAmount,
     amount: checkout.amount,
     currency,
+    price_source: checkout.priceSource,
     item_prices: checkout.itemPrices,
   };
 
@@ -1146,7 +1159,7 @@ async function createBundleCheckoutSession(options: {
       payment_environment: paymentEnvironment,
       stripe_livemode: paymentEnvironment === "live",
       price_source: checkout.priceSource,
-      derived_price: checkout.priceSource !== "bundle_price_override",
+      derived_price: checkout.priceSource === "bundle_discounted_items",
       fx_rate: checkout.fxRate,
       fx_source: checkout.fxSource,
       fx_date: checkout.fxDate,

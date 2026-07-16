@@ -641,6 +641,70 @@ async function activateRuntimeWorkflow(customerAutomation: any, automation: any,
   }
 }
 
+async function deactivateRuntimeWorkflow(customerAutomation: any, automation: any, order: any = null) {
+  const workflowId = runtimeWorkflowId(customerAutomation, automation, order);
+  if (!workflowId) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "missing_n8n_workflow_id",
+    };
+  }
+
+  try {
+    const result = await n8nApiRequest(
+      `/api/v1/workflows/${encodeURIComponent(workflowId)}/deactivate`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    );
+
+    return {
+      ok: true,
+      workflow_id: workflowId,
+      result,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.toLowerCase().includes("not active")) {
+      return {
+        ok: true,
+        already_inactive: true,
+        workflow_id: workflowId,
+      };
+    }
+
+    return {
+      ok: false,
+      workflow_id: workflowId,
+      error: message,
+    };
+  }
+}
+
+async function refreshRuntimeWorkflow(customerAutomation: any, automation: any, order: any = null) {
+  const workflowId = runtimeWorkflowId(customerAutomation, automation, order);
+  if (!workflowId) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "missing_n8n_workflow_id",
+    };
+  }
+
+  const deactivation = await deactivateRuntimeWorkflow(customerAutomation, automation, order);
+  const activation = await activateRuntimeWorkflow(customerAutomation, automation, order);
+
+  return {
+    ok: Boolean(activation?.ok),
+    workflow_id: workflowId,
+    deactivation,
+    activation,
+  };
+}
+
 function buildCallbackUrl() {
   const supabaseUrl = env("SUPABASE_URL").replace(/\/+$/, "");
   return `${supabaseUrl}/functions/v1/runtime-submit-output`;
@@ -1257,6 +1321,17 @@ function getRuntimeWebhookPath(customerAutomation: any, automation: any, order: 
   );
 }
 
+function hasCustomerRuntimeTarget(customerAutomation: any) {
+  return Boolean(
+    pickFirstString(
+      customerAutomation?.runtime_webhook_url,
+      customerAutomation?.n8n_webhook_url,
+      customerAutomation?.runtime_webhook_path,
+      customerAutomation?.n8n_webhook_path,
+    ),
+  );
+}
+
 function getRuntimeType(customerAutomation: any, automation: any) {
   return pickFirstString(
     customerAutomation?.runtime_type,
@@ -1285,6 +1360,18 @@ function extractExecutionId(responseBody: any) {
     responseBody?.data?.execution_id,
     responseBody?.id,
   );
+}
+
+function runtimeTriggerWaitTimeoutMs() {
+  const configured = Number(env("RUNTIME_TRIGGER_WAIT_TIMEOUT_MS") || env("N8N_SETUP_TRIGGER_TIMEOUT_MS") || 8000);
+  if (Number.isFinite(configured) && configured >= 2000) return Math.min(configured, 25000);
+  return 8000;
+}
+
+function isRequestAbortError(error: unknown) {
+  const name = String((error as any)?.name || "").toLowerCase();
+  const message = String((error as any)?.message || error || "").toLowerCase();
+  return name === "aborterror" || message.includes("abort");
 }
 
 async function triggerN8nWebhook(params: {
@@ -1336,14 +1423,38 @@ async function triggerN8nWebhook(params: {
     },
   };
 
-  const response = await fetch(params.webhookUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-nexus-runtime-secret": runtimeSecret,
-    },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), runtimeTriggerWaitTimeoutMs());
+  let response: Response;
+
+  try {
+    response = await fetch(params.webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-nexus-runtime-secret": runtimeSecret,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isRequestAbortError(error)) {
+      return {
+        response: null,
+        responseBody: {
+          ok: true,
+          status: "accepted_without_final_response",
+          message: "n8n accepted the setup request and is still running.",
+        },
+        executionId: "",
+        acceptedWithoutFinalResponse: true,
+      };
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const responseText = await response.text();
   let responseBody: any = {};
@@ -1463,6 +1574,37 @@ async function checkN8nExecutionAfterTrigger(customerAutomationId: string) {
 
 function classifyImmediateWebhookError(message: string) {
   const lower = cleanString(message).toLowerCase();
+  const credentialLike =
+    lower.includes("access token") ||
+    lower.includes("oauth") ||
+    lower.includes("credential") ||
+    lower.includes("unauthorized") ||
+    lower.includes("authorisation") ||
+    lower.includes("authorization") ||
+    lower.includes("authentication") ||
+    lower.includes("forbidden") ||
+    lower.includes("permission") ||
+    lower.includes("scope") ||
+    lower.includes("expired token") ||
+    lower.includes("token expired") ||
+    lower.includes("invalid token") ||
+    lower.includes("invalid api key") ||
+    lower.includes("api key invalid") ||
+    lower.includes("invalid credentials");
+  const webhookRegistrationLike =
+    lower.includes("not registered") ||
+    lower.includes("requested webhook") ||
+    lower.includes("webhook failed (404)") ||
+    lower.includes("404");
+
+  if (credentialLike && !webhookRegistrationLike) {
+    return {
+      needs_customer_action: true,
+      error_code: "CUSTOMER_CREDENTIAL_INVALID",
+      customer_message:
+        "The credentials you submitted are invalid, expired, or missing required permissions. Please update your setup details to continue.",
+    };
+  }
 
   if (
     lower.includes("webhook failed") ||
@@ -1476,21 +1618,6 @@ function classifyImmediateWebhookError(message: string) {
       error_code: "WORKFLOW_RUNTIME_REVIEW_REQUIRED",
       customer_message:
         "Your setup was submitted. Nexus is preparing the automation and will add the output to your dashboard when it is ready.",
-    };
-  }
-
-  if (
-    lower.includes("access token") ||
-    lower.includes("oauth") ||
-    lower.includes("credential") ||
-    lower.includes("unauthorized") ||
-    lower.includes("permission")
-  ) {
-    return {
-      needs_customer_action: true,
-      error_code: "CUSTOMER_CREDENTIAL_INVALID",
-      customer_message:
-        "The credentials you submitted are invalid, expired, or missing required permissions. Please update your setup details to continue.",
     };
   }
 
@@ -1839,19 +1966,30 @@ Deno.serve(async (req) => {
     let { setupAnswers, secretAnswers, credentialKeys } = splitAnswers;
     setupAnswers = applySheetAccessSetup(setupAnswers, automation, customerAutomation) as Record<string, string>;
 
+    const explicitMetaToken = cleanString((answers as Record<string, unknown>)?.meta_access_token);
+    if (explicitMetaToken && !secretAnswers.meta_access_token) {
+      secretAnswers.meta_access_token = explicitMetaToken;
+      delete setupAnswers.meta_access_token;
+      if (!credentialKeys.includes("meta_access_token")) {
+        credentialKeys = [...credentialKeys, "meta_access_token"];
+      }
+    }
+
     /*
       Safety fallback for old temporary testing setup:
-      If the credential schema expects meta_access_token but it is missing and brand_notes looks like a token,
+      If meta_access_token is missing and brand_notes looks like an old pasted Meta token,
       use it. This keeps the launch test flow working without depending on this behavior long-term.
     */
     let usedBrandNotesAsMetaToken = false;
     if (
-      credentialKeys.includes("meta_access_token") &&
       !secretAnswers.meta_access_token &&
       cleanString(setupAnswers.brand_notes).startsWith("EAA")
     ) {
       secretAnswers.meta_access_token = cleanString(setupAnswers.brand_notes);
       usedBrandNotesAsMetaToken = true;
+      if (!credentialKeys.includes("meta_access_token")) {
+        credentialKeys = [...credentialKeys, "meta_access_token"];
+      }
     }
 
     const { savedCredentialKeys } = await saveCustomerCredentials(
@@ -1971,16 +2109,34 @@ Deno.serve(async (req) => {
         order?.runtime_webhook_url,
     );
 
-    if (!isPythonRuntime && (runtimeType === "n8n_managed" || hasManagedWorkflowTemplate)) {
+    let provisionResultData: any = null;
+
+    const customerRuntimeExists = hasCustomerRuntimeTarget(customerAutomation);
+    const shouldProvisionCustomerWorkflow =
+      !customerRuntimeExists &&
+      !isPythonRuntime &&
+      (runtimeType === "n8n_managed" || hasManagedWorkflowTemplate);
+
+    if (shouldProvisionCustomerWorkflow) {
       try {
         const provisionResult = await provisionCustomerWorkflowBeforeTrigger({
           supabaseUrl,
           token,
           customerAutomationId: customerAutomation.id,
         });
+        provisionResultData = provisionResult;
 
         if (provisionResult?.customer_automation) {
           Object.assign(customerAutomation, provisionResult.customer_automation);
+        }
+        if (provisionResult?.workflow_id) {
+          customerAutomation.n8n_workflow_id = provisionResult.workflow_id;
+        }
+        if (provisionResult?.webhook_path) {
+          customerAutomation.runtime_webhook_path = provisionResult.webhook_path;
+        }
+        if (provisionResult?.webhook_url) {
+          customerAutomation.runtime_webhook_url = provisionResult.webhook_url;
         }
 
         runtimeType = getRuntimeType(customerAutomation, automation);
@@ -2015,7 +2171,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
+    let webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
+    if (!webhookUrl && provisionResultData?.webhook_url) {
+      webhookUrl = cleanString(provisionResultData.webhook_url);
+    }
+    if (!webhookUrl) {
+      const webhookPath = getRuntimeWebhookPath(customerAutomation, automation, order);
+      const n8nBaseUrl = cleanBaseUrl(env("N8N_BASE_URL"));
+      if (webhookPath && n8nBaseUrl) {
+        webhookUrl = `${n8nBaseUrl}/webhook/${webhookPath}`;
+      }
+    }
 
     const shouldTriggerRuntime =
       isPythonRuntime ||
@@ -2023,6 +2189,10 @@ Deno.serve(async (req) => {
       Boolean(webhookUrl);
 
     if (!shouldTriggerRuntime || (!isPythonRuntime && !webhookUrl)) {
+      const reason = hasManagedWorkflowTemplate
+        ? "Nexus saved the setup, but the runtime webhook was not available after provisioning."
+        : "Nexus saved the setup, but this product does not have an automatic runtime attached.";
+
       await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
         status: "setup_submitted",
         runtime_status: "not_started",
@@ -2032,14 +2202,33 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       });
 
+      await insertAutomationEvent(adminClient, {
+        customer_automation_id: customerAutomation.id,
+        buyer_id: customerAutomation.buyer_id,
+        automation_id: customerAutomation.automation_id,
+        order_id: customerAutomation.order_id,
+        event_type: "runtime_trigger_skipped",
+        title: "Runtime trigger skipped",
+        message: JSON.stringify({
+          reason,
+          runtime_type: runtimeType,
+          has_managed_workflow_template: hasManagedWorkflowTemplate,
+          webhook_path: getRuntimeWebhookPath(customerAutomation, automation, order),
+          provision_webhook_url: provisionResultData?.webhook_url || null,
+        }),
+        created_by: "runtime",
+      });
+
       return jsonResponse({
         ok: true,
         status: "submitted",
         triggered_n8n: false,
+        runtime_review_required: hasManagedWorkflowTemplate,
         submission_id: submission.id,
         setup_keys: Object.keys(setupAnswers),
         credential_keys_available: Object.keys(savedSecrets),
         used_brand_notes_as_meta_token: usedBrandNotesAsMetaToken,
+        message: reason,
       });
     }
 
@@ -2073,7 +2262,7 @@ Deno.serve(async (req) => {
       let activationRetry: any = null;
 
       if (!isPythonRuntime && isUnregisteredN8nWebhookError(message)) {
-        activationRetry = await activateRuntimeWorkflow(customerAutomation, automation, order);
+        activationRetry = await refreshRuntimeWorkflow(customerAutomation, automation, order);
 
         if (activationRetry?.ok) {
           try {
@@ -2193,6 +2382,8 @@ Deno.serve(async (req) => {
 
     const n8nCheckResult = isPythonRuntime
       ? { checked: false, reason: "Python runner handles execution and callback status." }
+      : triggerResult?.acceptedWithoutFinalResponse
+      ? { checked: false, reason: "n8n is still running; Nexus will receive the output callback when it finishes." }
       : await checkN8nExecutionAfterTrigger(customerAutomation.id);
 
     return jsonResponse({
@@ -2206,6 +2397,7 @@ Deno.serve(async (req) => {
       used_brand_notes_as_meta_token: usedBrandNotesAsMetaToken,
       n8n_execution_id: executionId || null,
       n8n_check: n8nCheckResult,
+      runtime_pending_response: Boolean(triggerResult?.acceptedWithoutFinalResponse),
     });
   } catch (error) {
     console.error("submit-automation-setup failed:", error);

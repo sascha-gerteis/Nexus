@@ -123,7 +123,10 @@ function contextExpressionForMapping(source: string, key: string, expressionMode
   const path = contextPathForMapping(source, key);
   if (!path) return "";
 
-  return expressionMode ? `={{ ${path} }}` : `{{ ${path} }}`;
+  // Keep Nexus placeholders in interpolation form. We do not force "=" here,
+  // because field-based credentials and setup values should remain exactly in
+  // the field where the developer placed them.
+  return `{{ ${path} }}`;
 }
 
 function isWholeString(value: string, placeholder: string) {
@@ -206,45 +209,7 @@ function normalizeKnownNexusPlaceholderMapping(mapping: any) {
 
 function forceN8nExpressionModeIfNeeded(value: string, childKey = "") {
   const output = String(value || "");
-  const key = String(childKey || "").toLowerCase();
-
-  /*
-    Do not turn actual code blocks into n8n expression fields.
-    Code node jsCode must remain plain JavaScript, and HTTP JSON bodies
-    should keep {{ ... }} interpolation inside valid JSON.
-  */
-  if (
-    key === "jscode" ||
-    key === "jsonbody" ||
-    key === "code" ||
-    key === "functioncode" ||
-    key === "script"
-  ) {
-    return output;
-  }
-
-  const hasRuntimeContextReference =
-    output.includes('$(\"Nexus Runtime Context\").first().json') ||
-    output.includes("$('Nexus Runtime Context').first().json") ||
-    output.includes('$("Nexus Runtime Context").first().json');
-
-  if (!hasRuntimeContextReference) {
-    return output;
-  }
-
-  /*
-    n8n only evaluates expressions when the parameter value starts with =.
-    This fixes URL fields like:
-    https://graph.facebook.com/v20.0/{{ $("Nexus Runtime Context").first().json.setup.facebook_page_id }}
-
-    into:
-    =https://graph.facebook.com/v20.0/{{ $("Nexus Runtime Context").first().json.setup.facebook_page_id }}
-  */
-  if (output.trim().startsWith("=")) {
-    return output;
-  }
-
-  return `=${output}`;
+  return output;
 }
 
 function repairBadMixedCredentialValue(output: string) {
@@ -276,7 +241,7 @@ function repairBadMixedCredentialValue(output: string) {
       containsBrandNotesReference;
 
     if (hasAccessTokenContext && value.toLowerCase().includes("brand_notes")) {
-      return '={{ $("Nexus Runtime Context").first().json.secrets.meta_access_token }}';
+      return '{{ $("Nexus Runtime Context").first().json.secrets.meta_access_token }}';
     }
   }
 

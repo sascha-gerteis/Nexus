@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -8,10 +8,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260710-admin-staff-analytics">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
 
   <title>Complete Setup | Nexus</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -52,8 +52,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260711-bundle-setup-dedupe"></script>
-  <script src="/assets/js/nexus-db.js?v=20260711-bundle-setup-dedupe"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
 
   <script>
     let activeCustomerAutomation = null;
@@ -82,9 +82,25 @@
       if (typeof schema === "string") {
         try {
           const parsed = JSON.parse(schema);
-          return Array.isArray(parsed) ? parsed : [];
+          return normalizeSetupSchema(parsed);
         } catch {
           return [];
+        }
+      }
+
+      if (typeof schema === "object") {
+        const candidates = [
+          schema.fields,
+          schema.setup_fields,
+          schema.setupFields,
+          schema.questions,
+          schema.schema,
+          schema.items
+        ];
+
+        for (const candidate of candidates) {
+          const normalized = normalizeSetupSchema(candidate);
+          if (normalized.length) return normalized;
         }
       }
 
@@ -142,6 +158,70 @@
 
     function fieldRequired(field) {
       return field.required ? "required" : "";
+    }
+
+    function isMonthlyCadenceSetupField(field = {}) {
+      const name = normalizeAnswerKey(field.name || field.key || field.credential_key || "");
+      const label = String(field.label || "").trim().toLowerCase();
+      const text = [
+        field.name,
+        field.key,
+        field.label,
+        field.description,
+        field.placeholder
+      ].map(value => String(value || "")).join(" ").toLowerCase();
+
+      if (/report[_\s-]*(period|range)|date[_\s-]*range|time[_\s-]*frame|period[_\s-]*(start|end)/.test(text)) {
+        return false;
+      }
+
+      return (
+        [
+          "frequency",
+          "run_frequency",
+          "schedule_frequency",
+          "report_frequency",
+          "delivery_frequency",
+          "cadence",
+          "run_cadence",
+          "schedule_cadence",
+          "how_often",
+          "repeat_every",
+          "interval"
+        ].includes(name) ||
+        /\b(run|schedule|delivery|report)\s+(frequency|cadence)\b/.test(text) ||
+        /\bhow often\b|\brepeat every\b|\bmonthly cadence\b/.test(text) ||
+        label === "frequency" ||
+        label === "cadence"
+      );
+    }
+
+    function shouldRenderBuyerSetupField(field = {}, options = {}) {
+      const name = normalizeAnswerKey(field.name || field.key || field.credential_key || "");
+      const label = String(field.label || "").trim().toLowerCase();
+      const text = [
+        field.name,
+        field.key,
+        field.label,
+        field.description,
+        field.placeholder
+      ].map(value => String(value || "")).join(" ").toLowerCase();
+
+      if (
+        name === "google_sheet_access_mode" ||
+        name === "nexus_sheet_access_mode" ||
+        name === "sheet_access_mode" ||
+        label === "how should nexus get access?" ||
+        /how should nexus get access/.test(text)
+      ) {
+        return false;
+      }
+
+      if (options.hideMonthlyCadence && isMonthlyCadenceSetupField(field)) {
+        return false;
+      }
+
+      return true;
     }
 
     function renderField(field, existingAnswers = {}, options = {}) {
@@ -232,6 +312,122 @@
       `;
     }
 
+    function bundleFieldWorkflowIds(field = {}) {
+      return [...new Set((field.sources || [])
+        .map(source => source.customer_automation_id)
+        .filter(Boolean)
+        .map(String))];
+    }
+
+    function bundleEntryKey(entry = {}) {
+      return String(entry.automation?.id || entry.automation?.customer_automation_id || entry.automation?.automation_id || "");
+    }
+
+    function bundleEntryTitle(entry = {}) {
+      return entry.product?.title || entry.automation?.name || entry.automation?.automation_title || "Workflow";
+    }
+
+    function bundleFieldIsShared(field = {}) {
+      if (field.type === "secret") return true;
+      return bundleFieldWorkflowIds(field).length !== 1;
+    }
+
+    function bundleFieldLabel(field = {}, productTitle = "") {
+      const label = field.label || field.name || "";
+      const prefix = productTitle ? `${productTitle}:` : "";
+      return prefix && label.startsWith(prefix) ? label.slice(prefix.length).trim() : label;
+    }
+
+    function renderBundleFieldList(fields = [], existingAnswers = {}, options = {}) {
+      return fields.map(field => {
+        const label = bundleFieldLabel(field, options.productTitle || "");
+        return renderField({ ...field, label }, existingAnswers, options);
+      }).join("");
+    }
+
+    function openBundleSetupSection(index) {
+      const sections = [...document.querySelectorAll("[data-bundle-section]")];
+      if (!sections.length) return;
+      const nextIndex = Math.max(0, Math.min(index, sections.length - 1));
+
+      sections.forEach((section, sectionIndex) => {
+        section.open = sectionIndex === nextIndex;
+      });
+
+      sections[nextIndex]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    window.openBundleSetupSection = openBundleSetupSection;
+
+    function renderBundleSetupFields(bundleSetup, setupFields = [], credentialFields = [], existingAnswers = {}, options = {}) {
+      const entries = bundleSetup?.entries || [];
+      const sharedSetupFields = setupFields.filter(bundleFieldIsShared);
+      const workflowFields = setupFields.filter(field => !bundleFieldIsShared(field));
+      const sharedFields = [...credentialFields, ...sharedSetupFields];
+
+      const workflowSections = entries.map((entry, index) => {
+        const entryKey = bundleEntryKey(entry);
+        const productTitle = bundleEntryTitle(entry);
+        const fields = workflowFields.filter(field => bundleFieldWorkflowIds(field).includes(entryKey));
+        const countLabel = `${fields.length} question${fields.length === 1 ? "" : "s"}`;
+
+        return `
+          <details class="bundle-setup-section" data-bundle-section ${index === 0 ? "open" : ""}>
+            <summary class="bundle-setup-summary-row">
+              <span>
+                <strong>${escapeHtml(productTitle)}</strong>
+                <small>${escapeHtml(countLabel)}</small>
+              </span>
+              <span class="bundle-setup-expand">Expand</span>
+            </summary>
+
+            <div class="bundle-setup-section-body">
+              ${
+                fields.length
+                  ? `<div class="bundle-setup-grid">${renderBundleFieldList(fields, existingAnswers, { ...options, productTitle })}</div>`
+                  : `<p class="bundle-setup-empty">No extra questions for this workflow. Shared details above are enough.</p>`
+              }
+
+              ${
+                index < entries.length - 1
+                  ? `<button type="button" class="btn btn-secondary bundle-setup-next" onclick="openBundleSetupSection(${index + 1})">Next workflow</button>`
+                  : `<p class="bundle-setup-finish">All workflow sections are visible. Submit once below to start the included workflows.</p>`
+              }
+            </div>
+          </details>
+        `;
+      }).join("");
+
+      return `
+        <div class="full bundle-setup-flow">
+          ${
+            sharedFields.length
+              ? `
+                <section class="bundle-setup-shared">
+                  <div class="setup-form-section-title">
+                    <h3>Shared details</h3>
+                    <p>Fill these once. Nexus reuses them across the workflows that need the same information.</p>
+                  </div>
+                  <div class="bundle-setup-grid">
+                    ${renderBundleFieldList(sharedFields, existingAnswers, options)}
+                  </div>
+                </section>
+              `
+              : ""
+          }
+
+          <section class="bundle-setup-workflows">
+            <div class="setup-form-section-title">
+              <h3>Workflow setup</h3>
+              <p>Open each workflow, complete its questions, then submit once at the end.</p>
+            </div>
+
+            ${workflowSections}
+          </section>
+        </div>
+      `;
+    }
+
     function cleanFlag(value) {
       return String(value || "").trim().toLowerCase();
     }
@@ -298,11 +494,11 @@
       if (devSlotMatches) return false;
 
       /*
-        Credential schema is sensitive. If a field is not explicitly buyer/customer-owned,
-        keep it out of the customer setup form. Developer credentials live in the Nexus
-        credential vault and are validated by product technical checks instead.
+        In customer setup, credential_schema means "buyer-provided access" unless the
+        product explicitly marks the field as developer/internal owned. This keeps bundle
+        setup from announcing a required Meta/Google/etc. token without rendering the input.
       */
-      return false;
+      return true;
     }
 
     function fieldTextForMatching(field = {}) {
@@ -430,6 +626,92 @@
       };
     }
 
+    function makeMetaAccessTokenField() {
+      return {
+        name: "meta_access_token",
+        label: "Meta access token",
+        type: "secret",
+        required: true,
+        customer_owned: true,
+        provider: "meta",
+        service: "meta",
+        credential_kind: "access_token",
+        placeholder: "EAAB...",
+        description: "Paste the Meta access token for the Facebook or Instagram assets this automation should use. Do not paste this in brand notes."
+      };
+    }
+
+    function hasMetaAccessCredentialField(fields = []) {
+      return fields.some(field => {
+        const text = fieldTextForMatching(field);
+        const name = fieldNameForMatching(field);
+        return (
+          /\b(meta|facebook|fb|instagram|ig)\b/.test(text) &&
+          /\b(access[_\s-]*token|bearer|token)\b/.test(text)
+        ) || [
+          "meta_access_token",
+          "facebook_access_token",
+          "instagram_access_token",
+          "fb_access_token",
+          "ig_access_token"
+        ].includes(name);
+      });
+    }
+
+    function productLooksLikeMetaSetup(product = {}, setupSchema = []) {
+      const detected = asAnswerObject(product.detected_placeholders);
+      const placeholderText = JSON.stringify([
+        detected,
+        product.placeholder_mappings,
+        product.placeholderMappings,
+        product.workflow_variables,
+        product.workflowVariables,
+        product.n8n_import_result,
+        product.n8n_last_import_result
+      ] || {}).toLowerCase();
+      const productText = [
+        product.title,
+        product.slug,
+        product.category,
+        product.badge,
+        product.short_description,
+        product.long_description,
+        product.problem,
+        product.outcome,
+        product.name,
+        product.description,
+        product.workflow_source_platform,
+        placeholderText
+      ].map(value => String(value || "")).join(" ").toLowerCase();
+
+      const setupText = setupSchema.map(field => fieldTextForMatching(field)).join(" ");
+      const hasSocialProduct = /\b(meta|facebook|fb|instagram|ig|social media|social listening)\b/.test(productText);
+      const hasMetaSetupField = /\b(meta|facebook|fb|instagram|ig)\b/.test(setupText);
+      const hasTokenPlaceholder = /\b(meta|facebook|fb|instagram|ig)[_\s-]*(access[_\s-]*)?token\b|\b(access[_\s-]*)?token\b.*\b(meta|facebook|instagram)\b/.test(placeholderText);
+      const hasLegacyBrandNotes = setupSchema.some(field => fieldNameForMatching(field) === "brand_notes");
+      const hasLegacySocialNotes = setupSchema.some(field => {
+        const name = fieldNameForMatching(field);
+        const text = fieldTextForMatching(field);
+        return (
+          name === "brand_notes" ||
+          name === "notes" ||
+          name === "social_notes" ||
+          name === "brand_context" ||
+          /\b(brand|social|facebook|instagram|meta)\b/.test(text)
+        );
+      });
+
+      return hasTokenPlaceholder || hasMetaSetupField || hasLegacyBrandNotes || (hasSocialProduct && hasLegacySocialNotes);
+    }
+
+    function inferBuyerCredentialFields(setupSchema = [], credentialSchema = [], product = {}) {
+      const fields = [...credentialSchema];
+      if (productLooksLikeMetaSetup(product, setupSchema) && !hasMetaAccessCredentialField(fields)) {
+        fields.push(makeMetaAccessTokenField());
+      }
+      return fields;
+    }
+
     function bundleFieldLabelFromSemantic(semantic, fallback = "") {
       const key = String(semantic || "").replace(/^setup:/, "").replace(/^credential:/, "");
       const labels = {
@@ -475,14 +757,68 @@
       return `bundle_${canonicalBundleToken(semantic).slice(0, 80) || "field"}`;
     }
 
+    const SHARED_BUNDLE_SETUP_PURPOSES = new Set([
+      "instagram_profile",
+      "tiktok_profile",
+      "facebook_page",
+      "linkedin_page",
+      "youtube_channel",
+      "company_website",
+      "business_name",
+      "contact_email",
+      "contact_phone",
+      "market_region"
+    ]);
+
+    function shouldShareBundleSetupSource(source = {}) {
+      if (source.kind !== "setup") return true;
+      const purpose = source.descriptor?.purpose || source.descriptor?.rawKey || "";
+      return SHARED_BUNDLE_SETUP_PURPOSES.has(purpose);
+    }
+
+    function productScopedBundleSemantic(source = {}) {
+      const descriptor = source.descriptor || {};
+      const fieldKey = descriptor.rawKey || fieldNameForMatching(source.field) || "field";
+      const purpose = descriptor.purpose || fieldKey;
+      const automationId =
+        source.entry?.automation?.id ||
+        source.entry?.automation?.automation_id ||
+        source.entry?.product?.id ||
+        "workflow";
+
+      return `setup:${purpose}:${automationId}:${fieldKey}`;
+    }
+
+    function isLegacyBrandNotesField(field = {}) {
+      return (
+        field.semantic === "setup:brand_notes" ||
+        fieldNameForMatching(field) === "brand_notes" ||
+        (Array.isArray(field.original_field_names) && field.original_field_names.some(name => canonicalBundleToken(name) === "brand_notes"))
+      );
+    }
+
+    function isMetaAccessTokenField(field = {}) {
+      const text = fieldTextForMatching(field);
+      const semantic = String(field.semantic || "").toLowerCase();
+      return (
+        semantic.includes("credential:meta") ||
+        fieldNameForMatching(field) === "meta_access_token" ||
+        (/\b(meta|facebook|instagram)\b/.test(text) && /\b(access[_\s-]*token|token)\b/.test(text))
+      );
+    }
+
     function buildBundleSetupModel(entries) {
       const sources = [];
 
       for (const entry of entries || []) {
         const product = entry.product || {};
         const setupSchema = normalizeSetupSchema(product.setup_schema);
-        const credentialSchema = normalizeSetupSchema(product.credential_schema)
-          .filter(field => isBuyerOwnedCredentialField(field, product));
+        const credentialSchema = inferBuyerCredentialFields(
+          setupSchema,
+          normalizeSetupSchema(product.credential_schema)
+            .filter(field => isBuyerOwnedCredentialField(field, product)),
+          product
+        );
 
         for (const field of setupSchema) {
           if (!field?.name) continue;
@@ -518,8 +854,10 @@
           const serviceSet = specificServices.get(`${provider}:${descriptor.credentialKind}`);
           if (!service && serviceSet?.size === 1) service = [...serviceSet][0];
           semantic = `credential:${provider}:${service || "general"}:${descriptor.credentialKind}`;
-        } else {
+        } else if (shouldShareBundleSetupSource(source)) {
           semantic = `setup:${descriptor.purpose || descriptor.rawKey}`;
+        } else {
+          semantic = productScopedBundleSemantic(source);
         }
 
         const formName = bundleFieldFormName(semantic);
@@ -538,7 +876,9 @@
           grouped.set(formName, {
             ...source.field,
             name: formName,
-            label: bundleFieldLabelFromSemantic(semantic, source.field.label || originalName),
+            label: source.kind === "setup" && !shouldShareBundleSetupSource(source)
+              ? `${productTitle}: ${source.field.label || bundleFieldLabelFromSemantic(`setup:${descriptor.purpose || descriptor.rawKey}`, originalName)}`
+              : bundleFieldLabelFromSemantic(semantic, source.field.label || originalName),
             type: source.kind === "credential" ? "secret" : source.field.type || "text",
             required: Boolean(source.field.required),
             semantic,
@@ -554,13 +894,19 @@
         }
       }
 
+      const hasMetaCredential = [...grouped.values()].some(field => field.type === "secret" && isMetaAccessTokenField(field));
       const fields = [...grouped.values()].map(field => {
         const workflowCount = new Set(field.sources.map(source => source.customer_automation_id)).size;
         const originalDescription = field.description || "";
+        const isBrandNotes = isLegacyBrandNotesField(field);
         return {
           ...field,
+          label: isBrandNotes ? "Brand notes and report goals" : field.label,
+          required: isBrandNotes && hasMetaCredential ? false : field.required,
           description: [
-            originalDescription,
+            isBrandNotes && hasMetaCredential
+              ? "Optional context only. Paste the Meta access token in the Credentials / Access field, not here."
+              : originalDescription,
             workflowCount > 1 ? `Used by ${workflowCount} workflows in this bundle.` : ""
           ].filter(Boolean).join(" ")
         };
@@ -591,6 +937,14 @@
 
       if (!orderId || typeof NexusDB.getBuyerCustomerAutomationsByOrderId !== "function") return null;
 
+      if (bundleId && typeof NexusDB.ensureCustomerAutomations === "function") {
+        try {
+          await NexusDB.ensureCustomerAutomations(orderId);
+        } catch (error) {
+          console.warn("Could not repair bundle customer automations before loading setup:", error);
+        }
+      }
+
       const { data: rows, error } = await NexusDB.getBuyerCustomerAutomationsByOrderId(orderId);
       if (error || !Array.isArray(rows) || rows.length < 2) {
         if (error) console.warn("Could not load bundle setup automations:", error);
@@ -619,6 +973,54 @@
 
       const model = buildBundleSetupModel(entries);
       return model.fields.length ? model : null;
+    }
+
+    async function loadBundleSetupContextByOrderId(orderId, bundleId = "") {
+      if (!orderId || typeof NexusDB.getBuyerCustomerAutomationsByOrderId !== "function") {
+        return null;
+      }
+
+      if (typeof NexusDB.ensureCustomerAutomations === "function") {
+        try {
+          await NexusDB.ensureCustomerAutomations(orderId);
+        } catch (error) {
+          console.warn("Could not ensure bundle customer automations:", error);
+        }
+      }
+
+      const { data: rows, error } = await NexusDB.getBuyerCustomerAutomationsByOrderId(orderId);
+      if (error || !Array.isArray(rows) || !rows.length) {
+        if (error) console.warn("Could not load order setup automations:", error);
+        return null;
+      }
+
+      const bundleRows = bundleId
+        ? rows.filter(row => {
+            const rowOrder = Array.isArray(row.orders) ? row.orders[0] || {} : row.orders || {};
+            return String(row.bundle_id || rowOrder.bundle_id || "") === String(bundleId);
+          })
+        : rows.filter(row => {
+            const rowOrder = Array.isArray(row.orders) ? row.orders[0] || {} : row.orders || {};
+            return row.bundle_id || rowOrder.bundle_id || rowOrder.order_type === "bundle";
+          });
+
+      const rowsForSetup = bundleRows.length ? bundleRows : rows;
+
+      const entries = await Promise.all(rowsForSetup.map(async row => {
+        const product = await resolveProductFromCustomerAutomation(row);
+        const submission = (await NexusDB.getLatestSetupSubmission(row.id)).data || null;
+        return { automation: row, product: product || {}, submission };
+      }));
+
+      const model = buildBundleSetupModel(entries);
+      if (!model.fields.length) return null;
+
+      return {
+        model,
+        primaryAutomation: entries[0]?.automation || rowsForSetup[0],
+        primaryProduct: entries[0]?.product || {},
+        primarySubmission: entries[0]?.submission || null
+      };
     }
 
 
@@ -684,9 +1086,24 @@ async function resolveProductFromCustomerAutomation(automation) {
     async function initSetupPage() {
       const root = document.getElementById("setupRoot");
       const customerAutomationId = getParam("id");
+      const orderId = getParam("order_id");
+      const bundleId = getParam("bundle_id");
 
       const user = await NexusDB.requireBuyer(location.pathname + location.search);
       if (!user) return;
+
+      if (!customerAutomationId && orderId) {
+        const bundleContext = await loadBundleSetupContextByOrderId(orderId, bundleId);
+
+        if (bundleContext?.model) {
+          activeCustomerAutomation = bundleContext.primaryAutomation;
+          activeProduct = bundleContext.primaryProduct;
+          latestSubmission = bundleContext.primarySubmission;
+          activeBundleSetup = bundleContext.model;
+          renderSetupForm(root);
+          return;
+        }
+      }
 
       if (!customerAutomationId) {
         root.innerHTML = `
@@ -762,12 +1179,19 @@ async function resolveProductFromCustomerAutomation(automation) {
       const setupSchema = bundleSetup
         ? bundleSetup.fields.filter(field => field.type !== "secret")
         : normalizeSetupSchema(product.setup_schema);
+      const visibleSetupSchema = setupSchema.filter(field => shouldRenderBuyerSetupField(field, {
+        hideMonthlyCadence: Boolean(bundleSetup)
+      }));
       const allCredentialSchema = bundleSetup
         ? bundleSetup.fields.filter(field => field.type === "secret")
         : normalizeSetupSchema(product.credential_schema);
       const credentialSchema = bundleSetup
         ? allCredentialSchema
-        : allCredentialSchema.filter(field => isBuyerOwnedCredentialField(field, product));
+        : inferBuyerCredentialFields(
+            setupSchema,
+            allCredentialSchema.filter(field => isBuyerOwnedCredentialField(field, product)),
+            product
+          );
 
       const existingAnswers = bundleSetup ? bundleSetup.existingAnswers || {} : mergeSetupAnswers(latestSubmission);
       const installType = automation.install_type || order.install_type || "self_serve";
@@ -795,10 +1219,10 @@ async function resolveProductFromCustomerAutomation(automation) {
       const lastErrorMessage = automation.last_error_message || "";
       const lastErrorCode = automation.last_error_code || "";
       const lastErrorNode = automation.last_error_node || "";
-      const hasAnySchema = setupSchema.length || credentialSchema.length;
+      const hasAnySchema = visibleSetupSchema.length || credentialSchema.length;
 
-      const setupFieldsHtml = setupSchema.length
-        ? setupSchema.map(field => renderField(field, existingAnswers, { hasSubmitted })).join("")
+      const setupFieldsHtml = visibleSetupSchema.length
+        ? visibleSetupSchema.map(field => renderField(field, existingAnswers, { hasSubmitted })).join("")
         : (
             hasAnySchema
               ? ""
@@ -826,7 +1250,12 @@ async function resolveProductFromCustomerAutomation(automation) {
         `
         : "";
 
-      const formFields = setupFieldsHtml + credentialFieldsHtml;
+      const showCredentialsFirst = Boolean(bundleSetup && credentialSchema.some(field => isMetaAccessTokenField(field)));
+      const formFields = bundleSetup
+        ? renderBundleSetupFields(bundleSetup, visibleSetupSchema, credentialSchema, existingAnswers, { hasSubmitted })
+        : showCredentialsFirst
+          ? credentialFieldsHtml + setupFieldsHtml
+          : setupFieldsHtml + credentialFieldsHtml;
       const workflowCount = bundleSetup?.entries?.length || 1;
       const title = bundleSetup
         ? order.automation_title || product.title || "Bundle setup"
@@ -995,7 +1424,11 @@ async function resolveProductFromCustomerAutomation(automation) {
               </div>
 
               <button type="submit" class="btn btn-primary" style="margin-top:1rem">
-                ${hasSubmitted ? "Update setup details" : "Submit setup details"}
+                ${
+                  bundleSetup
+                    ? hasSubmitted ? "Update bundle setup" : "Submit bundle setup and start workflows"
+                    : hasSubmitted ? "Update setup details" : "Submit setup details"
+                }
               </button>
             </form>
 
@@ -1042,11 +1475,9 @@ async function resolveProductFromCustomerAutomation(automation) {
         return;
       }
 
-      const results = [];
-
-      for (const entry of entries) {
+      const results = (await Promise.all(entries.map(async entry => {
         const customerAutomationId = entry?.automation?.id;
-        if (!customerAutomationId) continue;
+        if (!customerAutomationId) return null;
 
         const mappedAnswers = buildBundleAnswersForWorkflow(entry, answers);
         const { data, error } = await NexusDB.submitAutomationSetup({
@@ -1054,17 +1485,42 @@ async function resolveProductFromCustomerAutomation(automation) {
           answers: mappedAnswers
         });
 
-        results.push({
+        return {
           entry,
           data,
           error,
           answers: mappedAnswers
-        });
-      }
+        };
+      }))).filter(Boolean);
 
       const failures = results.filter(item => item.error);
 
       if (failures.length) {
+        const onlyRuntimeWaits = failures.every(item =>
+          /submit-automation-setup timed out|timed out/i.test(String(item.error?.message || ""))
+        );
+
+        if (onlyRuntimeWaits) {
+          const waitMessage = `Your bundle setup was saved. The included workflow${entries.length === 1 ? "" : "s"} may still be running, so outputs will appear in your dashboard when they finish.`;
+
+          if (resultEl) {
+            resultEl.innerHTML = `
+              <div class="success" style="margin-top:1rem">
+                <strong>Bundle setup submitted.</strong><br>
+                ${escapeHtml(waitMessage)}
+              </div>
+            `;
+          }
+
+          NexusUI.toast("Bundle setup submitted. Check your dashboard for outputs.");
+          button.disabled = false;
+          button.textContent = "Update setup details";
+          setTimeout(function () {
+            location.href = "/pages/buyer/dashboard.html";
+          }, 1800);
+          return;
+        }
+
         const safeMessage = "Your bundle setup was saved for some workflows, but Nexus needs to review one included workflow before everything can start.";
         NexusUI.toast(safeMessage);
 
@@ -1159,6 +1615,25 @@ async function resolveProductFromCustomerAutomation(automation) {
 
       if (error) {
         const rawMessage = String(error.message || "");
+        if (/submit-automation-setup timed out|timed out/i.test(rawMessage)) {
+          const waitMessage = "Your setup was saved. The automation may still be running, so outputs will appear in your dashboard when it finishes.";
+
+          NexusUI.toast("Setup submitted. Check your dashboard for outputs.");
+          document.getElementById("setupSubmitResult").innerHTML = `
+            <div class="success" style="margin-top:1rem">
+              <strong>Setup submitted.</strong><br>
+              ${escapeHtml(waitMessage)}
+            </div>
+          `;
+
+          button.disabled = false;
+          button.textContent = "Update setup details";
+          setTimeout(function () {
+            location.href = "/pages/buyer/dashboard.html";
+          }, 1800);
+          return;
+        }
+
         const safeMessage =
           /n8n|webhook|runtime|supabase|authorization header|requested webhook|function/i.test(rawMessage)
             ? "Your setup could not be fully started yet. Nexus has received the issue and will review the automation."
