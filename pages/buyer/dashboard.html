@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260716-buyer-bundle-card">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260717-bundle-issues">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -906,10 +906,45 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         automationState(item, getLatestOutputForAutomation(outputs, item.id), latestRunsByAutomation.get(item.id) || null)
       );
       const issueIds = new Set();
+      const issueDetails = [];
+      const workflowSummaries = included.map((item, index) => {
+        const latestRun = latestRunsByAutomation.get(item.id) || null;
+        const childState = childStates[index] || {};
+        const status = runIsFreshActive(latestRun)
+          ? "Running"
+          : runIsIssue(latestRun)
+            ? "Failed"
+            : childState.label || "Ready";
+
+        return {
+          id: item.id,
+          title: productTitleFromAutomation(item),
+          label: status,
+          tone: runIsIssue(latestRun) || childState.tone === "red" ? "red" : childState.tone || "green",
+          runAt: latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || item.last_run_at || ""
+        };
+      });
+
       included.forEach((item, index) => {
         const latestRun = latestRunsByAutomation.get(item.id);
         if (childStates[index]?.tone === "red" || runIsIssue(latestRun) || runIsStaleActive(latestRun)) {
           issueIds.add(item.id);
+          const rawMessage = String(
+            item.last_error_message ||
+            latestRun?.error_message ||
+            latestRun?.response_payload?.error ||
+            latestRun?.response_payload?.message ||
+            childStates[index]?.description ||
+            "This workflow needs attention."
+          ).replace(/\s+/g, " ").trim();
+          const message = rawMessage.length > 220 ? `${rawMessage.slice(0, 217)}...` : rawMessage;
+
+          issueDetails.push({
+            id: item.id,
+            title: productTitleFromAutomation(item),
+            status: childStates[index]?.label || latestRun?.status || item.runtime_status || "Issue detected",
+            message
+          });
         }
       });
       const issueCount = issueIds.size;
@@ -924,6 +959,20 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         ? included.filter(item => !outputAutomationIds.has(item.id)).length
         : 0;
       const partialBundleIssue = Boolean(bundleOutputs.length && incompleteAfterOutputCount && !progressCount);
+
+      if (partialBundleIssue) {
+        included
+          .filter(item => !outputAutomationIds.has(item.id) && !issueIds.has(item.id))
+          .forEach(item => {
+            issueDetails.push({
+              id: item.id,
+              title: productTitleFromAutomation(item),
+              status: "No output yet",
+              message: "This workflow has not returned an output for the bundle run yet."
+            });
+          });
+      }
+
       let state = {
         label: "Ready",
         tone: "green",
@@ -940,10 +989,13 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         };
       } else if (issueCount || partialBundleIssue) {
         const count = issueCount || incompleteAfterOutputCount;
+        const firstIssue = issueDetails[0];
         state = {
           label: "Needs attention",
           tone: "red",
-          description: `${count} included workflow${count === 1 ? "" : "s"} did not complete cleanly.`,
+          description: firstIssue
+            ? `${firstIssue.title}: ${firstIssue.message}`
+            : `${count} included workflow${count === 1 ? "" : "s"} did not complete cleanly.`,
           primaryAction: "View bundle setup"
         };
       } else if (progressCount) {
@@ -968,6 +1020,8 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         orderId,
         bundleId,
         included,
+        workflowSummaries,
+        issueDetails,
         latestOutput: bundleOutputs[0] || null,
         outputCount: bundleOutputs.length,
         state
@@ -1685,7 +1739,7 @@ function openAutomationDetail(customerAutomationId) {
     }
 
     function renderBundleBoardCard(row) {
-      const { order, snapshot, included, latestOutput, outputCount, state } = row;
+      const { order, snapshot, included, workflowSummaries = [], issueDetails = [], latestOutput, outputCount, state } = row;
       const title = order.automation_title || snapshot.bundle_title || "Automation bundle";
       const setupUrl = row.orderId && row.bundleId
         ? `/pages/buyer/setup.html?order_id=${encodeURIComponent(row.orderId)}&bundle_id=${encodeURIComponent(row.bundleId)}`
@@ -1735,10 +1789,35 @@ function openAutomationDetail(customerAutomationId) {
           </div>
 
           ${
-            workflowNames.length
+            (workflowSummaries.length || workflowNames.length)
               ? `
                 <div class="buyer-bundle-workflow-list">
-                  ${workflowNames.map(name => `<span>${escapeHtml(name)}</span>`).join("")}
+                  ${
+                    (workflowSummaries.length ? workflowSummaries : workflowNames.map(name => ({ title: name, label: "" })))
+                      .slice(0, 6)
+                      .map(summary => `
+                        <span class="${summary.tone === "red" ? "has-issue" : ""}">
+                          ${escapeHtml(summary.title || "Workflow")}
+                          ${summary.label ? `<small>${escapeHtml(summary.label)}</small>` : ""}
+                        </span>
+                      `).join("")
+                  }
+                </div>
+              `
+              : ""
+          }
+
+          ${
+            issueDetails.length
+              ? `
+                <div class="buyer-bundle-issue-list" aria-label="Bundle workflow issues">
+                  <strong>Needs attention</strong>
+                  ${issueDetails.slice(0, 4).map(issue => `
+                    <div class="buyer-bundle-issue-item">
+                      <span>${escapeHtml(issue.title || "Workflow")}</span>
+                      <small>${escapeHtml(issue.message || issue.status || "This workflow needs attention.")}</small>
+                    </div>
+                  `).join("")}
                 </div>
               `
               : ""

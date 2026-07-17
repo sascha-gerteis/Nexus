@@ -8260,6 +8260,7 @@ body[data-page="checkout"] .site-header {
 .buyer-bundle-workflow-list span {
   display: inline-flex;
   align-items: center;
+  gap: .32rem;
   min-height: 28px;
   padding: .3rem .48rem;
   border: 1px solid #dbeafe;
@@ -8268,6 +8269,53 @@ body[data-page="checkout"] .site-header {
   color: var(--navy);
   font-size: .72rem;
   font-weight: 900;
+}
+
+.buyer-bundle-workflow-list span.has-issue {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #991b1b;
+}
+
+.buyer-bundle-workflow-list small {
+  color: #64748b;
+  font-size: .64rem;
+  font-weight: 950;
+}
+
+.buyer-bundle-workflow-list span.has-issue small {
+  color: #b91c1c;
+}
+
+.buyer-bundle-issue-list {
+  display: grid;
+  gap: .45rem;
+  padding: .65rem;
+  border: 1px solid #fecaca;
+  border-radius: 16px;
+  background: #fff7f7;
+}
+
+.buyer-bundle-issue-list > strong {
+  color: #991b1b;
+  font-size: .78rem;
+  font-weight: 950;
+}
+
+.buyer-bundle-issue-item {
+  display: grid;
+  gap: .12rem;
+}
+
+.buyer-bundle-issue-item span {
+  color: var(--navy);
+  font-size: .86rem;
+  font-weight: 950;
+}
+
+.buyer-bundle-issue-item small {
+  color: #7f1d1d;
+  line-height: 1.35;
 }
 
 .buyer-automation-board-card {

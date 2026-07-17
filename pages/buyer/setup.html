@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260717-skip-groups">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -180,9 +180,16 @@
       if (/\b(facebook|fb|meta)\b/.test(text)) return "meta";
       if (/\blinkedin\b/.test(text)) return "linkedin";
       if (/\b(twitter|x profile|x account|x handle)\b/.test(text)) return "x_twitter";
+      if (/\b(pinterest)\b/.test(text)) return "pinterest";
+      if (/\b(reddit)\b/.test(text)) return "reddit";
+      if (/\b(snapchat)\b/.test(text)) return "snapchat";
+      if (/\b(threads)\b/.test(text)) return "threads";
       if (/\bcompetitor|competitors\b/.test(text)) return "competitors";
       if (/\b(google\s*)?(sheet|sheets|spreadsheet)\b/.test(text)) return "google_sheets";
-      if (/\b(shopify|woocommerce|stripe|hubspot|salesforce|airtable|notion|slack|telegram|whatsapp)\b/.test(text)) {
+      if (/\b(google\s*analytics|ga4)\b/.test(text)) return "google_analytics";
+      if (/\b(google\s*ads|adwords)\b/.test(text)) return "google_ads";
+      if (/\b(mailchimp|klaviyo|email\s*marketing)\b/.test(text)) return "email_marketing";
+      if (/\b(shopify|woocommerce|stripe|hubspot|salesforce|airtable|notion|slack|telegram|whatsapp|webflow|wordpress|calendly|pipedrive|zoho|quickbooks|xero)\b/.test(text)) {
         return detectBundleProvider(text) || "external_tool";
       }
 
@@ -197,9 +204,17 @@
         meta: "Meta / Facebook data",
         linkedin: "LinkedIn data",
         x_twitter: "X / Twitter data",
+        pinterest: "Pinterest data",
+        reddit: "Reddit data",
+        snapchat: "Snapchat data",
+        threads: "Threads data",
         competitors: "Competitor data",
         google_sheets: "Google Sheets data",
+        google_analytics: "Google Analytics data",
+        google_ads: "Google Ads data",
+        email_marketing: "Email marketing data",
         shopify: "Shopify data",
+        woocommerce: "WooCommerce data",
         stripe: "Stripe data",
         hubspot: "HubSpot data",
         salesforce: "Salesforce data",
@@ -208,6 +223,13 @@
         slack: "Slack data",
         telegram: "Telegram data",
         whatsapp: "WhatsApp data",
+        webflow: "Webflow data",
+        wordpress: "WordPress data",
+        calendly: "Calendly data",
+        pipedrive: "Pipedrive data",
+        zoho: "Zoho data",
+        quickbooks: "QuickBooks data",
+        xero: "Xero data",
         external_tool: "External tool data"
       };
 
@@ -216,10 +238,12 @@
 
     function fieldCanBeSkipped(field = {}) {
       if (field.allow_skip === false || field.skippable === false) return false;
-      if (field.allow_skip === true || field.skippable === true) return Boolean(setupFieldSkipGroup(field));
 
       const name = fieldNameForMatching(field);
       const text = fieldTextForMatching(field);
+      const group = setupFieldSkipGroup(field);
+
+      if (!group) return false;
 
       if ([
         "business_name",
@@ -236,7 +260,7 @@
 
       if (/\b(recipient|contact|buyer|technical)\b/.test(text) && /\bemail\b/.test(text)) return false;
 
-      return Boolean(setupFieldSkipGroup(field)) && Boolean(field.required || field.type === "secret");
+      return true;
     }
 
     function renderFieldListWithSkips(fields = [], existingAnswers = {}, options = {}) {
@@ -612,6 +636,36 @@
         answers.__nexus_skipped_fields = JSON.stringify(skippedFields);
         answers.__nexus_skip_summary = skippedSections.map(section => section.label).join(", ");
       }
+    }
+
+    function missingUnconfirmedSkipGroups(form) {
+      const missing = [];
+
+      form.querySelectorAll("[data-skip-group-card]").forEach(card => {
+        const toggle = card.querySelector("[data-skip-toggle]");
+        if (!toggle || toggle.checked) return;
+
+        const fields = [...card.querySelectorAll("[data-skip-group]")]
+          .filter(field => {
+            const name = field.getAttribute("name") || "";
+            return name && !name.startsWith(SKIP_FIELD_PREFIX) && !field.disabled;
+          });
+
+        if (!fields.length) return;
+
+        const hasAnyValue = fields.some(field => {
+          const type = String(field.type || "").toLowerCase();
+          if (type === "checkbox" || type === "radio") return field.checked;
+          return String(field.value || "").trim() !== "";
+        });
+
+        if (!hasAnyValue) {
+          const label = card.querySelector(".setup-skip-group-head strong")?.textContent?.trim() || "this data";
+          missing.push(label);
+        }
+      });
+
+      return missing;
     }
 
     function cleanFlag(value) {
@@ -1792,6 +1846,21 @@ async function resolveProductFromCustomerAutomation(automation) {
 
       for (const [key, value] of formData.entries()) {
         answers[key] = String(value || "").trim();
+      }
+
+      const missingSkipGroups = missingUnconfirmedSkipGroups(form);
+      if (missingSkipGroups.length) {
+        const message = `Fill in or tick "I do not have this data" for: ${missingSkipGroups.join(", ")}.`;
+        NexusUI.toast(message);
+        document.getElementById("setupSubmitResult").innerHTML = `
+          <div class="error" style="margin-top:1rem">
+            <strong>Confirm missing data.</strong><br>
+            ${escapeHtml(message)}
+          </div>
+        `;
+        button.disabled = false;
+        button.textContent = originalText;
+        return;
       }
 
       collectSkippedSetup(form, answers);
