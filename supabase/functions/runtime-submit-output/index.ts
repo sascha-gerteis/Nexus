@@ -140,6 +140,79 @@ function looksLikeJsonStorageError(message: string) {
   );
 }
 
+function stripHtmlForOutputSignal(value: unknown) {
+  return stripUnsafeText(value)
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function jsonHasMeaningfulOutput(value: unknown, depth = 0): boolean {
+  if (depth > 5 || value === null || value === undefined) return false;
+
+  if (typeof value === "string") return value.trim().length >= 3;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return value;
+
+  if (Array.isArray(value)) {
+    return value.some((item) => jsonHasMeaningfulOutput(item, depth + 1));
+  }
+
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !["system", "runtime_secret", "customer_automation_id"].includes(key))
+      .some(([, item]) => jsonHasMeaningfulOutput(item, depth + 1));
+  }
+
+  return false;
+}
+
+function outputHasBuyerVisibleContent(body: Record<string, unknown>) {
+  const html = stripUnsafeText(body.content_html || body.html);
+  const htmlText = stripHtmlForOutputSignal(html);
+  const hasVisualHtml = /<(img|table|canvas|iframe|svg|video|audio)\b/i.test(html);
+
+  if (html && (htmlText.length >= 20 || hasVisualHtml)) return true;
+
+  const textCandidates = [
+    body.content_text,
+    body.summary,
+    body.file_url,
+    body.storage_path,
+  ];
+
+  if (textCandidates.some((value) => stripUnsafeText(value).length >= 20)) return true;
+
+  const jsonCandidate = safeJsonObject(body.content_json || body.contentJson || body.data || {});
+  return jsonHasMeaningfulOutput(jsonCandidate);
+}
+
+function normalizeRuntimeResponseMode(value: unknown) {
+  const mode = cleanString(value).toLowerCase();
+  return ["dashboard_output", "instant_message", "alert_only", "webhook_ack"].includes(mode)
+    ? mode
+    : "dashboard_output";
+}
+
+function externalDeliverySummary(responseMode: string) {
+  if (responseMode === "instant_message") {
+    return "The automation completed and returned an instant response outside the standard report view.";
+  }
+
+  if (responseMode === "alert_only") {
+    return "The automation completed. The result was delivered as an alert, email, or notification.";
+  }
+
+  if (responseMode === "webhook_ack") {
+    return "The automation completed and acknowledged the incoming request.";
+  }
+
+  return "The automation completed successfully.";
+}
+
 function compactHtmlFallback(title: string, summary: string, contentText: string) {
   const escapeHtml = (value: string) =>
     stripUnsafeText(value)
@@ -861,6 +934,110 @@ Deno.serve(async (req) => {
         customer_message: classification.customer_message,
         admin_error_message: rawErrorMessage,
       });
+    }
+
+    const { data: parentAutomation } = customerAutomation.automation_id
+      ? await adminClient
+        .from("automations")
+        .select("*")
+        .eq("id", customerAutomation.automation_id)
+        .maybeSingle()
+      : { data: null };
+
+    const responseMode = normalizeRuntimeResponseMode(
+      parentAutomation?.runtime_response_mode ||
+        customerAutomation.runtime_response_mode ||
+        "dashboard_output",
+    );
+
+    if (!outputHasBuyerVisibleContent(body)) {
+      if (responseMode === "dashboard_output") {
+        const emptyOutputMessage =
+          "Nexus rejected this runtime callback because it did not include buyer-visible output. Send content_html, content_text, summary, file_url, storage_path, or content_json. If this product is designed to deliver by email/alert instead, set Customer response to Alert only, Instant answer, or Webhook acknowledgement.";
+
+        await tryUpdateCustomerAutomation(adminClient, customerAutomationId, {
+          runtime_status: "error",
+          health_status: "error",
+          last_error_code: "empty_runtime_output",
+          last_error_node: cleanString(body.node || body.error_node) || "Nexus Submit Output",
+          last_error_message: emptyOutputMessage,
+          last_error_details: {
+            received_keys: Object.keys(body),
+            response_mode: responseMode,
+          },
+          last_failed_at: now,
+          updated_at: now,
+        });
+
+        const updatedExistingRun = await updateExistingRunFromCallback(adminClient, body, {
+          status: "error",
+          finished_at: now,
+          error_message: emptyOutputMessage,
+          error_details: {
+            response_mode: responseMode,
+            received_keys: Object.keys(body),
+          },
+          response_payload: {
+            status: "error",
+            error_code: "empty_runtime_output",
+            error_message: emptyOutputMessage,
+          },
+        });
+
+        if (!updatedExistingRun) {
+          await adminClient
+            .from("automation_runs")
+            .insert({
+              customer_automation_id: customerAutomation.id,
+              buyer_id: customerAutomation.buyer_id,
+              automation_id: customerAutomation.automation_id,
+              order_id: customerAutomation.order_id,
+              runtime_type: customerAutomation.runtime_type || "n8n_managed",
+              trigger_type: "runtime_callback",
+              status: "error",
+              started_at: now,
+              finished_at: now,
+              created_at: now,
+              updated_at: now,
+              error_message: emptyOutputMessage,
+              error_details: {
+                response_mode: responseMode,
+                received_keys: Object.keys(body),
+              },
+            });
+        }
+
+        await insertEvent(adminClient, {
+          customer_automation_id: customerAutomation.id,
+          buyer_id: customerAutomation.buyer_id,
+          automation_id: customerAutomation.automation_id,
+          order_id: customerAutomation.order_id,
+          event_type: "runtime_output_rejected",
+          title: "Runtime output rejected",
+          message: JSON.stringify({
+            error_code: "empty_runtime_output",
+            message: emptyOutputMessage,
+            response_mode: responseMode,
+          }),
+          created_by: "runtime",
+        });
+
+        return errorResponse(emptyOutputMessage, 422);
+      }
+
+      const fallbackSummary = externalDeliverySummary(responseMode);
+      body.output_type = cleanString(body.output_type) || responseMode;
+      body.title = cleanString(body.title) || "Automation completed";
+      body.summary = cleanString(body.summary) || fallbackSummary;
+      body.content_text = cleanString(body.content_text) || fallbackSummary;
+      body.content_json = {
+        ...safeJsonObject(body.content_json || body.contentJson || body.data || {}),
+        nexus_delivery: {
+          response_mode: responseMode,
+          dashboard_output_required: false,
+          generated_at: now,
+        },
+      };
     }
 
     const outputTitle =

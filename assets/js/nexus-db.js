@@ -2607,6 +2607,65 @@ async function getBuyerCustomerAutomationsByOrderId(orderId) {
     .order("created_at", { ascending: true });
 }
 
+async function getBuyerCustomerAutomationsByBundleId(bundleId) {
+  const { data: user } = await getUser();
+
+  if (!user) {
+    return {
+      data: [],
+      error: { message: "Login required." }
+    };
+  }
+
+  if (!bundleId) {
+    return {
+      data: [],
+      error: { message: "Bundle id is required." }
+    };
+  }
+
+  return supabase
+    .from("customer_automations")
+    .select(`
+      *,
+      automations(
+        id,
+        title,
+        slug,
+        category,
+        icon,
+        color,
+        badge,
+        short_description,
+        long_description,
+        setup_schema,
+        credential_schema,
+        runtime_type,
+        runtime_webhook_url,
+        n8n_workflow_id
+      ),
+      orders(
+        id,
+        bundle_id,
+        payment_status,
+        order_status,
+        automation_id,
+        automation_title,
+        price_display,
+        currency,
+        install_type,
+        selected_customization
+      ),
+      developers(
+        display_name,
+        avatar_letter
+      )
+    `)
+    .eq("bundle_id", bundleId)
+    .eq("buyer_id", user.id)
+    .order("created_at", { ascending: true });
+}
+
 async function getLatestSetupSubmission(customerAutomationId) {
   const { data: user } = await getUser();
 
@@ -3481,6 +3540,7 @@ getBuyerOrderById,
 getCustomerAutomationByOrderId,
 getBuyerCustomerAutomationById,
 getBuyerCustomerAutomationsByOrderId,
+getBuyerCustomerAutomationsByBundleId,
 getLatestSetupSubmission,
 createSetupSubmission,
 listBuyerOutputs,

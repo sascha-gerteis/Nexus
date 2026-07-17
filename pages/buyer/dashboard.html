@@ -615,7 +615,54 @@ function humanizeSetupStatus(item) {
       return "pill blue";
     }
 
-    function automationState(item, latestOutput) {
+    const ACTIVE_RUN_WINDOW_MS = 30 * 60 * 1000;
+
+    function timestampMs(value) {
+      if (!value) return 0;
+      const time = new Date(value).getTime();
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function latestTimestampMs(...values) {
+      return values.map(timestampMs).filter(Boolean).sort((a, b) => b - a)[0] || 0;
+    }
+
+    function runStatusText(run) {
+      return String(run?.status || "").toLowerCase();
+    }
+
+    function runIsIssue(run) {
+      const status = runStatusText(run);
+      return status.includes("error") || status.includes("failed") || status.includes("timeout");
+    }
+
+    function runIsActiveStatus(run) {
+      const status = runStatusText(run);
+      return status.includes("running") || status.includes("processing") || status.includes("started") || status.includes("queued");
+    }
+
+    function runActivityMs(run) {
+      return latestTimestampMs(run?.updated_at, run?.started_at, run?.created_at);
+    }
+
+    function runIsFreshActive(run) {
+      if (!run || !runIsActiveStatus(run) || run.finished_at) return false;
+      const activity = runActivityMs(run);
+      return !activity || Date.now() - activity <= ACTIVE_RUN_WINDOW_MS;
+    }
+
+    function runIsStaleActive(run) {
+      if (!run || !runIsActiveStatus(run) || run.finished_at) return false;
+      const activity = runActivityMs(run);
+      return Boolean(activity && Date.now() - activity > ACTIVE_RUN_WINDOW_MS);
+    }
+
+    function automationRuntimeLooksFresh(item) {
+      const activity = latestTimestampMs(item?.last_run_requested_at, item?.last_run_at, item?.updated_at);
+      return Boolean(activity && Date.now() - activity <= ACTIVE_RUN_WINDOW_MS);
+    }
+
+    function automationState(item, latestOutput, latestRun = null) {
       const setupStatus = String(item.setup_status || "not_started").toLowerCase();
       const runtimeStatus = String(item.runtime_status || "not_started").toLowerCase();
       const healthStatus = String(item.health_status || "not_configured").toLowerCase();
@@ -634,6 +681,24 @@ function humanizeSetupStatus(item) {
           tone: "red",
           description: item.last_error_message || "This automation needs attention. Nexus is reviewing the issue.",
           primaryAction: "Contact support"
+        };
+      }
+
+      if (runIsIssue(latestRun)) {
+        return {
+          label: "Issue detected",
+          tone: "red",
+          description: latestRun.error_message || "The latest automation run failed. Check setup details or message Nexus.",
+          primaryAction: "Review issue"
+        };
+      }
+
+      if (runIsStaleActive(latestRun)) {
+        return {
+          label: "Needs attention",
+          tone: "red",
+          description: "The latest automation run did not finish cleanly. Nexus should review this run before the bundle is considered complete.",
+          primaryAction: "Review issue"
         };
       }
 
@@ -691,21 +756,24 @@ function humanizeSetupStatus(item) {
         };
       }
 
+      if (
+        runIsFreshActive(latestRun) ||
+        ((runtimeStatus === "running" || healthStatus === "running" || status === "running") && automationRuntimeLooksFresh(item))
+      ) {
+        return {
+          label: "Running",
+          tone: "orange",
+          description: "Your automation is currently running. Outputs will appear when it finishes.",
+          primaryAction: "View status"
+        };
+      }
+
       if (latestOutput || runtimeStatus === "success" || setupStatus === "complete" || setupStatus === "completed" || status === "active") {
         return {
           label: "Ready",
           tone: "green",
           description: "This automation is configured and has produced an output.",
           primaryAction: "View output"
-        };
-      }
-
-      if (runtimeStatus === "running" || healthStatus === "running" || status === "running") {
-        return {
-          label: "Running",
-          tone: "orange",
-          description: "Your automation is currently running. Outputs will appear when it finishes.",
-          primaryAction: "View status"
         };
       }
 
@@ -799,31 +867,63 @@ function bundleIdFromAutomation(item) {
   return item?.bundle_id || order.bundle_id || "";
 }
 
-function buildBuyerBundleRows(orders = [], automations = [], outputs = []) {
+function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs = []) {
   return (orders || [])
     .filter(isBundleOrder)
     .map(order => {
       const snapshot = parseBundleSnapshot(order);
       const orderId = order.id || "";
       const bundleId = order.bundle_id || snapshot.bundle_id || "";
-      const included = (automations || []).filter(item => {
+      const includedById = new Map();
+
+      (automations || []).forEach(item => {
         const itemOrderId = orderIdFromAutomation(item);
         const itemBundleId = bundleIdFromAutomation(item);
+        const belongsToOrder = orderId && itemOrderId === orderId;
+        const belongsToBundleOrphan = bundleId && itemBundleId === bundleId && (!orderId || !itemOrderId);
 
-        return (
-          (orderId && itemOrderId === orderId) ||
-          (bundleId && itemBundleId === bundleId)
-        );
+        if ((belongsToOrder || belongsToBundleOrphan) && item?.id) {
+          includedById.set(item.id, item);
+        }
       });
 
+      const included = [...includedById.values()];
       const includedIds = new Set(included.map(item => item.id).filter(Boolean));
       const bundleOutputs = (outputs || [])
         .filter(output => includedIds.has(output.customer_automation_id))
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-      const childStates = included.map(item => automationState(item, getLatestOutputForAutomation(outputs, item.id)));
-      const issueCount = childStates.filter(state => state.tone === "red").length;
+      const outputAutomationIds = new Set(bundleOutputs.map(output => output.customer_automation_id).filter(Boolean));
+      const latestRunsByAutomation = new Map();
+      (runs || [])
+        .filter(run => includedIds.has(run.customer_automation_id))
+        .sort((a, b) => new Date(b.finished_at || b.started_at || b.created_at || 0) - new Date(a.finished_at || a.started_at || a.created_at || 0))
+        .forEach(run => {
+          if (!latestRunsByAutomation.has(run.customer_automation_id)) {
+            latestRunsByAutomation.set(run.customer_automation_id, run);
+          }
+        });
+      const childStates = included.map(item =>
+        automationState(item, getLatestOutputForAutomation(outputs, item.id), latestRunsByAutomation.get(item.id) || null)
+      );
+      const issueIds = new Set();
+      included.forEach((item, index) => {
+        const latestRun = latestRunsByAutomation.get(item.id);
+        if (childStates[index]?.tone === "red" || runIsIssue(latestRun) || runIsStaleActive(latestRun)) {
+          issueIds.add(item.id);
+        }
+      });
+      const issueCount = issueIds.size;
       const setupCount = childStates.filter(state => String(state.label || "").toLowerCase().includes("setup") || String(state.label || "").toLowerCase().includes("request needed")).length;
-      const progressCount = childStates.filter(state => automationLane(state) === "progress").length;
+      const progressCount = included.filter((item, index) => {
+        const latestRun = latestRunsByAutomation.get(item.id);
+        if (runIsFreshActive(latestRun)) return true;
+        if (latestRun) return false;
+        return automationLane(childStates[index]) === "progress";
+      }).length;
+      const incompleteAfterOutputCount = bundleOutputs.length
+        ? included.filter(item => !outputAutomationIds.has(item.id)).length
+        : 0;
+      const partialBundleIssue = Boolean(bundleOutputs.length && incompleteAfterOutputCount && !progressCount);
       let state = {
         label: "Ready",
         tone: "green",
@@ -838,11 +938,19 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = []) {
           description: "Nexus is still attaching the included workflows to this bundle order.",
           primaryAction: "View bundle setup"
         };
-      } else if (issueCount) {
+      } else if (issueCount || partialBundleIssue) {
+        const count = issueCount || incompleteAfterOutputCount;
         state = {
           label: "Needs attention",
           tone: "red",
-          description: `${issueCount} included workflow${issueCount === 1 ? "" : "s"} need attention.`,
+          description: `${count} included workflow${count === 1 ? "" : "s"} did not complete cleanly.`,
+          primaryAction: "View bundle setup"
+        };
+      } else if (progressCount) {
+        state = {
+          label: "In progress",
+          tone: "blue",
+          description: "One or more included workflows are being prepared or running.",
           primaryAction: "View bundle setup"
         };
       } else if (setupCount) {
@@ -851,13 +959,6 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = []) {
           tone: "orange",
           description: "Complete the bundle setup form to start every included workflow.",
           primaryAction: "Complete bundle setup"
-        };
-      } else if (progressCount) {
-        state = {
-          label: "In progress",
-          tone: "blue",
-          description: "One or more included workflows are being prepared or running.",
-          primaryAction: "View bundle setup"
         };
       }
 
@@ -872,6 +973,15 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = []) {
         state
       };
     });
+}
+
+function bundleChildAutomationIds(bundleRows = []) {
+  return new Set(
+    (bundleRows || [])
+      .flatMap(row => row.included || [])
+      .map(item => item?.id)
+      .filter(Boolean)
+  );
 }
 
 function isMonthlyAutomation(item) {
@@ -1064,7 +1174,14 @@ function outputsForAutomation(customerAutomationId) {
 function runsForAutomation(customerAutomationId) {
   return (dashboardData.runs || [])
     .filter(run => run.customer_automation_id === customerAutomationId)
-    .sort((a, b) => new Date(b.created_at || b.started_at || 0) - new Date(a.created_at || a.started_at || 0));
+    .sort((a, b) =>
+      new Date(b.updated_at || b.finished_at || b.created_at || b.started_at || 0) -
+      new Date(a.updated_at || a.finished_at || a.created_at || a.started_at || 0)
+    );
+}
+
+function latestRunForAutomation(customerAutomationId) {
+  return runsForAutomation(customerAutomationId)[0] || null;
 }
 
 function openAutomationDetail(customerAutomationId) {
@@ -1195,10 +1312,12 @@ function openAutomationDetail(customerAutomationId) {
 
     function renderDashboard() {
       const { profile, orders, automations, events, outputs } = dashboardData;
-      const bundleRows = buildBuyerBundleRows(orders, automations, outputs);
+      const bundleRows = buildBuyerBundleRows(orders, dashboardData.automations || automations, outputs, dashboardData.runs || []);
+      const bundledIds = bundleChildAutomationIds(bundleRows);
+      const standaloneAutomations = automations.filter(item => !bundledIds.has(item.id));
 
-      const states = automations.map(item => {
-        return automationState(item, getLatestOutputForAutomation(outputs, item.id));
+      const states = standaloneAutomations.map(item => {
+        return automationState(item, getLatestOutputForAutomation(outputs, item.id), latestRunForAutomation(item.id));
       });
       const bundleStates = bundleRows.map(row => row.state);
       const allStates = states.concat(bundleStates);
@@ -1211,7 +1330,7 @@ function openAutomationDetail(customerAutomationId) {
       document.getElementById("buyerWelcome").textContent =
         profile?.name ? `Welcome back, ${profile.name}.` : "Your automation dashboard.";
 
-      document.getElementById("buyerAutomationCount").textContent = automations.length + bundleRows.length;
+      document.getElementById("buyerAutomationCount").textContent = standaloneAutomations.length + bundleRows.length;
       document.getElementById("buyerReadyCount").textContent = readyCount;
       document.getElementById("buyerOutputCount").textContent = outputs.length;
       document.getElementById("buyerIssueCount").textContent = issueCount;
@@ -1219,7 +1338,7 @@ function openAutomationDetail(customerAutomationId) {
       const mainStatus = document.getElementById("buyerMainStatus");
       const mainStatusText = document.getElementById("buyerMainStatusText");
 
-      if (!automations.length && !bundleRows.length) {
+      if (!standaloneAutomations.length && !bundleRows.length) {
         mainStatus.textContent = "No automations yet";
         mainStatusText.textContent = "Browse the marketplace to purchase your first automation.";
       } else if (issueCount > 0) {
@@ -1236,9 +1355,9 @@ function openAutomationDetail(customerAutomationId) {
         mainStatusText.textContent = "Your automations are configured and healthy.";
       }
 
-      renderOverview(automations, outputs, events, orders);
+      renderOverview(standaloneAutomations, outputs, events, orders);
       renderSavedProducts(dashboardData.savedProducts || []);
-      renderAutomations(automations, outputs);
+      renderAutomations(standaloneAutomations, outputs);
       renderAutomationDetail();
       renderOutputs(outputs, automations);
       renderEvents(events);
@@ -1286,10 +1405,10 @@ function openAutomationDetail(customerAutomationId) {
       if (!root) return;
 
       const latestOutput = outputs[0] || null;
-      const bundleRows = buildBuyerBundleRows(orders, automations, outputs);
+      const bundleRows = buildBuyerBundleRows(orders, automations, outputs, dashboardData.runs || []);
 
       const priorityAutomation = automations.find(item => {
-        const state = automationState(item, getLatestOutputForAutomation(outputs, item.id));
+        const state = automationState(item, getLatestOutputForAutomation(outputs, item.id), latestRunForAutomation(item.id));
         return (
           state.label === "Issue detected" ||
           state.label === "Blocked" ||
@@ -1306,7 +1425,7 @@ function openAutomationDetail(customerAutomationId) {
         : null;
 
       const priorityState = priorityAutomation
-        ? automationState(priorityAutomation, priorityLatestOutput)
+        ? automationState(priorityAutomation, priorityLatestOutput, latestRunForAutomation(priorityAutomation.id))
         : null;
 
       const priorityProduct = priorityAutomation?.automations || {};
@@ -1434,7 +1553,7 @@ function openAutomationDetail(customerAutomationId) {
 
     function renderAutomations(automations, outputs) {
       const root = document.getElementById("buyerAutomationsList");
-      const bundleRows = buildBuyerBundleRows(dashboardData.orders || [], automations, outputs);
+      const bundleRows = buildBuyerBundleRows(dashboardData.orders || [], dashboardData.automations || automations, outputs, dashboardData.runs || []);
 
       if (!root) return;
 
@@ -1454,7 +1573,7 @@ function openAutomationDetail(customerAutomationId) {
         const order = item.orders || {};
         const developerName = developerDisplayName(item);
         const latestOutput = getLatestOutputForAutomation(outputs, item.id);
-        const state = automationState(item, latestOutput);
+        const state = automationState(item, latestOutput, latestRunForAutomation(item.id));
         const lane = automationLane(state);
         return { item, product, order, developerName, latestOutput, state, lane };
       });
@@ -1524,7 +1643,7 @@ function openAutomationDetail(customerAutomationId) {
                   <div class="buyer-automation-lane-head">
                     <div>
                       <h3>Bundles</h3>
-                      <p>Your purchased packages, followed by the individual workflows inside them.</p>
+                      <p>Your purchased packages. Open a bundle to manage the included workflows together.</p>
                     </div>
                     <strong>${bundleRows.length}</strong>
                   </div>
@@ -1577,7 +1696,7 @@ function openAutomationDetail(customerAutomationId) {
         .filter(Boolean);
       const latestOutputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
       const childReadyCount = included.filter(item => {
-        const childState = automationState(item, getLatestOutputForAutomation(dashboardData.outputs, item.id));
+        const childState = automationState(item, getLatestOutputForAutomation(dashboardData.outputs, item.id), latestRunForAutomation(item.id));
         return childState.tone === "green";
       }).length;
 
@@ -1814,7 +1933,7 @@ function openAutomationDetail(customerAutomationId) {
       const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id);
       const outputs = outputsForAutomation(item.id);
       const runs = runsForAutomation(item.id);
-      const state = automationState(item, latestOutput);
+      const state = automationState(item, latestOutput, latestRunForAutomation(item.id));
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
@@ -1941,8 +2060,23 @@ function openAutomationDetail(customerAutomationId) {
 
       if (!root) return;
 
+      const bundleRows = buildBuyerBundleRows(dashboardData.orders || [], automations, outputs, dashboardData.runs || []);
+      const bundledIds = bundleChildAutomationIds(bundleRows);
+      const standaloneAutomations = (automations || []).filter(item => !bundledIds.has(item.id));
+
       if (!outputs.length) {
-        const waitingAutomations = (automations || []).slice(0, 4);
+        const waitingItems = [
+          ...bundleRows.map(row => ({
+            title: row.order?.automation_title || row.snapshot?.bundle_title || "Automation bundle",
+            status: row.state?.label || "Preparing"
+          })),
+          ...standaloneAutomations.map(item => ({
+            title: productTitleFromAutomation(item),
+            status: isRecurringAutomation(item) || runtimeFrequency(item) === "on_demand"
+              ? `Next output: ${nextOutputLabel(item)}`
+              : getSetupDisplayLabel(item)
+          }))
+        ].slice(0, 4);
         root.innerHTML = `
           <div class="buyer-output-command">
             <div class="buyer-empty-clean">
@@ -1950,14 +2084,14 @@ function openAutomationDetail(customerAutomationId) {
               <p>Automation results will appear here once your workflows run.</p>
             </div>
             ${
-              waitingAutomations.length
+              waitingItems.length
                 ? `
                   <div class="buyer-output-awaiting">
                     <h3>Waiting on first output</h3>
-                    ${waitingAutomations.map(item => `
+                    ${waitingItems.map(item => `
                       <article>
-                        <strong>${escapeHtml(productTitleFromAutomation(item))}</strong>
-                        <span>${escapeHtml(isRecurringAutomation(item) || runtimeFrequency(item) === "on_demand" ? `Next output: ${nextOutputLabel(item)}` : getSetupDisplayLabel(item))}</span>
+                        <strong>${escapeHtml(item.title)}</strong>
+                        <span>${escapeHtml(item.status)}</span>
                       </article>
                     `).join("")}
                   </div>
@@ -1970,10 +2104,12 @@ function openAutomationDetail(customerAutomationId) {
       }
 
       const latest = outputs[0];
-      const latestContext = outputAutomationContext(latest, automations);
-      const grouped = groupOutputsByAutomation(outputs, automations);
+      const latestContext = outputAutomationContext(latest, automations, bundleRows);
+      const grouped = groupOutputsByAutomation(outputs, automations, bundleRows);
       const outputAutomations = Object.keys(grouped).length;
-      const awaitingCount = (automations || []).filter(item => !outputs.some(output => output.customer_automation_id === item.id)).length;
+      const awaitingCount =
+        standaloneAutomations.filter(item => !outputs.some(output => output.customer_automation_id === item.id)).length +
+        bundleRows.filter(row => !row.outputCount).length;
 
       root.innerHTML = `
         <div class="buyer-output-command">
@@ -2009,7 +2145,7 @@ function openAutomationDetail(customerAutomationId) {
                     <div>
                       <span>${escapeHtml(group.category || "Output")}</span>
                       <h3>${escapeHtml(group.title)}</h3>
-                      <p>${group.items.length} ${escapeHtml(group.category || "output")}${group.items.length === 1 ? "" : "s"} from ${escapeHtml(group.title)} by ${escapeHtml(group.developerName)}.</p>
+                      <p>${escapeHtml(group.description || `${group.items.length} ${group.category || "output"}${group.items.length === 1 ? "" : "s"} from ${group.title} by ${group.developerName}.`)}</p>
                     </div>
                     <a class="btn btn-secondary btn-small" href="/pages/buyer/output.html?id=${encodeURIComponent(group.items[0].id)}">
                       View latest
@@ -2020,7 +2156,7 @@ function openAutomationDetail(customerAutomationId) {
                       <a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
                         <div>
                           <strong>${escapeHtml(output.title || "Automation output")}</strong>
-                          <small>${escapeHtml(group.category || "Output")} from ${escapeHtml(group.title)} by ${escapeHtml(group.developerName)}</small>
+                          <small>${escapeHtml(output.__context?.childTitle ? `${output.__context.childTitle} inside ${group.title}` : `${group.category || "Output"} from ${group.title} by ${group.developerName}`)}</small>
                           <p>${escapeHtml(output.summary || `From ${group.title} by ${group.developerName}.`)}</p>
                         </div>
                         <span>${escapeHtml(dateLabel(output.created_at))}</span>
@@ -2035,7 +2171,30 @@ function openAutomationDetail(customerAutomationId) {
       `;
     }
 
-    function outputAutomationContext(output, automations = []) {
+    function bundleRowForCustomerAutomation(customerAutomationId, bundleRows = []) {
+      if (!customerAutomationId) return null;
+      return (bundleRows || []).find(row =>
+        (row.included || []).some(item => item.id === customerAutomationId)
+      ) || null;
+    }
+
+    function outputAutomationContext(output, automations = [], bundleRows = []) {
+      const bundleRow = bundleRowForCustomerAutomation(output?.customer_automation_id, bundleRows);
+      if (bundleRow) {
+        const child = (bundleRow.included || []).find(item => item.id === output?.customer_automation_id) || {};
+        const title = bundleRow.order?.automation_title || bundleRow.snapshot?.bundle_title || "Automation bundle";
+        const childTitle = productTitleFromAutomation(child);
+
+        return {
+          title,
+          childTitle,
+          category: "Bundle output",
+          developerName: "Nexus",
+          groupKey: `bundle:${bundleRow.orderId || bundleRow.bundleId || title}`,
+          description: `${bundleRow.outputCount || 0} output${bundleRow.outputCount === 1 ? "" : "s"} from ${bundleRow.included.length} included workflow${bundleRow.included.length === 1 ? "" : "s"}.`
+        };
+      }
+
       const product = output?.automations || {};
       const customerAutomation = (automations || []).find(item => item.id === output?.customer_automation_id) || {};
       const title =
@@ -2048,24 +2207,26 @@ function openAutomationDetail(customerAutomationId) {
       return {
         title,
         category: output?.output_type || product.category || customerAutomation.automations?.category || "Output",
-        developerName: developerDisplayNameOptional(customerAutomation) || developerDisplayNameOptional(output) || "Nexus"
+        developerName: developerDisplayNameOptional(customerAutomation) || developerDisplayNameOptional(output) || "Nexus",
+        groupKey: output.customer_automation_id || output.automation_id || product.id || title || "output"
       };
     }
 
-    function groupOutputsByAutomation(outputs, automations = []) {
+    function groupOutputsByAutomation(outputs, automations = [], bundleRows = []) {
       return (outputs || []).reduce((groups, output) => {
-        const context = outputAutomationContext(output, automations);
+        const context = outputAutomationContext(output, automations, bundleRows);
         const product = output.automations || {};
-        const key = output.customer_automation_id || output.automation_id || product.id || context.title || "output";
+        const key = context.groupKey || output.customer_automation_id || output.automation_id || product.id || context.title || "output";
         if (!groups[key]) {
           groups[key] = {
             title: context.title,
             category: context.category,
             developerName: context.developerName,
+            description: context.description,
             items: []
           };
         }
-        groups[key].items.push(output);
+        groups[key].items.push({ ...output, __context: context });
         return groups;
       }, {});
     }

@@ -539,6 +539,38 @@ function splitSetupAndSecrets(answers: Record<string, unknown>, credentialSchema
   };
 }
 
+function parseJsonArrayValue(value: unknown) {
+  if (Array.isArray(value)) return value;
+  const raw = cleanString(value);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function skippedSetupMetadata(setupPayload: Record<string, unknown>) {
+  const skippedSections = parseJsonArrayValue(setupPayload.__nexus_skipped_sections);
+  const skippedFields = parseJsonArrayValue(setupPayload.__nexus_skipped_fields);
+  const skippedFieldNames = skippedFields
+    .map((field: any) => cleanString(field?.name || field))
+    .filter(Boolean);
+  const skippedSectionKeys = skippedSections
+    .map((section: any) => cleanString(section?.group || section))
+    .filter(Boolean);
+
+  return {
+    skipped_sections: skippedSections,
+    skipped_section_keys: skippedSectionKeys,
+    skipped_fields: skippedFields,
+    skipped_field_names: skippedFieldNames,
+    has_skipped_setup: Boolean(skippedSections.length || skippedFields.length),
+  };
+}
+
 function pickFirstString(...values: unknown[]) {
   for (const value of values) {
     const cleaned = cleanString(value);
@@ -1388,6 +1420,7 @@ async function triggerN8nWebhook(params: {
   const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
   const callbackUrl = buildCallbackUrl();
   const setupPayload = expandBuyerSetupAliases(params.setupAnswers || {});
+  const setupSkips = skippedSetupMetadata(setupPayload);
 
   const payload = {
     customer_automation_id: params.customerAutomation.id,
@@ -1409,6 +1442,11 @@ async function triggerN8nWebhook(params: {
       runtime_secret: runtimeSecret,
       setup_submission_id: params.submissionId,
       saved_credential_keys: params.savedCredentialKeys || [],
+      skipped_setup_sections: setupSkips.skipped_sections,
+      skipped_setup_section_keys: setupSkips.skipped_section_keys,
+      skipped_setup_fields: setupSkips.skipped_fields,
+      skipped_setup_field_names: setupSkips.skipped_field_names,
+      has_skipped_setup: setupSkips.has_skipped_setup,
 
       runtime_type: getRuntimeType(params.customerAutomation, params.automation),
       runtime_webhook_path: getRuntimeWebhookPath(
@@ -1643,6 +1681,7 @@ async function triggerPythonRunner(params: {
   const supabaseUrl = env("SUPABASE_URL").replace(/\/+$/, "");
   const callbackUrl = buildCallbackUrl();
   const setupPayload = expandBuyerSetupAliases(params.setupAnswers || {});
+  const setupSkips = skippedSetupMetadata(setupPayload);
 
   if (!supabaseUrl || !runtimeSecret) {
     throw new Error("Missing SUPABASE_URL or NEXUS_RUNTIME_SECRET Supabase secrets for Python runtime.");
@@ -1668,6 +1707,11 @@ async function triggerPythonRunner(params: {
       runtime_secret: runtimeSecret,
       setup_submission_id: params.submissionId,
       saved_credential_keys: params.savedCredentialKeys || [],
+      skipped_setup_sections: setupSkips.skipped_sections,
+      skipped_setup_section_keys: setupSkips.skipped_section_keys,
+      skipped_setup_fields: setupSkips.skipped_fields,
+      skipped_setup_field_names: setupSkips.skipped_field_names,
+      has_skipped_setup: setupSkips.has_skipped_setup,
       runtime_type: "python_runner",
     },
   };
