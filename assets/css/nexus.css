@@ -8510,6 +8510,9 @@ body[data-page="checkout"] .site-header {
 .buyer-output-row-list {
   display: grid;
   gap: .42rem;
+  max-height: min(70vh, 760px);
+  overflow-y: auto;
+  padding-right: .15rem;
 }
 
 .buyer-output-row {
@@ -13343,6 +13346,8 @@ body.developer-modal-open::before {
 .developer-editor-modal.python-editor-modal {
   padding: 0;
   overflow: hidden;
+  width: min(1320px, calc(100vw - 2rem));
+  height: min(840px, calc(100svh - 1.25rem));
   max-height: min(92vh, calc(100svh - 1.25rem));
 }
 
@@ -13359,23 +13364,24 @@ body.developer-modal-open::before {
 .python-editor-grid {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(300px, .75fr);
+  grid-template-columns: minmax(0, 1.8fr) minmax(300px, .82fr);
   gap: 1rem;
   padding: 1rem 1.25rem 1.25rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .python-editor-main,
 .python-editor-side {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
 }
 
 .python-editor-code {
-  height: clamp(360px, 58vh, 640px);
-  min-height: 420px;
+  width: 100%;
+  height: clamp(380px, 64svh, 640px);
+  min-height: 360px;
   max-height: none;
   resize: vertical;
 }
@@ -13454,7 +13460,6 @@ body.developer-modal-open::before {
 @media (max-width: 860px) {
   .python-editor-grid {
     grid-template-columns: 1fr;
-    overflow: auto;
   }
 
   .python-editor-main,
@@ -13463,8 +13468,8 @@ body.developer-modal-open::before {
   }
 
   .python-editor-code {
-    height: 420px;
-    min-height: 320px;
+    height: min(52svh, 460px);
+    min-height: 300px;
     max-height: none;
   }
 }
@@ -16511,5 +16516,77 @@ iframe {
 
   .admin-bundle-form-head {
     flex-direction: column;
+  }
+}
+
+/* Python editor polish: keep the code surface usable on mobile/tablet. */
+@media (max-width: 640px) {
+  .developer-editor-modal.python-editor-modal,
+  .developer-editor-modal.wide.python-editor-modal {
+    inset: .55rem;
+    width: auto;
+    height: calc(100svh - 1.1rem);
+    max-height: none;
+    transform: none;
+    border-radius: 20px;
+  }
+
+  .python-editor-modal .developer-modal-head {
+    display: grid;
+    gap: .75rem;
+    padding: .9rem;
+  }
+
+  .python-editor-modal .developer-modal-head .btn {
+    width: 100%;
+  }
+
+  .python-editor-grid {
+    padding: .85rem;
+    gap: .8rem;
+  }
+
+  .python-editor-code {
+    height: 46svh;
+    min-height: 280px;
+    font-size: .84rem;
+    line-height: 1.55;
+  }
+
+  .python-editor-side {
+    gap: .75rem;
+  }
+
+  .python-editor-side .compact-grid,
+  .python-editor-side .credential-action-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .python-editor-side .btn {
+    width: 100%;
+  }
+
+  .python-editor-help,
+  .python-editor-log {
+    border-radius: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  .python-editor-modal .developer-modal-head h3 {
+    font-size: 1.05rem;
+  }
+
+  .python-editor-modal .developer-modal-head p,
+  .python-editor-help p,
+  .python-editor-log {
+    font-size: .84rem;
+  }
+
+  .python-editor-code {
+    height: 42svh;
+    min-height: 240px;
   }
 }

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260717-bundle-issues">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260718-bundle-runs">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -352,7 +352,7 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
 <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
-<script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+<script src="/assets/js/nexus-db.js?v=20260718-bundle-runs"></script>
 <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
 
   <script>
@@ -648,7 +648,7 @@ function humanizeSetupStatus(item) {
     function runIsFreshActive(run) {
       if (!run || !runIsActiveStatus(run) || run.finished_at) return false;
       const activity = runActivityMs(run);
-      return !activity || Date.now() - activity <= ACTIVE_RUN_WINDOW_MS;
+      return Boolean(activity && Date.now() - activity <= ACTIVE_RUN_WINDOW_MS);
     }
 
     function runIsStaleActive(run) {
@@ -902,6 +902,7 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
             latestRunsByAutomation.set(run.customer_automation_id, run);
           }
         });
+      const bundleHasRuntimeActivity = Boolean(bundleOutputs.length || latestRunsByAutomation.size);
       const childStates = included.map(item =>
         automationState(item, getLatestOutputForAutomation(outputs, item.id), latestRunsByAutomation.get(item.id) || null)
       );
@@ -910,7 +911,10 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
       const workflowSummaries = included.map((item, index) => {
         const latestRun = latestRunsByAutomation.get(item.id) || null;
         const childState = childStates[index] || {};
-        const status = runIsFreshActive(latestRun)
+        const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
+        const status = missingAfterActivity
+          ? "Not started"
+          : runIsFreshActive(latestRun)
           ? "Running"
           : runIsIssue(latestRun)
             ? "Failed"
@@ -920,13 +924,26 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
           id: item.id,
           title: productTitleFromAutomation(item),
           label: status,
-          tone: runIsIssue(latestRun) || childState.tone === "red" ? "red" : childState.tone || "green",
+          tone: missingAfterActivity || runIsIssue(latestRun) || childState.tone === "red" ? "red" : childState.tone || "green",
           runAt: latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || item.last_run_at || ""
         };
       });
 
       included.forEach((item, index) => {
         const latestRun = latestRunsByAutomation.get(item.id);
+        const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
+
+        if (missingAfterActivity) {
+          issueIds.add(item.id);
+          issueDetails.push({
+            id: item.id,
+            title: productTitleFromAutomation(item),
+            status: "Not started",
+            message: "This workflow did not start during the bundle run. Open setup to run only the missing or failed workflow."
+          });
+          return;
+        }
+
         if (childStates[index]?.tone === "red" || runIsIssue(latestRun) || runIsStaleActive(latestRun)) {
           issueIds.add(item.id);
           const rawMessage = String(
@@ -953,6 +970,7 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         const latestRun = latestRunsByAutomation.get(item.id);
         if (runIsFreshActive(latestRun)) return true;
         if (latestRun) return false;
+        if (bundleHasRuntimeActivity && !outputAutomationIds.has(item.id)) return false;
         return automationLane(childStates[index]) === "progress";
       }).length;
       const incompleteAfterOutputCount = bundleOutputs.length
@@ -2231,7 +2249,7 @@ function openAutomationDetail(customerAutomationId) {
                     </a>
                   </div>
                   <div class="buyer-output-row-list">
-                    ${group.items.slice(0, 4).map(output => `
+                    ${group.items.map(output => `
                       <a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
                         <div>
                           <strong>${escapeHtml(output.title || "Automation output")}</strong>

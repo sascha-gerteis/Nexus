@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260717-skip-groups">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260718-bundle-runs">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -53,13 +53,17 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-db.js?v=20260718-bundle-runs"></script>
 
   <script>
     let activeCustomerAutomation = null;
     let activeProduct = null;
     let latestSubmission = null;
     let activeBundleSetup = null;
+    let activeBundleRuntime = {
+      outputsByAutomation: new Map(),
+      runsByAutomation: new Map()
+    };
 
     function getParam(name) {
       return new URLSearchParams(location.search).get(name);
@@ -1112,6 +1116,139 @@
       return { is_bundle_setup: true, entries, fields, existingAnswers };
     }
 
+    function bundleRuntimeTimestamp(value) {
+      const time = Date.parse(value || "");
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function bundleEntryRuntimeId(entry = {}) {
+      return String(entry.automation?.id || "");
+    }
+
+    function bundleEntryOutputs(entry = {}) {
+      return activeBundleRuntime.outputsByAutomation.get(bundleEntryRuntimeId(entry)) || [];
+    }
+
+    function bundleEntryRuns(entry = {}) {
+      return activeBundleRuntime.runsByAutomation.get(bundleEntryRuntimeId(entry)) || [];
+    }
+
+    function bundleEntryLatestRun(entry = {}) {
+      return bundleEntryRuns(entry)[0] || null;
+    }
+
+    function bundleRunIsFreshActive(run = {}) {
+      const status = String(run?.status || "").toLowerCase();
+      const active = ["queued", "pending", "running", "processing", "in_progress", "started"].some(item => status.includes(item));
+      if (!active) return false;
+
+      const timestamp = bundleRuntimeTimestamp(run.updated_at || run.started_at || run.created_at);
+      if (!timestamp) return true;
+
+      return Date.now() - timestamp < 45 * 60 * 1000;
+    }
+
+    function bundleRunIsFailure(run = {}) {
+      const status = String(run?.status || "").toLowerCase();
+      return Boolean(
+        run?.error_message ||
+          ["fail", "error", "timeout", "cancel", "rejected"].some(item => status.includes(item))
+      );
+    }
+
+    function bundleAutomationHasStoredIssue(automation = {}) {
+      const values = [
+        automation.status,
+        automation.setup_status,
+        automation.runtime_status,
+        automation.health_status,
+        automation.last_error_code,
+        automation.last_error_message
+      ].map(value => String(value || "").toLowerCase());
+
+      return Boolean(
+        automation.needs_customer_action ||
+          values.some(value =>
+            value.includes("fail") ||
+            value.includes("error") ||
+            value.includes("attention") ||
+            value.includes("review")
+          )
+      );
+    }
+
+    function bundleEntryNeedsRuntimeSubmit(entry = {}) {
+      const id = bundleEntryRuntimeId(entry);
+      if (!id) return false;
+
+      const outputs = bundleEntryOutputs(entry);
+      const latestRun = bundleEntryLatestRun(entry);
+
+      if (bundleRunIsFreshActive(latestRun)) return false;
+      if (bundleRunIsFailure(latestRun)) return true;
+      if (bundleAutomationHasStoredIssue(entry.automation || {})) return true;
+      if (!outputs.length) return true;
+
+      return false;
+    }
+
+    function groupBundleRuntimeRows(rows = [], key = "customer_automation_id") {
+      const grouped = new Map();
+
+      for (const row of rows || []) {
+        const id = String(row?.[key] || "");
+        if (!id) continue;
+        if (!grouped.has(id)) grouped.set(id, []);
+        grouped.get(id).push(row);
+      }
+
+      for (const items of grouped.values()) {
+        items.sort((a, b) =>
+          bundleRuntimeTimestamp(b.created_at || b.updated_at || b.started_at) -
+          bundleRuntimeTimestamp(a.created_at || a.updated_at || a.started_at)
+        );
+      }
+
+      return grouped;
+    }
+
+    async function hydrateBundleRuntimeStatus(entries = []) {
+      const ids = [...new Set((entries || []).map(entry => bundleEntryRuntimeId(entry)).filter(Boolean))];
+      activeBundleRuntime = {
+        outputsByAutomation: new Map(),
+        runsByAutomation: new Map()
+      };
+
+      if (!ids.length) return;
+
+      try {
+        const outputLoader = typeof NexusDB.listBuyerAutomationOutputsByCustomerAutomationIds === "function"
+          ? NexusDB.listBuyerAutomationOutputsByCustomerAutomationIds(ids)
+          : NexusDB.listBuyerAutomationOutputs();
+        const runLoader = typeof NexusDB.listBuyerAutomationRunsByCustomerAutomationIds === "function"
+          ? NexusDB.listBuyerAutomationRunsByCustomerAutomationIds(ids)
+          : NexusDB.listBuyerAutomationRuns();
+
+        const [outputsResult, runsResult] = await Promise.all([outputLoader, runLoader]);
+
+        if (outputsResult?.error) {
+          console.warn("Could not load bundle output history:", outputsResult.error);
+        } else {
+          const outputs = (outputsResult?.data || []).filter(row => ids.includes(String(row.customer_automation_id || "")));
+          activeBundleRuntime.outputsByAutomation = groupBundleRuntimeRows(outputs);
+        }
+
+        if (runsResult?.error) {
+          console.warn("Could not load bundle run history:", runsResult.error);
+        } else {
+          const runs = (runsResult?.data || []).filter(row => ids.includes(String(row.customer_automation_id || "")));
+          activeBundleRuntime.runsByAutomation = groupBundleRuntimeRows(runs);
+        }
+      } catch (error) {
+        console.warn("Could not hydrate bundle runtime state:", error);
+      }
+    }
+
     function customerAutomationOrder(row = {}) {
       return Array.isArray(row.orders) ? row.orders[0] || {} : row.orders || {};
     }
@@ -1198,6 +1335,7 @@
         return { automation: row, product: product || {}, submission };
       }));
 
+      await hydrateBundleRuntimeStatus(entries);
       const model = buildBundleSetupModel(entries);
       return model.fields.length ? model : null;
     }
@@ -1237,6 +1375,7 @@
         return { automation: row, product: product || {}, submission };
       }));
 
+      await hydrateBundleRuntimeStatus(entries);
       const model = buildBundleSetupModel(entries);
       if (!model.fields.length) return null;
 
@@ -1698,6 +1837,7 @@ async function resolveProductFromCustomerAutomation(automation) {
         NexusUI.toast("Bundle setup was not loaded. Refresh and try again.");
         button.disabled = false;
         button.textContent = originalText;
+        form.dataset.submitting = "false";
         return;
       }
 
@@ -1726,23 +1866,45 @@ async function resolveProductFromCustomerAutomation(automation) {
         };
       };
 
-      const settledResults = await Promise.allSettled(entries.map(submitOneBundleWorkflow));
-      const results = settledResults.map((result, index) => {
-        if (result.status === "fulfilled") return result.value;
+      const results = [];
 
-        return {
-          entry: entries[index],
-          data: null,
-          error: {
-            message: result.reason?.message || "This workflow could not be submitted."
-          },
-          answers: {}
-        };
-      }).filter(Boolean);
+      for (const [index, entry] of entries.entries()) {
+        const title = bundleEntryTitle(entry);
+        const needsRuntimeSubmit = bundleEntryNeedsRuntimeSubmit(entry);
+
+        if (!needsRuntimeSubmit) {
+          results.push({
+            entry,
+            data: null,
+            error: null,
+            answers: buildBundleAnswersForWorkflow(entry, answers),
+            skipped: true,
+            skipped_reason: "already_completed"
+          });
+          continue;
+        }
+
+        button.textContent = `Starting ${index + 1}/${entries.length}: ${title}`;
+
+        try {
+          results.push(await submitOneBundleWorkflow(entry));
+        } catch (error) {
+          results.push({
+            entry,
+            data: null,
+            error: {
+              message: error?.message || "This workflow could not be submitted."
+            },
+            answers: {}
+          });
+        }
+      }
 
       const failures = results.filter(item => item.error);
-      const submittedCount = results.length - failures.length;
-      const workflowWord = results.length === 1 ? "workflow" : "workflows";
+      const skippedCount = results.filter(item => item.skipped).length;
+      const attemptedCount = results.length - skippedCount;
+      const submittedCount = results.filter(item => !item.error && !item.skipped).length;
+      const workflowWord = attemptedCount === 1 ? "workflow" : "workflows";
 
       if (failures.length) {
         const onlyRuntimeWaits = failures.every(item =>
@@ -1757,7 +1919,7 @@ async function resolveProductFromCustomerAutomation(automation) {
               <div class="success" style="margin-top:1rem">
                 <strong>Bundle setup submitted.</strong><br>
                 ${escapeHtml(waitMessage)}<br>
-                Submitted ${results.length}/${entries.length} included ${workflowWord}.
+                Started ${submittedCount}/${attemptedCount || entries.length} included ${workflowWord}${skippedCount ? `; kept ${skippedCount} completed workflow${skippedCount === 1 ? "" : "s"}.` : "."}
               </div>
             `;
           }
@@ -1765,6 +1927,7 @@ async function resolveProductFromCustomerAutomation(automation) {
           NexusUI.toast("Bundle setup submitted. Check your dashboard for outputs.");
           button.disabled = false;
           button.textContent = "Update setup details";
+          form.dataset.submitting = "false";
           setTimeout(function () {
             location.href = "/pages/buyer/dashboard.html";
           }, 1800);
@@ -1784,7 +1947,7 @@ async function resolveProductFromCustomerAutomation(automation) {
             <div class="error" style="margin-top:1rem">
               <strong>Bundle setup needs review.</strong><br>
               ${escapeHtml(safeMessage)}
-              <br>Submitted ${submittedCount}/${entries.length} included workflow${entries.length === 1 ? "" : "s"}.
+              <br>Started ${submittedCount}/${attemptedCount || entries.length} workflow${(attemptedCount || entries.length) === 1 ? "" : "s"} that needed another run${skippedCount ? `; kept ${skippedCount} completed workflow${skippedCount === 1 ? "" : "s"}.` : "."}
               ${
                 failureDetails.length
                   ? `<ul style="margin:0.75rem 0 0 1.2rem">${failureDetails.map(detail => `<li>${escapeHtml(detail)}</li>`).join("")}</ul>`
@@ -1796,6 +1959,27 @@ async function resolveProductFromCustomerAutomation(automation) {
 
         button.disabled = false;
         button.textContent = originalText;
+        form.dataset.submitting = "false";
+        return;
+      }
+
+      if (!attemptedCount) {
+        if (resultEl) {
+          resultEl.innerHTML = `
+            <div class="success" style="margin-top:1rem">
+              <strong>Bundle already complete.</strong><br>
+              Every included workflow already has a completed output. No workflow was rerun.
+            </div>
+          `;
+        }
+
+        NexusUI.toast("Bundle is already complete. No workflows were rerun.");
+        button.disabled = false;
+        button.textContent = "Update setup details";
+        form.dataset.submitting = "false";
+        setTimeout(function () {
+            location.href = "/pages/buyer/dashboard.html";
+        }, 1400);
         return;
       }
 
@@ -1804,6 +1988,7 @@ async function resolveProductFromCustomerAutomation(automation) {
       };
 
       for (const result of results) {
+        if (result.skipped) continue;
         const entry = activeBundleSetup.entries.find(item => item.automation?.id === result.entry?.automation?.id);
         if (entry) {
           entry.submission = result.data?.submission || { answers: result.answers };
@@ -1816,15 +2001,16 @@ async function resolveProductFromCustomerAutomation(automation) {
         resultEl.innerHTML = `
           <div class="success" style="margin-top:1rem">
             <strong>Bundle setup submitted.</strong><br>
-            Nexus is preparing ${results.length}/${entries.length} included workflow${entries.length === 1 ? "" : "s"}.
+            Nexus started ${submittedCount}/${attemptedCount} workflow${attemptedCount === 1 ? "" : "s"} that needed a run${skippedCount ? ` and kept ${skippedCount} completed workflow${skippedCount === 1 ? "" : "s"}.` : "."}
           </div>
         `;
       }
 
-      NexusUI.toast("Bundle setup submitted. Nexus is preparing the workflows.");
+      NexusUI.toast("Bundle setup submitted. Nexus is preparing the workflows that needed a run.");
 
       button.disabled = false;
       button.textContent = "Update setup details";
+      form.dataset.submitting = "false";
 
       setTimeout(function () {
         location.href = "/pages/buyer/dashboard.html";
@@ -1838,6 +2024,12 @@ async function resolveProductFromCustomerAutomation(automation) {
       const button = form.querySelector("button[type='submit']");
       const originalText = button.textContent;
 
+      if (form.dataset.submitting === "true") {
+        NexusUI.toast("Setup is already being submitted. Please wait.");
+        return;
+      }
+
+      form.dataset.submitting = "true";
       button.disabled = true;
       button.textContent = "Submitting setup...";
 
@@ -1860,6 +2052,7 @@ async function resolveProductFromCustomerAutomation(automation) {
         `;
         button.disabled = false;
         button.textContent = originalText;
+        form.dataset.submitting = "false";
         return;
       }
 
@@ -1871,6 +2064,7 @@ async function resolveProductFromCustomerAutomation(automation) {
         NexusUI.toast("Automation was not loaded. Refresh and try again.");
         button.disabled = false;
         button.textContent = originalText;
+        form.dataset.submitting = "false";
         return;
       }
 
@@ -1878,6 +2072,7 @@ async function resolveProductFromCustomerAutomation(automation) {
         NexusUI.toast("Setup submit function is missing in nexus-db.js.");
         button.disabled = false;
         button.textContent = originalText;
+        form.dataset.submitting = "false";
         return;
       }
 
@@ -1906,6 +2101,7 @@ async function resolveProductFromCustomerAutomation(automation) {
 
           button.disabled = false;
           button.textContent = "Update setup details";
+          form.dataset.submitting = "false";
           setTimeout(function () {
             location.href = "/pages/buyer/dashboard.html";
           }, 1800);
@@ -1928,6 +2124,7 @@ async function resolveProductFromCustomerAutomation(automation) {
 
         button.disabled = false;
         button.textContent = originalText;
+        form.dataset.submitting = "false";
         return;
       }
 
@@ -1954,6 +2151,7 @@ async function resolveProductFromCustomerAutomation(automation) {
 
       button.disabled = false;
       button.textContent = "Update setup details";
+      form.dataset.submitting = "false";
 
       setTimeout(function () {
         location.href = "/pages/buyer/dashboard.html";

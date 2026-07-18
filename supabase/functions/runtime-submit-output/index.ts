@@ -640,10 +640,42 @@ async function tryUpdateParentAutomationAfterSuccess(
   return null;
 }
 
+const CALLBACK_RUN_MATCH_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+function callbackRunStatusIsActive(value: unknown) {
+  const status = cleanString(value).toLowerCase();
+  return ["running", "processing", "queued", "started", "pending", "in_progress"].some(item =>
+    status.includes(item)
+  );
+}
+
+async function findLatestActiveRunForCallback(adminClient: any, customerAutomationId: string) {
+  if (!customerAutomationId) return "";
+
+  const since = new Date(Date.now() - CALLBACK_RUN_MATCH_WINDOW_MS).toISOString();
+
+  const { data, error } = await adminClient
+    .from("automation_runs")
+    .select("id, status, created_at, updated_at, started_at")
+    .eq("customer_automation_id", customerAutomationId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    console.warn("automation_runs active callback lookup failed:", error.message);
+    return "";
+  }
+
+  const activeRun = (data || []).find((run: any) => callbackRunStatusIsActive(run?.status));
+  return cleanString(activeRun?.id);
+}
+
 async function updateExistingRunFromCallback(
   adminClient: any,
   body: any,
   payload: Record<string, unknown>,
+  customerAutomationId: string,
 ) {
   const runId = cleanString(
     body.run_id ||
@@ -659,7 +691,11 @@ async function updateExistingRunFromCallback(
       body.system?.runKey,
   );
 
-  if (!runId && !runKey) return false;
+  const fallbackRunId = !runId && !runKey
+    ? await findLatestActiveRunForCallback(adminClient, customerAutomationId)
+    : "";
+
+  if (!runId && !runKey && !fallbackRunId) return false;
 
   const updatePayload = {
     ...payload,
@@ -672,7 +708,10 @@ async function updateExistingRunFromCallback(
     .select("id")
     .limit(1);
 
-  query = runId ? query.eq("id", runId) : query.eq("run_key", runKey);
+  query = runId || fallbackRunId
+    ? query.eq("id", runId || fallbackRunId)
+    : query.eq("run_key", runKey);
+  if (customerAutomationId) query = query.eq("customer_automation_id", customerAutomationId);
 
   let { data, error } = await query.maybeSingle();
 
@@ -691,7 +730,10 @@ async function updateExistingRunFromCallback(
     .select("id")
     .limit(1);
 
-  query = runId ? query.eq("id", runId) : query.eq("run_key", runKey);
+  query = runId || fallbackRunId
+    ? query.eq("id", runId || fallbackRunId)
+    : query.eq("run_key", runKey);
+  if (customerAutomationId) query = query.eq("customer_automation_id", customerAutomationId);
 
   const fallback = await query.maybeSingle();
 
@@ -852,17 +894,22 @@ Deno.serve(async (req) => {
         return errorResponse(updateError.message, 500);
       }
 
-      const updatedExistingRun = await updateExistingRunFromCallback(adminClient, body, {
-        status: "error",
-        finished_at: now,
-        error_message: rawErrorMessage,
-        error_details: rawError,
-        response_payload: {
-          status,
+      const updatedExistingRun = await updateExistingRunFromCallback(
+        adminClient,
+        body,
+        {
+          status: "error",
+          finished_at: now,
           error_message: rawErrorMessage,
-          raw_error: rawError,
+          error_details: rawError,
+          response_payload: {
+            status,
+            error_message: rawErrorMessage,
+            raw_error: rawError,
+          },
         },
-      });
+        customerAutomation.id,
+      );
 
       if (!updatedExistingRun) {
         await adminClient
@@ -969,20 +1016,25 @@ Deno.serve(async (req) => {
           updated_at: now,
         });
 
-        const updatedExistingRun = await updateExistingRunFromCallback(adminClient, body, {
-          status: "error",
-          finished_at: now,
-          error_message: emptyOutputMessage,
-          error_details: {
-            response_mode: responseMode,
-            received_keys: Object.keys(body),
-          },
-          response_payload: {
+        const updatedExistingRun = await updateExistingRunFromCallback(
+          adminClient,
+          body,
+          {
             status: "error",
-            error_code: "empty_runtime_output",
+            finished_at: now,
             error_message: emptyOutputMessage,
+            error_details: {
+              response_mode: responseMode,
+              received_keys: Object.keys(body),
+            },
+            response_payload: {
+              status: "error",
+              error_code: "empty_runtime_output",
+              error_message: emptyOutputMessage,
+            },
           },
-        });
+          customerAutomation.id,
+        );
 
         if (!updatedExistingRun) {
           await adminClient
@@ -1169,16 +1221,21 @@ Deno.serve(async (req) => {
         .not("order_status", "in", '("cancelled","checkout_expired","payment_failed","refunded")');
     }
 
-    const updatedExistingRun = await updateExistingRunFromCallback(adminClient, body, {
-      status: "success",
-      finished_at: now,
-      response_payload: {
+    const updatedExistingRun = await updateExistingRunFromCallback(
+      adminClient,
+      body,
+      {
         status: "success",
-        output_id: output.id,
-        output_type: outputType,
-        title: outputTitle,
+        finished_at: now,
+        response_payload: {
+          status: "success",
+          output_id: output.id,
+          output_type: outputType,
+          title: outputTitle,
+        },
       },
-    });
+      customerAutomation.id,
+    );
 
     if (!updatedExistingRun) {
       await adminClient

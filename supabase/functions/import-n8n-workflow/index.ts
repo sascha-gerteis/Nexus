@@ -1903,6 +1903,20 @@ function buildNexusSubmitOutputBodyExpression() {
       source.body?.customer_automation_id ||
       source.body?.system?.customer_automation_id ||
       "",
+    run_id:
+      context.system?.run_id ||
+      source.run_id ||
+      source.system?.run_id ||
+      source.body?.run_id ||
+      source.body?.system?.run_id ||
+      "",
+    run_key:
+      context.system?.run_key ||
+      source.run_key ||
+      source.system?.run_key ||
+      source.body?.run_key ||
+      source.body?.system?.run_key ||
+      "",
     status: objectOutput.status || "success",
     output_type: objectOutput.output_type || objectOutput.outputType || "report",
     title:
@@ -1927,6 +1941,14 @@ function buildNexusSubmitOutputBodyParameters() {
       {
         name: "customer_automation_id",
         value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}',
+      },
+      {
+        name: "run_id",
+        value: '={{ $("Nexus Runtime Context").first().json.system.run_id || "" }}',
+      },
+      {
+        name: "run_key",
+        value: '={{ $("Nexus Runtime Context").first().json.system.run_key || "" }}',
       },
       {
         name: "status",

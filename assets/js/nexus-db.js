@@ -3003,6 +3003,78 @@ async function listBuyerAutomationRuns(userId) {
     .limit(200);
 }
 
+async function listBuyerAutomationOutputsByCustomerAutomationIds(customerAutomationIds = []) {
+  const { data: user } = await getUser();
+
+  if (!user) {
+    return {
+      data: [],
+      error: { message: "Login required." }
+    };
+  }
+
+  const ids = [...new Set((customerAutomationIds || []).filter(Boolean).map(String))];
+  if (!ids.length) {
+    return {
+      data: [],
+      error: null
+    };
+  }
+
+  return supabase
+    .from("automation_outputs")
+    .select("*")
+    .eq("buyer_id", user.id)
+    .eq("status", "published")
+    .in("customer_automation_id", ids)
+    .order("created_at", { ascending: false })
+    .limit(500);
+}
+
+async function listBuyerAutomationRunsByCustomerAutomationIds(customerAutomationIds = []) {
+  const { data: user } = await getUser();
+
+  if (!user) {
+    return {
+      data: [],
+      error: { message: "Login required." }
+    };
+  }
+
+  const ids = [...new Set((customerAutomationIds || []).filter(Boolean).map(String))];
+  if (!ids.length) {
+    return {
+      data: [],
+      error: null
+    };
+  }
+
+  return supabase
+    .from("automation_runs")
+    .select(`
+      id,
+      customer_automation_id,
+      automation_id,
+      order_id,
+      runtime_type,
+      trigger_type,
+      trigger_source,
+      status,
+      run_key,
+      scheduled_for,
+      n8n_execution_id,
+      error_message,
+      started_at,
+      finished_at,
+      created_at,
+      updated_at
+    `)
+    .eq("buyer_id", user.id)
+    .in("customer_automation_id", ids)
+    .order("created_at", { ascending: false })
+    .limit(500);
+}
+
 async function getBuyerAutomationOutput(outputId) {
   const { data: user } = await getUser();
 
@@ -3556,6 +3628,8 @@ saveAutomationTestProfile,
 listBuyerCustomerAutomations,
 listBuyerAutomationOutputs,
 listBuyerAutomationRuns,
+listBuyerAutomationOutputsByCustomerAutomationIds,
+listBuyerAutomationRunsByCustomerAutomationIds,
 getBuyerAutomationOutput,
 getBuyerAutomationSetupData,
 submitAutomationSetup,

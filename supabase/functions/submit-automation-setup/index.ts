@@ -630,6 +630,41 @@ function runtimeWorkflowId(customerAutomation: any, automation: any, order: any 
   );
 }
 
+function runtimeWorkflowWebhookPaths(workflow: any) {
+  const workflowRecord = Array.isArray(workflow?.nodes)
+    ? workflow
+    : Array.isArray(workflow?.data?.nodes)
+      ? workflow.data
+      : Array.isArray(workflow?.workflow?.nodes)
+        ? workflow.workflow
+        : workflow;
+  const nodes = Array.isArray(workflowRecord?.nodes) ? workflowRecord.nodes : [];
+
+  return nodes
+    .filter((node: any) =>
+      cleanString(node?.type).toLowerCase().includes("n8n-nodes-base.webhook")
+    )
+    .map((node: any) => cleanString(node?.parameters?.path))
+    .filter(Boolean);
+}
+
+async function loadRuntimeWorkflowWebhookPath(workflowId: string) {
+  if (!workflowId) return "";
+
+  try {
+    const workflow = await n8nApiRequest(
+      `/api/v1/workflows/${encodeURIComponent(workflowId)}`,
+      {
+        method: "GET",
+      },
+    );
+
+    return runtimeWorkflowWebhookPaths(workflow)[0] || "";
+  } catch (_error) {
+    return "";
+  }
+}
+
 async function activateRuntimeWorkflow(customerAutomation: any, automation: any, order: any = null) {
   const workflowId = runtimeWorkflowId(customerAutomation, automation, order);
   if (!workflowId) {
@@ -728,10 +763,14 @@ async function refreshRuntimeWorkflow(customerAutomation: any, automation: any, 
 
   const deactivation = await deactivateRuntimeWorkflow(customerAutomation, automation, order);
   const activation = await activateRuntimeWorkflow(customerAutomation, automation, order);
+  const webhookPath = activation?.ok ? await loadRuntimeWorkflowWebhookPath(workflowId) : "";
+  const n8nBaseUrl = cleanBaseUrl(env("N8N_BASE_URL"));
 
   return {
     ok: Boolean(activation?.ok),
     workflow_id: workflowId,
+    webhook_path: webhookPath,
+    webhook_url: webhookPath && n8nBaseUrl ? `${n8nBaseUrl}/webhook/${webhookPath}` : "",
     deactivation,
     activation,
   };
@@ -1043,6 +1082,133 @@ async function insertAutomationRun(
   if (fallbackError) {
     console.warn("automation_runs insert failed:", fallbackError.message || error.message);
   }
+}
+
+async function createAutomationRun(
+  adminClient: any,
+  payload: Record<string, unknown>,
+) {
+  let result = await adminClient
+    .from("automation_runs")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (!result.error && result.data?.id) {
+    return {
+      id: cleanString(result.data.id),
+      run_key: cleanString(payload.run_key),
+    };
+  }
+
+  const fallbackPayload = { ...payload };
+  delete fallbackPayload.run_key;
+  delete fallbackPayload.scheduled_for;
+  delete fallbackPayload.trigger_source;
+  delete fallbackPayload.request_payload;
+  delete fallbackPayload.response_payload;
+
+  result = await adminClient
+    .from("automation_runs")
+    .insert(fallbackPayload)
+    .select("id")
+    .single();
+
+  if (!result.error && result.data?.id) {
+    return {
+      id: cleanString(result.data.id),
+      run_key: "",
+    };
+  }
+
+  console.warn("automation_runs pre-trigger insert failed:", result.error?.message || "Unknown insert error");
+  return {
+    id: "",
+    run_key: "",
+  };
+}
+
+async function updateAutomationRunById(
+  adminClient: any,
+  runId: string,
+  payload: Record<string, unknown>,
+) {
+  if (!runId) return null;
+
+  const { error } = await adminClient
+    .from("automation_runs")
+    .update(payload)
+    .eq("id", runId);
+
+  if (!error) return null;
+
+  const fallbackPayload = { ...payload };
+  delete fallbackPayload.run_key;
+  delete fallbackPayload.scheduled_for;
+  delete fallbackPayload.trigger_source;
+  delete fallbackPayload.request_payload;
+  delete fallbackPayload.response_payload;
+
+  const { error: fallbackError } = await adminClient
+    .from("automation_runs")
+    .update(fallbackPayload)
+    .eq("id", runId);
+
+  if (fallbackError) {
+    console.warn("automation_runs update failed:", fallbackError.message || error.message);
+    return fallbackError || error;
+  }
+
+  return null;
+}
+
+const RUNTIME_DUPLICATE_WINDOW_MS = 45 * 60 * 1000;
+
+function runtimeFreshTimestamp(value: unknown) {
+  const timestamp = Date.parse(cleanString(value));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function runtimeStatusIsActive(value: unknown) {
+  const status = cleanString(value).toLowerCase();
+  return ["running", "processing", "queued", "started", "pending", "in_progress"].some(item =>
+    status.includes(item)
+  );
+}
+
+function customerAutomationHasFreshRuntimeRequest(customerAutomation: any) {
+  const requestedAt = runtimeFreshTimestamp(
+    customerAutomation?.last_run_requested_at ||
+      customerAutomation?.last_run_at,
+  );
+
+  if (!requestedAt || Date.now() - requestedAt > RUNTIME_DUPLICATE_WINDOW_MS) {
+    return false;
+  }
+
+  return (
+    runtimeStatusIsActive(customerAutomation?.runtime_status) ||
+    runtimeStatusIsActive(customerAutomation?.status)
+  );
+}
+
+async function findRecentActiveAutomationRun(adminClient: any, customerAutomationId: string) {
+  const since = new Date(Date.now() - RUNTIME_DUPLICATE_WINDOW_MS).toISOString();
+
+  const { data, error } = await adminClient
+    .from("automation_runs")
+    .select("id, status, trigger_type, trigger_source, n8n_execution_id, started_at, created_at, updated_at")
+    .eq("customer_automation_id", customerAutomationId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (error) {
+    console.warn("recent automation_runs duplicate check failed:", error.message);
+    return null;
+  }
+
+  return (data || []).find((run: any) => runtimeStatusIsActive(run?.status)) || null;
 }
 
 async function saveSetupSubmission(
@@ -1416,6 +1582,8 @@ async function triggerN8nWebhook(params: {
   secrets: Record<string, string>;
   savedCredentialKeys: string[];
   submissionId: string;
+  runId?: string;
+  runKey?: string;
 }) {
   const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
   const callbackUrl = buildCallbackUrl();
@@ -1427,6 +1595,8 @@ async function triggerN8nWebhook(params: {
     automation_id: params.customerAutomation.automation_id,
     order_id: params.customerAutomation.order_id,
     buyer_id: params.customerAutomation.buyer_id,
+    run_id: params.runId || "",
+    run_key: params.runKey || "",
 
     setup: setupPayload,
     secrets: params.secrets || {},
@@ -1441,6 +1611,8 @@ async function triggerN8nWebhook(params: {
       callback_url: callbackUrl,
       runtime_secret: runtimeSecret,
       setup_submission_id: params.submissionId,
+      run_id: params.runId || "",
+      run_key: params.runKey || "",
       saved_credential_keys: params.savedCredentialKeys || [],
       skipped_setup_sections: setupSkips.skipped_sections,
       skipped_setup_section_keys: setupSkips.skipped_section_keys,
@@ -1676,6 +1848,8 @@ async function triggerPythonRunner(params: {
   secrets: Record<string, string>;
   savedCredentialKeys: string[];
   submissionId: string;
+  runId?: string;
+  runKey?: string;
 }) {
   const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
   const supabaseUrl = env("SUPABASE_URL").replace(/\/+$/, "");
@@ -1692,6 +1866,8 @@ async function triggerPythonRunner(params: {
     automation_id: params.customerAutomation.automation_id,
     order_id: params.customerAutomation.order_id,
     buyer_id: params.customerAutomation.buyer_id,
+    run_id: params.runId || "",
+    run_key: params.runKey || "",
 
     setup: setupPayload,
     secrets: params.secrets || {},
@@ -1706,6 +1882,8 @@ async function triggerPythonRunner(params: {
       callback_url: callbackUrl,
       runtime_secret: runtimeSecret,
       setup_submission_id: params.submissionId,
+      run_id: params.runId || "",
+      run_key: params.runKey || "",
       saved_credential_keys: params.savedCredentialKeys || [],
       skipped_setup_sections: setupSkips.skipped_sections,
       skipped_setup_section_keys: setupSkips.skipped_section_keys,
@@ -2061,6 +2239,43 @@ Deno.serve(async (req) => {
     const submission = submissionResult.data;
     const now = new Date().toISOString();
 
+    const recentActiveRun = !skipRuntimeTrigger
+      ? await findRecentActiveAutomationRun(adminClient, customerAutomation.id)
+      : null;
+    const freshRuntimeRequest = !skipRuntimeTrigger &&
+      customerAutomationHasFreshRuntimeRequest(customerAutomation);
+
+    if (recentActiveRun || freshRuntimeRequest) {
+      await insertAutomationEvent(adminClient, {
+        customer_automation_id: customerAutomation.id,
+        buyer_id: customerAutomation.buyer_id,
+        automation_id: customerAutomation.automation_id,
+        order_id: customerAutomation.order_id,
+        event_type: "runtime_duplicate_prevented",
+        title: "Duplicate runtime prevented",
+        message: JSON.stringify({
+          active_run_id: recentActiveRun?.id || null,
+          runtime_status: customerAutomation.runtime_status || "",
+          status: customerAutomation.status || "",
+          last_run_requested_at: customerAutomation.last_run_requested_at || null,
+        }),
+        created_by: "runtime",
+      });
+
+      return jsonResponse({
+        ok: true,
+        status: "already_running",
+        triggered_n8n: false,
+        duplicate_runtime_prevented: true,
+        active_run_id: recentActiveRun?.id || null,
+        submission_id: submission.id,
+        setup_keys: Object.keys(setupAnswers),
+        credential_keys_available: Object.keys(savedSecrets),
+        used_brand_notes_as_meta_token: usedBrandNotesAsMetaToken,
+        message: "This automation is already running. Nexus saved the setup and did not start a duplicate run.",
+      });
+    }
+
     /*
       Important retry behavior:
       Buyer submissions move into running immediately.
@@ -2107,6 +2322,7 @@ Deno.serve(async (req) => {
             n8n_last_execution_status: null,
             n8n_last_execution_checked_at: null,
 
+            last_run_requested_at: now,
             updated_at: now,
           },
     );
@@ -2276,6 +2492,28 @@ Deno.serve(async (req) => {
       });
     }
 
+    const runKey = `setup:${customerAutomation.id}:${submission.id}`;
+    const runStartedAt = new Date().toISOString();
+    const activeRun = await createAutomationRun(adminClient, {
+      customer_automation_id: customerAutomation.id,
+      buyer_id: customerAutomation.buyer_id,
+      automation_id: customerAutomation.automation_id,
+      order_id: customerAutomation.order_id,
+      runtime_type: runtimeType || "n8n_managed",
+      trigger_type: "buyer_setup_submit",
+      trigger_source: isAdmin ? "admin_setup_submit" : isDeveloper ? "developer_setup_submit" : "buyer_setup_submit",
+      status: "running",
+      run_key: runKey,
+      request_payload: {
+        setup_submission_id: submission.id,
+        setup_keys: Object.keys(setupAnswers),
+        credential_keys_available: Object.keys(savedSecrets),
+      },
+      started_at: runStartedAt,
+      created_at: runStartedAt,
+      updated_at: runStartedAt,
+    });
+
     let triggerResult: any = null;
 
     try {
@@ -2289,6 +2527,8 @@ Deno.serve(async (req) => {
           secrets: savedSecrets,
           savedCredentialKeys,
           submissionId: submission.id,
+          runId: activeRun.id,
+          runKey: activeRun.run_key || runKey,
         })
         : await triggerN8nWebhook({
           webhookUrl,
@@ -2300,6 +2540,8 @@ Deno.serve(async (req) => {
           secrets: savedSecrets,
           savedCredentialKeys,
           submissionId: submission.id,
+          runId: activeRun.id,
+          runKey: activeRun.run_key || runKey,
         });
     } catch (error) {
       let message = error instanceof Error ? error.message : String(error);
@@ -2309,6 +2551,25 @@ Deno.serve(async (req) => {
         activationRetry = await refreshRuntimeWorkflow(customerAutomation, automation, order);
 
         if (activationRetry?.ok) {
+          if (activationRetry.webhook_path) {
+            customerAutomation.runtime_webhook_path = activationRetry.webhook_path;
+          }
+          if (activationRetry.webhook_url) {
+            customerAutomation.runtime_webhook_url = activationRetry.webhook_url;
+            webhookUrl = activationRetry.webhook_url;
+          } else {
+            const refreshedWebhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
+            if (refreshedWebhookUrl) webhookUrl = refreshedWebhookUrl;
+          }
+
+          if (activationRetry.webhook_path || activationRetry.webhook_url) {
+            await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
+              ...(activationRetry.webhook_path ? { runtime_webhook_path: activationRetry.webhook_path } : {}),
+              ...(activationRetry.webhook_url ? { runtime_webhook_url: activationRetry.webhook_url } : {}),
+              updated_at: new Date().toISOString(),
+            });
+          }
+
           try {
             triggerResult = await triggerN8nWebhook({
               webhookUrl,
@@ -2320,6 +2581,8 @@ Deno.serve(async (req) => {
               secrets: savedSecrets,
               savedCredentialKeys,
               submissionId: submission.id,
+              runId: activeRun.id,
+              runKey: activeRun.run_key || runKey,
             });
           } catch (retryError) {
             message = retryError instanceof Error ? retryError.message : String(retryError);
@@ -2346,6 +2609,22 @@ Deno.serve(async (req) => {
           webhook_url: webhookUrl,
           workflow_id: runtimeWorkflowId(customerAutomation, automation, order),
           activation_retry: activationRetry,
+        });
+
+        await updateAutomationRunById(adminClient, activeRun.id, {
+          status: "error",
+          finished_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          error_message: message,
+          error_details: {
+            webhook_url: webhookUrl,
+            workflow_id: runtimeWorkflowId(customerAutomation, automation, order),
+            activation_retry: activationRetry,
+          },
+          response_payload: {
+            status: "trigger_failed",
+            error_message: message,
+          },
         });
 
         if (!isAdmin && !isDeveloper) {
@@ -2379,6 +2658,11 @@ Deno.serve(async (req) => {
 
     const executionId = triggerResult?.executionId || "";
 
+    await updateAutomationRunById(adminClient, activeRun.id, {
+      n8n_execution_id: executionId || null,
+      updated_at: new Date().toISOString(),
+    });
+
     if (executionId) {
       await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
         n8n_last_execution_id: executionId,
@@ -2393,21 +2677,6 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       });
     }
-
-    await insertAutomationRun(adminClient, {
-      customer_automation_id: customerAutomation.id,
-      buyer_id: customerAutomation.buyer_id,
-      automation_id: customerAutomation.automation_id,
-      order_id: customerAutomation.order_id,
-      runtime_type: runtimeType || "n8n_managed",
-      trigger_type: "buyer_setup_submit",
-      trigger_source: isAdmin ? "admin_setup_submit" : isDeveloper ? "developer_setup_submit" : "buyer_setup_submit",
-      status: "running",
-      n8n_execution_id: executionId || null,
-      started_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
 
     await insertAutomationEvent(adminClient, {
       customer_automation_id: customerAutomation.id,
@@ -2440,6 +2709,8 @@ Deno.serve(async (req) => {
       credential_keys_available: Object.keys(savedSecrets),
       used_brand_notes_as_meta_token: usedBrandNotesAsMetaToken,
       n8n_execution_id: executionId || null,
+      run_id: activeRun.id || null,
+      run_key: activeRun.run_key || runKey,
       n8n_check: n8nCheckResult,
       runtime_pending_response: Boolean(triggerResult?.acceptedWithoutFinalResponse),
     });
