@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260718-bundle-runs">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260719-bundle-runtime-source">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -53,7 +53,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260718-bundle-runs"></script>
+  <script src="/assets/js/nexus-db.js?v=20260719-bundle-runtime-source"></script>
 
   <script>
     let activeCustomerAutomation = null;
@@ -1125,6 +1125,47 @@
       return String(entry.automation?.id || "");
     }
 
+    function webhookPathFromUrl(url = "") {
+      const value = String(url || "").trim();
+      if (!value) return "";
+
+      try {
+        const parsed = new URL(value);
+        const match = parsed.pathname.match(/\/webhook\/([^/?#]+)/);
+        return match?.[1] ? decodeURIComponent(match[1]) : "";
+      } catch (_error) {
+        const match = value.match(/\/webhook\/([^/?#]+)/);
+        return match?.[1] ? decodeURIComponent(match[1]) : "";
+      }
+    }
+
+    function bundleEntryHasOwnRuntime(entry = {}) {
+      const automation = entry?.automation || {};
+      const product = entry?.product || {};
+      const customerWorkflowId = String(automation.n8n_workflow_id || "").trim();
+      const productWorkflowId = String(product.n8n_workflow_id || "").trim();
+
+      if (customerWorkflowId && (!productWorkflowId || customerWorkflowId !== productWorkflowId)) {
+        return true;
+      }
+
+      const customerPath =
+        String(automation.runtime_webhook_path || automation.n8n_webhook_path || "").trim() ||
+        webhookPathFromUrl(automation.runtime_webhook_url || automation.n8n_webhook_url || "");
+      const productPath =
+        String(product.runtime_webhook_path || product.n8n_webhook_path || "").trim() ||
+        webhookPathFromUrl(product.runtime_webhook_url || product.n8n_webhook_url || "");
+
+      return Boolean(customerPath && customerPath !== productPath && customerPath.startsWith("nexus-customer-"));
+    }
+
+    function bundleEntryHasProductRuntimeSource(entry = {}) {
+      const product = entry?.product || {};
+      return Boolean(
+        String(product.n8n_workflow_id || product.runtime_webhook_url || product.n8n_webhook_url || product.runtime_webhook_path || product.n8n_webhook_path || "").trim()
+      );
+    }
+
     function bundleEntryOutputs(entry = {}) {
       return activeBundleRuntime.outputsByAutomation.get(bundleEntryRuntimeId(entry)) || [];
     }
@@ -1156,6 +1197,23 @@
       );
     }
 
+    function bundleEntryLatestRuntimeTime(entry = {}) {
+      const latestRun = bundleEntryLatestRun(entry);
+      const latestOutput = bundleEntryOutputs(entry)[0] || {};
+
+      return Math.max(
+        bundleRuntimeTimestamp(latestRun?.finished_at || latestRun?.updated_at || latestRun?.started_at || latestRun?.created_at),
+        bundleRuntimeTimestamp(latestOutput?.created_at || latestOutput?.updated_at)
+      );
+    }
+
+    function bundleEntryRuntimeIsStale(entry = {}) {
+      const latestRuntimeTime = bundleEntryLatestRuntimeTime(entry);
+      const sourceUpdatedTime = bundleRuntimeTimestamp(entry?.product?.updated_at || entry?.product?.created_at);
+
+      return Boolean(sourceUpdatedTime && (!latestRuntimeTime || sourceUpdatedTime > latestRuntimeTime + 1000));
+    }
+
     function bundleAutomationHasStoredIssue(automation = {}) {
       const values = [
         automation.status,
@@ -1185,6 +1243,8 @@
       const latestRun = bundleEntryLatestRun(entry);
 
       if (bundleRunIsFreshActive(latestRun)) return false;
+      if (bundleEntryHasProductRuntimeSource(entry) && !bundleEntryHasOwnRuntime(entry)) return true;
+      if (bundleEntryRuntimeIsStale(entry)) return true;
       if (bundleRunIsFailure(latestRun)) return true;
       if (bundleAutomationHasStoredIssue(entry.automation || {})) return true;
       if (!outputs.length) return true;
@@ -1263,39 +1323,109 @@
       return String(row.order_id || rowOrder.id || "");
     }
 
+    function customerAutomationProductId(row = {}) {
+      const joinedProduct = Array.isArray(row.automations)
+        ? row.automations[0] || {}
+        : row.automations || {};
+      return String(row.automation_id || joinedProduct.id || "");
+    }
+
+    function customerAutomationUpdatedTime(row = {}) {
+      const time = Date.parse(row.updated_at || row.created_at || "");
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function isArchivedCustomerAutomationRow(row = {}) {
+      const values = [
+        row.status,
+        row.setup_status,
+        row.runtime_status,
+        row.health_status
+      ].map(value => String(value || "").toLowerCase());
+
+      return values.some(value =>
+        value.includes("archived") ||
+        value.includes("deleted") ||
+        value.includes("removed") ||
+        value.includes("cancelled")
+      );
+    }
+
+    function scoreBundleSetupRow(row = {}, expectedOrderId = "") {
+      let score = customerAutomationUpdatedTime(row);
+      const orderId = customerAutomationOrderId(row);
+
+      if (expectedOrderId && orderId === expectedOrderId) score += 10_000_000_000_000;
+      if (row.last_error_message || String(row.runtime_status || "").toLowerCase().includes("error")) score -= 500_000;
+      if (isArchivedCustomerAutomationRow(row)) score -= 10_000_000_000_000;
+
+      return score;
+    }
+
+    function canonicalBundleSetupRows(rows = [], expectedOrderId = "", expectedBundleId = "", options = {}) {
+      const allowOrphans = Boolean(options.allowOrphans);
+      const byProductId = new Map();
+
+      for (const row of rows || []) {
+        if (!row?.id) continue;
+        if (isArchivedCustomerAutomationRow(row)) continue;
+
+        const rowBundleId = customerAutomationBundleId(row);
+        const rowOrderId = customerAutomationOrderId(row);
+        const belongsToOrder = expectedOrderId && rowOrderId === expectedOrderId;
+        const belongsToOrphanBundle = allowOrphans && expectedBundleId && rowBundleId === expectedBundleId && !rowOrderId;
+
+        if (expectedBundleId && rowBundleId && rowBundleId !== expectedBundleId) continue;
+        if (expectedOrderId && !belongsToOrder && !belongsToOrphanBundle) continue;
+        if (!expectedOrderId && expectedBundleId && rowBundleId !== expectedBundleId) continue;
+
+        const productKey = customerAutomationProductId(row) || row.id;
+        const current = byProductId.get(productKey);
+
+        if (!current || scoreBundleSetupRow(row, expectedOrderId) > scoreBundleSetupRow(current, expectedOrderId)) {
+          byProductId.set(productKey, row);
+        }
+      }
+
+      return Array.from(byProductId.values())
+        .sort((a, b) => customerAutomationUpdatedTime(a) - customerAutomationUpdatedTime(b));
+    }
+
     async function loadBundleSetupRows(orderId, bundleId, rows = []) {
-      const rowMap = new Map();
       const expectedOrderId = String(orderId || "");
       const expectedBundleId = String(bundleId || "");
 
-      function addRow(row) {
-        if (!row?.id) return;
-        if (expectedBundleId && customerAutomationBundleId(row) !== expectedBundleId) return;
-        rowMap.set(row.id, row);
-      }
+      const currentOrderRows = canonicalBundleSetupRows(
+        Array.isArray(rows) ? rows : [],
+        expectedOrderId,
+        expectedBundleId,
+        { allowOrphans: false }
+      );
 
-      for (const row of Array.isArray(rows) ? rows : []) {
-        addRow(row);
+      if (currentOrderRows.length) {
+        return currentOrderRows;
       }
 
       /*
-        Older bundle rows can exist with bundle_id but no order_id.
-        Load those too so the setup form submits every included workflow.
+        Legacy fallback:
+        Older bundle rows can exist with bundle_id but no order_id. Only use
+        these if the current paid order did not return any child rows.
       */
       if (expectedBundleId && typeof NexusDB.getBuyerCustomerAutomationsByBundleId === "function") {
         const { data: bundleRows, error } = await NexusDB.getBuyerCustomerAutomationsByBundleId(expectedBundleId);
         if (error) {
           console.warn("Could not load bundle fallback automations:", error);
         } else {
-          for (const row of bundleRows || []) {
-            const rowOrderId = customerAutomationOrderId(row);
-            if (expectedOrderId && rowOrderId && rowOrderId !== expectedOrderId) continue;
-            addRow(row);
-          }
+          return canonicalBundleSetupRows(
+            bundleRows || [],
+            expectedOrderId,
+            expectedBundleId,
+            { allowOrphans: true }
+          );
         }
       }
 
-      return Array.from(rowMap.values());
+      return [];
     }
 
     async function loadBundleSetupContext(primaryAutomation, primaryProduct, primarySubmission) {

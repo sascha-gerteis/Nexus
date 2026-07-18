@@ -1519,6 +1519,40 @@ function getRuntimeWebhookPath(customerAutomation: any, automation: any, order: 
   );
 }
 
+function getTemplateRuntimeWebhookUrl(automation: any, order: any) {
+  return pickFirstString(
+    automation?.runtime_webhook_url,
+    automation?.n8n_webhook_url,
+    order?.runtime_webhook_url,
+    order?.n8n_webhook_url,
+  );
+}
+
+function getTemplateRuntimeWebhookPath(automation: any, order: any) {
+  return pickFirstString(
+    automation?.runtime_webhook_path,
+    automation?.n8n_webhook_path,
+    order?.runtime_webhook_path,
+    order?.n8n_webhook_path,
+  );
+}
+
+function webhookPathFromUrl(url: string) {
+  const value = cleanString(url);
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    const match = parsed.pathname.match(/\/webhook\/([^/?#]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  } catch {
+    const match = value.match(/\/webhook\/([^/?#]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+
+  return "";
+}
+
 function hasCustomerRuntimeTarget(customerAutomation: any) {
   return Boolean(
     pickFirstString(
@@ -1528,6 +1562,36 @@ function hasCustomerRuntimeTarget(customerAutomation: any) {
       customerAutomation?.n8n_webhook_path,
     ),
   );
+}
+
+function hasOwnCustomerRuntimeTarget(customerAutomation: any, automation: any, order: any) {
+  const customerWorkflowId = pickFirstString(customerAutomation?.n8n_workflow_id);
+  const templateWorkflowId = pickFirstString(automation?.n8n_workflow_id, order?.n8n_workflow_id);
+
+  if (customerWorkflowId && (!templateWorkflowId || customerWorkflowId !== templateWorkflowId)) {
+    return true;
+  }
+
+  const customerWebhookUrl = pickFirstString(
+    customerAutomation?.runtime_webhook_url,
+    customerAutomation?.n8n_webhook_url,
+  );
+  const customerWebhookPath = pickFirstString(
+    customerAutomation?.runtime_webhook_path,
+    customerAutomation?.n8n_webhook_path,
+    webhookPathFromUrl(customerWebhookUrl),
+  );
+  const templateWebhookUrl = getTemplateRuntimeWebhookUrl(automation, order);
+  const templateWebhookPath = pickFirstString(
+    getTemplateRuntimeWebhookPath(automation, order),
+    webhookPathFromUrl(templateWebhookUrl),
+  );
+
+  if (!customerWebhookPath && !customerWebhookUrl) return false;
+  if (templateWebhookPath && customerWebhookPath && customerWebhookPath === templateWebhookPath) return false;
+  if (templateWebhookUrl && customerWebhookUrl && customerWebhookUrl === templateWebhookUrl) return false;
+
+  return customerWebhookPath.startsWith("nexus-customer-");
 }
 
 function getRuntimeType(customerAutomation: any, automation: any) {
@@ -2371,10 +2435,12 @@ Deno.serve(async (req) => {
 
     let provisionResultData: any = null;
 
-    const customerRuntimeExists = hasCustomerRuntimeTarget(customerAutomation);
+    const customerRuntimeExists = hasOwnCustomerRuntimeTarget(customerAutomation, automation, order);
+    const productMasterWorkflowId = pickFirstString(automation?.n8n_workflow_id, order?.n8n_workflow_id);
     const shouldProvisionCustomerWorkflow =
       !customerRuntimeExists &&
       !isPythonRuntime &&
+      Boolean(productMasterWorkflowId) &&
       (runtimeType === "n8n_managed" || hasManagedWorkflowTemplate);
 
     if (shouldProvisionCustomerWorkflow) {
@@ -2514,6 +2580,26 @@ Deno.serve(async (req) => {
       updated_at: runStartedAt,
     });
 
+    await insertAutomationEvent(adminClient, {
+      customer_automation_id: customerAutomation.id,
+      buyer_id: customerAutomation.buyer_id,
+      automation_id: customerAutomation.automation_id,
+      order_id: customerAutomation.order_id,
+      event_type: "runtime_trigger_attempt",
+      title: "Runtime trigger attempt",
+      message: JSON.stringify({
+        runtime_type: runtimeType,
+        webhook_url: isPythonRuntime ? null : webhookUrl,
+        webhook_path: getRuntimeWebhookPath(customerAutomation, automation, order),
+        template_webhook_url: isPythonRuntime ? null : getTemplateRuntimeWebhookUrl(automation, order),
+        template_webhook_path: getTemplateRuntimeWebhookPath(automation, order),
+        customer_workflow_id: customerAutomation.n8n_workflow_id || null,
+        template_workflow_id: automation?.n8n_workflow_id || order?.n8n_workflow_id || null,
+        provision_result: provisionResultData || null,
+      }),
+      created_by: "runtime",
+    });
+
     let triggerResult: any = null;
 
     try {
@@ -2546,8 +2632,72 @@ Deno.serve(async (req) => {
     } catch (error) {
       let message = error instanceof Error ? error.message : String(error);
       let activationRetry: any = null;
+      let reprovisionRetry: any = null;
 
       if (!isPythonRuntime && isUnregisteredN8nWebhookError(message)) {
+        const templateWebhookUrl = getTemplateRuntimeWebhookUrl(automation, order);
+        const templateWebhookPath = getTemplateRuntimeWebhookPath(automation, order) ||
+          webhookPathFromUrl(templateWebhookUrl);
+
+        if (
+          templateWebhookUrl &&
+          cleanString(templateWebhookUrl) !== cleanString(webhookUrl)
+        ) {
+          try {
+            await insertAutomationEvent(adminClient, {
+              customer_automation_id: customerAutomation.id,
+              buyer_id: customerAutomation.buyer_id,
+              automation_id: customerAutomation.automation_id,
+              order_id: customerAutomation.order_id,
+              event_type: "runtime_template_webhook_retry",
+              title: "Retrying product runtime webhook",
+              message: JSON.stringify({
+                failed_webhook_url: webhookUrl,
+                failed_webhook_path: getRuntimeWebhookPath(customerAutomation, automation, order),
+                template_webhook_url: templateWebhookUrl,
+                template_webhook_path: templateWebhookPath,
+              }),
+              created_by: "runtime",
+            });
+
+            webhookUrl = templateWebhookUrl;
+            if (templateWebhookPath) {
+              customerAutomation.runtime_webhook_path = templateWebhookPath;
+            }
+            customerAutomation.runtime_webhook_url = templateWebhookUrl;
+
+            triggerResult = await triggerN8nWebhook({
+              webhookUrl,
+              customerAutomation,
+              automation,
+              order,
+              user: isAdmin || isDeveloper ? null : user,
+              setupAnswers,
+              secrets: savedSecrets,
+              savedCredentialKeys,
+              submissionId: submission.id,
+              runId: activeRun.id,
+              runKey: activeRun.run_key || runKey,
+            });
+
+            await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
+              runtime_webhook_url: templateWebhookUrl,
+              ...(templateWebhookPath ? { runtime_webhook_path: templateWebhookPath } : {}),
+              last_error_message: null,
+              last_error_code: null,
+              last_error_node: null,
+              updated_at: new Date().toISOString(),
+            });
+          } catch (templateRetryError) {
+            message = templateRetryError instanceof Error
+              ? templateRetryError.message
+              : String(templateRetryError);
+          }
+        }
+
+        if (triggerResult) {
+          // Template retry succeeded. Skip clone activation/reprovisioning.
+        } else {
         activationRetry = await refreshRuntimeWorkflow(customerAutomation, automation, order);
 
         if (activationRetry?.ok) {
@@ -2588,6 +2738,54 @@ Deno.serve(async (req) => {
             message = retryError instanceof Error ? retryError.message : String(retryError);
           }
         }
+
+        if (!triggerResult && isUnregisteredN8nWebhookError(message)) {
+          try {
+            reprovisionRetry = await provisionCustomerWorkflowBeforeTrigger({
+              supabaseUrl,
+              token,
+              customerAutomationId: customerAutomation.id,
+            });
+
+            if (reprovisionRetry?.customer_automation) {
+              Object.assign(customerAutomation, reprovisionRetry.customer_automation);
+            }
+            if (reprovisionRetry?.workflow_id) {
+              customerAutomation.n8n_workflow_id = reprovisionRetry.workflow_id;
+            }
+            if (reprovisionRetry?.webhook_path) {
+              customerAutomation.runtime_webhook_path = reprovisionRetry.webhook_path;
+            }
+            if (reprovisionRetry?.webhook_url) {
+              customerAutomation.runtime_webhook_url = reprovisionRetry.webhook_url;
+              webhookUrl = reprovisionRetry.webhook_url;
+            } else {
+              const reprovisionedWebhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
+              if (reprovisionedWebhookUrl) webhookUrl = reprovisionedWebhookUrl;
+            }
+
+            triggerResult = await triggerN8nWebhook({
+              webhookUrl,
+              customerAutomation,
+              automation,
+              order,
+              user: isAdmin || isDeveloper ? null : user,
+              setupAnswers,
+              secrets: savedSecrets,
+              savedCredentialKeys,
+              submissionId: submission.id,
+              runId: activeRun.id,
+              runKey: activeRun.run_key || runKey,
+            });
+          } catch (reprovisionError) {
+            message = reprovisionError instanceof Error ? reprovisionError.message : String(reprovisionError);
+            reprovisionRetry = {
+              ok: false,
+              error: message,
+            };
+          }
+        }
+        }
       }
 
       if (triggerResult) {
@@ -2601,6 +2799,7 @@ Deno.serve(async (req) => {
           message: JSON.stringify({
             webhook_path: getRuntimeWebhookPath(customerAutomation, automation, order),
             activation_retry: activationRetry,
+            reprovision_retry: reprovisionRetry,
           }),
           created_by: "runtime",
         });
@@ -2609,6 +2808,7 @@ Deno.serve(async (req) => {
           webhook_url: webhookUrl,
           workflow_id: runtimeWorkflowId(customerAutomation, automation, order),
           activation_retry: activationRetry,
+          reprovision_retry: reprovisionRetry,
         });
 
         await updateAutomationRunById(adminClient, activeRun.id, {
@@ -2620,6 +2820,7 @@ Deno.serve(async (req) => {
             webhook_url: webhookUrl,
             workflow_id: runtimeWorkflowId(customerAutomation, automation, order),
             activation_retry: activationRetry,
+            reprovision_retry: reprovisionRetry,
           },
           response_payload: {
             status: "trigger_failed",

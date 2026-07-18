@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260718-bundle-runs">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260719-bundle-runtime-source">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -352,7 +352,7 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
 <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
-<script src="/assets/js/nexus-db.js?v=20260718-bundle-runs"></script>
+<script src="/assets/js/nexus-db.js?v=20260719-bundle-runtime-source"></script>
 <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
 
   <script>
@@ -867,6 +867,119 @@ function bundleIdFromAutomation(item) {
   return item?.bundle_id || order.bundle_id || "";
 }
 
+function automationProductKey(item) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return item?.automation_id || product.id || item?.id || "";
+}
+
+function automationUpdatedTime(item) {
+  const time = Date.parse(item?.updated_at || item?.created_at || "");
+  return Number.isFinite(time) ? time : 0;
+}
+
+function automationSourceUpdatedTime(item) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  const productTime = Date.parse(product?.updated_at || product?.created_at || "");
+  return Number.isFinite(productTime) ? productTime : 0;
+}
+
+function latestAutomationActivityTime(output, run) {
+  const outputTime = Date.parse(output?.created_at || output?.updated_at || "");
+  const runTime = Date.parse(run?.finished_at || run?.updated_at || run?.started_at || run?.created_at || "");
+  return Math.max(
+    Number.isFinite(outputTime) ? outputTime : 0,
+    Number.isFinite(runTime) ? runTime : 0
+  );
+}
+
+function webhookPathFromUrl(url = "") {
+  const value = String(url || "").trim();
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    const match = parsed.pathname.match(/\/webhook\/([^/?#]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : "";
+  } catch (_error) {
+    const match = value.match(/\/webhook\/([^/?#]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : "";
+  }
+}
+
+function automationHasProductRuntimeSource(item) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return Boolean(
+    String(product.n8n_workflow_id || product.runtime_webhook_url || product.n8n_webhook_url || product.runtime_webhook_path || product.n8n_webhook_path || "").trim()
+  );
+}
+
+function automationHasOwnRuntime(item) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  const customerWorkflowId = String(item?.n8n_workflow_id || "").trim();
+  const productWorkflowId = String(product?.n8n_workflow_id || "").trim();
+
+  if (customerWorkflowId && (!productWorkflowId || customerWorkflowId !== productWorkflowId)) return true;
+
+  const customerPath =
+    String(item?.runtime_webhook_path || item?.n8n_webhook_path || "").trim() ||
+    webhookPathFromUrl(item?.runtime_webhook_url || item?.n8n_webhook_url || "");
+  const productPath =
+    String(product?.runtime_webhook_path || product?.n8n_webhook_path || "").trim() ||
+    webhookPathFromUrl(product?.runtime_webhook_url || product?.n8n_webhook_url || "");
+
+  return Boolean(customerPath && customerPath !== productPath && customerPath.startsWith("nexus-customer-"));
+}
+
+function automationNeedsFreshRun(item, output, run) {
+  const sourceTime = automationSourceUpdatedTime(item);
+  const activityTime = latestAutomationActivityTime(output, run);
+  return Boolean(
+    (automationHasProductRuntimeSource(item) && !automationHasOwnRuntime(item)) ||
+      (sourceTime && (!activityTime || sourceTime > activityTime + 1000))
+  );
+}
+
+function isArchivedAutomationRow(item) {
+  const values = [
+    item?.status,
+    item?.setup_status,
+    item?.runtime_status,
+    item?.health_status
+  ].map(value => String(value || "").toLowerCase());
+
+  return values.some(value =>
+    value.includes("archived") ||
+    value.includes("deleted") ||
+    value.includes("removed") ||
+    value.includes("cancelled")
+  );
+}
+
+function scoreBundleAutomationRow(item, orderId) {
+  let score = automationUpdatedTime(item);
+  if (orderId && orderIdFromAutomation(item) === orderId) score += 10_000_000_000_000;
+  if (item?.last_error_message || String(item?.runtime_status || "").toLowerCase().includes("error")) score -= 500_000;
+  if (isArchivedAutomationRow(item)) score -= 10_000_000_000_000;
+  return score;
+}
+
+function dedupeBundleAutomations(items = [], orderId = "") {
+  const byProduct = new Map();
+
+  for (const item of items || []) {
+    if (!item?.id || isArchivedAutomationRow(item)) continue;
+    const key = automationProductKey(item);
+    const current = byProduct.get(key);
+
+    if (!current || scoreBundleAutomationRow(item, orderId) > scoreBundleAutomationRow(current, orderId)) {
+      byProduct.set(key, item);
+    }
+  }
+
+  return Array.from(byProduct.values())
+    .sort((a, b) => automationUpdatedTime(a) - automationUpdatedTime(b));
+}
+
 function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs = []) {
   return (orders || [])
     .filter(isBundleOrder)
@@ -874,20 +987,24 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
       const snapshot = parseBundleSnapshot(order);
       const orderId = order.id || "";
       const bundleId = order.bundle_id || snapshot.bundle_id || "";
-      const includedById = new Map();
+      const exactOrderItems = [];
+      const orphanBundleItems = [];
 
       (automations || []).forEach(item => {
+        if (isArchivedAutomationRow(item)) return;
         const itemOrderId = orderIdFromAutomation(item);
         const itemBundleId = bundleIdFromAutomation(item);
         const belongsToOrder = orderId && itemOrderId === orderId;
         const belongsToBundleOrphan = bundleId && itemBundleId === bundleId && (!orderId || !itemOrderId);
 
-        if ((belongsToOrder || belongsToBundleOrphan) && item?.id) {
-          includedById.set(item.id, item);
-        }
+        if (belongsToOrder && item?.id) exactOrderItems.push(item);
+        if (belongsToBundleOrphan && item?.id) orphanBundleItems.push(item);
       });
 
-      const included = [...includedById.values()];
+      const included = dedupeBundleAutomations(
+        exactOrderItems.length ? exactOrderItems : orphanBundleItems,
+        orderId
+      );
       const includedIds = new Set(included.map(item => item.id).filter(Boolean));
       const bundleOutputs = (outputs || [])
         .filter(output => includedIds.has(output.customer_automation_id))
@@ -910,9 +1027,13 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
       const issueDetails = [];
       const workflowSummaries = included.map((item, index) => {
         const latestRun = latestRunsByAutomation.get(item.id) || null;
+        const latestOutput = getLatestOutputForAutomation(outputs, item.id);
         const childState = childStates[index] || {};
         const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
-        const status = missingAfterActivity
+        const staleAfterChange = automationNeedsFreshRun(item, latestOutput, latestRun);
+        const status = staleAfterChange
+          ? "Needs run"
+          : missingAfterActivity
           ? "Not started"
           : runIsFreshActive(latestRun)
           ? "Running"
@@ -924,14 +1045,27 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
           id: item.id,
           title: productTitleFromAutomation(item),
           label: status,
-          tone: missingAfterActivity || runIsIssue(latestRun) || childState.tone === "red" ? "red" : childState.tone || "green",
+          tone: staleAfterChange || missingAfterActivity || runIsIssue(latestRun) || childState.tone === "red" ? "red" : childState.tone || "green",
           runAt: latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || item.last_run_at || ""
         };
       });
 
       included.forEach((item, index) => {
         const latestRun = latestRunsByAutomation.get(item.id);
+        const latestOutput = getLatestOutputForAutomation(outputs, item.id);
         const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
+        const staleAfterChange = automationNeedsFreshRun(item, latestOutput, latestRun);
+
+        if (staleAfterChange) {
+          issueIds.add(item.id);
+          issueDetails.push({
+            id: item.id,
+            title: productTitleFromAutomation(item),
+            status: "Needs run",
+            message: "This workflow changed after its latest output. Open setup to run the current workflow version."
+          });
+          return;
+        }
 
         if (missingAfterActivity) {
           issueIds.add(item.id);

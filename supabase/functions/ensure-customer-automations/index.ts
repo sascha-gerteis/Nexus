@@ -54,6 +54,86 @@ function cleanString(value: unknown) {
   return String(value || "").trim();
 }
 
+function rowUpdatedTime(row: any) {
+  const time = Date.parse(row?.updated_at || row?.created_at || "");
+  return Number.isFinite(time) ? time : 0;
+}
+
+function isArchivedCustomerAutomationRow(row: any) {
+  const values = [
+    row?.status,
+    row?.setup_status,
+    row?.runtime_status,
+    row?.health_status,
+  ].map((value) => cleanString(value).toLowerCase());
+
+  return values.some((value) =>
+    value.includes("archived") ||
+    value.includes("deleted") ||
+    value.includes("removed") ||
+    value.includes("cancelled")
+  );
+}
+
+function scoreCustomerAutomationRow(row: any) {
+  let score = rowUpdatedTime(row);
+
+  if (row?.runtime_webhook_url || row?.runtime_webhook_path || row?.n8n_workflow_id) score += 1_000_000;
+  if (row?.last_error_message || cleanString(row?.runtime_status).toLowerCase().includes("error")) score -= 500_000;
+  if (isArchivedCustomerAutomationRow(row)) score -= 10_000_000_000_000;
+
+  return score;
+}
+
+function productWorkflowId(product: any) {
+  return cleanString(product?.n8n_workflow_id);
+}
+
+function productWebhookUrl(product: any) {
+  return cleanString(product?.runtime_webhook_url || product?.n8n_webhook_url);
+}
+
+function productWebhookPath(product: any) {
+  return cleanString(product?.runtime_webhook_path || product?.n8n_webhook_path);
+}
+
+function existingHasCustomerRuntime(existing: any, product: any) {
+  const existingWorkflowId = cleanString(existing?.n8n_workflow_id);
+  const existingWebhookUrl = cleanString(existing?.runtime_webhook_url || existing?.n8n_webhook_url);
+  const existingWebhookPath = cleanString(existing?.runtime_webhook_path || existing?.n8n_webhook_path);
+  const masterWorkflowId = productWorkflowId(product);
+  const masterWebhookUrl = productWebhookUrl(product);
+  const masterWebhookPath = productWebhookPath(product);
+
+  if (!existingWorkflowId) return false;
+  if (masterWorkflowId && existingWorkflowId === masterWorkflowId) return false;
+  if (masterWebhookUrl && existingWebhookUrl && existingWebhookUrl === masterWebhookUrl) return false;
+  if (masterWebhookPath && existingWebhookPath && existingWebhookPath === masterWebhookPath) return false;
+
+  return true;
+}
+
+function existingHasAnyRuntimeTarget(existing: any) {
+  return Boolean(
+    cleanString(existing?.n8n_workflow_id) ||
+      cleanString(existing?.runtime_webhook_url || existing?.n8n_webhook_url) ||
+      cleanString(existing?.runtime_webhook_path || existing?.n8n_webhook_path)
+  );
+}
+
+function productRuntimeChangedSinceCustomerSync(existing: any, product: any) {
+  if (!existing?.id) return false;
+
+  const productUpdatedAt = Date.parse(product?.updated_at || product?.created_at || "");
+  const customerUpdatedAt = Date.parse(existing?.updated_at || existing?.created_at || "");
+
+  if (!Number.isFinite(productUpdatedAt) || !Number.isFinite(customerUpdatedAt)) {
+    return false;
+  }
+
+  return productUpdatedAt > customerUpdatedAt + 1000;
+}
+
 function normalizeRuntimeTriggerMode(product: any, isSubscription: boolean) {
   const raw = cleanString(product?.runtime_trigger_mode || product?.trigger_mode).toLowerCase();
 
@@ -258,6 +338,12 @@ async function upsertBundleCustomerAutomation(adminClient: any, order: any, prod
   const setupStatus = setupStatusForInstallType(installType);
   const status = statusForInstallType(installType);
   const runFrequency = normalizeRunFrequency(product, order);
+  const hasCustomerRuntime = existingHasCustomerRuntime(existing, product);
+  const productRuntimeChanged = productRuntimeChangedSinceCustomerSync(existing, product);
+  const shouldResetRuntimeState = Boolean(
+    existing?.id &&
+      (productRuntimeChanged || (!hasCustomerRuntime && existingHasAnyRuntimeTarget(existing)))
+  );
 
   const payload: Record<string, unknown> = {
     order_id: order.id,
@@ -271,15 +357,22 @@ async function upsertBundleCustomerAutomation(adminClient: any, order: any, prod
     setup_status: existing?.setup_status || setupStatus,
     runtime_type: product.runtime_type || existing?.runtime_type || "manual",
     runtime_trigger_mode: normalizeRuntimeTriggerMode(product, isMonthlyOrder(order)),
-    runtime_webhook_url: product.runtime_webhook_url || product.n8n_webhook_url || existing?.runtime_webhook_url || null,
-    runtime_webhook_path: product.runtime_webhook_path || product.n8n_webhook_path || existing?.runtime_webhook_path || null,
+    /*
+      Bundle children must not store the product/template workflow as if it
+      were the buyer-specific runtime. If a customer clone already exists, keep
+      it. Otherwise leave runtime fields empty so submit-automation-setup
+      provisions from the current product template before triggering.
+    */
+    runtime_webhook_url: hasCustomerRuntime ? existing?.runtime_webhook_url || null : null,
+    runtime_webhook_path: hasCustomerRuntime ? existing?.runtime_webhook_path || null : null,
     runtime_output_mode: product.runtime_output_mode || existing?.runtime_output_mode || "standard",
     runtime_no_change_policy: product.runtime_no_change_policy || existing?.runtime_no_change_policy || "record_no_change",
     runtime_response_mode: product.runtime_response_mode || existing?.runtime_response_mode || "async",
-    n8n_workflow_id: product.n8n_workflow_id || existing?.n8n_workflow_id || null,
-    n8n_workflow_name: product.n8n_workflow_name || existing?.n8n_workflow_name || null,
-    runtime_status: existing?.runtime_status || "not_started",
-    health_status: existing?.health_status || "not_configured",
+    n8n_workflow_id: hasCustomerRuntime ? existing?.n8n_workflow_id || null : null,
+    n8n_workflow_name: hasCustomerRuntime ? existing?.n8n_workflow_name || null : null,
+    runtime_status: shouldResetRuntimeState ? "not_started" : existing?.runtime_status || "not_started",
+    health_status: shouldResetRuntimeState ? "pending" : existing?.health_status || "not_configured",
+    last_error_message: shouldResetRuntimeState ? null : existing?.last_error_message || null,
     run_frequency: runFrequency,
     schedule_status: existing?.schedule_status || "inactive",
     updated_at: nowIso(),
@@ -373,11 +466,15 @@ async function ensureBundleForOrder(adminClient: any, order: any) {
   }
 
   const entries = await loadBundleProducts(adminClient, order);
-  const existingByAutomationId = new Map(
-    (existingRows || [])
-      .filter((row: any) => row.automation_id)
-      .map((row: any) => [row.automation_id, row]),
-  );
+  const existingByAutomationId = new Map();
+  for (const row of existingRows || []) {
+    if (!row?.automation_id || isArchivedCustomerAutomationRow(row)) continue;
+    const current = existingByAutomationId.get(row.automation_id);
+
+    if (!current || scoreCustomerAutomationRow(row) > scoreCustomerAutomationRow(current)) {
+      existingByAutomationId.set(row.automation_id, row);
+    }
+  }
 
   const createdOrExisting = [];
 

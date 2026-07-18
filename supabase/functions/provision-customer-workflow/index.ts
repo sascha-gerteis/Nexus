@@ -17,6 +17,48 @@ function shortId(value: string) {
   return cleanString(value).split("-")[0] || crypto.randomUUID().split("-")[0];
 }
 
+function webhookPathFromUrl(url: unknown) {
+  const value = cleanString(url);
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    const match = parsed.pathname.match(/\/webhook\/([^/?#]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  } catch {
+    const match = value.match(/\/webhook\/([^/?#]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+
+  return "";
+}
+
+function productWebhookPath(product: any) {
+  return (
+    cleanString(product?.runtime_webhook_path || product?.n8n_webhook_path) ||
+    webhookPathFromUrl(product?.runtime_webhook_url || product?.n8n_webhook_url)
+  );
+}
+
+function customerHasOwnWorkflow(customerAutomation: any, product: any) {
+  const customerWorkflowId = cleanString(customerAutomation?.n8n_workflow_id);
+  const masterWorkflowId = cleanString(product?.n8n_workflow_id);
+
+  return Boolean(customerWorkflowId && (!masterWorkflowId || customerWorkflowId !== masterWorkflowId));
+}
+
+function customerHasOwnWebhook(customerAutomation: any, product: any) {
+  const customerPath =
+    cleanString(customerAutomation?.runtime_webhook_path || customerAutomation?.n8n_webhook_path) ||
+    webhookPathFromUrl(customerAutomation?.runtime_webhook_url || customerAutomation?.n8n_webhook_url);
+  const masterPath = productWebhookPath(product);
+
+  if (!customerPath) return false;
+  if (masterPath && customerPath === masterPath) return false;
+
+  return customerPath.startsWith("nexus-customer-");
+}
+
 function subscriptionIsActive(order: any) {
   const paymentStatus = cleanString(order?.payment_status).toLowerCase();
   const subscriptionStatus = cleanString(order?.stripe_subscription_status).toLowerCase();
@@ -1604,13 +1646,18 @@ Deno.serve(async (req) => {
       return errorResponse("Product has no master n8n workflow ID. Import the product workflow first.", 400);
     }
 
+    const hasOwnWorkflow = customerHasOwnWorkflow(customerAutomation, product);
+    const hasOwnWebhook = customerHasOwnWebhook(customerAutomation, product);
     const webhookPath =
-      cleanString(customerAutomation.runtime_webhook_path) ||
-      `nexus-customer-${shortId(customerAutomation.id)}-${crypto.randomUUID().split("-")[0]}`;
+      hasOwnWebhook
+        ? cleanString(customerAutomation.runtime_webhook_path) ||
+          webhookPathFromUrl(customerAutomation.runtime_webhook_url)
+        : `nexus-customer-${shortId(customerAutomation.id)}-${crypto.randomUUID().split("-")[0]}`;
 
     const webhookUrl =
-      cleanString(customerAutomation.runtime_webhook_url) ||
-      `${cleanBaseUrl(n8nBaseUrl)}/webhook/${webhookPath}`;
+      hasOwnWebhook && cleanString(customerAutomation.runtime_webhook_url)
+        ? cleanString(customerAutomation.runtime_webhook_url)
+        : `${cleanBaseUrl(n8nBaseUrl)}/webhook/${webhookPath}`;
 
     const callbackUrl = `${cleanBaseUrl(supabaseUrl)}/functions/v1/runtime-submit-output`;
 
@@ -1733,7 +1780,7 @@ const workflowPlaceholderMappings = mergeMappings(
     let imported: any;
     let recreatedDeletedWorkflow = false;
 
-    if (customerAutomation.n8n_workflow_id) {
+    if (hasOwnWorkflow) {
       try {
         await deactivateWorkflow(
           n8nBaseUrl,
@@ -1855,10 +1902,10 @@ const workflowPlaceholderMappings = mergeMappings(
       buyer_id: customerAutomation.buyer_id,
       automation_id: customerAutomation.automation_id || product.id || null,
       order_id: customerAutomation.order_id || order?.id || null,
-      event_type: customerAutomation.n8n_workflow_id
+      event_type: hasOwnWorkflow
         ? "customer_workflow_updated"
         : "customer_workflow_provisioned",
-      title: customerAutomation.n8n_workflow_id
+      title: hasOwnWorkflow
         ? "Customer workflow updated"
         : "Customer workflow created",
       message: recreatedInvalidWorkflow
