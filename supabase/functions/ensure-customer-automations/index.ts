@@ -97,6 +97,46 @@ function productWebhookPath(product: any) {
   return cleanString(product?.runtime_webhook_path || product?.n8n_webhook_path);
 }
 
+function normalizeWorkflowCloneMode(...values: unknown[]) {
+  const raw = values
+    .map((value) => cleanString(value))
+    .find(Boolean)
+    ?.toLowerCase()
+    .replace(/[\s-]+/g, "_") || "";
+
+  if (
+    [
+      "per_customer",
+      "clone_per_customer",
+      "customer_clone",
+      "customer_cloned",
+      "customer_workflow",
+      "dedicated_customer_workflow",
+      "isolated",
+      "isolated_customer_workflow",
+    ].includes(raw)
+  ) {
+    return "per_customer";
+  }
+
+  return "shared_product";
+}
+
+function shouldUseCustomerWorkflowClone(product: any, order: any = null, existing: any = null) {
+  return normalizeWorkflowCloneMode(
+    existing?.runtime_workflow_mode,
+    existing?.n8n_workflow_mode,
+    product?.runtime_workflow_mode,
+    product?.n8n_workflow_mode,
+    product?.workflow_isolation_mode,
+    product?.runtime_isolation_mode,
+    product?.customer_workflow_mode,
+    product?.runtime_customer_workflow_mode,
+    order?.runtime_workflow_mode,
+    order?.n8n_workflow_mode,
+  ) === "per_customer";
+}
+
 function existingHasCustomerRuntime(existing: any, product: any) {
   const existingWorkflowId = cleanString(existing?.n8n_workflow_id);
   const existingWebhookUrl = cleanString(existing?.runtime_webhook_url || existing?.n8n_webhook_url);
@@ -338,7 +378,8 @@ async function upsertBundleCustomerAutomation(adminClient: any, order: any, prod
   const setupStatus = setupStatusForInstallType(installType);
   const status = statusForInstallType(installType);
   const runFrequency = normalizeRunFrequency(product, order);
-  const hasCustomerRuntime = existingHasCustomerRuntime(existing, product);
+  const useCustomerWorkflowClone = shouldUseCustomerWorkflowClone(product, order, existing);
+  const hasCustomerRuntime = useCustomerWorkflowClone && existingHasCustomerRuntime(existing, product);
   const productRuntimeChanged = productRuntimeChangedSinceCustomerSync(existing, product);
   const shouldResetRuntimeState = Boolean(
     existing?.id &&
@@ -359,9 +400,10 @@ async function upsertBundleCustomerAutomation(adminClient: any, order: any, prod
     runtime_trigger_mode: normalizeRuntimeTriggerMode(product, isMonthlyOrder(order)),
     /*
       Bundle children must not store the product/template workflow as if it
-      were the buyer-specific runtime. If a customer clone already exists, keep
-      it. Otherwise leave runtime fields empty so submit-automation-setup
-      provisions from the current product template before triggering.
+      were the buyer-specific runtime. Customer-specific n8n clones are only
+      retained for products that explicitly opt into per-customer isolation.
+      Normal products always run the current product workflow with buyer setup
+      injected at trigger time.
     */
     runtime_webhook_url: hasCustomerRuntime ? existing?.runtime_webhook_url || null : null,
     runtime_webhook_path: hasCustomerRuntime ? existing?.runtime_webhook_path || null : null,

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260719-bundle-runtime-source">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260719-bundle-setup-validation">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -53,7 +53,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260719-bundle-runtime-source"></script>
+  <script src="/assets/js/nexus-db.js?v=20260719-bundle-setup-validation"></script>
 
   <script>
     let activeCustomerAutomation = null;
@@ -161,7 +161,7 @@
     }
 
     function fieldRequired(field) {
-      return field.required ? "required" : "";
+      return field.required ? `data-original-required="true"` : `data-original-required="false"`;
     }
 
     const SKIP_FIELD_PREFIX = "__nexus_skip__";
@@ -422,7 +422,9 @@
       }
 
       if (type === "secret") {
-        const secretRequired = field.required && !options.hasSubmitted ? "required" : "";
+        const secretRequired = field.required && !options.hasSubmitted
+          ? `data-original-required="true"`
+          : `data-original-required="false"`;
         const placeholder = options.hasSubmitted
           ? "Leave blank to keep saved credential"
           : (field.placeholder || "Paste API key, token, or secret value");
@@ -586,7 +588,7 @@
         }
 
         field.disabled = checked;
-        field.required = checked ? false : field.dataset.originalRequired === "true";
+        field.required = false;
 
         const wrap = field.closest("[data-skip-field-wrap]");
         if (wrap) wrap.classList.toggle("setup-skip-field-disabled", checked);
@@ -670,6 +672,80 @@
       });
 
       return missing;
+    }
+
+    function setupFieldHasValue(field) {
+      const type = String(field.type || "").toLowerCase();
+      if (type === "checkbox" || type === "radio") return Boolean(field.checked);
+      return String(field.value || "").trim() !== "";
+    }
+
+    function setupFieldFriendlyLabel(field) {
+      const wrap = field.closest("[data-skip-field-wrap]") || field.closest("div, section") || field.parentElement;
+      const label = wrap?.querySelector("label")?.textContent || field.getAttribute("name") || "this field";
+      return String(label).replace(/\s*\*\s*$/, "").trim() || "this field";
+    }
+
+    function revealSetupField(field) {
+      const section = field.closest("[data-bundle-section]");
+      if (section) section.open = true;
+
+      const skipCard = field.closest("[data-skip-group-card]");
+      if (skipCard) {
+        skipCard.classList.remove("is-skipped");
+        const toggle = skipCard.querySelector("[data-skip-toggle]");
+        if (toggle?.checked) {
+          toggle.checked = false;
+          applySetupSkipToggle(toggle);
+        }
+      }
+
+      const target = field.closest("[data-skip-field-wrap]") || field.closest("[data-bundle-section]") || field;
+      setTimeout(() => {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        try {
+          field.focus({ preventScroll: true });
+        } catch {
+          field.focus();
+        }
+      }, 60);
+    }
+
+    function showSetupValidationMessage(message, field) {
+      NexusUI.toast(message);
+      const resultEl = document.getElementById("setupSubmitResult");
+      if (resultEl) {
+        resultEl.innerHTML = `
+          <div class="error" style="margin-top:1rem">
+            <strong>Complete the missing setup detail.</strong><br>
+            ${escapeHtml(message)}
+          </div>
+        `;
+      }
+
+      if (field) revealSetupField(field);
+    }
+
+    function validateRequiredSetupFields(form) {
+      const requiredFields = [...form.querySelectorAll('[data-original-required="true"]')];
+
+      for (const field of requiredFields) {
+        const name = field.getAttribute("name") || "";
+        if (!name || name.startsWith(SKIP_FIELD_PREFIX) || field.disabled) continue;
+        if (setupFieldHasValue(field)) continue;
+
+        const label = setupFieldFriendlyLabel(field);
+        const skipCard = field.closest("[data-skip-group-card]");
+        const skipLabel = skipCard?.querySelector(".setup-skip-toggle span")?.textContent?.trim();
+        const message = skipCard && skipLabel
+          ? `Please complete ${label}, or tick "${skipLabel}" for that section.`
+          : `Please complete ${label}.`;
+
+        showSetupValidationMessage(message, field);
+        return false;
+      }
+
+      return true;
     }
 
     function cleanFlag(value) {
@@ -1197,6 +1273,14 @@
       );
     }
 
+    function bundleRunIsFinished(run = {}) {
+      const status = String(run?.status || "").toLowerCase();
+      return Boolean(
+        run?.finished_at ||
+          ["success", "succeeded", "complete", "completed", "done", "finished"].some(item => status.includes(item))
+      );
+    }
+
     function bundleEntryLatestRuntimeTime(entry = {}) {
       const latestRun = bundleEntryLatestRun(entry);
       const latestOutput = bundleEntryOutputs(entry)[0] || {};
@@ -1212,6 +1296,19 @@
       const sourceUpdatedTime = bundleRuntimeTimestamp(entry?.product?.updated_at || entry?.product?.created_at);
 
       return Boolean(sourceUpdatedTime && (!latestRuntimeTime || sourceUpdatedTime > latestRuntimeTime + 1000));
+    }
+
+    function bundleEntryLatestRunNeedsOutput(entry = {}) {
+      const outputs = bundleEntryOutputs(entry);
+      const latestRun = bundleEntryLatestRun(entry);
+
+      if (!latestRun || bundleRunIsFailure(latestRun)) return false;
+      if (!bundleRunIsFinished(latestRun)) return false;
+
+      const latestRunTime = bundleRuntimeTimestamp(latestRun.finished_at || latestRun.updated_at || latestRun.started_at || latestRun.created_at);
+      const latestOutputTime = bundleRuntimeTimestamp(outputs[0]?.created_at || outputs[0]?.updated_at);
+
+      return Boolean(latestRunTime && (!latestOutputTime || latestRunTime > latestOutputTime + 1000));
     }
 
     function bundleAutomationHasStoredIssue(automation = {}) {
@@ -1243,10 +1340,10 @@
       const latestRun = bundleEntryLatestRun(entry);
 
       if (bundleRunIsFreshActive(latestRun)) return false;
-      if (bundleEntryHasProductRuntimeSource(entry) && !bundleEntryHasOwnRuntime(entry)) return true;
       if (bundleEntryRuntimeIsStale(entry)) return true;
       if (bundleRunIsFailure(latestRun)) return true;
       if (bundleAutomationHasStoredIssue(entry.automation || {})) return true;
+      if (bundleEntryLatestRunNeedsOutput(entry)) return true;
       if (!outputs.length) return true;
 
       return false;
@@ -1885,7 +1982,7 @@ async function resolveProductFromCustomerAutomation(automation) {
                 : ""
             }
 
-            <form id="buyerSetupForm">
+            <form id="buyerSetupForm" novalidate>
               <div class="form-grid">
                 ${formFields}
 
@@ -2156,6 +2253,10 @@ async function resolveProductFromCustomerAutomation(automation) {
 
       if (form.dataset.submitting === "true") {
         NexusUI.toast("Setup is already being submitted. Please wait.");
+        return;
+      }
+
+      if (!validateRequiredSetupFields(form)) {
         return;
       }
 

@@ -584,6 +584,44 @@ function cleanBaseUrl(value: string) {
   return cleanString(value).replace(/\/+$/, "");
 }
 
+function normalizeWorkflowCloneMode(...values: unknown[]) {
+  const raw = pickFirstString(...values)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (
+    [
+      "per_customer",
+      "clone_per_customer",
+      "customer_clone",
+      "customer_cloned",
+      "customer_workflow",
+      "dedicated_customer_workflow",
+      "isolated",
+      "isolated_customer_workflow",
+    ].includes(raw)
+  ) {
+    return "per_customer";
+  }
+
+  return "shared_product";
+}
+
+function shouldUseCustomerWorkflowClone(automation: any, order: any = null, customerAutomation: any = null) {
+  return normalizeWorkflowCloneMode(
+    customerAutomation?.runtime_workflow_mode,
+    customerAutomation?.n8n_workflow_mode,
+    automation?.runtime_workflow_mode,
+    automation?.n8n_workflow_mode,
+    automation?.workflow_isolation_mode,
+    automation?.runtime_isolation_mode,
+    automation?.customer_workflow_mode,
+    automation?.runtime_customer_workflow_mode,
+    order?.runtime_workflow_mode,
+    order?.n8n_workflow_mode,
+  ) === "per_customer";
+}
+
 async function n8nApiRequest(path: string, options: RequestInit = {}) {
   const baseUrl = cleanBaseUrl(env("N8N_BASE_URL"));
   const apiKey = env("N8N_API_KEY");
@@ -623,10 +661,18 @@ async function n8nApiRequest(path: string, options: RequestInit = {}) {
 }
 
 function runtimeWorkflowId(customerAutomation: any, automation: any, order: any = null) {
+  if (shouldUseCustomerWorkflowClone(automation, order, customerAutomation)) {
+    return pickFirstString(
+      customerAutomation?.n8n_workflow_id,
+      automation?.n8n_workflow_id,
+      order?.n8n_workflow_id,
+    );
+  }
+
   return pickFirstString(
-    customerAutomation?.n8n_workflow_id,
     automation?.n8n_workflow_id,
     order?.n8n_workflow_id,
+    customerAutomation?.n8n_workflow_id,
   );
 }
 
@@ -1498,24 +1544,46 @@ async function loadCustomerAutomation(adminClient: any, id: string) {
 }
 
 function getRuntimeWebhookUrl(customerAutomation: any, automation: any, order: any) {
+  if (shouldUseCustomerWorkflowClone(automation, order, customerAutomation)) {
+    return pickFirstString(
+      customerAutomation?.runtime_webhook_url,
+      customerAutomation?.n8n_webhook_url,
+      automation?.runtime_webhook_url,
+      automation?.n8n_webhook_url,
+      order?.runtime_webhook_url,
+      order?.n8n_webhook_url,
+    );
+  }
+
   return pickFirstString(
-    customerAutomation?.runtime_webhook_url,
-    customerAutomation?.n8n_webhook_url,
     automation?.runtime_webhook_url,
     automation?.n8n_webhook_url,
     order?.runtime_webhook_url,
     order?.n8n_webhook_url,
+    customerAutomation?.runtime_webhook_url,
+    customerAutomation?.n8n_webhook_url,
   );
 }
 
 function getRuntimeWebhookPath(customerAutomation: any, automation: any, order: any) {
+  if (shouldUseCustomerWorkflowClone(automation, order, customerAutomation)) {
+    return pickFirstString(
+      customerAutomation?.runtime_webhook_path,
+      customerAutomation?.n8n_webhook_path,
+      automation?.runtime_webhook_path,
+      automation?.n8n_webhook_path,
+      order?.runtime_webhook_path,
+      order?.n8n_webhook_path,
+    );
+  }
+
   return pickFirstString(
-    customerAutomation?.runtime_webhook_path,
-    customerAutomation?.n8n_webhook_path,
     automation?.runtime_webhook_path,
     automation?.n8n_webhook_path,
     order?.runtime_webhook_path,
     order?.n8n_webhook_path,
+    customerAutomation?.runtime_webhook_path,
+    customerAutomation?.n8n_webhook_path,
   );
 }
 
@@ -1565,6 +1633,10 @@ function hasCustomerRuntimeTarget(customerAutomation: any) {
 }
 
 function hasOwnCustomerRuntimeTarget(customerAutomation: any, automation: any, order: any) {
+  if (!shouldUseCustomerWorkflowClone(automation, order, customerAutomation)) {
+    return false;
+  }
+
   const customerWorkflowId = pickFirstString(customerAutomation?.n8n_workflow_id);
   const templateWorkflowId = pickFirstString(automation?.n8n_workflow_id, order?.n8n_workflow_id);
 
@@ -1690,9 +1762,10 @@ async function triggerN8nWebhook(params: {
         params.automation,
         params.order,
       ),
-      n8n_workflow_id: pickFirstString(
-        params.customerAutomation.n8n_workflow_id,
-        params.automation?.n8n_workflow_id,
+      n8n_workflow_id: runtimeWorkflowId(
+        params.customerAutomation,
+        params.automation,
+        params.order,
       ),
     },
   };
@@ -2423,6 +2496,11 @@ Deno.serve(async (req) => {
 
     let runtimeType = getRuntimeType(customerAutomation, automation);
     let isPythonRuntime = runtimeType === "python_runner";
+    const useCustomerWorkflowClone = shouldUseCustomerWorkflowClone(
+      automation,
+      order,
+      customerAutomation,
+    );
 
     const hasManagedWorkflowTemplate = Boolean(
       customerAutomation.n8n_workflow_id ||
@@ -2438,6 +2516,7 @@ Deno.serve(async (req) => {
     const customerRuntimeExists = hasOwnCustomerRuntimeTarget(customerAutomation, automation, order);
     const productMasterWorkflowId = pickFirstString(automation?.n8n_workflow_id, order?.n8n_workflow_id);
     const shouldProvisionCustomerWorkflow =
+      useCustomerWorkflowClone &&
       !customerRuntimeExists &&
       !isPythonRuntime &&
       Boolean(productMasterWorkflowId) &&
@@ -2595,6 +2674,7 @@ Deno.serve(async (req) => {
         template_webhook_path: getTemplateRuntimeWebhookPath(automation, order),
         customer_workflow_id: customerAutomation.n8n_workflow_id || null,
         template_workflow_id: automation?.n8n_workflow_id || order?.n8n_workflow_id || null,
+        workflow_mode: useCustomerWorkflowClone ? "per_customer_clone" : "shared_product",
         provision_result: provisionResultData || null,
       }),
       created_by: "runtime",
@@ -2698,93 +2778,113 @@ Deno.serve(async (req) => {
         if (triggerResult) {
           // Template retry succeeded. Skip clone activation/reprovisioning.
         } else {
-        activationRetry = await refreshRuntimeWorkflow(customerAutomation, automation, order);
+          activationRetry = await refreshRuntimeWorkflow(customerAutomation, automation, order);
 
-        if (activationRetry?.ok) {
-          if (activationRetry.webhook_path) {
-            customerAutomation.runtime_webhook_path = activationRetry.webhook_path;
-          }
-          if (activationRetry.webhook_url) {
-            customerAutomation.runtime_webhook_url = activationRetry.webhook_url;
-            webhookUrl = activationRetry.webhook_url;
-          } else {
-            const refreshedWebhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
-            if (refreshedWebhookUrl) webhookUrl = refreshedWebhookUrl;
-          }
-
-          if (activationRetry.webhook_path || activationRetry.webhook_url) {
-            await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
-              ...(activationRetry.webhook_path ? { runtime_webhook_path: activationRetry.webhook_path } : {}),
-              ...(activationRetry.webhook_url ? { runtime_webhook_url: activationRetry.webhook_url } : {}),
-              updated_at: new Date().toISOString(),
-            });
-          }
-
-          try {
-            triggerResult = await triggerN8nWebhook({
-              webhookUrl,
-              customerAutomation,
-              automation,
-              order,
-              user: isAdmin || isDeveloper ? null : user,
-              setupAnswers,
-              secrets: savedSecrets,
-              savedCredentialKeys,
-              submissionId: submission.id,
-              runId: activeRun.id,
-              runKey: activeRun.run_key || runKey,
-            });
-          } catch (retryError) {
-            message = retryError instanceof Error ? retryError.message : String(retryError);
-          }
-        }
-
-        if (!triggerResult && isUnregisteredN8nWebhookError(message)) {
-          try {
-            reprovisionRetry = await provisionCustomerWorkflowBeforeTrigger({
-              supabaseUrl,
-              token,
-              customerAutomationId: customerAutomation.id,
-            });
-
-            if (reprovisionRetry?.customer_automation) {
-              Object.assign(customerAutomation, reprovisionRetry.customer_automation);
+          if (activationRetry?.ok) {
+            if (activationRetry.webhook_path) {
+              customerAutomation.runtime_webhook_path = activationRetry.webhook_path;
             }
-            if (reprovisionRetry?.workflow_id) {
-              customerAutomation.n8n_workflow_id = reprovisionRetry.workflow_id;
-            }
-            if (reprovisionRetry?.webhook_path) {
-              customerAutomation.runtime_webhook_path = reprovisionRetry.webhook_path;
-            }
-            if (reprovisionRetry?.webhook_url) {
-              customerAutomation.runtime_webhook_url = reprovisionRetry.webhook_url;
-              webhookUrl = reprovisionRetry.webhook_url;
+            if (activationRetry.webhook_url) {
+              customerAutomation.runtime_webhook_url = activationRetry.webhook_url;
+              webhookUrl = activationRetry.webhook_url;
             } else {
-              const reprovisionedWebhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
-              if (reprovisionedWebhookUrl) webhookUrl = reprovisionedWebhookUrl;
+              const refreshedWebhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
+              if (refreshedWebhookUrl) webhookUrl = refreshedWebhookUrl;
             }
 
-            triggerResult = await triggerN8nWebhook({
-              webhookUrl,
-              customerAutomation,
-              automation,
-              order,
-              user: isAdmin || isDeveloper ? null : user,
-              setupAnswers,
-              secrets: savedSecrets,
-              savedCredentialKeys,
-              submissionId: submission.id,
-              runId: activeRun.id,
-              runKey: activeRun.run_key || runKey,
-            });
-          } catch (reprovisionError) {
-            message = reprovisionError instanceof Error ? reprovisionError.message : String(reprovisionError);
-            reprovisionRetry = {
-              ok: false,
-              error: message,
-            };
+            if (activationRetry.webhook_path || activationRetry.webhook_url) {
+              await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
+                ...(activationRetry.webhook_path ? { runtime_webhook_path: activationRetry.webhook_path } : {}),
+                ...(activationRetry.webhook_url ? { runtime_webhook_url: activationRetry.webhook_url } : {}),
+                updated_at: new Date().toISOString(),
+              });
+
+              if (!useCustomerWorkflowClone && automation?.id) {
+                await adminClient
+                  .from("automations")
+                  .update({
+                    ...(activationRetry.webhook_path ? { runtime_webhook_path: activationRetry.webhook_path } : {}),
+                    ...(activationRetry.webhook_url
+                      ? {
+                          runtime_webhook_url: activationRetry.webhook_url,
+                          n8n_webhook_url: activationRetry.webhook_url,
+                        }
+                      : {}),
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", automation.id);
+              }
+            }
+
+            try {
+              triggerResult = await triggerN8nWebhook({
+                webhookUrl,
+                customerAutomation,
+                automation,
+                order,
+                user: isAdmin || isDeveloper ? null : user,
+                setupAnswers,
+                secrets: savedSecrets,
+                savedCredentialKeys,
+                submissionId: submission.id,
+                runId: activeRun.id,
+                runKey: activeRun.run_key || runKey,
+              });
+            } catch (retryError) {
+              message = retryError instanceof Error ? retryError.message : String(retryError);
+            }
           }
-        }
+
+          if (
+            !triggerResult &&
+            useCustomerWorkflowClone &&
+            isUnregisteredN8nWebhookError(message)
+          ) {
+            try {
+              reprovisionRetry = await provisionCustomerWorkflowBeforeTrigger({
+                supabaseUrl,
+                token,
+                customerAutomationId: customerAutomation.id,
+              });
+
+              if (reprovisionRetry?.customer_automation) {
+                Object.assign(customerAutomation, reprovisionRetry.customer_automation);
+              }
+              if (reprovisionRetry?.workflow_id) {
+                customerAutomation.n8n_workflow_id = reprovisionRetry.workflow_id;
+              }
+              if (reprovisionRetry?.webhook_path) {
+                customerAutomation.runtime_webhook_path = reprovisionRetry.webhook_path;
+              }
+              if (reprovisionRetry?.webhook_url) {
+                customerAutomation.runtime_webhook_url = reprovisionRetry.webhook_url;
+                webhookUrl = reprovisionRetry.webhook_url;
+              } else {
+                const reprovisionedWebhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
+                if (reprovisionedWebhookUrl) webhookUrl = reprovisionedWebhookUrl;
+              }
+
+              triggerResult = await triggerN8nWebhook({
+                webhookUrl,
+                customerAutomation,
+                automation,
+                order,
+                user: isAdmin || isDeveloper ? null : user,
+                setupAnswers,
+                secrets: savedSecrets,
+                savedCredentialKeys,
+                submissionId: submission.id,
+                runId: activeRun.id,
+                runKey: activeRun.run_key || runKey,
+              });
+            } catch (reprovisionError) {
+              message = reprovisionError instanceof Error ? reprovisionError.message : String(reprovisionError);
+              reprovisionRetry = {
+                ok: false,
+                error: message,
+              };
+            }
+          }
         }
       }
 

@@ -270,6 +270,62 @@ function runFrequency(customerAutomation: any) {
     : "monthly";
 }
 
+function normalizeWorkflowCloneMode(...values: unknown[]) {
+  const raw = values
+    .map((value) => cleanString(value))
+    .find(Boolean)
+    ?.toLowerCase()
+    .replace(/[\s-]+/g, "_") || "";
+
+  if (
+    [
+      "per_customer",
+      "clone_per_customer",
+      "customer_clone",
+      "customer_cloned",
+      "customer_workflow",
+      "dedicated_customer_workflow",
+      "isolated",
+      "isolated_customer_workflow",
+    ].includes(raw)
+  ) {
+    return "per_customer";
+  }
+
+  return "shared_product";
+}
+
+function shouldUseCustomerWorkflowClone(automation: any, order: any = null, customerAutomation: any = null) {
+  return normalizeWorkflowCloneMode(
+    customerAutomation?.runtime_workflow_mode,
+    customerAutomation?.n8n_workflow_mode,
+    automation?.runtime_workflow_mode,
+    automation?.n8n_workflow_mode,
+    automation?.workflow_isolation_mode,
+    automation?.runtime_isolation_mode,
+    automation?.customer_workflow_mode,
+    automation?.runtime_customer_workflow_mode,
+    order?.runtime_workflow_mode,
+    order?.n8n_workflow_mode,
+  ) === "per_customer";
+}
+
+function runtimeWorkflowId(customerAutomation: any, automation: any, order: any = null) {
+  if (shouldUseCustomerWorkflowClone(automation, order, customerAutomation)) {
+    return pickFirstString(
+      customerAutomation?.n8n_workflow_id,
+      automation?.n8n_workflow_id,
+      order?.n8n_workflow_id,
+    );
+  }
+
+  return pickFirstString(
+    automation?.n8n_workflow_id,
+    order?.n8n_workflow_id,
+    customerAutomation?.n8n_workflow_id,
+  );
+}
+
 function buildCallbackUrl() {
   return `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/runtime-submit-output`;
 }
@@ -315,24 +371,46 @@ async function provisionCustomerWorkflowBeforeRun(customerAutomationId: string) 
 }
 
 function getRuntimeWebhookUrl(customerAutomation: any, automation: any, order: any) {
+  if (shouldUseCustomerWorkflowClone(automation, order, customerAutomation)) {
+    return pickFirstString(
+      customerAutomation?.runtime_webhook_url,
+      customerAutomation?.n8n_webhook_url,
+      automation?.runtime_webhook_url,
+      automation?.n8n_webhook_url,
+      order?.runtime_webhook_url,
+      order?.n8n_webhook_url,
+    );
+  }
+
   return pickFirstString(
-    customerAutomation?.runtime_webhook_url,
-    customerAutomation?.n8n_webhook_url,
     automation?.runtime_webhook_url,
     automation?.n8n_webhook_url,
     order?.runtime_webhook_url,
     order?.n8n_webhook_url,
+    customerAutomation?.runtime_webhook_url,
+    customerAutomation?.n8n_webhook_url,
   );
 }
 
 function getRuntimeWebhookPath(customerAutomation: any, automation: any, order: any) {
+  if (shouldUseCustomerWorkflowClone(automation, order, customerAutomation)) {
+    return pickFirstString(
+      customerAutomation?.runtime_webhook_path,
+      customerAutomation?.n8n_webhook_path,
+      automation?.runtime_webhook_path,
+      automation?.n8n_webhook_path,
+      order?.runtime_webhook_path,
+      order?.n8n_webhook_path,
+    );
+  }
+
   return pickFirstString(
-    customerAutomation?.runtime_webhook_path,
-    customerAutomation?.n8n_webhook_path,
     automation?.runtime_webhook_path,
     automation?.n8n_webhook_path,
     order?.runtime_webhook_path,
     order?.n8n_webhook_path,
+    customerAutomation?.runtime_webhook_path,
+    customerAutomation?.n8n_webhook_path,
   );
 }
 
@@ -690,10 +768,7 @@ function buildRuntimePayload(params: {
       saved_credential_keys: params.savedCredentialKeys || [],
       runtime_type: customerAutomation.runtime_type || params.automation?.runtime_type || "n8n_managed",
       runtime_webhook_path: getRuntimeWebhookPath(customerAutomation, params.automation, order),
-      n8n_workflow_id: pickFirstString(
-        customerAutomation.n8n_workflow_id,
-        params.automation?.n8n_workflow_id,
-      ),
+      n8n_workflow_id: runtimeWorkflowId(customerAutomation, params.automation, order),
     },
   };
 }
@@ -890,6 +965,39 @@ async function n8nApiRequest(path: string, options: RequestInit = {}) {
   return data;
 }
 
+function runtimeWorkflowWebhookPaths(workflow: any) {
+  const workflowRecord = Array.isArray(workflow?.nodes)
+    ? workflow
+    : Array.isArray(workflow?.data?.nodes)
+      ? workflow.data
+      : Array.isArray(workflow?.workflow?.nodes)
+        ? workflow.workflow
+        : workflow;
+  const nodes = Array.isArray(workflowRecord?.nodes) ? workflowRecord.nodes : [];
+
+  return nodes
+    .filter((node: any) =>
+      cleanString(node?.type).toLowerCase().includes("n8n-nodes-base.webhook")
+    )
+    .map((node: any) => cleanString(node?.parameters?.path))
+    .filter(Boolean);
+}
+
+async function loadRuntimeWorkflowWebhookPath(workflowId: string) {
+  const id = cleanString(workflowId);
+  if (!id) return "";
+
+  try {
+    const workflow = await n8nApiRequest(`/api/v1/workflows/${encodeURIComponent(id)}`, {
+      method: "GET",
+    });
+
+    return runtimeWorkflowWebhookPaths(workflow)[0] || "";
+  } catch (_error) {
+    return "";
+  }
+}
+
 async function activateRuntimeWorkflowById(workflowId: string) {
   const id = cleanString(workflowId);
   if (!id) {
@@ -1000,16 +1108,24 @@ async function runCandidate(adminClient: any, row: any, options: {
   const isManualRun = options.action === "run_one" ||
     options.action === "run_latest" ||
     options.action === "run_matching";
+  const useCustomerWorkflowClone = shouldUseCustomerWorkflowClone(automation, order, customerAutomation);
 
   if (!options.dryRun && isManualRun) {
     const hasN8nTemplate = Boolean(
-      customerAutomation.n8n_workflow_id ||
-        automation?.n8n_workflow_id ||
-        customerAutomation.runtime_webhook_url ||
-        automation?.runtime_webhook_url,
+      automation?.n8n_workflow_id ||
+        order?.n8n_workflow_id ||
+        automation?.runtime_webhook_url ||
+        automation?.n8n_webhook_url ||
+        order?.runtime_webhook_url ||
+        order?.n8n_webhook_url ||
+        (useCustomerWorkflowClone && (
+          customerAutomation.n8n_workflow_id ||
+          customerAutomation.runtime_webhook_url ||
+          customerAutomation.n8n_webhook_url
+        )),
     );
 
-    if (hasN8nTemplate && !hasCustomerRuntimeTarget(customerAutomation)) {
+    if (useCustomerWorkflowClone && hasN8nTemplate && !hasCustomerRuntimeTarget(customerAutomation)) {
       const provisionResult = await provisionCustomerWorkflowBeforeRun(customerAutomation.id);
       if (provisionResult?.customer_automation) {
         Object.assign(customerAutomation, provisionResult.customer_automation);
@@ -1081,7 +1197,7 @@ async function runCandidate(adminClient: any, row: any, options: {
       callback_url: buildCallbackUrl(),
       runtime_type: customerAutomation.runtime_type || automation?.runtime_type || "n8n_managed",
       runtime_webhook_path: getRuntimeWebhookPath(customerAutomation, automation, order),
-      n8n_workflow_id: pickFirstString(customerAutomation.n8n_workflow_id, automation?.n8n_workflow_id),
+      n8n_workflow_id: runtimeWorkflowId(customerAutomation, automation, order),
     },
   };
 
@@ -1133,11 +1249,7 @@ async function runCandidate(adminClient: any, row: any, options: {
     } catch (error) {
       if (!isWebhookNotRegistered(error)) throw error;
 
-      const workflowId = pickFirstString(
-        customerAutomation.n8n_workflow_id,
-        automation?.n8n_workflow_id,
-        order?.n8n_workflow_id,
-      );
+      const workflowId = runtimeWorkflowId(customerAutomation, automation, order);
       let activation: Record<string, unknown> = {};
       let shouldReprovision = false;
 
@@ -1155,6 +1267,27 @@ async function runCandidate(adminClient: any, row: any, options: {
       }
 
       if (!shouldReprovision) {
+        const refreshedWebhookPath = await loadRuntimeWorkflowWebhookPath(workflowId);
+        const n8nBaseUrl = cleanBaseUrl(N8N_BASE_URL);
+
+        if (refreshedWebhookPath && n8nBaseUrl) {
+          webhookUrl = `${n8nBaseUrl}/webhook/${refreshedWebhookPath}`;
+          runtimePayload.system.runtime_webhook_path = refreshedWebhookPath;
+          runtimePayload.system.n8n_workflow_id = runtimeWorkflowId(customerAutomation, automation, order);
+
+          if (!useCustomerWorkflowClone && automation?.id) {
+            await adminClient
+              .from("automations")
+              .update({
+                runtime_webhook_path: refreshedWebhookPath,
+                runtime_webhook_url: webhookUrl,
+                n8n_webhook_url: webhookUrl,
+                updated_at: nowIso(),
+              })
+              .eq("id", automation.id);
+          }
+        }
+
         try {
           response = await triggerWebhook(webhookUrl, runtimePayload);
           response.data = {
@@ -1167,7 +1300,7 @@ async function runCandidate(adminClient: any, row: any, options: {
         }
       }
 
-      if (shouldReprovision) {
+      if (shouldReprovision && shouldUseCustomerWorkflowClone(automation, order, customerAutomation)) {
         const provisionResult = await provisionCustomerWorkflowBeforeRun(customerAutomation.id);
         if (provisionResult?.customer_automation) {
           Object.assign(customerAutomation, provisionResult.customer_automation);
@@ -1184,10 +1317,7 @@ async function runCandidate(adminClient: any, row: any, options: {
 
         webhookUrl = getRuntimeWebhookUrl(customerAutomation, automation, order);
         runtimePayload.system.runtime_webhook_path = getRuntimeWebhookPath(customerAutomation, automation, order);
-        runtimePayload.system.n8n_workflow_id = pickFirstString(
-          customerAutomation.n8n_workflow_id,
-          automation?.n8n_workflow_id,
-        );
+        runtimePayload.system.n8n_workflow_id = runtimeWorkflowId(customerAutomation, automation, order);
 
         response = await triggerWebhook(webhookUrl, runtimePayload);
         response.data = {
@@ -1198,6 +1328,10 @@ async function runCandidate(adminClient: any, row: any, options: {
             webhook_path: provisionResult?.webhook_path || "",
           },
         };
+      } else if (shouldReprovision) {
+        throw new Error(
+          "The product workflow webhook is not registered. Publish or activate the product workflow in n8n, then run again.",
+        );
       }
     }
 
