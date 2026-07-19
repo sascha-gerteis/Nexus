@@ -996,6 +996,22 @@ function dedupeBundleAutomations(items = [], orderId = "") {
     .sort((a, b) => automationUpdatedTime(a) - automationUpdatedTime(b));
 }
 
+function latestOutputByCustomerAutomation(outputs = []) {
+  const latestByAutomation = new Map();
+
+  (outputs || []).forEach(output => {
+    const id = output?.customer_automation_id;
+    if (!id) return;
+
+    const current = latestByAutomation.get(id);
+    if (!current || timestampMs(output.created_at || output.updated_at) > timestampMs(current.created_at || current.updated_at)) {
+      latestByAutomation.set(id, output);
+    }
+  });
+
+  return latestByAutomation;
+}
+
 function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs = []) {
   return (orders || [])
     .filter(isBundleOrder)
@@ -1025,6 +1041,9 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
       const bundleOutputs = (outputs || [])
         .filter(output => includedIds.has(output.customer_automation_id))
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const latestBundleOutputsByAutomation = latestOutputByCustomerAutomation(bundleOutputs);
+      const latestBundleOutputs = Array.from(latestBundleOutputsByAutomation.values())
+        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
       const outputAutomationIds = new Set(bundleOutputs.map(output => output.customer_automation_id).filter(Boolean));
       const latestRunsByAutomation = new Map();
       (runs || [])
@@ -1207,8 +1226,10 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         included,
         workflowSummaries,
         issueDetails,
-        latestOutput: bundleOutputs[0] || null,
-        outputCount: bundleOutputs.length,
+        latestOutput: latestBundleOutputs[0] || null,
+        outputCount: latestBundleOutputs.length,
+        totalOutputCount: bundleOutputs.length,
+        latestOutputs: latestBundleOutputs,
         state
       };
     });
@@ -2455,7 +2476,7 @@ function openAutomationDetail(customerAutomationId) {
           category: "Bundle output",
           developerName: "Nexus",
           groupKey: `bundle:${bundleRow.orderId || bundleRow.bundleId || title}`,
-          description: `${bundleRow.outputCount || 0} output${bundleRow.outputCount === 1 ? "" : "s"} from ${bundleRow.included.length} included workflow${bundleRow.included.length === 1 ? "" : "s"}.`
+          description: `${bundleRow.outputCount || 0} latest output${bundleRow.outputCount === 1 ? "" : "s"} from ${bundleRow.included.length} included workflow${bundleRow.included.length === 1 ? "" : "s"}${bundleRow.totalOutputCount && bundleRow.totalOutputCount > bundleRow.outputCount ? ` (${bundleRow.totalOutputCount} total in history)` : ""}.`
         };
       }
 
@@ -2490,7 +2511,25 @@ function openAutomationDetail(customerAutomationId) {
             items: []
           };
         }
-        groups[key].items.push({ ...output, __context: context });
+        const preparedOutput = { ...output, __context: context };
+
+        if (context.category === "Bundle output" && output.customer_automation_id) {
+          const existingIndex = groups[key].items.findIndex(item => item.customer_automation_id === output.customer_automation_id);
+
+          if (existingIndex >= 0) {
+            const existing = groups[key].items[existingIndex];
+            if (timestampMs(output.created_at || output.updated_at) > timestampMs(existing.created_at || existing.updated_at)) {
+              groups[key].items[existingIndex] = preparedOutput;
+            }
+          } else {
+            groups[key].items.push(preparedOutput);
+          }
+
+          groups[key].items.sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
+          return groups;
+        }
+
+        groups[key].items.push(preparedOutput);
         return groups;
       }, {});
     }
