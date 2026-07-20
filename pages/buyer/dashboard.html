@@ -486,8 +486,17 @@ function humanizeSetupStatus(item) {
   return humanizeStatus(setupStatus);
 }
 
-    function getLatestOutputForAutomation(outputs, customerAutomationId) {
-      return (outputs || []).find(output => output.customer_automation_id === customerAutomationId) || null;
+    function orderIdFromCustomerAutomation(item) {
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+      return String(item?.order_id || order?.id || "");
+    }
+
+    function getLatestOutputForAutomation(outputs, customerAutomationId, orderId = "") {
+      return (outputs || []).find(output => {
+        if (output.customer_automation_id !== customerAutomationId) return false;
+        if (!orderId) return true;
+        return outputBelongsToOrder(output, orderId);
+      }) || null;
     }
 
     function isGuidedInstall(item) {
@@ -1437,23 +1446,25 @@ function runStatusTone(status) {
   return "blue";
 }
 
-function outputsForAutomation(customerAutomationId) {
+function outputsForAutomation(customerAutomationId, orderId = "") {
   return (dashboardData.outputs || [])
     .filter(output => output.customer_automation_id === customerAutomationId)
+    .filter(output => outputBelongsToOrder(output, orderId))
     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 }
 
-function runsForAutomation(customerAutomationId) {
+function runsForAutomation(customerAutomationId, orderId = "") {
   return (dashboardData.runs || [])
     .filter(run => run.customer_automation_id === customerAutomationId)
+    .filter(run => runBelongsToOrder(run, orderId))
     .sort((a, b) =>
       new Date(b.updated_at || b.finished_at || b.created_at || b.started_at || 0) -
       new Date(a.updated_at || a.finished_at || a.created_at || a.started_at || 0)
     );
 }
 
-function latestRunForAutomation(customerAutomationId) {
-  return runsForAutomation(customerAutomationId)[0] || null;
+function latestRunForAutomation(customerAutomationId, orderId = "") {
+  return runsForAutomation(customerAutomationId, orderId)[0] || null;
 }
 
 function openAutomationDetail(customerAutomationId) {
@@ -1589,7 +1600,8 @@ function openAutomationDetail(customerAutomationId) {
       const standaloneAutomations = automations.filter(item => !bundledIds.has(item.id));
 
       const states = standaloneAutomations.map(item => {
-        return automationState(item, getLatestOutputForAutomation(outputs, item.id), latestRunForAutomation(item.id));
+        const orderId = orderIdFromCustomerAutomation(item);
+        return automationState(item, getLatestOutputForAutomation(outputs, item.id, orderId), latestRunForAutomation(item.id, orderId));
       });
       const bundleStates = bundleRows.map(row => row.state);
       const allStates = states.concat(bundleStates);
@@ -1680,7 +1692,8 @@ function openAutomationDetail(customerAutomationId) {
       const bundleRows = buildBuyerBundleRows(orders, automations, outputs, dashboardData.runs || []);
 
       const priorityAutomation = automations.find(item => {
-        const state = automationState(item, getLatestOutputForAutomation(outputs, item.id), latestRunForAutomation(item.id));
+        const orderId = orderIdFromCustomerAutomation(item);
+        const state = automationState(item, getLatestOutputForAutomation(outputs, item.id, orderId), latestRunForAutomation(item.id, orderId));
         return (
           state.label === "Issue detected" ||
           state.label === "Blocked" ||
@@ -1692,12 +1705,13 @@ function openAutomationDetail(customerAutomationId) {
       }) || automations[0] || null;
       const priorityBundle = bundleRows.find(row => row.state.tone !== "green") || bundleRows[0] || null;
 
+      const priorityOrderId = priorityAutomation ? orderIdFromCustomerAutomation(priorityAutomation) : "";
       const priorityLatestOutput = priorityAutomation
-        ? getLatestOutputForAutomation(outputs, priorityAutomation.id)
+        ? getLatestOutputForAutomation(outputs, priorityAutomation.id, priorityOrderId)
         : null;
 
       const priorityState = priorityAutomation
-        ? automationState(priorityAutomation, priorityLatestOutput, latestRunForAutomation(priorityAutomation.id))
+        ? automationState(priorityAutomation, priorityLatestOutput, latestRunForAutomation(priorityAutomation.id, priorityOrderId))
         : null;
 
       const priorityProduct = priorityAutomation?.automations || {};
@@ -1843,11 +1857,12 @@ function openAutomationDetail(customerAutomationId) {
       const enriched = automations.map(item => {
         const product = item.automations || {};
         const order = item.orders || {};
+        const orderId = orderIdFromCustomerAutomation(item);
         const developerName = developerDisplayName(item);
-        const latestOutput = getLatestOutputForAutomation(outputs, item.id);
-        const state = automationState(item, latestOutput, latestRunForAutomation(item.id));
+        const latestOutput = getLatestOutputForAutomation(outputs, item.id, orderId);
+        const state = automationState(item, latestOutput, latestRunForAutomation(item.id, orderId));
         const lane = automationLane(state);
-        return { item, product, order, developerName, latestOutput, state, lane };
+        return { item, product, order, orderId, developerName, latestOutput, state, lane };
       });
 
       const bundleLaneCounts = {
@@ -1967,10 +1982,9 @@ function openAutomationDetail(customerAutomationId) {
         .map(item => productTitleFromAutomation(item))
         .filter(Boolean);
       const latestOutputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
-      const childReadyCount = included.filter(item => {
-        const childState = automationState(item, getLatestOutputForAutomation(dashboardData.outputs, item.id), latestRunForAutomation(item.id));
-        return childState.tone === "green";
-      }).length;
+      const childReadyCount = (workflowSummaries.length ? workflowSummaries : included.map(item => ({ tone: automationState(item, null, null).tone })))
+        .filter(summary => summary.tone === "green")
+        .length;
 
       return `
         <article class="buyer-automation-board-card buyer-bundle-board-card">
@@ -2086,15 +2100,15 @@ function openAutomationDetail(customerAutomationId) {
     }
 
     function renderAutomationBoardCard(row) {
-      const { item, product, developerName, latestOutput, state } = row;
+      const { item, product, developerName, latestOutput, state, orderId } = row;
       const productTitle = productTitleFromAutomation(item);
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
       const primaryButton = getAutomationActionButton(item, latestOutput, state);
       const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
-      const automationOutputs = outputsForAutomation(item.id);
-      const automationRuns = runsForAutomation(item.id);
+      const automationOutputs = outputsForAutomation(item.id, orderId);
+      const automationRuns = runsForAutomation(item.id, orderId);
       const recurring = isRecurringAutomation(item);
 
       return `
@@ -2227,10 +2241,11 @@ function openAutomationDetail(customerAutomationId) {
       const product = item.automations || {};
       const productTitle = productTitleFromAutomation(item);
       const developerName = developerDisplayName(item);
-      const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id);
-      const outputs = outputsForAutomation(item.id);
-      const runs = runsForAutomation(item.id);
-      const state = automationState(item, latestOutput, latestRunForAutomation(item.id));
+      const orderId = orderIdFromCustomerAutomation(item);
+      const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id, orderId);
+      const outputs = outputsForAutomation(item.id, orderId);
+      const runs = runsForAutomation(item.id, orderId);
+      const state = automationState(item, latestOutput, latestRunForAutomation(item.id, orderId));
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
@@ -2405,7 +2420,10 @@ function openAutomationDetail(customerAutomationId) {
       const grouped = groupOutputsByAutomation(outputs, automations, bundleRows);
       const outputAutomations = Object.keys(grouped).length;
       const awaitingCount =
-        standaloneAutomations.filter(item => !outputs.some(output => output.customer_automation_id === item.id)).length +
+        standaloneAutomations.filter(item => {
+          const orderId = orderIdFromCustomerAutomation(item);
+          return !outputs.some(output => output.customer_automation_id === item.id && outputBelongsToOrder(output, orderId));
+        }).length +
         bundleRows.filter(row => !row.outputCount).length;
 
       root.innerHTML = `
@@ -2499,7 +2517,15 @@ function openAutomationDetail(customerAutomationId) {
       }
 
       const product = output?.automations || {};
-      const customerAutomation = (automations || []).find(item => item.id === output?.customer_automation_id) || {};
+      const outputOrderId = String(output?.order_id || "");
+      const customerAutomation =
+        (automations || []).find(item =>
+          item.id === output?.customer_automation_id &&
+          (!outputOrderId || orderIdFromCustomerAutomation(item) === outputOrderId)
+        ) ||
+        (automations || []).find(item => item.id === output?.customer_automation_id) ||
+        {};
+      const customerAutomationOrderId = outputOrderId || orderIdFromCustomerAutomation(customerAutomation);
       const title =
         product.title ||
         customerAutomation.name ||
@@ -2511,7 +2537,9 @@ function openAutomationDetail(customerAutomationId) {
         title,
         category: output?.output_type || product.category || customerAutomation.automations?.category || "Output",
         developerName: developerDisplayNameOptional(customerAutomation) || developerDisplayNameOptional(output) || "Nexus",
-        groupKey: output.customer_automation_id || output.automation_id || product.id || title || "output"
+        groupKey: customerAutomationOrderId
+          ? `automation:${output.customer_automation_id || output.automation_id || product.id || title}:${customerAutomationOrderId}`
+          : output.customer_automation_id || output.automation_id || product.id || title || "output"
       };
     }
 
