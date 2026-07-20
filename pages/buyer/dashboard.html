@@ -491,11 +491,11 @@ function humanizeSetupStatus(item) {
       return String(item?.order_id || order?.id || "");
     }
 
-    function getLatestOutputForAutomation(outputs, customerAutomationId, orderId = "") {
+    function getLatestOutputForAutomation(outputs, customerAutomationId, orderId = "", latestRun = null, item = {}) {
       return (outputs || []).find(output => {
         if (output.customer_automation_id !== customerAutomationId) return false;
-        if (!orderId) return true;
-        return outputBelongsToOrder(output, orderId);
+        if (orderId && !outputBelongsToOrder(output, orderId)) return false;
+        return outputIsFreshForAutomation(output, item, latestRun);
       }) || null;
     }
 
@@ -877,6 +877,62 @@ function bundleIdFromAutomation(item) {
   return item?.bundle_id || order.bundle_id || "";
 }
 
+function isBundleCustomerAutomation(item) {
+  const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+  return Boolean(bundleIdFromAutomation(item) || isBundleOrder(order));
+}
+
+function automationOrderTime(item) {
+  const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+  return latestTimestampMs(order?.created_at, item?.created_at, item?.updated_at);
+}
+
+function latestBundleOrders(orders = []) {
+  const byBundle = new Map();
+
+  (orders || []).filter(isBundleOrder).forEach(order => {
+    const snapshot = parseBundleSnapshot(order);
+    const bundleKey = String(order?.bundle_id || snapshot.bundle_id || order?.automation_title || order?.id || "");
+    if (!bundleKey) return;
+
+    const current = byBundle.get(bundleKey);
+    const orderTime = latestTimestampMs(order?.created_at, order?.updated_at);
+    const currentTime = latestTimestampMs(current?.created_at, current?.updated_at);
+
+    if (!current || orderTime >= currentTime) {
+      byBundle.set(bundleKey, order);
+    }
+  });
+
+  return Array.from(byBundle.values())
+    .sort((a, b) => latestTimestampMs(b?.created_at, b?.updated_at) - latestTimestampMs(a?.created_at, a?.updated_at));
+}
+
+function currentStandaloneAutomations(items = []) {
+  const byProduct = new Map();
+
+  (items || []).forEach(item => {
+    if (!item?.id || isArchivedAutomationRow(item) || isBundleCustomerAutomation(item)) return;
+
+    const key = automationProductKey(item) || item.id;
+    const current = byProduct.get(key);
+
+    if (!current || automationOrderTime(item) >= automationOrderTime(current)) {
+      byProduct.set(key, item);
+    }
+  });
+
+  return Array.from(byProduct.values())
+    .sort((a, b) => automationOrderTime(b) - automationOrderTime(a));
+}
+
+function visibleDashboardAutomations(standaloneAutomations = [], bundleRows = []) {
+  return [
+    ...(standaloneAutomations || []),
+    ...(bundleRows || []).flatMap(row => row.included || [])
+  ];
+}
+
 function automationProductKey(item) {
   const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
   return item?.automation_id || product.id || item?.id || "";
@@ -900,6 +956,41 @@ function latestAutomationActivityTime(output, run) {
     Number.isFinite(outputTime) ? outputTime : 0,
     Number.isFinite(runTime) ? runTime : 0
   );
+}
+
+function outputRuntimeMeta(output = {}) {
+  const content = output?.content_json && typeof output.content_json === "object" ? output.content_json : {};
+  const runtime = content.nexus_runtime && typeof content.nexus_runtime === "object" ? content.nexus_runtime : {};
+  return {
+    runId: String(output?.automation_run_id || output?.run_id || runtime.run_id || ""),
+    runKey: String(output?.run_key || runtime.run_key || "")
+  };
+}
+
+function outputMatchesRun(output = {}, run = {}) {
+  if (!run) return false;
+  const meta = outputRuntimeMeta(output);
+  return Boolean(
+    (meta.runId && run.id && meta.runId === String(run.id)) ||
+    (meta.runKey && run.run_key && meta.runKey === String(run.run_key))
+  );
+}
+
+function outputIsFreshForAutomation(output = {}, item = {}, latestRun = null) {
+  if (!output) return false;
+  if (outputMatchesRun(output, latestRun)) return true;
+
+  const outputTime = timestampMs(output.created_at || output.updated_at);
+  if (!outputTime) return true;
+
+  const latestRequestTime = latestTimestampMs(
+    latestRun?.started_at,
+    latestRun?.created_at,
+    item?.last_run_requested_at
+  );
+
+  if (!latestRequestTime) return true;
+  return outputTime + 1000 >= latestRequestTime;
 }
 
 function webhookPathFromUrl(url = "") {
@@ -1032,8 +1123,7 @@ function runBelongsToOrder(run, orderId = "") {
 }
 
 function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs = []) {
-  return (orders || [])
-    .filter(isBundleOrder)
+  return latestBundleOrders(orders)
     .map(order => {
       const snapshot = parseBundleSnapshot(order);
       const orderId = order.id || "";
@@ -1057,14 +1147,11 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         orderId
       );
       const includedIds = new Set(included.map(item => item.id).filter(Boolean));
-      const bundleOutputs = (outputs || [])
+      const itemById = new Map(included.map(item => [String(item.id || ""), item]));
+      const rawBundleOutputs = (outputs || [])
         .filter(output => outputBelongsToOrder(output, orderId))
         .filter(output => includedIds.has(output.customer_automation_id))
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-      const latestBundleOutputsByAutomation = latestOutputByCustomerAutomation(bundleOutputs);
-      const latestBundleOutputs = Array.from(latestBundleOutputsByAutomation.values())
-        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
-      const outputAutomationIds = new Set(bundleOutputs.map(output => output.customer_automation_id).filter(Boolean));
       const latestRunsByAutomation = new Map();
       (runs || [])
         .filter(run => runBelongsToOrder(run, orderId))
@@ -1075,6 +1162,15 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
             latestRunsByAutomation.set(run.customer_automation_id, run);
           }
         });
+      const bundleOutputs = rawBundleOutputs.filter(output => {
+        const item = itemById.get(String(output.customer_automation_id || "")) || {};
+        const latestRun = latestRunsByAutomation.get(output.customer_automation_id) || null;
+        return outputIsFreshForAutomation(output, item, latestRun);
+      });
+      const latestBundleOutputsByAutomation = latestOutputByCustomerAutomation(bundleOutputs);
+      const latestBundleOutputs = Array.from(latestBundleOutputsByAutomation.values())
+        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
+      const outputAutomationIds = new Set(bundleOutputs.map(output => output.customer_automation_id).filter(Boolean));
       const bundleHasRuntimeActivity = Boolean(bundleOutputs.length || latestRunsByAutomation.size);
       const childStates = included.map(item =>
         automationState(item, getLatestOutputForAutomation(bundleOutputs, item.id), latestRunsByAutomation.get(item.id) || null)
@@ -1596,15 +1692,17 @@ function openAutomationDetail(customerAutomationId) {
     function renderDashboard() {
       const { profile, orders, automations, events, outputs } = dashboardData;
       const bundleRows = buildBuyerBundleRows(orders, dashboardData.automations || automations, outputs, dashboardData.runs || []);
-      const bundledIds = bundleChildAutomationIds(bundleRows);
-      const standaloneAutomations = automations.filter(item => !bundledIds.has(item.id));
+      const standaloneAutomations = currentStandaloneAutomations(automations);
+      const visibleAutomations = visibleDashboardAutomations(standaloneAutomations, bundleRows);
 
       const states = standaloneAutomations.map(item => {
         const orderId = orderIdFromCustomerAutomation(item);
-        return automationState(item, getLatestOutputForAutomation(outputs, item.id, orderId), latestRunForAutomation(item.id, orderId));
+        const latestRun = latestRunForAutomation(item.id, orderId);
+        return automationState(item, getLatestOutputForAutomation(outputs, item.id, orderId, latestRun, item), latestRun);
       });
       const bundleStates = bundleRows.map(row => row.state);
       const allStates = states.concat(bundleStates);
+      const visibleOutputCount = countDisplayOutputs(outputs, visibleAutomations, bundleRows);
 
       const readyCount = allStates.filter(state => state.label === "Ready" || state.label === "Install complete").length;
       const issueCount = allStates.filter(state => state.label === "Issue detected" || state.label === "Blocked" || state.label === "Needs attention").length;
@@ -1616,7 +1714,7 @@ function openAutomationDetail(customerAutomationId) {
 
       document.getElementById("buyerAutomationCount").textContent = standaloneAutomations.length + bundleRows.length;
       document.getElementById("buyerReadyCount").textContent = readyCount;
-      document.getElementById("buyerOutputCount").textContent = outputs.length;
+      document.getElementById("buyerOutputCount").textContent = visibleOutputCount;
       document.getElementById("buyerIssueCount").textContent = issueCount;
 
       const mainStatus = document.getElementById("buyerMainStatus");
@@ -1643,7 +1741,7 @@ function openAutomationDetail(customerAutomationId) {
       renderSavedProducts(dashboardData.savedProducts || []);
       renderAutomations(standaloneAutomations, outputs);
       renderAutomationDetail();
-      renderOutputs(outputs, automations);
+      renderOutputs(outputs, visibleAutomations);
       renderEvents(events);
       renderOrders(orders);
     }
@@ -1688,12 +1786,17 @@ function openAutomationDetail(customerAutomationId) {
 
       if (!root) return;
 
-      const latestOutput = outputs[0] || null;
-      const bundleRows = buildBuyerBundleRows(orders, automations, outputs, dashboardData.runs || []);
+      const bundleRows = buildBuyerBundleRows(orders, dashboardData.automations || automations, outputs, dashboardData.runs || []);
+      const visibleAutomations = visibleDashboardAutomations(automations, bundleRows);
+      const visibleOutputGroups = groupOutputsByAutomation(outputs, visibleAutomations, bundleRows);
+      const latestOutput = Object.values(visibleOutputGroups)
+        .flatMap(group => group.items || [])
+        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at))[0] || null;
 
       const priorityAutomation = automations.find(item => {
         const orderId = orderIdFromCustomerAutomation(item);
-        const state = automationState(item, getLatestOutputForAutomation(outputs, item.id, orderId), latestRunForAutomation(item.id, orderId));
+        const latestRun = latestRunForAutomation(item.id, orderId);
+        const state = automationState(item, getLatestOutputForAutomation(outputs, item.id, orderId, latestRun, item), latestRun);
         return (
           state.label === "Issue detected" ||
           state.label === "Blocked" ||
@@ -1706,12 +1809,13 @@ function openAutomationDetail(customerAutomationId) {
       const priorityBundle = bundleRows.find(row => row.state.tone !== "green") || bundleRows[0] || null;
 
       const priorityOrderId = priorityAutomation ? orderIdFromCustomerAutomation(priorityAutomation) : "";
+      const priorityLatestRun = priorityAutomation ? latestRunForAutomation(priorityAutomation.id, priorityOrderId) : null;
       const priorityLatestOutput = priorityAutomation
-        ? getLatestOutputForAutomation(outputs, priorityAutomation.id, priorityOrderId)
+        ? getLatestOutputForAutomation(outputs, priorityAutomation.id, priorityOrderId, priorityLatestRun, priorityAutomation)
         : null;
 
       const priorityState = priorityAutomation
-        ? automationState(priorityAutomation, priorityLatestOutput, latestRunForAutomation(priorityAutomation.id, priorityOrderId))
+        ? automationState(priorityAutomation, priorityLatestOutput, priorityLatestRun)
         : null;
 
       const priorityProduct = priorityAutomation?.automations || {};
@@ -1859,10 +1963,11 @@ function openAutomationDetail(customerAutomationId) {
         const order = item.orders || {};
         const orderId = orderIdFromCustomerAutomation(item);
         const developerName = developerDisplayName(item);
-        const latestOutput = getLatestOutputForAutomation(outputs, item.id, orderId);
-        const state = automationState(item, latestOutput, latestRunForAutomation(item.id, orderId));
+        const latestRun = latestRunForAutomation(item.id, orderId);
+        const latestOutput = getLatestOutputForAutomation(outputs, item.id, orderId, latestRun, item);
+        const state = automationState(item, latestOutput, latestRun);
         const lane = automationLane(state);
-        return { item, product, order, orderId, developerName, latestOutput, state, lane };
+        return { item, product, order, orderId, developerName, latestRun, latestOutput, state, lane };
       });
 
       const bundleLaneCounts = {
@@ -2100,7 +2205,7 @@ function openAutomationDetail(customerAutomationId) {
     }
 
     function renderAutomationBoardCard(row) {
-      const { item, product, developerName, latestOutput, state, orderId } = row;
+      const { item, product, developerName, latestRun, latestOutput, state, orderId } = row;
       const productTitle = productTitleFromAutomation(item);
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
@@ -2108,6 +2213,7 @@ function openAutomationDetail(customerAutomationId) {
       const primaryButton = getAutomationActionButton(item, latestOutput, state);
       const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
       const automationOutputs = outputsForAutomation(item.id, orderId);
+      const currentAutomationOutputs = automationOutputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
       const automationRuns = runsForAutomation(item.id, orderId);
       const recurring = isRecurringAutomation(item);
 
@@ -2151,7 +2257,7 @@ function openAutomationDetail(customerAutomationId) {
           </div>
 
           <div class="buyer-automation-history-strip">
-            <span>${automationOutputs.length} output${automationOutputs.length === 1 ? "" : "s"}</span>
+            <span>${currentAutomationOutputs.length} output${currentAutomationOutputs.length === 1 ? "" : "s"}</span>
             <span>${automationRuns.length} run${automationRuns.length === 1 ? "" : "s"} recorded</span>
             <span>${escapeHtml(scheduleStatusLabel(item))}</span>
           </div>
@@ -2242,10 +2348,12 @@ function openAutomationDetail(customerAutomationId) {
       const productTitle = productTitleFromAutomation(item);
       const developerName = developerDisplayName(item);
       const orderId = orderIdFromCustomerAutomation(item);
-      const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id, orderId);
-      const outputs = outputsForAutomation(item.id, orderId);
       const runs = runsForAutomation(item.id, orderId);
-      const state = automationState(item, latestOutput, latestRunForAutomation(item.id, orderId));
+      const latestRun = runs[0] || null;
+      const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id, orderId, latestRun, item);
+      const outputs = outputsForAutomation(item.id, orderId);
+      const currentOutputs = outputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
+      const state = automationState(item, latestOutput, latestRun);
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
@@ -2298,8 +2406,8 @@ function openAutomationDetail(customerAutomationId) {
             </article>
             <article>
               <span>Outputs</span>
-              <strong>${outputs.length}</strong>
-              <p>${outputs.length ? "Previous results are listed below." : "No outputs have been published yet."}</p>
+              <strong>${currentOutputs.length}</strong>
+              <p>${currentOutputs.length ? "Current results are listed below." : "No current output has been published for this setup yet."}</p>
             </article>
             <article>
               <span>Runtime history</span>
@@ -2320,8 +2428,8 @@ function openAutomationDetail(customerAutomationId) {
 
               <div class="buyer-output-row-list">
                 ${
-                  outputs.length
-                    ? outputs.map(output => `
+                  currentOutputs.length
+                    ? currentOutputs.map(output => `
                       <a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
                         <div>
                           <strong>${escapeHtml(output.title || "Automation output")}</strong>
@@ -2331,7 +2439,7 @@ function openAutomationDetail(customerAutomationId) {
                         <span>${escapeHtml(dateLabel(output.created_at))}</span>
                       </a>
                     `).join("")
-                    : `<div class="buyer-lane-empty">No outputs for this automation yet.</div>`
+                    : `<div class="buyer-lane-empty">No current output for this setup yet. Older outputs stay in history once this run finishes.</div>`
                 }
               </div>
             </section>
@@ -2376,7 +2484,7 @@ function openAutomationDetail(customerAutomationId) {
       const bundledIds = bundleChildAutomationIds(bundleRows);
       const standaloneAutomations = (automations || []).filter(item => !bundledIds.has(item.id));
 
-      if (!outputs.length) {
+      if (!outputs.length || !countDisplayOutputs(outputs, automations, bundleRows)) {
         const waitingItems = [
           ...bundleRows.map(row => ({
             title: row.order?.automation_title || row.snapshot?.bundle_title || "Automation bundle",
@@ -2415,14 +2523,19 @@ function openAutomationDetail(customerAutomationId) {
         return;
       }
 
-      const latest = outputs[0];
-      const latestContext = outputAutomationContext(latest, automations, bundleRows);
       const grouped = groupOutputsByAutomation(outputs, automations, bundleRows);
+      const displayedOutputs = Object.values(grouped)
+        .flatMap(group => group.items || [])
+        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
+      const latest = displayedOutputs[0] || outputs[0];
+      const latestContext = outputAutomationContext(latest, automations, bundleRows);
+      const displayOutputCount = displayedOutputs.length;
       const outputAutomations = Object.keys(grouped).length;
       const awaitingCount =
         standaloneAutomations.filter(item => {
           const orderId = orderIdFromCustomerAutomation(item);
-          return !outputs.some(output => output.customer_automation_id === item.id && outputBelongsToOrder(output, orderId));
+          const latestRun = latestRunForAutomation(item.id, orderId);
+          return !getLatestOutputForAutomation(outputs, item.id, orderId, latestRun, item);
         }).length +
         bundleRows.filter(row => !row.outputCount).length;
 
@@ -2447,7 +2560,7 @@ function openAutomationDetail(customerAutomationId) {
           </div>
 
           <div class="buyer-output-stats">
-            <article><span>Total outputs</span><strong>${outputs.length}</strong></article>
+            <article><span>Total outputs</span><strong>${displayOutputCount}</strong></article>
             <article><span>Automations with results</span><strong>${outputAutomations}</strong></article>
             <article><span>Awaiting first result</span><strong>${awaitingCount}</strong></article>
           </div>
@@ -2523,7 +2636,6 @@ function openAutomationDetail(customerAutomationId) {
           item.id === output?.customer_automation_id &&
           (!outputOrderId || orderIdFromCustomerAutomation(item) === outputOrderId)
         ) ||
-        (automations || []).find(item => item.id === output?.customer_automation_id) ||
         {};
       const customerAutomationOrderId = outputOrderId || orderIdFromCustomerAutomation(customerAutomation);
       const title =
@@ -2543,8 +2655,31 @@ function openAutomationDetail(customerAutomationId) {
       };
     }
 
+    function outputIsCurrentForDashboard(output = {}, automations = [], bundleRows = []) {
+      const bundleRow = bundleRowForOutput(output, bundleRows);
+
+      if (bundleRow) {
+        const child = (bundleRow.included || []).find(item => item.id === output?.customer_automation_id) || {};
+        const latestRun = latestRunForAutomation(output.customer_automation_id, bundleRow.orderId);
+        return outputIsFreshForAutomation(output, child, latestRun);
+      }
+
+      const outputOrderId = String(output?.order_id || "");
+      const customerAutomation = (automations || []).find(item => item.id === output?.customer_automation_id) || {};
+
+      if (!customerAutomation?.id) return false;
+      if (isBundleCustomerAutomation(customerAutomation)) return false;
+
+      const expectedOrderId = String(orderIdFromCustomerAutomation(customerAutomation) || "");
+      if (expectedOrderId && outputOrderId !== expectedOrderId) return false;
+      if (!expectedOrderId && outputOrderId) return false;
+
+      const latestRun = latestRunForAutomation(output.customer_automation_id, expectedOrderId);
+      return outputIsFreshForAutomation(output, customerAutomation, latestRun);
+    }
     function groupOutputsByAutomation(outputs, automations = [], bundleRows = []) {
       return (outputs || []).reduce((groups, output) => {
+        if (!outputIsCurrentForDashboard(output, automations, bundleRows)) return groups;
         const context = outputAutomationContext(output, automations, bundleRows);
         const product = output.automations || {};
         const key = context.groupKey || output.customer_automation_id || output.automation_id || product.id || context.title || "output";
@@ -2580,6 +2715,10 @@ function openAutomationDetail(customerAutomationId) {
       }, {});
     }
 
+    function countDisplayOutputs(outputs = [], automations = [], bundleRows = []) {
+      const groups = groupOutputsByAutomation(outputs, automations, bundleRows);
+      return Object.values(groups).reduce((count, group) => count + ((group.items || []).length), 0);
+    }
     function renderEvents(events) {
       const root = document.getElementById("buyerEventsList");
 

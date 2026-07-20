@@ -1369,8 +1369,9 @@
       return grouped;
     }
 
-    async function hydrateBundleRuntimeStatus(entries = []) {
+    async function hydrateBundleRuntimeStatus(entries = [], orderId = "") {
       const ids = [...new Set((entries || []).map(entry => bundleEntryRuntimeId(entry)).filter(Boolean))];
+      const expectedOrderId = String(orderId || "");
       activeBundleRuntime = {
         outputsByAutomation: new Map(),
         runsByAutomation: new Map()
@@ -1391,14 +1392,18 @@
         if (outputsResult?.error) {
           console.warn("Could not load bundle output history:", outputsResult.error);
         } else {
-          const outputs = (outputsResult?.data || []).filter(row => ids.includes(String(row.customer_automation_id || "")));
+          const outputs = (outputsResult?.data || [])
+            .filter(row => ids.includes(String(row.customer_automation_id || "")))
+            .filter(row => !expectedOrderId || String(row.order_id || "") === expectedOrderId);
           activeBundleRuntime.outputsByAutomation = groupBundleRuntimeRows(outputs);
         }
 
         if (runsResult?.error) {
           console.warn("Could not load bundle run history:", runsResult.error);
         } else {
-          const runs = (runsResult?.data || []).filter(row => ids.includes(String(row.customer_automation_id || "")));
+          const runs = (runsResult?.data || [])
+            .filter(row => ids.includes(String(row.customer_automation_id || "")))
+            .filter(row => !expectedOrderId || String(row.order_id || "") === expectedOrderId);
           activeBundleRuntime.runsByAutomation = groupBundleRuntimeRows(runs);
         }
       } catch (error) {
@@ -1562,7 +1567,7 @@
         return { automation: row, product: product || {}, submission };
       }));
 
-      await hydrateBundleRuntimeStatus(entries);
+      await hydrateBundleRuntimeStatus(entries, orderId);
       const model = buildBundleSetupModel(entries);
       return model.fields.length ? model : null;
     }
@@ -1602,7 +1607,7 @@
         return { automation: row, product: product || {}, submission };
       }));
 
-      await hydrateBundleRuntimeStatus(entries);
+      await hydrateBundleRuntimeStatus(entries, orderId);
       const model = buildBundleSetupModel(entries);
       if (!model.fields.length) return null;
 
