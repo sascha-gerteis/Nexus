@@ -671,6 +671,60 @@ async function findLatestActiveRunForCallback(adminClient: any, customerAutomati
   return cleanString(activeRun?.id);
 }
 
+function callbackRunReference(body: any) {
+  return {
+    runId: cleanString(
+      body.run_id ||
+        body.runId ||
+        body.system?.run_id ||
+        body.system?.runId,
+    ),
+    runKey: cleanString(
+      body.run_key ||
+        body.runKey ||
+        body.system?.run_key ||
+        body.system?.runKey,
+    ),
+  };
+}
+
+async function findCallbackRunContext(adminClient: any, body: any, customerAutomationId: string) {
+  const { runId, runKey } = callbackRunReference(body);
+
+  if (runId || runKey) {
+    let query = adminClient
+      .from("automation_runs")
+      .select("id, run_key, customer_automation_id, buyer_id, automation_id, order_id, status, created_at, updated_at, started_at, finished_at")
+      .limit(1);
+
+    query = runId ? query.eq("id", runId) : query.eq("run_key", runKey);
+    if (customerAutomationId) query = query.eq("customer_automation_id", customerAutomationId);
+
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      console.warn("automation_runs callback context lookup failed:", error.message);
+    } else if (data?.id) {
+      return data;
+    }
+  }
+
+  const since = new Date(Date.now() - CALLBACK_RUN_MATCH_WINDOW_MS).toISOString();
+  const { data, error } = await adminClient
+    .from("automation_runs")
+    .select("id, run_key, customer_automation_id, buyer_id, automation_id, order_id, status, created_at, updated_at, started_at, finished_at")
+    .eq("customer_automation_id", customerAutomationId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    console.warn("automation_runs callback context fallback failed:", error.message);
+    return null;
+  }
+
+  return (data || []).find((run: any) => callbackRunStatusIsActive(run?.status)) || data?.[0] || null;
+}
+
 async function updateExistingRunFromCallback(
   adminClient: any,
   body: any,
@@ -852,6 +906,32 @@ Deno.serve(async (req) => {
       );
     }
 
+    const callbackRunContext = await findCallbackRunContext(adminClient, body, customerAutomation.id);
+    const callbackOrderId = cleanString(
+      callbackRunContext?.order_id ||
+        body.order_id ||
+        body.orderId ||
+        body.system?.order_id ||
+        body.system?.orderId ||
+        customerAutomation.order_id,
+    );
+    const callbackBuyerId = cleanString(
+      callbackRunContext?.buyer_id ||
+        body.buyer_id ||
+        body.buyerId ||
+        body.system?.buyer_id ||
+        body.system?.buyerId ||
+        customerAutomation.buyer_id,
+    );
+    const callbackAutomationId = cleanString(
+      callbackRunContext?.automation_id ||
+        body.automation_id ||
+        body.automationId ||
+        body.system?.automation_id ||
+        body.system?.automationId ||
+        customerAutomation.automation_id,
+    );
+
     const isErrorStatus =
       status === "error" ||
       status === "failed" ||
@@ -916,9 +996,9 @@ Deno.serve(async (req) => {
           .from("automation_runs")
           .insert({
             customer_automation_id: customerAutomation.id,
-            buyer_id: customerAutomation.buyer_id,
-            automation_id: customerAutomation.automation_id,
-            order_id: customerAutomation.order_id,
+            buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+            automation_id: callbackAutomationId || customerAutomation.automation_id,
+            order_id: callbackOrderId || null,
             runtime_type: customerAutomation.runtime_type || "n8n_managed",
             trigger_type: "runtime_callback",
             status: "error",
@@ -933,9 +1013,9 @@ Deno.serve(async (req) => {
 
       await tryInsertRunError(adminClient, {
         customer_automation_id: customerAutomation.id,
-        buyer_id: customerAutomation.buyer_id,
-        automation_id: customerAutomation.automation_id,
-        order_id: customerAutomation.order_id,
+        buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+        automation_id: callbackAutomationId || customerAutomation.automation_id,
+        order_id: callbackOrderId || null,
 
         source: cleanString(body.source) || "n8n",
         error_type: classification.error_type,
@@ -951,9 +1031,9 @@ Deno.serve(async (req) => {
 
       await insertEvent(adminClient, {
         customer_automation_id: customerAutomation.id,
-        buyer_id: customerAutomation.buyer_id,
-        automation_id: customerAutomation.automation_id,
-        order_id: customerAutomation.order_id,
+        buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+        automation_id: callbackAutomationId || customerAutomation.automation_id,
+        order_id: callbackOrderId || null,
         event_type: classification.needs_customer_action
           ? "customer_action_required"
           : "runtime_error",
@@ -1041,9 +1121,9 @@ Deno.serve(async (req) => {
             .from("automation_runs")
             .insert({
               customer_automation_id: customerAutomation.id,
-              buyer_id: customerAutomation.buyer_id,
-              automation_id: customerAutomation.automation_id,
-              order_id: customerAutomation.order_id,
+              buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+              automation_id: callbackAutomationId || customerAutomation.automation_id,
+              order_id: callbackOrderId || null,
               runtime_type: customerAutomation.runtime_type || "n8n_managed",
               trigger_type: "runtime_callback",
               status: "error",
@@ -1061,9 +1141,9 @@ Deno.serve(async (req) => {
 
         await insertEvent(adminClient, {
           customer_automation_id: customerAutomation.id,
-          buyer_id: customerAutomation.buyer_id,
-          automation_id: customerAutomation.automation_id,
-          order_id: customerAutomation.order_id,
+          buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+          automation_id: callbackAutomationId || customerAutomation.automation_id,
+          order_id: callbackOrderId || null,
           event_type: "runtime_output_rejected",
           title: "Runtime output rejected",
           message: JSON.stringify({
@@ -1102,9 +1182,9 @@ Deno.serve(async (req) => {
 
     const outputPayload = {
       customer_automation_id: customerAutomation.id,
-      order_id: customerAutomation.order_id || null,
-      buyer_id: customerAutomation.buyer_id,
-      automation_id: customerAutomation.automation_id || null,
+      order_id: callbackOrderId || null,
+      buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+      automation_id: callbackAutomationId || customerAutomation.automation_id || null,
 
       output_type: outputType,
       status: "published",
@@ -1113,7 +1193,14 @@ Deno.serve(async (req) => {
       summary: stripUnsafeText(body.summary),
       content_text: stripUnsafeText(body.content_text),
       content_html: stripUnsafeText(body.content_html || body.html),
-      content_json: safeJsonObject(body.content_json || body.contentJson || body.data || {}),
+      content_json: {
+        ...safeJsonObject(body.content_json || body.contentJson || body.data || {}),
+        nexus_runtime: {
+          order_id: callbackOrderId || null,
+          run_id: cleanString(callbackRunContext?.id) || cleanString(body.run_id || body.runId || body.system?.run_id || body.system?.runId) || null,
+          run_key: cleanString(callbackRunContext?.run_key) || cleanString(body.run_key || body.runKey || body.system?.run_key || body.system?.runKey) || null,
+        },
+      },
       file_url: stripUnsafeText(body.file_url),
       storage_path: stripUnsafeText(body.storage_path),
 
@@ -1209,14 +1296,14 @@ Deno.serve(async (req) => {
 
     await tryUpdateParentAutomationAfterSuccess(adminClient, customerAutomation, now);
 
-    if (customerAutomation.order_id) {
+    if (callbackOrderId) {
       await adminClient
         .from("orders")
         .update({
           order_status: "completed",
           updated_at: now,
         })
-        .eq("id", customerAutomation.order_id)
+        .eq("id", callbackOrderId)
         .eq("payment_status", "paid")
         .not("order_status", "in", '("cancelled","checkout_expired","payment_failed","refunded")');
     }
@@ -1242,9 +1329,9 @@ Deno.serve(async (req) => {
         .from("automation_runs")
         .insert({
           customer_automation_id: customerAutomation.id,
-          buyer_id: customerAutomation.buyer_id,
-          automation_id: customerAutomation.automation_id,
-          order_id: customerAutomation.order_id,
+          buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+          automation_id: callbackAutomationId || customerAutomation.automation_id,
+          order_id: callbackOrderId || null,
           runtime_type: customerAutomation.runtime_type || "n8n_managed",
           trigger_type: "runtime_callback",
           status: "success",
@@ -1257,9 +1344,9 @@ Deno.serve(async (req) => {
 
     await insertEvent(adminClient, {
       customer_automation_id: customerAutomation.id,
-      buyer_id: customerAutomation.buyer_id,
-      automation_id: customerAutomation.automation_id,
-      order_id: customerAutomation.order_id,
+      buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+      automation_id: callbackAutomationId || customerAutomation.automation_id,
+      order_id: callbackOrderId || null,
       event_type: "runtime_output_received",
       title: "Automation output received",
       message: JSON.stringify({

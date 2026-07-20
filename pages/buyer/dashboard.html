@@ -1012,6 +1012,16 @@ function latestOutputByCustomerAutomation(outputs = []) {
   return latestByAutomation;
 }
 
+function outputBelongsToOrder(output, orderId = "") {
+  if (!orderId) return true;
+  return String(output?.order_id || "") === String(orderId);
+}
+
+function runBelongsToOrder(run, orderId = "") {
+  if (!orderId) return true;
+  return String(run?.order_id || "") === String(orderId);
+}
+
 function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs = []) {
   return (orders || [])
     .filter(isBundleOrder)
@@ -1039,6 +1049,7 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
       );
       const includedIds = new Set(included.map(item => item.id).filter(Boolean));
       const bundleOutputs = (outputs || [])
+        .filter(output => outputBelongsToOrder(output, orderId))
         .filter(output => includedIds.has(output.customer_automation_id))
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
       const latestBundleOutputsByAutomation = latestOutputByCustomerAutomation(bundleOutputs);
@@ -1047,6 +1058,7 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
       const outputAutomationIds = new Set(bundleOutputs.map(output => output.customer_automation_id).filter(Boolean));
       const latestRunsByAutomation = new Map();
       (runs || [])
+        .filter(run => runBelongsToOrder(run, orderId))
         .filter(run => includedIds.has(run.customer_automation_id))
         .sort((a, b) => new Date(b.finished_at || b.started_at || b.created_at || 0) - new Date(a.finished_at || a.started_at || a.created_at || 0))
         .forEach(run => {
@@ -1056,14 +1068,14 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         });
       const bundleHasRuntimeActivity = Boolean(bundleOutputs.length || latestRunsByAutomation.size);
       const childStates = included.map(item =>
-        automationState(item, getLatestOutputForAutomation(outputs, item.id), latestRunsByAutomation.get(item.id) || null)
+        automationState(item, getLatestOutputForAutomation(bundleOutputs, item.id), latestRunsByAutomation.get(item.id) || null)
       );
       const outputGraceActive = bundleWithinOutputGrace(order, included);
       const issueIds = new Set();
       const issueDetails = [];
       const workflowSummaries = included.map((item, index) => {
         const latestRun = latestRunsByAutomation.get(item.id) || null;
-        const latestOutput = getLatestOutputForAutomation(outputs, item.id);
+        const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
         const childState = childStates[index] || {};
         const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
         const waitingForOutput = !latestOutput && !runIsIssue(latestRun) && (
@@ -1094,7 +1106,7 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
 
       included.forEach((item, index) => {
         const latestRun = latestRunsByAutomation.get(item.id);
-        const latestOutput = getLatestOutputForAutomation(outputs, item.id);
+        const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
         const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
         const waitingForOutput = !latestOutput && !runIsIssue(latestRun) && (
           runIsFreshActive(latestRun) ||
@@ -1152,7 +1164,7 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
       const setupCount = childStates.filter(state => String(state.label || "").toLowerCase().includes("setup") || String(state.label || "").toLowerCase().includes("request needed")).length;
       const progressCount = included.filter((item, index) => {
         const latestRun = latestRunsByAutomation.get(item.id);
-        const latestOutput = getLatestOutputForAutomation(outputs, item.id);
+        const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
         if (runIsFreshActive(latestRun)) return true;
         if (!latestOutput && !runIsIssue(latestRun) && bundleHasRuntimeActivity && outputGraceActive) return true;
         if (latestRun) return false;
@@ -2456,15 +2468,21 @@ function openAutomationDetail(customerAutomationId) {
       `;
     }
 
-    function bundleRowForCustomerAutomation(customerAutomationId, bundleRows = []) {
+    function bundleRowForOutput(output, bundleRows = []) {
+      const customerAutomationId = output?.customer_automation_id;
       if (!customerAutomationId) return null;
-      return (bundleRows || []).find(row =>
-        (row.included || []).some(item => item.id === customerAutomationId)
-      ) || null;
+
+      const outputOrderId = String(output?.order_id || "");
+      if (!outputOrderId) return null;
+
+      return (bundleRows || []).find(row => {
+        if (String(row.orderId || "") !== outputOrderId) return false;
+        return (row.included || []).some(item => item.id === customerAutomationId);
+      }) || null;
     }
 
     function outputAutomationContext(output, automations = [], bundleRows = []) {
-      const bundleRow = bundleRowForCustomerAutomation(output?.customer_automation_id, bundleRows);
+      const bundleRow = bundleRowForOutput(output, bundleRows);
       if (bundleRow) {
         const child = (bundleRow.included || []).find(item => item.id === output?.customer_automation_id) || {};
         const title = bundleRow.order?.automation_title || bundleRow.snapshot?.bundle_title || "Automation bundle";
@@ -2476,7 +2494,7 @@ function openAutomationDetail(customerAutomationId) {
           category: "Bundle output",
           developerName: "Nexus",
           groupKey: `bundle:${bundleRow.orderId || bundleRow.bundleId || title}`,
-          description: `${bundleRow.outputCount || 0} latest output${bundleRow.outputCount === 1 ? "" : "s"} from ${bundleRow.included.length} included workflow${bundleRow.included.length === 1 ? "" : "s"}${bundleRow.totalOutputCount && bundleRow.totalOutputCount > bundleRow.outputCount ? ` (${bundleRow.totalOutputCount} total in history)` : ""}.`
+          description: `${bundleRow.outputCount || 0} latest output${bundleRow.outputCount === 1 ? "" : "s"} from ${bundleRow.included.length} included workflow${bundleRow.included.length === 1 ? "" : "s"}.`
         };
       }
 
