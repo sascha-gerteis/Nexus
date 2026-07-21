@@ -494,7 +494,7 @@ function humanizeSetupStatus(item) {
     function getLatestOutputForAutomation(outputs, customerAutomationId, orderId = "", latestRun = null, item = {}) {
       return (outputs || []).find(output => {
         if (output.customer_automation_id !== customerAutomationId) return false;
-        if (orderId && !outputBelongsToOrder(output, orderId)) return false;
+        if (orderId && !outputBelongsToOrder(output, orderId, item)) return false;
         return outputIsFreshForAutomation(output, item, latestRun);
       }) || null;
     }
@@ -887,75 +887,72 @@ function automationOrderTime(item) {
   return latestTimestampMs(order?.created_at, item?.created_at, item?.updated_at);
 }
 
-function latestBundleOrders(orders = []) {
-  const byBundle = new Map();
 
-  (orders || []).filter(isBundleOrder).forEach(order => {
-    const snapshot = parseBundleSnapshot(order);
-    const bundleKey = String(order?.bundle_id || snapshot.bundle_id || order?.automation_title || order?.id || "");
-    if (!bundleKey) return;
 
-    const current = byBundle.get(bundleKey);
-    const orderTime = latestTimestampMs(order?.created_at, order?.updated_at);
-    const currentTime = latestTimestampMs(current?.created_at, current?.updated_at);
 
-    if (!current || orderTime >= currentTime) {
-      byBundle.set(bundleKey, order);
-    }
-  });
-
-  return Array.from(byBundle.values())
-    .sort((a, b) => latestTimestampMs(b?.created_at, b?.updated_at) - latestTimestampMs(a?.created_at, a?.updated_at));
+function automationProductKey(item) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return String(
+    item?.automation_id ||
+    product?.id ||
+    product?.slug ||
+    product?.title ||
+    item?.name ||
+    item?.id ||
+    ""
+  );
 }
 
-function currentStandaloneAutomations(items = []) {
-  const byProduct = new Map();
+function automationUpdatedTime(item = {}) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return latestTimestampMs(
+    item?.last_run_requested_at,
+    item?.last_run_at,
+    item?.updated_at,
+    item?.created_at,
+    product?.updated_at,
+    product?.created_at
+  );
+}
 
-  (items || []).forEach(item => {
-    if (!item?.id || isArchivedAutomationRow(item) || isBundleCustomerAutomation(item)) return;
+function automationSourceUpdatedTime(item = {}) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return latestTimestampMs(
+    product?.updated_at,
+    product?.workflow_updated_at,
+    product?.n8n_last_imported_at,
+    product?.last_tested_at,
+    item?.source_updated_at,
+    item?.workflow_updated_at
+  );
+}
 
-    const key = automationProductKey(item) || item.id;
-    const current = byProduct.get(key);
-
-    if (!current || automationOrderTime(item) >= automationOrderTime(current)) {
-      byProduct.set(key, item);
-    }
-  });
-
-  return Array.from(byProduct.values())
+function latestAutomationActivityTime(output = null, run = null) {
+  return latestTimestampMs(
+    output?.created_at,
+    output?.updated_at,
+    run?.finished_at,
+    run?.started_at,
+    run?.created_at,
+    run?.updated_at
+  );
+}function currentStandaloneAutomations(items = []) {
+  return (items || [])
+    .filter(item => item?.id && !isArchivedAutomationRow(item) && !isBundleCustomerAutomation(item))
     .sort((a, b) => automationOrderTime(b) - automationOrderTime(a));
 }
 
 function visibleDashboardAutomations(standaloneAutomations = [], bundleRows = []) {
-  return [
-    ...(standaloneAutomations || []),
-    ...(bundleRows || []).flatMap(row => row.included || [])
-  ];
-}
-
-function automationProductKey(item) {
-  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
-  return item?.automation_id || product.id || item?.id || "";
-}
-
-function automationUpdatedTime(item) {
-  const time = Date.parse(item?.updated_at || item?.created_at || "");
-  return Number.isFinite(time) ? time : 0;
-}
-
-function automationSourceUpdatedTime(item) {
-  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
-  const productTime = Date.parse(product?.updated_at || product?.created_at || "");
-  return Number.isFinite(productTime) ? productTime : 0;
-}
-
-function latestAutomationActivityTime(output, run) {
-  const outputTime = Date.parse(output?.created_at || output?.updated_at || "");
-  const runTime = Date.parse(run?.finished_at || run?.updated_at || run?.started_at || run?.created_at || "");
-  return Math.max(
-    Number.isFinite(outputTime) ? outputTime : 0,
-    Number.isFinite(runTime) ? runTime : 0
+  const bundleChildIds = new Set(
+    (bundleRows || [])
+      .flatMap(row => row?.included || [])
+      .map(item => String(item?.id || ""))
+      .filter(Boolean)
   );
+
+  return (standaloneAutomations || [])
+    .filter(item => item?.id && !isArchivedAutomationRow(item))
+    .filter(item => !bundleChildIds.has(String(item.id || "")) && !isBundleCustomerAutomation(item));
 }
 
 function outputRuntimeMeta(output = {}) {
@@ -1112,50 +1109,137 @@ function latestOutputByCustomerAutomation(outputs = []) {
   return latestByAutomation;
 }
 
-function outputBelongsToOrder(output, orderId = "") {
+function outputBelongsToOrder(output, orderId = "", item = null) {
   if (!orderId) return true;
-  return String(output?.order_id || "") === String(orderId);
+
+  const outputOrderId = String(output?.order_id || "");
+  if (outputOrderId) return outputOrderId === String(orderId);
+
+  /*
+    Older output rows do not always carry order_id. In that case the
+    customer_automation row is still the ownership source of truth.
+  */
+  const itemOrderId = item ? String(orderIdFromAutomation(item) || "") : "";
+  if (itemOrderId) return itemOrderId === String(orderId);
+
+  return true;
 }
 
-function runBelongsToOrder(run, orderId = "") {
+function runBelongsToOrder(run, orderId = "", item = null) {
   if (!orderId) return true;
-  return String(run?.order_id || "") === String(orderId);
+
+  const runOrderId = String(run?.order_id || "");
+  if (runOrderId) return runOrderId === String(orderId);
+
+  const itemOrderId = item ? String(orderIdFromAutomation(item) || "") : "";
+  if (itemOrderId) return itemOrderId === String(orderId);
+
+  return true;
+}
+
+function runtimeRowFitsOrderWindow(row = {}, order = {}, nextNewerOrderTime = 0) {
+  if (String(row?.order_id || "")) return true;
+
+  const rowTime = timestampMs(row?.created_at || row?.updated_at || row?.started_at || row?.finished_at);
+  const orderTime = timestampMs(order?.created_at || order?.updated_at);
+
+  if (!rowTime || !orderTime) return true;
+  if (rowTime + 1000 < orderTime) return false;
+  if (nextNewerOrderTime && rowTime >= nextNewerOrderTime - 1000) return false;
+
+  return true;
 }
 
 function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs = []) {
-  return latestBundleOrders(orders)
-    .map(order => {
+  const bundleOrders = (orders || [])
+    .filter(isBundleOrder)
+    .sort((a, b) => latestTimestampMs(b?.created_at, b?.updated_at) - latestTimestampMs(a?.created_at, a?.updated_at));
+  const ordersByBundle = new Map();
+
+  bundleOrders.forEach(order => {
+    const snapshot = parseBundleSnapshot(order);
+    const bundleId = String(order.bundle_id || snapshot.bundle_id || "");
+    if (!bundleId) return;
+    if (!ordersByBundle.has(bundleId)) ordersByBundle.set(bundleId, []);
+    ordersByBundle.get(bundleId).push(order);
+  });
+
+  const legacyItemsByOrder = new Map();
+
+  (automations || []).forEach(item => {
+    if (!item?.id || isArchivedAutomationRow(item)) return;
+    if (orderIdFromAutomation(item)) return;
+
+    const itemBundleId = String(bundleIdFromAutomation(item) || "");
+    if (!itemBundleId) return;
+
+    const candidateOrders = ordersByBundle.get(itemBundleId) || [];
+    if (!candidateOrders.length) return;
+
+    const itemTime = automationOrderTime(item) || timestampMs(item?.created_at || item?.updated_at);
+    let selectedOrder = null;
+    let selectedTime = -1;
+
+    candidateOrders.forEach(order => {
+      const orderTime = timestampMs(order?.created_at || order?.updated_at);
+      if (!orderTime) return;
+      if (itemTime && orderTime > itemTime + 15 * 60 * 1000) return;
+      if (orderTime > selectedTime) {
+        selectedTime = orderTime;
+        selectedOrder = order;
+      }
+    });
+
+    if (!selectedOrder && candidateOrders.length === 1) {
+      selectedOrder = candidateOrders[0];
+    }
+
+    const selectedOrderId = selectedOrder?.id || "";
+    if (!selectedOrderId) return;
+    if (!legacyItemsByOrder.has(selectedOrderId)) legacyItemsByOrder.set(selectedOrderId, []);
+    legacyItemsByOrder.get(selectedOrderId).push(item);
+  });
+
+  return bundleOrders.map(order => {
       const snapshot = parseBundleSnapshot(order);
       const orderId = order.id || "";
       const bundleId = order.bundle_id || snapshot.bundle_id || "";
       const exactOrderItems = [];
-      const orphanBundleItems = [];
 
       (automations || []).forEach(item => {
         if (isArchivedAutomationRow(item)) return;
         const itemOrderId = orderIdFromAutomation(item);
-        const itemBundleId = bundleIdFromAutomation(item);
         const belongsToOrder = orderId && itemOrderId === orderId;
-        const belongsToBundleOrphan = bundleId && itemBundleId === bundleId && (!orderId || !itemOrderId);
 
         if (belongsToOrder && item?.id) exactOrderItems.push(item);
-        if (belongsToBundleOrphan && item?.id) orphanBundleItems.push(item);
       });
 
-      const included = dedupeBundleAutomations(
-        exactOrderItems.length ? exactOrderItems : orphanBundleItems,
-        orderId
-      );
+      const legacyOrderItems = legacyItemsByOrder.get(orderId) || [];
+      const includedSource = exactOrderItems.length ? exactOrderItems : legacyOrderItems;
+      const included = dedupeBundleAutomations(includedSource, orderId);
       const includedIds = new Set(included.map(item => item.id).filter(Boolean));
       const itemById = new Map(included.map(item => [String(item.id || ""), item]));
+      const sameBundleOrders = (ordersByBundle.get(String(bundleId || "")) || [])
+        .filter(candidate => String(candidate?.id || "") !== String(orderId || ""));
+      const orderTime = timestampMs(order?.created_at || order?.updated_at);
+      const nextNewerOrderTime = sameBundleOrders
+        .map(candidate => timestampMs(candidate?.created_at || candidate?.updated_at))
+        .filter(time => orderTime && time > orderTime)
+        .sort((a, b) => a - b)[0] || 0;
       const rawBundleOutputs = (outputs || [])
-        .filter(output => outputBelongsToOrder(output, orderId))
-        .filter(output => includedIds.has(output.customer_automation_id))
+        .filter(output => {
+          const item = itemById.get(String(output?.customer_automation_id || ""));
+          if (!item) return false;
+          return outputBelongsToOrder(output, orderId, item) && runtimeRowFitsOrderWindow(output, order, nextNewerOrderTime);
+        })
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
       const latestRunsByAutomation = new Map();
       (runs || [])
-        .filter(run => runBelongsToOrder(run, orderId))
-        .filter(run => includedIds.has(run.customer_automation_id))
+        .filter(run => {
+          const item = itemById.get(String(run?.customer_automation_id || ""));
+          if (!item) return false;
+          return runBelongsToOrder(run, orderId, item) && runtimeRowFitsOrderWindow(run, order, nextNewerOrderTime);
+        })
         .sort((a, b) => new Date(b.finished_at || b.started_at || b.created_at || 0) - new Date(a.finished_at || a.started_at || a.created_at || 0))
         .forEach(run => {
           if (!latestRunsByAutomation.has(run.customer_automation_id)) {
@@ -1165,6 +1249,14 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
       const bundleOutputs = rawBundleOutputs.filter(output => {
         const item = itemById.get(String(output.customer_automation_id || "")) || {};
         const latestRun = latestRunsByAutomation.get(output.customer_automation_id) || null;
+
+        if (latestRun && outputMatchesRun(output, latestRun)) return true;
+        if (latestRun) {
+          const outputTime = timestampMs(output.created_at || output.updated_at);
+          const runTime = latestTimestampMs(latestRun.started_at, latestRun.created_at);
+          if (runTime && (!outputTime || outputTime + 1000 < runTime)) return false;
+        }
+
         return outputIsFreshForAutomation(output, item, latestRun);
       });
       const latestBundleOutputsByAutomation = latestOutputByCustomerAutomation(bundleOutputs);
@@ -1542,25 +1634,25 @@ function runStatusTone(status) {
   return "blue";
 }
 
-function outputsForAutomation(customerAutomationId, orderId = "") {
+function outputsForAutomation(customerAutomationId, orderId = "", item = null) {
   return (dashboardData.outputs || [])
     .filter(output => output.customer_automation_id === customerAutomationId)
-    .filter(output => outputBelongsToOrder(output, orderId))
+    .filter(output => outputBelongsToOrder(output, orderId, item))
     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 }
 
-function runsForAutomation(customerAutomationId, orderId = "") {
+function runsForAutomation(customerAutomationId, orderId = "", item = null) {
   return (dashboardData.runs || [])
     .filter(run => run.customer_automation_id === customerAutomationId)
-    .filter(run => runBelongsToOrder(run, orderId))
+    .filter(run => runBelongsToOrder(run, orderId, item))
     .sort((a, b) =>
       new Date(b.updated_at || b.finished_at || b.created_at || b.started_at || 0) -
       new Date(a.updated_at || a.finished_at || a.created_at || a.started_at || 0)
     );
 }
 
-function latestRunForAutomation(customerAutomationId, orderId = "") {
-  return runsForAutomation(customerAutomationId, orderId)[0] || null;
+function latestRunForAutomation(customerAutomationId, orderId = "", item = null) {
+  return runsForAutomation(customerAutomationId, orderId, item)[0] || null;
 }
 
 function openAutomationDetail(customerAutomationId) {
@@ -1681,12 +1773,53 @@ function openAutomationDetail(customerAutomationId) {
         });
     }
 
-    async function loadBuyerDashboard() {
-      const user = await NexusDB.requireBuyer("/pages/buyer/dashboard.html");
-      if (!user) return;
+    function renderDashboardLoadError(error) {
+      const message = error?.message || String(error || "Could not load the buyer dashboard.");
+      console.error("Buyer dashboard load error:", error);
 
-      await loadBuyerDashboardRecords(user);
-      runCustomerAutomationEnsure();
+      const roots = [
+        "overviewRoot",
+        "buyerAutomationBoard",
+        "buyerOutputsPanel",
+        "buyerOrdersList"
+      ];
+
+      roots.forEach(id => {
+        const root = document.getElementById(id);
+        if (!root) return;
+        root.innerHTML = `
+          <div class="buyer-empty-clean error">
+            <h3>Dashboard could not load</h3>
+            <p>${escapeHtml(message)}</p>
+            <button class="btn btn-primary" type="button" onclick="location.reload()">Reload dashboard</button>
+          </div>
+        `;
+      });
+
+      const status = document.getElementById("buyerMainStatus");
+      const statusText = document.getElementById("buyerMainStatusText");
+      if (status) status.textContent = "Could not load";
+      if (statusText) statusText.textContent = message;
+
+      if (typeof NexusNotice !== "undefined") {
+        NexusNotice.error("Could not load buyer dashboard", message);
+      }
+    }
+
+    async function loadBuyerDashboard() {
+      try {
+        if (typeof NexusDB === "undefined") {
+          throw new Error("NexusDB did not load. Hard refresh the page or check the latest deployment assets.");
+        }
+
+        const user = await NexusDB.requireBuyer("/pages/buyer/dashboard.html");
+        if (!user) return;
+
+        await loadBuyerDashboardRecords(user);
+        runCustomerAutomationEnsure();
+      } catch (error) {
+        renderDashboardLoadError(error);
+      }
     }
 
     function renderDashboard() {
@@ -2212,7 +2345,7 @@ function openAutomationDetail(customerAutomationId) {
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
       const primaryButton = getAutomationActionButton(item, latestOutput, state);
       const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
-      const automationOutputs = outputsForAutomation(item.id, orderId);
+      const automationOutputs = outputsForAutomation(item.id, orderId, item);
       const currentAutomationOutputs = automationOutputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
       const automationRuns = runsForAutomation(item.id, orderId);
       const recurring = isRecurringAutomation(item);
@@ -2351,7 +2484,7 @@ function openAutomationDetail(customerAutomationId) {
       const runs = runsForAutomation(item.id, orderId);
       const latestRun = runs[0] || null;
       const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id, orderId, latestRun, item);
-      const outputs = outputsForAutomation(item.id, orderId);
+      const outputs = outputsForAutomation(item.id, orderId, item);
       const currentOutputs = outputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
       const state = automationState(item, latestOutput, latestRun);
       const setupUrl = getBuyerSetupUrl(item);
@@ -2480,9 +2613,10 @@ function openAutomationDetail(customerAutomationId) {
 
       if (!root) return;
 
-      const bundleRows = buildBuyerBundleRows(dashboardData.orders || [], automations, outputs, dashboardData.runs || []);
+      const allCustomerAutomations = dashboardData.automations || [];
+      const bundleRows = buildBuyerBundleRows(dashboardData.orders || [], allCustomerAutomations, outputs, dashboardData.runs || []);
       const bundledIds = bundleChildAutomationIds(bundleRows);
-      const standaloneAutomations = (automations || []).filter(item => !bundledIds.has(item.id));
+      const standaloneAutomations = (automations || allCustomerAutomations || []).filter(item => !bundledIds.has(item.id));
 
       if (!outputs.length || !countDisplayOutputs(outputs, automations, bundleRows)) {
         const waitingItems = [
@@ -2604,11 +2738,15 @@ function openAutomationDetail(customerAutomationId) {
       if (!customerAutomationId) return null;
 
       const outputOrderId = String(output?.order_id || "");
-      if (!outputOrderId) return null;
 
       return (bundleRows || []).find(row => {
-        if (String(row.orderId || "") !== outputOrderId) return false;
-        return (row.included || []).some(item => item.id === customerAutomationId);
+        const child = (row.included || []).find(item => item.id === customerAutomationId);
+        if (!child) return false;
+
+        if (outputOrderId) return String(row.orderId || "") === outputOrderId;
+        if ((row.latestOutputs || []).some(item => item.id === output?.id)) return true;
+
+        return outputBelongsToOrder(output, row.orderId || "", child);
       }) || null;
     }
 
@@ -2671,10 +2809,10 @@ function openAutomationDetail(customerAutomationId) {
       if (isBundleCustomerAutomation(customerAutomation)) return false;
 
       const expectedOrderId = String(orderIdFromCustomerAutomation(customerAutomation) || "");
-      if (expectedOrderId && outputOrderId !== expectedOrderId) return false;
+      if (expectedOrderId && outputOrderId && outputOrderId !== expectedOrderId) return false;
       if (!expectedOrderId && outputOrderId) return false;
 
-      const latestRun = latestRunForAutomation(output.customer_automation_id, expectedOrderId);
+      const latestRun = latestRunForAutomation(output.customer_automation_id, expectedOrderId, customerAutomation);
       return outputIsFreshForAutomation(output, customerAutomation, latestRun);
     }
     function groupOutputsByAutomation(outputs, automations = [], bundleRows = []) {
