@@ -1515,9 +1515,17 @@
       }
 
       /*
-        Legacy fallback:
-        Older bundle rows can exist with bundle_id but no order_id. Only use
-        these if the current paid order did not return any child rows.
+        Exact paid-order isolation:
+        Never borrow orphaned workflows from another purchase when an order ID
+        is present. Stripe/ensure-customer-automations must provision the exact
+        order_items selected at checkout.
+      */
+      if (expectedOrderId) {
+        return [];
+      }
+
+      /*
+        Legacy fallback is only available for old links that have no order ID.
       */
       if (expectedBundleId && typeof NexusDB.getBuyerCustomerAutomationsByBundleId === "function") {
         const { data: bundleRows, error } = await NexusDB.getBuyerCustomerAutomationsByBundleId(expectedBundleId);

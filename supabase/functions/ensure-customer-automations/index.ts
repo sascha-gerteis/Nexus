@@ -54,6 +54,23 @@ function cleanString(value: unknown) {
   return String(value || "").trim();
 }
 
+function bundleSnapshot(order: any) {
+  const value = order?.bundle_snapshot;
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return {};
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function hasStrictBundleSelection(order: any) {
+  return Number(bundleSnapshot(order)?.selection_version || 0) >= 1;
+}
+
 function rowUpdatedTime(row: any) {
   const time = Date.parse(row?.updated_at || row?.created_at || "");
   return Number.isFinite(time) ? time : 0;
@@ -206,6 +223,14 @@ async function loadBundleProducts(adminClient: any, order: any) {
         product: one(item.automations),
       }))
       .filter((entry: any) => entry.product?.id);
+  }
+
+  if (hasStrictBundleSelection(order)) {
+    if (itemError) {
+      throw new Error(`Could not load the selected workflows for this bundle order: ${itemError.message}`);
+    }
+
+    throw new Error("This customized bundle order has no selected workflow items. Nexus will not fall back to unrelated bundle products.");
   }
 
   const bundleId = cleanString(order.bundle_id);

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Contact Messages | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-admin="true" data-admin-page="messages">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+
+      <a href="/pages/admin/dashboard.html">Overview</a>
+      <a href="/pages/admin/automations.html">Products</a>
+      <a href="/pages/admin/product-form.html">Create Product</a>
+      <a href="/pages/admin/customer-automations.html">Customer Automations</a>
+      <a href="/pages/admin/developer-profile.html">Developer Profile</a>
+      <a href="/pages/admin/reviews.html">Reviews</a>
+      <a class="active" href="/pages/admin/messages.html">Inquiries</a>
+      <a href="/pages/admin/waitlist.html">Developer Intake</a>
+      <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
+      <a href="/pages/marketplace/index.html">View Marketplace</a>
+      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+    </aside>
+
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Admin inbox</span>
+        <h2>Inquiries and contact messages.</h2>
+        <p>
+          View customer inquiries from website forms, support requests, and future connected email messages.
+        </p>
+      </div>
+
+      <div class="grid-4" style="margin-bottom:1rem">
+        <div class="card">
+          <h3 id="newCount">0</h3>
+          <p>New</p>
+        </div>
+
+        <div class="card">
+          <h3 id="readCount">0</h3>
+          <p>Read</p>
+        </div>
+
+        <div class="card">
+          <h3 id="repliedCount">0</h3>
+          <p>Replied</p>
+        </div>
+
+        <div class="card">
+          <h3 id="closedCount">0</h3>
+          <p>Closed</p>
+        </div>
+      </div>
+
+      <section class="admin-inbox-card" style="margin-bottom:1.5rem">
+        <div class="admin-inbox-toolbar">
+          <div>
+            <h2>Platform messages</h2>
+            <p>Direct buyer, developer, and Nexus conversations.</p>
+          </div>
+
+          <button class="btn btn-secondary btn-small" onclick="loadPlatformMessages()">
+            Refresh
+          </button>
+        </div>
+
+        <div id="platformMessageRows" class="admin-inbox-body">
+          <div class="admin-inbox-empty">Loading platform messages...</div>
+        </div>
+      </section>
+
+      <section class="admin-inbox-card">
+        <div class="admin-inbox-toolbar">
+          <div>
+            <h2>Inbox</h2>
+            <p>Review and manage incoming inquiries.</p>
+          </div>
+
+          <div class="admin-inbox-toolbar-actions">
+            <select id="statusFilter" class="input" onchange="renderMessages()">
+              <option value="all">All statuses</option>
+              <option value="new">New</option>
+              <option value="read">Read</option>
+              <option value="replied">Replied</option>
+              <option value="closed">Closed</option>
+              <option value="spam">Spam</option>
+            </select>
+
+            <button class="btn btn-secondary btn-small" onclick="loadMessages()">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="admin-inbox-table">
+          <div class="admin-inbox-head">
+            <div>Sender</div>
+            <div>Subject</div>
+            <div>Message</div>
+            <div>Status</div>
+            <div>Source</div>
+            <div>Received</div>
+            <div>Actions</div>
+          </div>
+
+          <div id="messagesRows" class="admin-inbox-body">
+            <div class="admin-inbox-empty">Loading messages...</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="nexus-modal-lite" id="messageModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeMessageModal()"></div>
+
+    <div class="nexus-modal-lite-card message-modal-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeMessageModal()">&times;</button>
+
+      <span class="eyebrow" id="messageModalStatus">Inquiry</span>
+      <h2 id="messageModalSubject">Message</h2>
+
+      <div class="message-detail-meta" id="messageModalMeta"></div>
+
+      <div class="message-detail-body" id="messageModalBody"></div>
+
+      <label style="margin-top:1rem">Admin notes</label>
+      <textarea class="textarea" id="messageAdminNotes" placeholder="Internal notes..."></textarea>
+
+      <div class="modal-lite-actions">
+        <button class="btn btn-secondary" onclick="closeMessageModal()">Close</button>
+        <button class="btn btn-secondary" onclick="markCurrentMessage('closed')">Mark closed</button>
+        <button class="btn btn-primary" onclick="replyToCurrentMessage()">Reply</button>
+        <button class="btn btn-primary" onclick="saveCurrentMessageNotes()">Save notes</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+
+  <script>
+    let allMessages = [];
+    let currentMessage = null;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function dateLabel(value) {
+      if (!value) return "";
+      return new Date(value).toLocaleString();
+    }
+
+    function statusPillClass(status) {
+      const safe = String(status || "new").toLowerCase();
+
+      if (safe === "closed") return "pill green";
+      if (safe === "replied") return "pill blue";
+      if (safe === "spam") return "pill red";
+      if (safe === "read") return "pill purple";
+
+      return "pill orange";
+    }
+
+    async function initMessagesPage() {
+      if (window.NexusUI && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      const profile = await NexusDB.requireAdminAccess();
+      if (!profile) return;
+
+      await Promise.all([
+        loadMessages(),
+        loadPlatformMessages()
+      ]);
+    }
+
+    async function loadPlatformMessages() {
+      const body = document.getElementById("platformMessageRows");
+      if (!body || typeof NexusUI.mountMessageCenter !== "function") return;
+
+      await NexusUI.mountMessageCenter(body, {
+        title: "Platform conversations",
+        viewerRole: "admin"
+      });
+    }
+
+    async function loadMessages() {
+      const body = document.getElementById("messagesRows");
+
+      if (body) {
+        body.innerHTML = `<div class="admin-inbox-empty">Loading messages...</div>`;
+      }
+
+      const { data, error } = await NexusDB.listContactMessages();
+
+      if (error) {
+        body.innerHTML = `
+          <div class="admin-inbox-empty">
+            ${escapeHtml(error.message || "Could not load messages.")}
+          </div>
+        `;
+        console.error(error);
+        return;
+      }
+
+      allMessages = data || [];
+      renderMessages();
+    }
+
+    function renderMessages() {
+      const body = document.getElementById("messagesRows");
+      const filter = document.getElementById("statusFilter")?.value || "all";
+
+      const messages = filter === "all"
+        ? allMessages
+        : allMessages.filter(item => item.status === filter);
+
+      document.getElementById("newCount").textContent =
+        allMessages.filter(item => item.status === "new").length;
+
+      document.getElementById("readCount").textContent =
+        allMessages.filter(item => item.status === "read").length;
+
+      document.getElementById("repliedCount").textContent =
+        allMessages.filter(item => item.status === "replied").length;
+
+      document.getElementById("closedCount").textContent =
+        allMessages.filter(item => item.status === "closed").length;
+
+      if (!messages.length) {
+        body.innerHTML = `<div class="admin-inbox-empty">No messages found.</div>`;
+        return;
+      }
+
+      body.innerHTML = messages.map(message => {
+        const sender = message.name || message.email || "Unknown sender";
+        const subject = message.subject || "Website inquiry";
+        const preview = String(message.message || "");
+        const shortPreview = preview.length > 180 ? `${preview.slice(0, 180)}...` : preview;
+
+        return `
+          <article class="admin-inbox-row">
+            <div class="admin-inbox-cell admin-inbox-sender" data-label="Sender">
+              <strong>${escapeHtml(sender)}</strong>
+              <span>${escapeHtml(message.email || "No email")}</span>
+              ${
+                message.company
+                  ? `<small>${escapeHtml(message.company)}</small>`
+                  : `<small>-</small>`
+              }
+            </div>
+
+            <div class="admin-inbox-cell admin-inbox-subject" data-label="Subject">
+              ${escapeHtml(subject)}
+            </div>
+
+            <div class="admin-inbox-cell admin-inbox-message" data-label="Message">
+              ${escapeHtml(shortPreview)}
+            </div>
+
+            <div class="admin-inbox-cell" data-label="Status">
+              <span class="${statusPillClass(message.status)}">
+                ${escapeHtml(message.status || "new")}
+              </span>
+            </div>
+
+            <div class="admin-inbox-cell admin-inbox-source" data-label="Source">
+              ${escapeHtml(message.source || "website_form")}
+            </div>
+
+            <div class="admin-inbox-cell admin-inbox-date" data-label="Received">
+              ${escapeHtml(dateLabel(message.created_at))}
+            </div>
+
+            <div class="admin-inbox-cell admin-inbox-actions" data-label="Actions">
+              <button class="btn btn-primary btn-small" onclick="openMessageModal('${message.id}')">
+                View
+              </button>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    async function openMessageModal(id) {
+      currentMessage = allMessages.find(item => item.id === id);
+
+      if (!currentMessage) return;
+
+      document.getElementById("messageModalStatus").textContent =
+        currentMessage.status || "Inquiry";
+
+      document.getElementById("messageModalSubject").textContent =
+        currentMessage.subject || "Website inquiry";
+
+      document.getElementById("messageModalMeta").innerHTML = `
+        <strong>${escapeHtml(currentMessage.name || "Unknown sender")}</strong>
+        ${currentMessage.email ? ` - ${escapeHtml(currentMessage.email)}` : ""}
+        ${currentMessage.company ? ` - ${escapeHtml(currentMessage.company)}` : ""}
+        ${currentMessage.phone ? ` - ${escapeHtml(currentMessage.phone)}` : ""}
+        <br>
+        <span>${escapeHtml(dateLabel(currentMessage.created_at))}</span>
+      `;
+
+      document.getElementById("messageModalBody").textContent =
+        currentMessage.message || "";
+
+      document.getElementById("messageAdminNotes").value =
+        currentMessage.admin_notes || "";
+
+      document.getElementById("messageModal").classList.add("open");
+      document.getElementById("messageModal").setAttribute("aria-hidden", "false");
+
+      if (currentMessage.status === "new") {
+        await updateMessageStatus(currentMessage.id, "read", false);
+        currentMessage.status = "read";
+        renderMessages();
+      }
+    }
+
+    function closeMessageModal() {
+      const modal = document.getElementById("messageModal");
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    async function updateMessageStatus(id, status, reload = true) {
+      const { error } = await NexusDB.updateContactMessage(id, {
+        status,
+        updated_at: new Date().toISOString()
+      });
+
+      if (error) {
+        NexusUI.toast(error.message || "Could not update message.");
+        return false;
+      }
+
+      if (reload) {
+        NexusUI.toast("Message updated.");
+        await loadMessages();
+      }
+
+      return true;
+    }
+
+    async function markCurrentMessage(status) {
+      if (!currentMessage) return;
+
+      const ok = await updateMessageStatus(currentMessage.id, status);
+
+      if (ok) {
+        closeMessageModal();
+      }
+    }
+
+    async function saveCurrentMessageNotes() {
+      if (!currentMessage) return;
+
+      const notes = document.getElementById("messageAdminNotes").value || "";
+
+      const { error } = await NexusDB.updateContactMessage(currentMessage.id, {
+        admin_notes: notes,
+        updated_at: new Date().toISOString()
+      });
+
+      if (error) {
+        NexusUI.toast(error.message || "Could not save notes.");
+        return;
+      }
+
+      NexusUI.toast("Notes saved.");
+      await loadMessages();
+    }
+
+    async function replyToCurrentMessage() {
+      if (!currentMessage) return;
+
+      if (!currentMessage.email) {
+        NexusUI.toast("This message has no email address.");
+        return;
+      }
+
+      const subject = encodeURIComponent(`Re: ${currentMessage.subject || "Your inquiry"}`);
+      const body = encodeURIComponent(
+        `Hi ${currentMessage.name || ""},\n\n\n\nBest,\nNexus AI`
+      );
+
+      window.location.href = `mailto:${currentMessage.email}?subject=${subject}&body=${body}`;
+
+      await NexusDB.updateContactMessage(currentMessage.id, {
+        status: "replied",
+        last_reply_subject: `Re: ${currentMessage.subject || "Your inquiry"}`,
+        last_replied_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
+      await loadMessages();
+    }
+
+    document.addEventListener("DOMContentLoaded", initMessagesPage);
+  </script>
+</body>
+</html>

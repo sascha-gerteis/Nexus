@@ -1,0 +1,8 @@
+[functions.import-n8n-workflow]
+verify_jwt = false
+
+[functions.test-n8n-connection]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false

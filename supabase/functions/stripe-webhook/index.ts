@@ -65,6 +65,23 @@ function cleanString(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function bundleSnapshot(order: any) {
+  const value = order?.bundle_snapshot;
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return {};
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function hasStrictBundleSelection(order: any) {
+  return Number(bundleSnapshot(order)?.selection_version || 0) >= 1;
+}
+
 function fromUnix(value: unknown) {
   const seconds = Number(value || 0);
   return seconds > 0 ? new Date(seconds * 1000).toISOString() : null;
@@ -766,6 +783,14 @@ async function loadBundleOrderProducts(order: any) {
         product: one(item.automations),
       }))
       .filter((entry: any) => entry.product?.id);
+  }
+
+  if (hasStrictBundleSelection(order)) {
+    if (itemError) {
+      throw new Error(`Could not load the selected workflows for this paid bundle order: ${itemError.message}`);
+    }
+
+    throw new Error("Customized bundle order has no active order items. Fulfillment stopped before any unrelated workflows could be attached.");
   }
 
   if (itemError) {

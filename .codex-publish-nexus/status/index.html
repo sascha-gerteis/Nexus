@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus Status | Runtime and Platform Health</title>
+  <meta name="description" content="Check current Nexus platform, marketplace, workflow runtime, messaging, and automation runner status.">
+  <link rel="canonical" href="https://nexus-ai.software/status/">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+</head>
+
+<body data-page="status">
+  <header class="site-header" id="globalNav" data-active="status"></header>
+
+  <main class="status-page">
+    <section class="status-hero">
+      <div>
+        <span class="eyebrow">Nexus status</span>
+        <h1>Runtime and platform health.</h1>
+        <p>Check whether Nexus marketplace, messaging, hosted workflow runtime, and automation runners are operating normally.</p>
+      </div>
+
+      <button class="btn btn-primary" type="button" id="refreshStatusButton">Refresh status</button>
+    </section>
+
+    <section class="status-summary-card" id="statusSummary">
+      <span class="status-dot status-loading"></span>
+      <div>
+        <strong>Checking Nexus...</strong>
+        <p>Loading public runtime status.</p>
+      </div>
+    </section>
+
+    <section class="status-grid" id="statusComponents">
+      <article class="status-component-card">
+        <span class="status-pill loading">Checking</span>
+        <h2>Loading components</h2>
+        <p>Please wait while Nexus checks the current runtime state.</p>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-row">
+      <div>
+        <strong>Nexus</strong><br>
+        <span>The trusted marketplace layer for business automation.</span>
+      </div>
+      <div class="footer-links">
+        <a href="/pages/marketplace/index.html">Marketplace</a>
+        <a href="/pages/contact/index.html">Contact</a>
+        <a href="/status/">Status</a>
+        <a href="/pages/legal/privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script defer src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script defer src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script>
+    const statusCopy = {
+      operational: {
+        title: "All public systems operational",
+        body: "Nexus is currently reporting normal public runtime health.",
+      },
+      degraded: {
+        title: "Some systems need attention",
+        body: "Nexus is reachable, but one or more services may be slower or partially degraded.",
+      },
+      issue: {
+        title: "Platform issue detected",
+        body: "Nexus detected a runtime issue. We are checking the affected service.",
+      },
+      loading: {
+        title: "Checking Nexus...",
+        body: "Loading public runtime status.",
+      },
+    };
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function statusLabel(value) {
+      if (value === "operational") return "Operational";
+      if (value === "degraded") return "Degraded";
+      if (value === "issue") return "Issue";
+      return "Checking";
+    }
+
+    function renderStatus(data) {
+      const status = data?.status || "issue";
+      const copy = statusCopy[status] || statusCopy.issue;
+      const checkedAt = data?.checked_at ? new Date(data.checked_at).toLocaleString() : "";
+      const summary = document.getElementById("statusSummary");
+      const components = document.getElementById("statusComponents");
+
+      summary.className = `status-summary-card ${status}`;
+      summary.innerHTML = `
+        <span class="status-dot ${escapeHtml(status)}"></span>
+        <div>
+          <strong>${escapeHtml(copy.title)}</strong>
+          <p>${escapeHtml(copy.body)}${checkedAt ? ` Last checked ${escapeHtml(checkedAt)}.` : ""}</p>
+        </div>
+      `;
+
+      components.innerHTML = (data?.components || []).map((item) => `
+        <article class="status-component-card ${escapeHtml(item.status)}">
+          <span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
+          <h2>${escapeHtml(item.name)}</h2>
+          <p>${escapeHtml(item.message)}</p>
+        </article>
+      `).join("") || `
+        <article class="status-component-card issue">
+          <span class="status-pill issue">Issue</span>
+          <h2>Status unavailable</h2>
+          <p>Nexus could not load component status.</p>
+        </article>
+      `;
+    }
+
+    async function loadStatus() {
+      const button = document.getElementById("refreshStatusButton");
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Checking...";
+      }
+
+      try {
+        const config = window.NEXUS_CONFIG || {};
+        const baseUrl = `${String(config.SUPABASE_URL || "").replace(/\/+$/, "")}/functions/v1/public-runtime-status`;
+        const response = await fetch(baseUrl, {
+          headers: {
+            apikey: config.SUPABASE_ANON_KEY || "",
+            Authorization: `Bearer ${config.SUPABASE_ANON_KEY || ""}`,
+          },
+        });
+        const data = await response.json().catch(() => ({}));
+        renderStatus(data);
+      } catch (error) {
+        renderStatus({
+          status: "issue",
+          checked_at: new Date().toISOString(),
+          components: [
+            {
+              name: "Status service",
+              status: "issue",
+              message: "Could not load the public status service.",
+            },
+          ],
+        });
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = "Refresh status";
+        }
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (window.NexusUI?.mountGlobalNav) {
+        await window.NexusUI.mountGlobalNav();
+      }
+
+      document.getElementById("refreshStatusButton")?.addEventListener("click", loadStatus);
+      loadStatus();
+    });
+  </script>
+</body>
+</html>

@@ -954,7 +954,30 @@ function getBundleOverridePriceSource(bundle: any, requestedCurrency: SupportedC
   return null;
 }
 
-async function loadBundleCheckout(adminClient: any, bundleId: string, currency: SupportedCheckoutCurrency) {
+function normalizeSelectedAutomationIds(value: unknown) {
+  if (!Array.isArray(value)) return null;
+
+  return Array.from(new Set(
+    value
+      .map((item) => cleanString(item))
+      .filter(Boolean),
+  ));
+}
+
+function effectiveBundleDiscountPercent(basePercent: unknown, selectedCount: number, availableCount: number) {
+  const base = Math.max(0, Math.min(Number(basePercent || 0), 95));
+  if (selectedCount <= 1 || availableCount <= 1) return 0;
+  if (selectedCount >= availableCount) return base;
+
+  return Math.round((base * ((selectedCount - 1) / (availableCount - 1))) * 100) / 100;
+}
+
+async function loadBundleCheckout(
+  adminClient: any,
+  bundleId: string,
+  currency: SupportedCheckoutCurrency,
+  selectedAutomationIdsInput: unknown,
+) {
   const { data: bundle, error } = await adminClient
     .from("automation_bundles")
     .select("*, automation_bundle_items(*, automations!automation_bundle_items_automation_id_fkey(*, developers(*)))")
@@ -973,12 +996,34 @@ async function loadBundleCheckout(adminClient: any, bundleId: string, currency: 
     .filter((item: any) => item?.status === "active" && item?.automations)
     .sort((a: any, b: any) => Number(a.position || 0) - Number(b.position || 0));
 
-  const products = items
+  const availableProducts = items
     .map((item: any) => item.automations)
     .filter((product: any) => product?.status === "live");
 
-  if (products.length < Number(bundle.min_active_items || 1)) {
+  if (availableProducts.length < Number(bundle.min_active_items || 1)) {
     throw new Error("This bundle does not have enough active workflows available right now.");
+  }
+
+  const selectedAutomationIds = normalizeSelectedAutomationIds(selectedAutomationIdsInput);
+  const availableIds = new Set(availableProducts.map((product: any) => cleanString(product.id)));
+
+  if (selectedAutomationIds && !selectedAutomationIds.length) {
+    throw new Error("Choose at least one workflow for this bundle.");
+  }
+
+  const unknownIds = (selectedAutomationIds || []).filter((id) => !availableIds.has(id));
+  if (unknownIds.length) {
+    throw new Error("One or more selected workflows are no longer available in this bundle. Refresh checkout and try again.");
+  }
+
+  const selectedIdSet = selectedAutomationIds ? new Set(selectedAutomationIds) : availableIds;
+  const selectedItems = items.filter((item: any) => selectedIdSet.has(cleanString(item?.automations?.id)));
+  const products = selectedItems
+    .map((item: any) => item.automations)
+    .filter((product: any) => product?.status === "live");
+
+  if (!products.length) {
+    throw new Error("Choose at least one workflow for this bundle.");
   }
 
   for (const product of products) {
@@ -1019,14 +1064,19 @@ async function loadBundleCheckout(adminClient: any, bundleId: string, currency: 
     });
   }
 
-  const discountPercent = Math.max(0, Math.min(Number(bundle.discount_percent || 0), 95));
+  const discountPercent = effectiveBundleDiscountPercent(
+    bundle.discount_percent,
+    products.length,
+    availableProducts.length,
+  );
   let amount = roundMoney(subtotal * (1 - discountPercent / 100), currency);
   let priceSource = "bundle_discounted_items";
   let fxRate: number | null = null;
   let fxSource: string | null = null;
   let fxDate: string | null = null;
 
-  const overridePrice = getBundleOverridePriceSource(bundle, currency);
+  const isFullBundle = products.length === availableProducts.length;
+  const overridePrice = isFullBundle ? getBundleOverridePriceSource(bundle, currency) : null;
   if (overridePrice) {
     const converted = await convertStandaloneAmountForCurrency(overridePrice.amount, overridePrice.currency, currency);
     amount = converted.amount;
@@ -1045,9 +1095,18 @@ async function loadBundleCheckout(adminClient: any, bundleId: string, currency: 
 
   return {
     bundle,
-    items,
+    items: selectedItems,
     products,
+    availableProducts,
     itemPrices,
+    selectedAutomationIds: products.map((product: any) => product.id),
+    excludedAutomationIds: availableProducts
+      .filter((product: any) => !selectedIdSet.has(cleanString(product.id)))
+      .map((product: any) => product.id),
+    availableItemCount: availableProducts.length,
+    selectedItemCount: products.length,
+    baseDiscountPercent: Math.max(0, Math.min(Number(bundle.discount_percent || 0), 95)),
+    effectiveDiscountPercent: discountPercent,
     subtotal: roundMoney(subtotal, currency),
     discountAmount,
     amount,
@@ -1065,6 +1124,7 @@ async function createBundleCheckoutSession(options: {
   paymentEnvironment: "live" | "test";
   user: any;
   bundleId: string;
+  selectedAutomationIds: unknown;
   installType: string;
   currency: SupportedCheckoutCurrency;
   buyerName: string;
@@ -1079,6 +1139,7 @@ async function createBundleCheckoutSession(options: {
     paymentEnvironment,
     user,
     bundleId,
+    selectedAutomationIds,
     currency,
     buyerName,
     buyerEmail,
@@ -1086,14 +1147,21 @@ async function createBundleCheckoutSession(options: {
     buyerWebsite,
     setupNotes,
   } = options;
-  const checkout = await loadBundleCheckout(adminClient, bundleId, currency);
+  const checkout = await loadBundleCheckout(adminClient, bundleId, currency, selectedAutomationIds);
   const primaryProduct = checkout.products[0];
   const priceDisplay = formatCheckoutPriceDisplay(checkout.amount, currency, checkout.mode);
   const bundleSnapshot = {
+    selection_version: 1,
     bundle_id: checkout.bundle.id,
     bundle_slug: checkout.bundle.slug,
     bundle_title: checkout.bundle.title,
-    discount_percent: checkout.bundle.discount_percent || 0,
+    discount_percent: checkout.effectiveDiscountPercent,
+    base_discount_percent: checkout.baseDiscountPercent,
+    effective_discount_percent: checkout.effectiveDiscountPercent,
+    available_item_count: checkout.availableItemCount,
+    selected_item_count: checkout.selectedItemCount,
+    selected_automation_ids: checkout.selectedAutomationIds,
+    excluded_automation_ids: checkout.excludedAutomationIds,
     subtotal: checkout.subtotal,
     discount_amount: checkout.discountAmount,
     amount: checkout.amount,
@@ -1192,7 +1260,11 @@ async function createBundleCheckoutSession(options: {
   });
 
   if (orderItemRows.length) {
-    await adminClient.from("order_items").insert(orderItemRows);
+    const { error: orderItemsError } = await adminClient.from("order_items").insert(orderItemRows);
+    if (orderItemsError) {
+      await adminClient.from("orders").delete().eq("id", order.id).eq("payment_status", "pending");
+      throw new Error(`Could not save the selected bundle workflows: ${orderItemsError.message}`);
+    }
   }
 
   const metadata = {
@@ -1206,6 +1278,9 @@ async function createBundleCheckoutSession(options: {
     amount: String(checkout.amount),
     subtotal_amount: String(checkout.subtotal),
     discount_amount: String(checkout.discountAmount),
+    selected_item_count: String(checkout.selectedItemCount),
+    available_item_count: String(checkout.availableItemCount),
+    effective_discount_percent: String(checkout.effectiveDiscountPercent),
     price_source: checkout.priceSource,
     payment_environment: paymentEnvironment,
     source: "nexus",
@@ -1272,6 +1347,10 @@ async function createBundleCheckoutSession(options: {
     amount: checkout.amount,
     subtotal_amount: checkout.subtotal,
     discount_amount: checkout.discountAmount,
+    selected_automation_ids: checkout.selectedAutomationIds,
+    selected_item_count: checkout.selectedItemCount,
+    available_item_count: checkout.availableItemCount,
+    effective_discount_percent: checkout.effectiveDiscountPercent,
     unit_amount: toStripeUnitAmount(checkout.amount, currency),
     price_display: priceDisplay,
     price_source: checkout.priceSource,
@@ -1300,6 +1379,7 @@ Deno.serve(async (req) => {
 
     const automationId = body.automation_id;
     const bundleId = cleanString(body.bundle_id);
+    const selectedAutomationIds = body.selected_automation_ids;
     const installType = normalizeInstallType(body.install_type || "self_serve");
     const selectedCustomization = String(body.selected_customization || "");
     const currency = normalizeCurrency(body.currency || "USD");
@@ -1324,6 +1404,7 @@ Deno.serve(async (req) => {
         paymentEnvironment: paymentMode.environment,
         user,
         bundleId,
+        selectedAutomationIds,
         installType,
         currency,
         buyerName,

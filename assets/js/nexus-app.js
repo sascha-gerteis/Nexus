@@ -3,6 +3,7 @@ const NexusApp = (() => {
   let liveBundles = [];
   let activeProduct = null;
   let checkoutSetupProduct = null;
+  let checkoutBundleSelection = new Set();
   let selectedCustomizationName = "";
   let marketplaceDrawTimer = null;
   const compareSlugs = new Set();
@@ -1262,7 +1263,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
         <div class="card">
           <h3>Ready to use this bundle?</h3>
           <p>
-            Checkout creates one bundle order and unlocks the included product setup forms in your buyer dashboard.
+            Choose the workflows you need at checkout. Nexus creates one order and one setup experience for only those selected workflows.
             If one included product is paused later, Nexus keeps the bundle live with the remaining active products and adjusts future pricing.
           </p>
           <div class="hero-actions" style="justify-content:flex-start">
@@ -1473,12 +1474,49 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       : setupSummaryAmountText(NexusUI.priceAmount?.(product) || 0);
   }
 
+  function checkoutBundleProducts(product = checkoutSetupProduct) {
+    return product?.is_bundle && Array.isArray(product.bundle_products)
+      ? product.bundle_products.filter((item) => item?.id)
+      : [];
+  }
+
+  function effectiveCheckoutBundleDiscount(product, selectedCount, availableCount) {
+    const base = Math.max(0, Math.min(Number(product?.discount_percent || 0), 95));
+    if (selectedCount <= 1 || availableCount <= 1) return 0;
+    if (selectedCount >= availableCount) return base;
+
+    return Math.round((base * ((selectedCount - 1) / (availableCount - 1))) * 100) / 100;
+  }
+
+  function checkoutBundlePricing(product = checkoutSetupProduct) {
+    const products = checkoutBundleProducts(product);
+    const selected = products.filter((item) => checkoutBundleSelection.has(String(item.id)));
+    const subtotal = selected.reduce((sum, item) => sum + Number(NexusUI.priceAmount?.(item) || 0), 0);
+    const discountPercent = effectiveCheckoutBundleDiscount(product, selected.length, products.length);
+    const fullBundleSelected = selected.length === products.length;
+    const fullBundleAmount = Number(NexusUI.priceAmount?.(product) || 0);
+    const amount = fullBundleSelected && fullBundleAmount > 0
+      ? fullBundleAmount
+      : subtotal * (1 - discountPercent / 100);
+
+    return {
+      products,
+      selected,
+      subtotal,
+      discountPercent,
+      amount: Math.max(0, Math.round((amount + Number.EPSILON) * 100) / 100),
+    };
+  }
+
   function updateCheckoutSetupSummary(type) {
     const product = checkoutSetupProduct;
     if (!product) return;
 
     const installType = type || document.getElementById("chosenInstallType")?.value || "self_serve";
-    const baseAmount = Number(NexusUI.priceAmount?.(product) || 0);
+    const bundlePricing = product.is_bundle ? checkoutBundlePricing(product) : null;
+    const baseAmount = bundlePricing
+      ? bundlePricing.amount
+      : Number(NexusUI.priceAmount?.(product) || 0);
     const guidedAmount = installType === "nexus_guided"
       ? Number(NexusUI.guidedInstallFeeAmount?.(product) || 0)
       : 0;
@@ -1491,13 +1529,22 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const totalEl = document.getElementById("checkoutTotalPriceText");
     const totalNote = document.getElementById("checkoutTotalPriceNote");
 
-    if (baseEl) baseEl.textContent = setupBasePriceText(product);
+    if (baseEl) {
+      baseEl.textContent = bundlePricing
+        ? setupSummaryAmountText(baseAmount)
+        : setupBasePriceText(product);
+    }
     if (guidedEl) guidedEl.textContent = guidedAmount > 0 ? `+ ${setupSummaryAmountText(guidedAmount)}` : "Included";
     if (guidedRow) guidedRow.hidden = installType !== "nexus_guided";
     if (totalEl) totalEl.textContent = setupSummaryAmountText(totalAmount);
 
     if (totalNote) {
-      if (installType === "nexus_guided" && guidedAmount > 0 && pricingType === "monthly") {
+      if (bundlePricing) {
+        const discountLabel = bundlePricing.discountPercent > 0
+          ? ` with a ${bundlePricing.discountPercent}% bundle discount`
+          : "";
+        totalNote.textContent = `${bundlePricing.selected.length} of ${bundlePricing.products.length} workflows selected${discountLabel}. The price and setup include only these workflows.`;
+      } else if (installType === "nexus_guided" && guidedAmount > 0 && pricingType === "monthly") {
         totalNote.textContent = `Then ${setupSummaryAmountText(baseAmount)}/mo after the one-time guided install fee.`;
       } else if (installType === "nexus_guided" && guidedAmount > 0) {
         totalNote.textContent = "Includes the selected one-time guided install fee.";
@@ -1603,6 +1650,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
 function renderSetupChoicePage(root, product) {
   checkoutSetupProduct = product;
+  const availableBundleProducts = checkoutBundleProducts(product);
+  checkoutBundleSelection = new Set(availableBundleProducts.map((item) => String(item.id)));
   const guidedInstallEnabled = productAllowsGuidedInstall(product);
   const guidedInstallFee = NexusUI.guidedInstallFeeMoney?.(product) || "";
   const guidedInstallFeeLabel = guidedInstallFee ? `+ ${guidedInstallFee}` : "Included";
@@ -1662,7 +1711,7 @@ function renderSetupChoicePage(root, product) {
               <span>Checkout summary</span>
               <div class="checkout-price-lines">
                 <div class="checkout-price-line">
-                  <span>Product price</span>
+                  <span>${product.is_bundle ? "Selected workflows" : "Product price"}</span>
                   <strong id="checkoutBasePriceText">${NexusUI.money(product)}</strong>
                 </div>
                 <div class="checkout-price-line" id="checkoutGuidedFeeRow" hidden>
@@ -1687,12 +1736,33 @@ function renderSetupChoicePage(root, product) {
               <span class="tag">${NexusUI.getCurrency()}</span>
             </div>
 
-            ${product.is_bundle && Array.isArray(product.bundle_products) ? `
+            ${product.is_bundle && availableBundleProducts.length ? `
               <div class="bundle-checkout-includes">
-                <strong>Included products</strong>
-                ${product.bundle_products.map((item) => `
-                  <span>${NexusUI.escapeHtml(item.title || "Product")}</span>
-                `).join("")}
+                <div class="bundle-checkout-heading">
+                  <div>
+                    <strong>Customize this bundle</strong>
+                    <small>Remove workflows you do not need. Your discount decreases with fewer workflows.</small>
+                  </div>
+                  <span id="bundleSelectionCount">${availableBundleProducts.length}/${availableBundleProducts.length} selected</span>
+                </div>
+                <div class="bundle-checkout-options">
+                  ${availableBundleProducts.map((item) => `
+                    <label class="bundle-checkout-option selected" data-bundle-checkout-option="${item.id}">
+                      <input
+                        type="checkbox"
+                        value="${item.id}"
+                        data-bundle-workflow-toggle
+                        checked
+                      >
+                      <span class="bundle-checkout-option-copy">
+                        <strong>${NexusUI.escapeHtml(item.title || "Product")}</strong>
+                        <small>${NexusUI.escapeHtml(item.short_description || item.category || "Included workflow")}</small>
+                      </span>
+                      <strong class="bundle-checkout-option-price">${NexusUI.money(item)}</strong>
+                    </label>
+                  `).join("")}
+                </div>
+                <small class="bundle-checkout-security">Only selected workflows are charged, added to setup, run, and returned in this purchase.</small>
               </div>
             ` : ""}
           </div>
@@ -1746,6 +1816,32 @@ function renderSetupChoicePage(root, product) {
 
   const form = document.getElementById("setupChoicePageForm");
 
+  root.querySelectorAll("[data-bundle-workflow-toggle]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const workflowId = String(input.value || "");
+      if (input.checked) {
+        checkoutBundleSelection.add(workflowId);
+      } else {
+        checkoutBundleSelection.delete(workflowId);
+      }
+
+      if (!checkoutBundleSelection.size) {
+        checkoutBundleSelection.add(workflowId);
+        input.checked = true;
+        NexusUI.toast("Keep at least one workflow in the bundle.");
+      }
+
+      const pricing = checkoutBundlePricing(product);
+      root.querySelectorAll("[data-bundle-checkout-option]").forEach((option) => {
+        option.classList.toggle("selected", checkoutBundleSelection.has(String(option.dataset.bundleCheckoutOption || "")));
+      });
+
+      const count = document.getElementById("bundleSelectionCount");
+      if (count) count.textContent = `${pricing.selected.length}/${pricing.products.length} selected`;
+      updateCheckoutSetupSummary(document.getElementById("chosenInstallType")?.value || "self_serve");
+    });
+  });
+
   form.onsubmit = async function(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -1776,9 +1872,23 @@ function renderSetupChoicePage(root, product) {
       selectedCustomizationName ||
       "";
 
+    const selectedAutomationIds = product.is_bundle
+      ? checkoutBundlePricing(product).selected.map((item) => item.id)
+      : [];
+
+    if (product.is_bundle && !selectedAutomationIds.length) {
+      NexusUI.toast("Choose at least one workflow for this bundle.");
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalButtonText;
+      }
+      return;
+    }
+
     const payload = {
       automation_id: product.is_bundle ? "" : product.id,
       bundle_id: product.is_bundle ? product.id : "",
+      selected_automation_ids: selectedAutomationIds,
       install_type: installType,
       selected_customization: customization,
       currency: NexusUI.getCurrency(),
@@ -1797,6 +1907,8 @@ function renderSetupChoicePage(root, product) {
       metadata: {
         item_type: product.is_bundle ? "bundle" : "automation",
         bundle_id: product.is_bundle ? product.id : "",
+        selected_automation_ids: selectedAutomationIds,
+        selected_workflow_count: selectedAutomationIds.length,
         install_type: installType,
         selected_customization: customization,
         currency: payload.currency,

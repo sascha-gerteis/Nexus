@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <title>How Nexus Handles Access and Credentials</title>
+  <meta name="description" content="Learn how Nexus handles buyer access, OAuth, temporary access, credentials, developer visibility, customer data, revocation, and cancellation.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nexus-ai.software/pages/security-access/index.html">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+</head>
+<body data-page="trust-page">
+  <header class="site-header" id="globalNav" data-active="marketplace"></header>
+  <main>
+    <section class="home-hero"><div class="container"><div class="home-hero-content"><h1>How Nexus handles access and credentials.</h1><p>Automation setup should not mean sending raw passwords around. Nexus aims to use setup forms, secure credential flows, OAuth where possible, and clear revocation paths.</p><div class="home-hero-actions"><a class="btn btn-primary" href="/pages/marketplace/index.html">Browse products</a><a class="btn btn-secondary" href="/pages/product-standards/index.html">Product standards</a></div></div></div></section>
+
+    <section class="section solution-rich-section"><div class="container"><div class="section-head left"><h2>Access rules buyers and developers should know.</h2><p>Exact handling depends on the product and tools involved, but these are the platform expectations.</p></div><div class="solution-policy-grid">
+      <article class="solution-policy-card"><h3>What buyers should never send</h3><p>Do not send raw passwords, personal banking access, government IDs, or unrelated sensitive data through messages.</p></article>
+      <article class="solution-policy-card"><h3>OAuth when available</h3><p>For supported tools, OAuth or platform-approved connection flows are preferred over copying secrets manually.</p></article>
+      <article class="solution-policy-card"><h3>Temporary access</h3><p>If temporary access is needed, buyers should limit permissions and revoke access after setup or cancellation.</p></article>
+      <article class="solution-policy-card"><h3>Developer visibility</h3><p>Developers should only see the setup data and product context needed to support their approved product.</p></article>
+      <article class="solution-policy-card"><h3>Developer-owned keys</h3><p>Provider keys used by the developer's workflow logic are managed separately from buyer setup data.</p></article>
+      <article class="solution-policy-card"><h3>Buyer-owned access</h3><p>Buyer credentials, accounts, URLs, files, and input data remain the buyer's responsibility.</p></article>
+      <article class="solution-policy-card"><h3>Data storage</h3><p>Nexus stores order, setup, output, message, and operational records needed to run and support the product.</p></article>
+      <article class="solution-policy-card"><h3>After cancellation</h3><p>Scheduled runs stop after cancellation according to the order/subscription state. Buyers should revoke third-party access they granted.</p></article>
+      <article class="solution-policy-card"><h3>Security questions</h3><p>If a product needs unusually sensitive access, ask Nexus before checkout so scope and risk are clear.</p></article>
+    </div></div></section>
+  </main>
+  <footer class="footer"><div class="container footer-row"><div><strong>Nexus</strong><br><span>The trusted marketplace layer for business automation.</span></div><div class="footer-links"><a href="/pages/marketplace/index.html">Marketplace</a><a href="/pages/product-standards/index.html">Standards</a><a href="/pages/buyer-protection/index.html">Protection</a><a href="/pages/calculator/index.html">Calculator</a><a href="/pages/contact/index.html">Contact</a><a href="/status/">Status</a><a href="/pages/legal/privacy.html">Privacy</a></div></div></footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script defer src="/assets/js/config.js?v=20260713-code-stability"></script><script defer src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script><script defer src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script><script defer src="/assets/js/nexus-buyer-nav.js?v=20260713-code-stability"></script>
+</body>
+</html>

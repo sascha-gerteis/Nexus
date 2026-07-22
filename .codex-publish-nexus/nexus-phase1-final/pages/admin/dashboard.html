@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260701-bundle-preview-width">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Admin Dashboard | Nexus AI</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-admin="true" data-admin-page="dashboard">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+  <div class="sidebar-title">Nexus Admin</div>
+
+  <a class="active" href="/pages/admin/dashboard.html">Overview</a>
+  <a href="/pages/admin/orders.html">Orders</a>
+  <a href="/pages/admin/automations.html">Products</a>
+  <a href="/pages/admin/product-form.html">Create Product</a>
+  <a href="/pages/admin/customer-automations.html">Cancellation Requests</a>
+  <a href="/pages/admin/messages.html">Inquiries</a>
+  <a href="/pages/admin/notifications.html">Notifications</a>
+  <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
+  <a href="/pages/admin/waitlist.html">Developer Waitlist</a>
+  <a href="/pages/admin/reviews.html">Reviews</a>
+  <a href="/pages/admin/developer-profile.html">Developer Profile</a>
+  <a href="/pages/marketplace/index.html">View Marketplace</a>
+  <a href="#" onclick="NexusDB.signOut()">Logout</a>
+</aside>
+
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Admin overview</span>
+        <h2>Marketplace control center.</h2>
+        <p>
+          Manage products, customer automations, cancellation requests, reviews,
+          developer profile, contact messages, waitlist signups, and checkout records.
+        </p>
+      </div>
+
+      <a class="card admin-dashboard-card" href="/pages/admin/orders.html">
+  <span class="pill blue">Orders</span>
+  <h3>All Orders</h3>
+  <p>View paid orders, guided install requests, pending checkouts, and completed installs.</p>
+</a>
+
+      <div class="grid-4">
+        <div class="card">
+          <h3 id="totalProducts">0</h3>
+          <p>Total products</p>
+        </div>
+
+        <div class="card">
+          <h3 id="liveProducts">0</h3>
+          <p>Live products</p>
+        </div>
+
+        <div class="card">
+          <h3 id="totalDevelopers">0</h3>
+          <p>Developers</p>
+        </div>
+
+        <div class="card">
+          <h3 id="totalReviews">0</h3>
+          <p>Reviews</p>
+        </div>
+      </div>
+
+      <div class="section-head left" style="margin-top:2rem">
+        <span class="eyebrow">Operations</span>
+        <h2>Run the marketplace safely.</h2>
+        <p>
+          Review buyer automations, cancellation requests, notifications, and incoming support messages.
+        </p>
+      </div>
+
+      <div class="grid-3" style="margin-top:1rem">
+        <a class="card admin-dashboard-card" href="/pages/admin/customer-automations.html">
+          <span class="pill blue">Operations</span>
+          <h3>Customer Automations</h3>
+          <p>
+            View buyer automations, cancellation requests, setup status, runtime status, and issues.
+          </p>
+        </a>
+
+        <a class="card admin-dashboard-card" href="/pages/admin/automations.html">
+          <span class="pill green">Products</span>
+          <h3>Product Management</h3>
+          <p>
+            Create, edit, pause, delete, and sync automation products.
+          </p>
+        </a>
+
+        <a class="card admin-dashboard-card" href="/pages/admin/notifications.html">
+          <span class="pill orange">Alerts</span>
+          <h3>Admin Notifications</h3>
+          <p>
+            Review paid orders, cancellation requests, runtime alerts, and system updates.
+          </p>
+        </a>
+      </div>
+
+      <div class="grid-3" style="margin-top:1rem">
+        <div class="card">
+          <h3 id="totalWaitlist">0</h3>
+          <p>Developer waitlist</p>
+        </div>
+
+        <div class="card">
+          <h3 id="totalMessages">0</h3>
+          <p>Contact messages</p>
+        </div>
+
+        <div class="card">
+          <h3 id="totalCheckout">0</h3>
+          <p>Checkout prep records</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="productModal">
+    <div class="modal">
+      <div class="modal-side" id="modalSide"></div>
+      <div class="modal-main" id="modalMain"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-app.js?v=20260710-admin-staff-analytics"></script>
+</body>
+</html>
