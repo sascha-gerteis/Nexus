@@ -1155,7 +1155,7 @@
       };
     }
 
-    function buildBundleSetupModel(entries) {
+    function buildBundleSetupModel(entries, meta = {}) {
       const fields = [];
       const existingAnswers = {};
 
@@ -1189,7 +1189,14 @@
         }
       }
 
-      return { is_bundle_setup: true, entries, fields, existingAnswers };
+      return {
+        is_bundle_setup: true,
+        entries,
+        fields,
+        existingAnswers,
+        order_id: meta.orderId || "",
+        bundle_id: meta.bundleId || ""
+      };
     }
 
     function bundleRuntimeTimestamp(value) {
@@ -1448,8 +1455,7 @@
       return values.some(value =>
         value.includes("archived") ||
         value.includes("deleted") ||
-        value.includes("removed") ||
-        value.includes("cancelled")
+        value.includes("removed")
       );
     }
 
@@ -1568,7 +1574,7 @@
       }));
 
       await hydrateBundleRuntimeStatus(entries, orderId);
-      const model = buildBundleSetupModel(entries);
+      const model = buildBundleSetupModel(entries, { orderId, bundleId });
       return model.fields.length ? model : null;
     }
 
@@ -1608,7 +1614,7 @@
       }));
 
       await hydrateBundleRuntimeStatus(entries, orderId);
-      const model = buildBundleSetupModel(entries);
+      const model = buildBundleSetupModel(entries, { orderId, bundleId });
       if (!model.fields.length) return null;
 
       return {
@@ -2073,6 +2079,47 @@ async function resolveProductFromCustomerAutomation(automation) {
         return;
       }
 
+      const bundleAttemptStartedAt = new Date().toISOString();
+      const firstAutomation = entries[0]?.automation || {};
+      const firstOrder = customerAutomationOrder(firstAutomation);
+      const bundleAttemptOrderId = activeBundleSetup?.order_id || getParam("order_id") || firstAutomation.order_id || firstOrder.id || "";
+      const bundleAttemptBundleId = activeBundleSetup?.bundle_id || getParam("bundle_id") || firstAutomation.bundle_id || firstOrder.bundle_id || "";
+      const bundleAttemptId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, marker => {
+          const random = Math.random() * 16 | 0;
+          const value = marker === "x" ? random : (random & 0x3) | 0x8;
+          return value.toString(16);
+        });
+
+      if (bundleAttemptOrderId && bundleAttemptBundleId) {
+        try {
+          localStorage.setItem(
+            `nexus_bundle_attempt:${bundleAttemptOrderId}:${bundleAttemptBundleId}`,
+            JSON.stringify({
+              bundle_attempt_id: bundleAttemptId,
+              submitted_at: bundleAttemptStartedAt,
+              order_id: bundleAttemptOrderId,
+              bundle_id: bundleAttemptBundleId,
+              customer_automation_ids: entries
+                .map(entry => entry?.automation?.id)
+                .filter(Boolean)
+            })
+          );
+        } catch (error) {
+          console.warn("Could not store bundle attempt marker", error);
+        }
+      }
+
+      const bundleDashboardUrl = (() => {
+        const params = new URLSearchParams();
+        if (bundleAttemptOrderId) params.set("order_id", bundleAttemptOrderId);
+        if (bundleAttemptBundleId) params.set("bundle_id", bundleAttemptBundleId);
+        params.set("bundle_attempt_id", bundleAttemptId);
+        params.set("bundle_attempt_started_at", bundleAttemptStartedAt);
+        return `/pages/buyer/dashboard.html?${params.toString()}`;
+      })();
+
       const submitOneBundleWorkflow = async entry => {
         const customerAutomationId = entry?.automation?.id;
         if (!customerAutomationId) {
@@ -2087,7 +2134,11 @@ async function resolveProductFromCustomerAutomation(automation) {
         const mappedAnswers = buildBundleAnswersForWorkflow(entry, answers);
         const { data, error } = await NexusDB.submitAutomationSetup({
           customer_automation_id: customerAutomationId,
-          answers: mappedAnswers
+          answers: mappedAnswers,
+          bundle_attempt_id: bundleAttemptId,
+          bundle_order_id: bundleAttemptOrderId,
+          bundle_id: bundleAttemptBundleId,
+          bundle_expected_count: entries.length
         });
 
         return {
@@ -2102,19 +2153,6 @@ async function resolveProductFromCustomerAutomation(automation) {
 
       for (const [index, entry] of entries.entries()) {
         const title = bundleEntryTitle(entry);
-        const needsRuntimeSubmit = bundleEntryNeedsRuntimeSubmit(entry);
-
-        if (!needsRuntimeSubmit) {
-          results.push({
-            entry,
-            data: null,
-            error: null,
-            answers: buildBundleAnswersForWorkflow(entry, answers),
-            skipped: true,
-            skipped_reason: "already_completed"
-          });
-          continue;
-        }
 
         button.textContent = `Starting ${index + 1}/${entries.length}: ${title}`;
 
@@ -2133,9 +2171,8 @@ async function resolveProductFromCustomerAutomation(automation) {
       }
 
       const failures = results.filter(item => item.error);
-      const skippedCount = results.filter(item => item.skipped).length;
-      const attemptedCount = results.length - skippedCount;
-      const submittedCount = results.filter(item => !item.error && !item.skipped).length;
+      const attemptedCount = results.length;
+      const submittedCount = results.filter(item => !item.error).length;
       const workflowWord = attemptedCount === 1 ? "workflow" : "workflows";
 
       if (failures.length) {
@@ -2151,7 +2188,7 @@ async function resolveProductFromCustomerAutomation(automation) {
               <div class="success" style="margin-top:1rem">
                 <strong>Bundle setup submitted.</strong><br>
                 ${escapeHtml(waitMessage)}<br>
-                Started ${submittedCount}/${attemptedCount || entries.length} included ${workflowWord}${skippedCount ? `; kept ${skippedCount} completed workflow${skippedCount === 1 ? "" : "s"}.` : "."}
+                Started ${submittedCount}/${attemptedCount || entries.length} included ${workflowWord}.
               </div>
             `;
           }
@@ -2161,7 +2198,7 @@ async function resolveProductFromCustomerAutomation(automation) {
           button.textContent = "Update setup details";
           form.dataset.submitting = "false";
           setTimeout(function () {
-            location.href = "/pages/buyer/dashboard.html";
+            location.href = bundleDashboardUrl;
           }, 1800);
           return;
         }
@@ -2179,7 +2216,7 @@ async function resolveProductFromCustomerAutomation(automation) {
             <div class="error" style="margin-top:1rem">
               <strong>Bundle setup needs review.</strong><br>
               ${escapeHtml(safeMessage)}
-              <br>Started ${submittedCount}/${attemptedCount || entries.length} workflow${(attemptedCount || entries.length) === 1 ? "" : "s"} that needed another run${skippedCount ? `; kept ${skippedCount} completed workflow${skippedCount === 1 ? "" : "s"}.` : "."}
+              <br>Started ${submittedCount}/${attemptedCount || entries.length} workflow${(attemptedCount || entries.length) === 1 ? "" : "s"} from this bundle attempt.
               ${
                 failureDetails.length
                   ? `<ul style="margin:0.75rem 0 0 1.2rem">${failureDetails.map(detail => `<li>${escapeHtml(detail)}</li>`).join("")}</ul>`
@@ -2195,32 +2232,11 @@ async function resolveProductFromCustomerAutomation(automation) {
         return;
       }
 
-      if (!attemptedCount) {
-        if (resultEl) {
-          resultEl.innerHTML = `
-            <div class="success" style="margin-top:1rem">
-              <strong>Bundle already complete.</strong><br>
-              Every included workflow already has a completed output. No workflow was rerun.
-            </div>
-          `;
-        }
-
-        NexusUI.toast("Bundle is already complete. No workflows were rerun.");
-        button.disabled = false;
-        button.textContent = "Update setup details";
-        form.dataset.submitting = "false";
-        setTimeout(function () {
-            location.href = "/pages/buyer/dashboard.html";
-        }, 1400);
-        return;
-      }
-
       latestSubmission = {
         answers
       };
 
       for (const result of results) {
-        if (result.skipped) continue;
         const entry = activeBundleSetup.entries.find(item => item.automation?.id === result.entry?.automation?.id);
         if (entry) {
           entry.submission = result.data?.submission || { answers: result.answers };
@@ -2233,19 +2249,19 @@ async function resolveProductFromCustomerAutomation(automation) {
         resultEl.innerHTML = `
           <div class="success" style="margin-top:1rem">
             <strong>Bundle setup submitted.</strong><br>
-            Nexus started ${submittedCount}/${attemptedCount} workflow${attemptedCount === 1 ? "" : "s"} that needed a run${skippedCount ? ` and kept ${skippedCount} completed workflow${skippedCount === 1 ? "" : "s"}.` : "."}
+            Nexus started ${submittedCount}/${attemptedCount} workflow${attemptedCount === 1 ? "" : "s"} for this bundle attempt.
           </div>
         `;
       }
 
-      NexusUI.toast("Bundle setup submitted. Nexus is preparing the workflows that needed a run.");
+      NexusUI.toast("Bundle setup submitted. Nexus is preparing every included workflow.");
 
       button.disabled = false;
       button.textContent = "Update setup details";
       form.dataset.submitting = "false";
 
       setTimeout(function () {
-        location.href = "/pages/buyer/dashboard.html";
+        location.href = bundleDashboardUrl;
       }, 1800);
     }
 
@@ -2398,3 +2414,7 @@ async function resolveProductFromCustomerAutomation(automation) {
   </script>
 </body>
 </html>
+
+
+
+

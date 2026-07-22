@@ -302,15 +302,19 @@ function runContextMatchTokens(runContext: any) {
   const responsePayload = isPlainObject(runContext?.response_payload)
     ? runContext.response_payload
     : {};
-  // Only the unique Nexus run identity may match an n8n execution. Bundle
-  // attempt/item IDs can be shared by retries and are not proof of ownership.
   const tokens = [
     runContext?.id,
     runContext?.run_key,
+    runContext?.bundle_run_attempt_id,
+    runContext?.bundle_run_item_id,
     responsePayload?.run_id,
     responsePayload?.runId,
     responsePayload?.run_key,
     responsePayload?.runKey,
+    responsePayload?.bundle_run_attempt_id,
+    responsePayload?.bundleRunAttemptId,
+    responsePayload?.bundle_run_item_id,
+    responsePayload?.bundleRunItemId,
   ]
     .map((token) => cleanString(token))
     .filter((token) => token.length >= 8);
@@ -344,32 +348,9 @@ async function findExecutionForRunContext(workflowId: string, runContext: any) {
     .filter(Boolean);
   const needsExactMatch = runContextMatchTokens(runContext).length > 0;
 
-  const runStartedAt = new Date(
-    runContext?.started_at || runContext?.created_at || 0,
-  ).getTime();
-
-  for (const candidate of sorted) {
-    const candidateId = cleanString(candidate?.id);
-    if (!candidateId) continue;
-
-    const executionDetail = await n8nFetch(`/api/v1/executions/${encodeURIComponent(candidateId)}?includeData=true`);
-    // n8n's detail endpoint can omit fields that are present on the list
-    // response (notably the terminal status). Preserve the list status so a
-    // cancelled execution can never be inferred as successful merely because
-    // it has finished and has a stoppedAt timestamp.
-    const execution = {
-      ...candidate,
-      ...executionDetail,
-      status: cleanString(executionDetail?.status) || cleanString(candidate?.status),
-    };
-    const executionStartedAt = new Date(
-      execution?.startedAt || execution?.createdAt || 0,
-    ).getTime();
-    const freshForRun = !runStartedAt || (
-      executionStartedAt && executionStartedAt >= runStartedAt - 15000
-    );
-
-    if (freshForRun && (!needsExactMatch || executionMatchesRunContext(execution, runContext))) {
+  for (const candidateId of candidateIds) {
+    const execution = await n8nFetch(`/api/v1/executions/${encodeURIComponent(candidateId)}?includeData=true`);
+    if (!needsExactMatch || executionMatchesRunContext(execution, runContext)) {
       return {
         execution,
         matched: needsExactMatch,
@@ -387,69 +368,6 @@ async function findExecutionForRunContext(workflowId: string, runContext: any) {
   };
 }
 
-async function findExecutionForLegacyOrder(
-  workflowId: string,
-  customerAutomationId: string,
-  orderId: string,
-  startedAfter: string,
-  bundleAttemptId = "",
-  bundleRunItemId = "",
-) {
-  const cutoff = new Date(startedAfter || 0).getTime();
-  const inspected = new Set<string>();
-
-  const scan = async (workflowFilter: string, requireExactItem: boolean) => {
-    let cursor = "";
-    for (let page = 0; page < 12; page += 1) {
-      let path = "/api/v1/executions?limit=100&includeData=false";
-      if (workflowFilter) path += "&workflowId=" + encodeURIComponent(workflowFilter);
-      if (cursor) path += "&cursor=" + encodeURIComponent(cursor);
-      const payload = await n8nFetch(path);
-      const executions = normalizeExecutionsList(payload).slice().sort((a: any, b: any) =>
-        new Date(b.startedAt || b.createdAt || 0).getTime() -
-        new Date(a.startedAt || a.createdAt || 0).getTime()
-      );
-      let reachedCutoff = false;
-
-      for (const candidate of executions) {
-        const candidateId = cleanString(candidate?.id);
-        if (!candidateId || inspected.has(candidateId)) continue;
-        inspected.add(candidateId);
-        const candidateTime = new Date(candidate?.startedAt || candidate?.createdAt || 0).getTime();
-        if (cutoff && candidateTime && candidateTime + 15000 < cutoff) {
-          reachedCutoff = true;
-          continue;
-        }
-        const detail = await n8nFetch(
-          "/api/v1/executions/" + encodeURIComponent(candidateId) + "?includeData=true",
-        );
-        const execution = {
-          ...candidate,
-          ...detail,
-          status: cleanString(detail?.status) || cleanString(candidate?.status),
-        };
-        const haystack = stringifySafe(execution);
-        if (bundleRunItemId && haystack.includes(bundleRunItemId)) return execution;
-        if (requireExactItem) continue;
-        if (
-          bundleAttemptId &&
-          haystack.includes(bundleAttemptId) &&
-          (haystack.includes(customerAutomationId) || haystack.includes(orderId))
-        ) return execution;
-        if (haystack.includes(customerAutomationId)) return execution;
-      }
-
-      cursor = cleanString(payload?.nextCursor || payload?.next_cursor);
-      if (!cursor || reachedCutoff) break;
-    }
-    return null;
-  };
-
-  const workflowExecution = await scan(workflowId, false);
-  if (workflowExecution) return workflowExecution;
-  if (bundleRunItemId) return await scan("", true);
-  return null;
-}
 function getExecutionStatus(execution: any) {
   const status = cleanString(execution?.status).toLowerCase();
   if (status) return status;
@@ -458,6 +376,9 @@ function getExecutionStatus(execution: any) {
     return "error";
   }
 
+  if (execution?.finished === true && execution?.stoppedAt && !execution?.data?.resultData?.error) {
+    return "success";
+  }
 
   if (execution?.finished === false && execution?.stoppedAt) {
     return "error";
@@ -469,32 +390,6 @@ function getExecutionStatus(execution: any) {
 
   return "unknown";
 }
-const EXECUTION_SUCCESS_STATUSES = new Set([
-  "success",
-  "succeeded",
-  "completed",
-  "complete",
-]);
-
-const EXECUTION_FAILURE_STATUSES = new Set([
-  "error",
-  "failed",
-  "failure",
-  "crashed",
-  "canceled",
-  "cancelled",
-  "aborted",
-  "stopped",
-]);
-
-const EXECUTION_ACTIVE_STATUSES = new Set([
-  "running",
-  "waiting",
-  "new",
-  "unknown",
-  "queued",
-  "pending",
-]);
 
 function extractExecutionError(execution: any) {
   const error =
@@ -696,10 +591,7 @@ function buildFallbackOutputPayload(customerAutomation: any, execution: any, fal
 
   return {
     customer_automation_id: customerAutomation.id,
-    // A customer automation can be reused by multiple purchases. Recovery
-    // must inherit the order captured for this exact run, never the reusable
-    // customer_automations row, or a later purchase can receive old output.
-    order_id: cleanString(runContext?.order_id) || customerAutomation.order_id || null,
+    order_id: customerAutomation.order_id || null,
     buyer_id: customerAutomation.buyer_id,
     automation_id: customerAutomation.automation_id || null,
     automation_run_id: cleanString(runContext?.id) || null,
@@ -882,7 +774,6 @@ async function applyExecutionFailure(adminClient: any, customerAutomation: any, 
   const bundleContext = (updatedRuns || []).find((run: any) => cleanString(run?.bundle_run_item_id)) || runContext;
   await updateBundleRunItemFromRun(adminClient, bundleContext, {
     status: failureStatus,
-    output_id: null,
     error_message: classification.customer_message || errorMessage,
     finished_at: now,
   });
@@ -891,7 +782,7 @@ async function applyExecutionFailure(adminClient: any, customerAutomation: any, 
     customer_automation_id: customerAutomation.id,
     buyer_id: customerAutomation.buyer_id,
     automation_id: customerAutomation.automation_id,
-    order_id: cleanString(bundleContext?.order_id) || customerAutomation.order_id,
+    order_id: customerAutomation.order_id,
     source: "n8n_api_poll",
     error_type: classification.error_type,
     error_code: classification.error_code,
@@ -908,7 +799,7 @@ async function applyExecutionFailure(adminClient: any, customerAutomation: any, 
     customer_automation_id: customerAutomation.id,
     buyer_id: customerAutomation.buyer_id,
     automation_id: customerAutomation.automation_id,
-    order_id: cleanString(bundleContext?.order_id) || customerAutomation.order_id,
+    order_id: customerAutomation.order_id,
     event_type: classification.needs_customer_action
       ? "customer_action_required"
       : "runtime_error",
@@ -1219,154 +1110,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    const requestedRunId = cleanString(body.run_id || body.runId);
-    const requestedOrderId = cleanString(body.order_id || body.orderId);
-    const recoverMissingRun = body.recover_missing_run === true || body.recoverMissingRun === true;
-    const requestedBundleAttemptId = cleanString(body.bundle_run_attempt_id || body.bundleRunAttemptId);
-    const requestedBundleRunItemId = cleanString(body.bundle_run_item_id || body.bundleRunItemId);
-
-    if (requestedOrderId && requestedOrderId !== cleanString(customerAutomation.order_id)) {
-      return errorResponse("The requested order does not own this customer automation.", 409);
-    }
-
-    if (recoverMissingRun && (requestedBundleAttemptId || requestedBundleRunItemId)) {
-      if (!requestedBundleAttemptId || !requestedBundleRunItemId || !requestedOrderId) {
-        return errorResponse("Bundle recovery requires an order, attempt, and item ID.", 400);
-      }
-      const { data: recoveryItem, error: recoveryItemError } = await adminClient
-        .from("bundle_run_items")
-        .select("id,bundle_run_attempt_id,order_id,customer_automation_id")
-        .eq("id", requestedBundleRunItemId)
-        .eq("bundle_run_attempt_id", requestedBundleAttemptId)
-        .eq("order_id", requestedOrderId)
-        .eq("customer_automation_id", customerAutomationId)
-        .maybeSingle();
-      if (recoveryItemError || !recoveryItem?.id) {
-        return errorResponse(recoveryItemError?.message || "The bundle run item does not belong to this purchase.", 409);
-      }
-    }
-    let runQuery = adminClient
+    const { data: latestRun } = await adminClient
       .from("automation_runs")
       .select("id, status, n8n_execution_id, error_message, created_at, updated_at, started_at, finished_at, run_key, order_id, bundle_run_attempt_id, bundle_run_item_id, response_payload")
-      .eq("customer_automation_id", customerAutomationId);
-
-    runQuery = requestedRunId
-      ? runQuery.eq("id", requestedRunId)
-      : runQuery.order("created_at", { ascending: false }).limit(1);
-
-    if (!requestedRunId && requestedOrderId) {
-      runQuery = runQuery.eq("order_id", requestedOrderId);
-    }
-    if (!requestedRunId && requestedBundleRunItemId) {
-      runQuery = runQuery.eq("bundle_run_item_id", requestedBundleRunItemId);
-    } else if (!requestedRunId && requestedBundleAttemptId) {
-      runQuery = runQuery.eq("bundle_run_attempt_id", requestedBundleAttemptId);
-    }
-
-    const { data: latestRunData, error: latestRunError } = await runQuery.maybeSingle();
-    let latestRun: any = latestRunData || null;
-
-    if (latestRunError || (requestedRunId && !latestRun?.id)) {
-      return errorResponse(latestRunError?.message || "The requested Nexus automation run was not found.", 404);
-    }
-
-    const recoveryProduct = Array.isArray(customerAutomation.automations)
-      ? customerAutomation.automations[0]
-      : customerAutomation.automations || {};
-    let recoveredExecution: any = null;
-
-    if (!latestRun?.id && recoverMissingRun && requestedOrderId) {
-      const workflowId = cleanString(
-        body.workflow_id ||
-          body.workflowId ||
-          customerAutomation.n8n_workflow_id ||
-          recoveryProduct.n8n_workflow_id,
-      );
-      if (!workflowId) {
-        return errorResponse("No n8n workflow ID found for legacy run recovery.", 400);
-      }
-
-      const orderRecord = Array.isArray(customerAutomation.orders)
-        ? customerAutomation.orders[0]
-        : customerAutomation.orders || {};
-      recoveredExecution = await findExecutionForLegacyOrder(
-        workflowId,
-        customerAutomationId,
-        requestedOrderId,
-        cleanString(orderRecord?.created_at || customerAutomation.created_at),
-        requestedBundleAttemptId,
-        requestedBundleRunItemId,
-      );
-
-      if (!recoveredExecution) {
-        return jsonResponse({ ok: true, status: "legacy_execution_not_found" });
-      }
-
-      const startedAt = cleanString(recoveredExecution.startedAt || recoveredExecution.createdAt) ||
-        new Date().toISOString();
-      const { data: recoveredRun, error: recoveredRunError } = await adminClient
-        .from("automation_runs")
-        .insert({
-          customer_automation_id: customerAutomationId,
-          buyer_id: customerAutomation.buyer_id,
-          automation_id: customerAutomation.automation_id,
-          order_id: requestedOrderId,
-          bundle_run_attempt_id: requestedBundleAttemptId || null,
-          bundle_run_item_id: requestedBundleRunItemId || null,
-          runtime_type: "n8n_managed",
-          trigger_type: "buyer_setup_submit",
-          trigger_source: "legacy_bundle_recovery",
-          status: "running",
-          n8n_execution_id: cleanString(recoveredExecution.id) || null,
-          request_payload: { legacy_bundle_recovery: true },
-          response_payload: { legacy_bundle_recovery: true },
-          started_at: startedAt,
-          created_at: startedAt,
-          updated_at: new Date().toISOString(),
-        })
-        .select("id, status, n8n_execution_id, error_message, created_at, updated_at, started_at, finished_at, run_key, order_id, bundle_run_attempt_id, bundle_run_item_id, response_payload")
-        .single();
-
-      if (recoveredRunError || !recoveredRun?.id) {
-        return errorResponse(
-          recoveredRunError?.message || "Could not persist the recovered legacy run.",
-          500,
-        );
-      }
-
-      latestRun = recoveredRun;
-      if (requestedBundleRunItemId) {
-        const { error: recoveryLinkError } = await adminClient
-          .from("bundle_run_items")
-          .update({
-            automation_run_id: recoveredRun.id,
-            started_at: startedAt,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", requestedBundleRunItemId)
-          .eq("bundle_run_attempt_id", requestedBundleAttemptId);
-        if (recoveryLinkError) {
-          return errorResponse(recoveryLinkError.message || "Could not link the recovered run to its bundle item.", 500);
-        }
-      }
-    }
-
-    if (!latestRun?.id) {
-      return errorResponse("No Nexus automation run was found for this purchase.", 404);
-    }
-    if (
-      requestedBundleAttemptId &&
-      cleanString(latestRun?.bundle_run_attempt_id) !== requestedBundleAttemptId
-    ) {
-      return errorResponse("The requested run does not belong to this bundle attempt.", 409);
-    }
-
-    if (
-      requestedBundleRunItemId &&
-      cleanString(latestRun?.bundle_run_item_id) !== requestedBundleRunItemId
-    ) {
-      return errorResponse("The requested run does not belong to this bundle workflow item.", 409);
-    }
+      .eq("customer_automation_id", customerAutomationId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (latestRunStoppedBeforeN8n(latestRun)) {
       return jsonResponse({
@@ -1397,35 +1147,11 @@ Deno.serve(async (req) => {
         latestRun?.n8n_execution_id,
     );
 
-    if (
-      (body.execution_id || body.executionId) &&
-      latestRun?.n8n_execution_id &&
-      cleanString(body.execution_id || body.executionId) !== cleanString(latestRun.n8n_execution_id)
-    ) {
-      return errorResponse("The requested n8n execution does not belong to this Nexus run.", 409);
-    }
-
-    let execution: any = recoveredExecution;
-    let rejectedStoredExecutionId = "";
-    const exactRunIdentityRequired = Boolean(
-      requestedRunId || latestRun?.bundle_run_attempt_id || latestRun?.bundle_run_item_id,
-    );
+    let execution: any = null;
 
     if (explicitExecutionId) {
-      const storedExecution = await n8nFetch(
-        `/api/v1/executions/${encodeURIComponent(explicitExecutionId)}?includeData=true`,
-      );
-
-      if (!exactRunIdentityRequired || executionMatchesRunContext(storedExecution, latestRun)) {
-        execution = storedExecution;
-      } else {
-        // Older matcher versions could persist a nearby execution ID. Do not
-        // trust it unless the execution payload proves the exact Nexus run.
-        rejectedStoredExecutionId = explicitExecutionId;
-      }
-    }
-
-    if (!execution) {
+      execution = await n8nFetch(`/api/v1/executions/${encodeURIComponent(explicitExecutionId)}?includeData=true`);
+    } else {
       const workflowId = cleanString(
         body.workflow_id ||
           body.workflowId ||
@@ -1444,9 +1170,7 @@ Deno.serve(async (req) => {
 
       if (!executionMatch.execution) {
         const now = new Date().toISOString();
-        const message = rejectedStoredExecutionId
-          ? "The stored n8n execution belonged to a different Nexus run. Waiting for the exact execution."
-          : "No n8n execution matched this exact Nexus run yet.";
+        const message = "No n8n execution matched this exact Nexus run yet.";
 
         await runUpdateQuery(
           adminClient,
@@ -1455,12 +1179,10 @@ Deno.serve(async (req) => {
           "",
           {
             status: "running",
-            n8n_execution_id: null,
             updated_at: now,
             response_payload: {
               status: "waiting_for_matching_execution",
               message,
-              rejected_execution_id: rejectedStoredExecutionId || null,
               inspected_executions: executionMatch.inspected,
               candidate_ids: executionMatch.candidate_ids,
             },
@@ -1469,7 +1191,6 @@ Deno.serve(async (req) => {
 
         await updateBundleRunItemFromRun(adminClient, latestRun, {
           status: "running",
-          output_id: null,
           error_message: null,
           finished_at: null,
         });
@@ -1478,7 +1199,6 @@ Deno.serve(async (req) => {
           ok: true,
           status: "waiting_for_matching_execution",
           message,
-          rejected_execution_id: rejectedStoredExecutionId || null,
           inspected_executions: executionMatch.inspected,
           candidate_ids: executionMatch.candidate_ids,
         });
@@ -1491,35 +1211,19 @@ Deno.serve(async (req) => {
 
     let result: Record<string, unknown>;
 
-    if (EXECUTION_FAILURE_STATUSES.has(executionStatus)) {
+    if (["error", "failed", "failure", "crashed", "canceled", "cancelled", "aborted"].includes(executionStatus)) {
       result = await applyExecutionFailure(adminClient, customerAutomation, execution, {
         runContext: latestRun,
       });
-    } else if (EXECUTION_SUCCESS_STATUSES.has(executionStatus)) {
+    } else if (["running", "waiting", "new", "unknown"].includes(executionStatus)) {
+      result = await applyExecutionRunning(adminClient, customerAutomation, execution, {
+        runContext: latestRun,
+      });
+    } else {
       result = await applyExecutionSuccess(adminClient, customerAutomation, execution, {
         forceRecover: body.force_recover === true || body.forceRecover === true,
         runContext: latestRun,
       });
-    } else {
-      // Never turn an unfamiliar n8n status into a successful customer output.
-      // If n8n has stopped, fail closed and clear any provisional bundle output;
-      // otherwise keep polling until n8n reports an explicit terminal status.
-      if (execution?.stoppedAt && !EXECUTION_ACTIVE_STATUSES.has(executionStatus)) {
-        execution = {
-          ...execution,
-          status: executionStatus || "stopped",
-          error: execution?.error || {
-            message: `n8n execution stopped with non-success status: ${executionStatus || "unknown"}.`,
-          },
-        };
-        result = await applyExecutionFailure(adminClient, customerAutomation, execution, {
-          runContext: latestRun,
-        });
-      } else {
-        result = await applyExecutionRunning(adminClient, customerAutomation, execution, {
-          runContext: latestRun,
-        });
-      }
     }
 
     return jsonResponse({
@@ -1553,6 +1257,5 @@ Deno.serve(async (req) => {
     );
   }
 });
-
 
 

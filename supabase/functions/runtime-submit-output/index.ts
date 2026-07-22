@@ -652,6 +652,7 @@ function callbackRunStatusIsActive(value: unknown) {
 async function findLatestActiveRunForCallback(adminClient: any, customerAutomationId: string) {
   if (!customerAutomationId) return "";
 
+
   const since = new Date(Date.now() - CALLBACK_RUN_MATCH_WINDOW_MS).toISOString();
 
   const { data, error } = await adminClient
@@ -688,13 +689,137 @@ function callbackRunReference(body: any) {
   };
 }
 
+function callbackExecutionReference(body: any, callbackRunContext: any = null) {
+  return cleanString(
+    callbackRunContext?.n8n_execution_id ||
+      body.n8n_execution_id ||
+      body.n8nExecutionId ||
+      body.execution_id ||
+      body.executionId ||
+      body.system?.n8n_execution_id ||
+      body.system?.n8nExecutionId ||
+      body.system?.execution_id ||
+      body.system?.executionId,
+  );
+}
+
+function isUuid(value: unknown) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanString(value));
+}
+
+function callbackBundleReference(body: any, callbackRunContext: any = null) {
+  return {
+    bundleAttemptId: cleanString(
+      callbackRunContext?.bundle_run_attempt_id ||
+        body.bundle_run_attempt_id ||
+        body.bundleRunAttemptId ||
+        body.bundle_attempt_id ||
+        body.bundleAttemptId ||
+        body.bundle_run_id ||
+        body.bundleRunId ||
+        body.system?.bundle_run_attempt_id ||
+        body.system?.bundleRunAttemptId ||
+        body.system?.bundle_attempt_id ||
+        body.system?.bundleAttemptId ||
+        body.system?.bundle_run_id ||
+        body.system?.bundleRunId,
+    ),
+    bundleRunItemId: cleanString(
+      callbackRunContext?.bundle_run_item_id ||
+        body.bundle_run_item_id ||
+        body.bundleRunItemId ||
+        body.system?.bundle_run_item_id ||
+        body.system?.bundleRunItemId,
+    ),
+  };
+}
+
+function callbackHasExplicitRuntimeReference(body: any) {
+  const runReference = callbackRunReference(body);
+  const bundleReference = callbackBundleReference(body, null);
+
+  return Boolean(
+    runReference.runId ||
+      runReference.runKey ||
+      bundleReference.bundleAttemptId ||
+      bundleReference.bundleRunItemId,
+  );
+}
+
+async function updateBundleRunItem(
+  adminClient: any,
+  bundleRunItemId: string,
+  payload: Record<string, unknown>,
+) {
+  if (!isUuid(bundleRunItemId)) return null;
+
+  const { error } = await adminClient
+    .from("bundle_run_items")
+    .update(payload)
+    .eq("id", bundleRunItemId);
+
+  if (error) {
+    console.warn("bundle_run_items callback update failed:", error.message);
+    return error;
+  }
+
+  return null;
+}
+
+async function refreshBundleRunAttemptRollup(adminClient: any, bundleAttemptId: string) {
+  if (!isUuid(bundleAttemptId)) return null;
+
+  const { data: items, error } = await adminClient
+    .from("bundle_run_items")
+    .select("id,status")
+    .eq("bundle_run_attempt_id", bundleAttemptId);
+
+  if (error) {
+    console.warn("bundle_run_attempts callback rollup read failed:", error.message);
+    return error;
+  }
+
+  const rows = items || [];
+  const expectedCount = rows.length;
+  const completedCount = rows.filter((item: any) => cleanString(item.status).toLowerCase() === "success").length;
+  const failedCount = rows.filter((item: any) => ["failed", "cancelled", "timed_out"].includes(cleanString(item.status).toLowerCase())).length;
+  const runningCount = rows.filter((item: any) => ["queued", "running", "processing", "pending", "in_progress"].includes(cleanString(item.status).toLowerCase())).length;
+  const status = expectedCount && completedCount >= expectedCount
+    ? "success"
+    : expectedCount && failedCount >= expectedCount
+    ? "failed"
+    : failedCount && !runningCount
+    ? "partial_failed"
+    : "running";
+
+  const { error: updateError } = await adminClient
+    .from("bundle_run_attempts")
+    .update({
+      status,
+      expected_count: expectedCount,
+      completed_count: completedCount,
+      failed_count: failedCount,
+      finished_at: ["success", "failed", "partial_failed"].includes(status) ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", bundleAttemptId);
+
+  if (updateError) {
+    console.warn("bundle_run_attempts callback rollup update failed:", updateError.message);
+    return updateError;
+  }
+
+  return null;
+}
+
 async function findCallbackRunContext(adminClient: any, body: any, customerAutomationId: string) {
   const { runId, runKey } = callbackRunReference(body);
+  const explicitBundleReference = callbackBundleReference(body, null);
 
   if (runId || runKey) {
     let query = adminClient
       .from("automation_runs")
-      .select("id, run_key, customer_automation_id, buyer_id, automation_id, order_id, status, created_at, updated_at, started_at, finished_at")
+      .select("id, run_key, customer_automation_id, buyer_id, automation_id, order_id, bundle_run_attempt_id, bundle_run_item_id, status, n8n_execution_id, created_at, updated_at, started_at, finished_at")
       .limit(1);
 
     query = runId ? query.eq("id", runId) : query.eq("run_key", runKey);
@@ -706,12 +831,17 @@ async function findCallbackRunContext(adminClient: any, body: any, customerAutom
     } else if (data?.id) {
       return data;
     }
+
+    // Explicit Nexus run identity is authoritative. Never attach this callback
+    // to a nearby run if the referenced row cannot be found.
+    return null;
   }
+
 
   const since = new Date(Date.now() - CALLBACK_RUN_MATCH_WINDOW_MS).toISOString();
   const { data, error } = await adminClient
     .from("automation_runs")
-    .select("id, run_key, customer_automation_id, buyer_id, automation_id, order_id, status, created_at, updated_at, started_at, finished_at")
+    .select("id, run_key, customer_automation_id, buyer_id, automation_id, order_id, bundle_run_attempt_id, bundle_run_item_id, status, n8n_execution_id, created_at, updated_at, started_at, finished_at")
     .eq("customer_automation_id", customerAutomationId)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
@@ -906,14 +1036,54 @@ Deno.serve(async (req) => {
       );
     }
 
+    const { data: callbackOrder } = customerAutomation.order_id
+      ? await adminClient
+        .from("orders")
+        .select("id, order_type, bundle_id")
+        .eq("id", customerAutomation.order_id)
+        .maybeSingle()
+      : { data: null };
+
+    const hasExplicitRuntimeReference = callbackHasExplicitRuntimeReference(body);
     const callbackRunContext = await findCallbackRunContext(adminClient, body, customerAutomation.id);
+    const bodyBundleReference = callbackBundleReference(body, null);
+    const isBundleRuntimeCallback = Boolean(
+      customerAutomation.bundle_id ||
+        callbackOrder?.bundle_id ||
+        cleanString(callbackOrder?.order_type).toLowerCase() === "bundle" ||
+        callbackRunContext?.bundle_run_attempt_id ||
+        callbackRunContext?.bundle_run_item_id ||
+        bodyBundleReference.bundleAttemptId ||
+        bodyBundleReference.bundleRunItemId ||
+        body.bundle_order_id ||
+        body.bundleOrderId ||
+        body.system?.bundle_order_id ||
+        body.system?.bundleOrderId,
+    );
+
+    if (isBundleRuntimeCallback && !hasExplicitRuntimeReference) {
+      return errorResponse(
+        "Bundle output callback is missing Nexus run identity. Sync/reprovision the Nexus Submit Output node so it sends run_id/run_key or bundle_run_attempt_id/bundle_run_item_id. Nexus will not guess bundle ownership from customer_automation_id alone.",
+        409,
+      );
+    }
+
+    if (isBundleRuntimeCallback && !callbackRunContext?.id) {
+      return errorResponse(
+        "Bundle output callback does not match an exact Nexus automation run. The output was rejected to prevent cross-purchase attribution.",
+        409,
+      );
+    }
+
     const callbackOrderId = cleanString(
       callbackRunContext?.order_id ||
-        body.order_id ||
-        body.orderId ||
-        body.system?.order_id ||
-        body.system?.orderId ||
-        customerAutomation.order_id,
+        (!isBundleRuntimeCallback && (
+          body.order_id ||
+          body.orderId ||
+          body.system?.order_id ||
+          body.system?.orderId ||
+          customerAutomation.order_id
+        )),
     );
     const callbackBuyerId = cleanString(
       callbackRunContext?.buyer_id ||
@@ -931,6 +1101,15 @@ Deno.serve(async (req) => {
         body.system?.automationId ||
         customerAutomation.automation_id,
     );
+    const { bundleAttemptId, bundleRunItemId } = callbackBundleReference(body, callbackRunContext);
+    const callbackAutomationRunId = cleanString(callbackRunContext?.id) || cleanString(body.run_id || body.runId || body.system?.run_id || body.system?.runId);
+
+    if (isBundleRuntimeCallback && (!callbackOrderId || !bundleAttemptId || !bundleRunItemId || !callbackAutomationRunId)) {
+      return errorResponse(
+        "Bundle output callback is missing the exact Nexus order, attempt, item, or run identity. The output was rejected to prevent cross-purchase attribution.",
+        409,
+      );
+    }
 
     const isErrorStatus =
       status === "error" ||
@@ -974,6 +1153,16 @@ Deno.serve(async (req) => {
         return errorResponse(updateError.message, 500);
       }
 
+            if (bundleRunItemId) {
+        await updateBundleRunItem(adminClient, bundleRunItemId, {
+          status: "failed",
+          finished_at: now,
+          error_message: rawErrorMessage,
+          updated_at: now,
+        });
+        await refreshBundleRunAttemptRollup(adminClient, bundleAttemptId);
+      }
+
       const updatedExistingRun = await updateExistingRunFromCallback(
         adminClient,
         body,
@@ -999,6 +1188,8 @@ Deno.serve(async (req) => {
             buyer_id: callbackBuyerId || customerAutomation.buyer_id,
             automation_id: callbackAutomationId || customerAutomation.automation_id,
             order_id: callbackOrderId || null,
+            bundle_run_attempt_id: bundleAttemptId || null,
+            bundle_run_item_id: bundleRunItemId || null,
             runtime_type: customerAutomation.runtime_type || "n8n_managed",
             trigger_type: "runtime_callback",
             status: "error",
@@ -1096,6 +1287,16 @@ Deno.serve(async (req) => {
           updated_at: now,
         });
 
+                if (bundleRunItemId) {
+          await updateBundleRunItem(adminClient, bundleRunItemId, {
+            status: "failed",
+            finished_at: now,
+            error_message: emptyOutputMessage,
+            updated_at: now,
+          });
+          await refreshBundleRunAttemptRollup(adminClient, bundleAttemptId);
+        }
+
         const updatedExistingRun = await updateExistingRunFromCallback(
           adminClient,
           body,
@@ -1124,6 +1325,8 @@ Deno.serve(async (req) => {
               buyer_id: callbackBuyerId || customerAutomation.buyer_id,
               automation_id: callbackAutomationId || customerAutomation.automation_id,
               order_id: callbackOrderId || null,
+              bundle_run_attempt_id: bundleAttemptId || null,
+              bundle_run_item_id: bundleRunItemId || null,
               runtime_type: customerAutomation.runtime_type || "n8n_managed",
               trigger_type: "runtime_callback",
               status: "error",
@@ -1185,6 +1388,9 @@ Deno.serve(async (req) => {
       order_id: callbackOrderId || null,
       buyer_id: callbackBuyerId || customerAutomation.buyer_id,
       automation_id: callbackAutomationId || customerAutomation.automation_id || null,
+      automation_run_id: callbackAutomationRunId || null,
+      bundle_run_attempt_id: bundleAttemptId || null,
+      bundle_run_item_id: bundleRunItemId || null,
 
       output_type: outputType,
       status: "published",
@@ -1197,8 +1403,10 @@ Deno.serve(async (req) => {
         ...safeJsonObject(body.content_json || body.contentJson || body.data || {}),
         nexus_runtime: {
           order_id: callbackOrderId || null,
-          run_id: cleanString(callbackRunContext?.id) || cleanString(body.run_id || body.runId || body.system?.run_id || body.system?.runId) || null,
+          run_id: callbackAutomationRunId || null,
           run_key: cleanString(callbackRunContext?.run_key) || cleanString(body.run_key || body.runKey || body.system?.run_key || body.system?.runKey) || null,
+          bundle_run_attempt_id: bundleAttemptId || null,
+          bundle_run_item_id: bundleRunItemId || null,
         },
       },
       file_url: stripUnsafeText(body.file_url),
@@ -1209,11 +1417,45 @@ Deno.serve(async (req) => {
       updated_at: now,
     };
 
-    let { data: output, error: outputError } = await adminClient
-      .from("automation_outputs")
-      .insert(outputPayload)
-      .select()
-      .single();
+    let existingOutputId = "";
+    if (bundleRunItemId || callbackAutomationRunId) {
+      let existingOutputQuery = adminClient
+        .from("automation_outputs")
+        .select("id")
+        .eq("customer_automation_id", customerAutomation.id)
+        .eq("order_id", callbackOrderId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      existingOutputQuery = bundleRunItemId
+        ? existingOutputQuery.eq("bundle_run_item_id", bundleRunItemId)
+        : existingOutputQuery.eq("automation_run_id", callbackAutomationRunId);
+
+      const { data: existingOutput } = await existingOutputQuery.maybeSingle();
+      existingOutputId = cleanString(existingOutput?.id);
+    }
+
+    const persistOutput = async (payload: Record<string, unknown>) => {
+      if (existingOutputId) {
+        const updatePayload = { ...payload };
+        delete updatePayload.created_at;
+
+        return adminClient
+          .from("automation_outputs")
+          .update({ ...updatePayload, updated_at: now })
+          .eq("id", existingOutputId)
+          .select()
+          .single();
+      }
+
+      return adminClient
+        .from("automation_outputs")
+        .insert(payload)
+        .select()
+        .single();
+    };
+
+    let { data: output, error: outputError } = await persistOutput(outputPayload);
 
     if (outputError && looksLikeJsonStorageError(outputError.message)) {
       const retryPayload = {
@@ -1225,11 +1467,7 @@ Deno.serve(async (req) => {
         content_json: {},
       };
 
-      const retry = await adminClient
-        .from("automation_outputs")
-        .insert(retryPayload)
-        .select()
-        .single();
+      const retry = await persistOutput(retryPayload);
 
       output = retry.data;
       outputError = retry.error;
@@ -1251,11 +1489,7 @@ Deno.serve(async (req) => {
         storage_path: "",
       };
 
-      const compact = await adminClient
-        .from("automation_outputs")
-        .insert(compactPayload)
-        .select()
-        .single();
+      const compact = await persistOutput(compactPayload);
 
       output = compact.data;
       outputError = compact.error;
@@ -1268,78 +1502,144 @@ Deno.serve(async (req) => {
       );
     }
 
+    const callbackN8nExecutionId = callbackExecutionReference(body, callbackRunContext);
+    const runtimeTypeForFinalCheck = cleanString(
+      customerAutomation.runtime_type ||
+        parentAutomation?.runtime_type ||
+        customerAutomation.workflow_source_platform ||
+        parentAutomation?.workflow_source_platform ||
+        "n8n_managed",
+    ).toLowerCase();
+    const isN8nManagedRuntime = !runtimeTypeForFinalCheck || runtimeTypeForFinalCheck.includes("n8n");
+    const hasCallbackRunIdentity = Boolean(
+      hasExplicitRuntimeReference ||
+        callbackAutomationRunId ||
+        bundleAttemptId ||
+        bundleRunItemId,
+    );
+    const shouldWaitForN8nFinalStatus = Boolean(
+      callbackN8nExecutionId ||
+        (isN8nManagedRuntime && hasCallbackRunIdentity),
+    );
+
     const updateError = await tryUpdateCustomerAutomation(
       adminClient,
       customerAutomationId,
-      {
-        runtime_status: "success",
-        setup_status: customerAutomation.setup_status === "needs_update"
-          ? "submitted"
-          : customerAutomation.setup_status || "submitted",
-        health_status: "healthy",
-        status: "active",
+      shouldWaitForN8nFinalStatus
+        ? {
+          runtime_status: "running",
+          setup_status: customerAutomation.setup_status === "needs_update"
+            ? "submitted"
+            : customerAutomation.setup_status || "submitted",
+          health_status: "running",
+          status: "running",
 
-        needs_customer_action: false,
-        last_output_at: now,
-        last_run_at: now,
-        last_error_code: null,
-        last_error_node: null,
-        last_error_message: null,
-        last_error_details: {},
-        updated_at: now,
-      },
+          needs_customer_action: false,
+          last_output_at: now,
+          last_run_at: now,
+          last_error_code: null,
+          last_error_node: null,
+          last_error_message: null,
+          last_error_details: {},
+          n8n_last_execution_id: callbackN8nExecutionId,
+          n8n_last_execution_status: "output_received",
+          n8n_last_execution_checked_at: now,
+          updated_at: now,
+        }
+        : {
+          runtime_status: "success",
+          setup_status: customerAutomation.setup_status === "needs_update"
+            ? "submitted"
+            : customerAutomation.setup_status || "submitted",
+          health_status: "healthy",
+          status: "active",
+
+          needs_customer_action: false,
+          last_output_at: now,
+          last_run_at: now,
+          last_error_code: null,
+          last_error_node: null,
+          last_error_message: null,
+          last_error_details: {},
+          updated_at: now,
+        },
     );
 
     if (updateError) {
       return errorResponse(updateError.message, 500);
     }
 
-    await tryUpdateParentAutomationAfterSuccess(adminClient, customerAutomation, now);
+    if (!shouldWaitForN8nFinalStatus) {
+      await tryUpdateParentAutomationAfterSuccess(adminClient, customerAutomation, now);
 
-    if (callbackOrderId) {
-      await adminClient
-        .from("orders")
-        .update({
-          order_status: "completed",
-          updated_at: now,
-        })
-        .eq("id", callbackOrderId)
-        .eq("payment_status", "paid")
-        .not("order_status", "in", '("cancelled","checkout_expired","payment_failed","refunded")');
+      if (callbackOrderId) {
+        await adminClient
+          .from("orders")
+          .update({
+            order_status: "completed",
+            updated_at: now,
+          })
+          .eq("id", callbackOrderId)
+          .eq("payment_status", "paid")
+          .not("order_status", "in", '("cancelled","checkout_expired","payment_failed","refunded")');
+      }
     }
+
+    if (bundleRunItemId) {
+      await updateBundleRunItem(adminClient, bundleRunItemId, {
+        status: shouldWaitForN8nFinalStatus ? "running" : "success",
+        output_id: output.id,
+        automation_run_id: callbackAutomationRunId || null,
+        error_message: null,
+        finished_at: shouldWaitForN8nFinalStatus ? null : now,
+        updated_at: now,
+      });
+      await refreshBundleRunAttemptRollup(adminClient, bundleAttemptId);
+    }
+
+    const runCallbackPayload: Record<string, unknown> = {
+      status: shouldWaitForN8nFinalStatus ? "running" : "success",
+      response_payload: {
+        status: shouldWaitForN8nFinalStatus ? "output_received" : "success",
+        output_id: output.id,
+        output_type: outputType,
+        title: outputTitle,
+        n8n_execution_id: callbackN8nExecutionId || null,
+      },
+    };
+
+    if (callbackN8nExecutionId) runCallbackPayload.n8n_execution_id = callbackN8nExecutionId;
+    if (!shouldWaitForN8nFinalStatus) runCallbackPayload.finished_at = now;
 
     const updatedExistingRun = await updateExistingRunFromCallback(
       adminClient,
       body,
-      {
-        status: "success",
-        finished_at: now,
-        response_payload: {
-          status: "success",
-          output_id: output.id,
-          output_type: outputType,
-          title: outputTitle,
-        },
-      },
+      runCallbackPayload,
       customerAutomation.id,
     );
 
     if (!updatedExistingRun) {
+      const insertRunPayload: Record<string, unknown> = {
+        customer_automation_id: customerAutomation.id,
+        buyer_id: callbackBuyerId || customerAutomation.buyer_id,
+        automation_id: callbackAutomationId || customerAutomation.automation_id,
+        order_id: callbackOrderId || null,
+        bundle_run_attempt_id: bundleAttemptId || null,
+        bundle_run_item_id: bundleRunItemId || null,
+        runtime_type: customerAutomation.runtime_type || "n8n_managed",
+        trigger_type: "runtime_callback",
+        status: shouldWaitForN8nFinalStatus ? "running" : "success",
+        started_at: now,
+        created_at: now,
+        updated_at: now,
+      };
+
+      if (callbackN8nExecutionId) insertRunPayload.n8n_execution_id = callbackN8nExecutionId;
+      if (!shouldWaitForN8nFinalStatus) insertRunPayload.finished_at = now;
+
       await adminClient
         .from("automation_runs")
-        .insert({
-          customer_automation_id: customerAutomation.id,
-          buyer_id: callbackBuyerId || customerAutomation.buyer_id,
-          automation_id: callbackAutomationId || customerAutomation.automation_id,
-          order_id: callbackOrderId || null,
-          runtime_type: customerAutomation.runtime_type || "n8n_managed",
-          trigger_type: "runtime_callback",
-          status: "success",
-          started_at: now,
-          finished_at: now,
-          created_at: now,
-          updated_at: now,
-        });
+        .insert(insertRunPayload);
     }
 
     await insertEvent(adminClient, {
@@ -1362,6 +1662,8 @@ Deno.serve(async (req) => {
       status: "output_saved",
       customer_automation_id: customerAutomationId,
       output_id: output.id,
+      bundle_run_attempt_id: bundleAttemptId || null,
+      bundle_run_item_id: bundleRunItemId || null,
       output,
     });
   } catch (error) {
@@ -1373,3 +1675,10 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+
+
+
+
+
+

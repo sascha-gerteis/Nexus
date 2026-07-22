@@ -3089,32 +3089,12 @@ async function listBuyerBundleRunAttempts(userId) {
     `)
     .eq("buyer_id", buyerId)
     .order("created_at", { ascending: false })
-    .limit(500);
+    .limit(100);
 
   const { data, error } = await query;
-
-  // Keep the buyer dashboard available while a new runtime migration is
-  // rolling out. Exact attempt tracking is additive; older purchases still
-  // use their order-scoped rows until the table is installed.
-  if (error) {
-    const message = String(error.message || "").toLowerCase();
-    const code = String(error.code || "").toUpperCase();
-    const trackingTableUnavailable =
-      code === "42P01" ||
-      code === "PGRST200" ||
-      code === "PGRST205" ||
-      (message.includes("bundle_run_attempts") && (
-        message.includes("schema cache") ||
-        message.includes("does not exist") ||
-        message.includes("could not find the table")
-      ));
-
-    if (trackingTableUnavailable) {
-      console.warn("Bundle run attempt tracking is not installed yet; using strict order-scoped history.");
-      return { data: [], error: null, trackingUnavailable: true };
-    }
+  if (error && isSchemaError(error)) {
+    return { data: [], error: null };
   }
-
   return { data: data || [], error };
 }
 async function listBuyerAutomationOutputsByCustomerAutomationIds(customerAutomationIds = []) {

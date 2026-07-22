@@ -352,7 +352,7 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
 <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
-<script src="/assets/js/nexus-db.js?v=20260722-order-id-isolation"></script>
+<script src="/assets/js/nexus-db.js?v=20260722-execution-finalize"></script>
 <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
 
   <script>
@@ -368,11 +368,8 @@
     let buyerMessagesLoaded = false;
     let dashboardEnsureInFlight = null;
     let selectedAutomationId = null;
-    let bundleStatusRefreshTimer = null;
-    let bundleStatusRefreshInFlight = false;
-    let bundleStatusRefreshCycles = 0;
-    const bundleTerminalRunChecks = new Set();
-    const legacyBundleRecoveryChecks = new Set();
+    let dashboardRefreshTimer = null;
+    const dashboardExecutionPollInFlight = new Set();
 
     function escapeHtml(value) {
       return String(value || "")
@@ -1079,20 +1076,20 @@ function isArchivedAutomationRow(item) {
   return values.some(value =>
     value.includes("archived") ||
     value.includes("deleted") ||
-    value.includes("removed")
+    value.includes("removed") ||
+    value.includes("cancelled")
   );
 }
 
-function scoreBundleAutomationRow(item, orderId, preferredAutomationIds = null) {
+function scoreBundleAutomationRow(item, orderId) {
   let score = automationUpdatedTime(item);
   if (orderId && orderIdFromAutomation(item) === orderId) score += 10_000_000_000_000;
-  if (preferredAutomationIds?.has(String(item?.id || ""))) score += 100_000_000_000_000;
   if (item?.last_error_message || String(item?.runtime_status || "").toLowerCase().includes("error")) score -= 500_000;
   if (isArchivedAutomationRow(item)) score -= 10_000_000_000_000;
   return score;
 }
 
-function dedupeBundleAutomations(items = [], orderId = "", preferredAutomationIds = new Set()) {
+function dedupeBundleAutomations(items = [], orderId = "") {
   const byProduct = new Map();
 
   for (const item of items || []) {
@@ -1100,11 +1097,7 @@ function dedupeBundleAutomations(items = [], orderId = "", preferredAutomationId
     const key = automationProductKey(item);
     const current = byProduct.get(key);
 
-    if (
-      !current ||
-      scoreBundleAutomationRow(item, orderId, preferredAutomationIds) >
-        scoreBundleAutomationRow(current, orderId, preferredAutomationIds)
-    ) {
+    if (!current || scoreBundleAutomationRow(item, orderId) > scoreBundleAutomationRow(current, orderId)) {
       byProduct.set(key, item);
     }
   }
@@ -1152,21 +1145,37 @@ function runtimeRowExplicitlyBelongsToOrder(row = {}, orderId = "") {
 
 function outputBelongsToOrder(output, orderId = "", item = null) {
   if (!orderId) return true;
+
   const outputOrderId = String(output?.order_id || "");
-  return Boolean(outputOrderId && outputOrderId === String(orderId));
+  if (outputOrderId) return outputOrderId === String(orderId);
+
+  /*
+    Older output rows do not always carry order_id. In that case the
+    customer_automation row is still the ownership source of truth.
+  */
+  const itemOrderId = item ? String(orderIdFromAutomation(item) || "") : "";
+  if (itemOrderId) return itemOrderId === String(orderId);
+
+  return true;
 }
 
 function runBelongsToOrder(run, orderId = "", item = null) {
   if (!orderId) return true;
+
   const runOrderId = String(run?.order_id || "");
-  return Boolean(runOrderId && runOrderId === String(orderId));
+  if (runOrderId) return runOrderId === String(orderId);
+
+  const itemOrderId = item ? String(orderIdFromAutomation(item) || "") : "";
+  if (itemOrderId) return itemOrderId === String(orderId);
+
+  return true;
 }
 
 function runtimeRowFitsOrderWindow(row = {}, order = {}, nextNewerOrderTime = 0) {
   if (String(row?.order_id || "")) return true;
 
-  const rowTime = timestampMs(row?.created_at || row?.updated_at || row?.started_at || row?.finished_at);
-  const orderTime = timestampMs(order?.created_at || order?.updated_at);
+  const rowTime = latestTimestampMs(row?.finished_at, row?.started_at, row?.updated_at, row?.created_at);
+  const orderTime = latestTimestampMs(order?.updated_at, order?.created_at);
 
   if (!rowTime || !orderTime) return true;
   if (rowTime + 1000 < orderTime) return false;
@@ -1174,149 +1183,356 @@ function runtimeRowFitsOrderWindow(row = {}, order = {}, nextNewerOrderTime = 0)
 
   return true;
 }
-function bundleRunStatus(value = "") {
-  return String(value || "").trim().toLowerCase();
+function bundleUrlAttemptMeta(orderId = "", bundleId = "") {
+  try {
+    const params = new URLSearchParams(location.search || "");
+    const attemptId = String(params.get("bundle_attempt_id") || params.get("bundle_run_attempt_id") || "");
+    if (!attemptId) return null;
+
+    const urlOrderId = String(params.get("order_id") || "");
+    const urlBundleId = String(params.get("bundle_id") || "");
+    if (orderId && urlOrderId && urlOrderId !== String(orderId)) return null;
+    if (bundleId && urlBundleId && urlBundleId !== String(bundleId)) return null;
+
+    return {
+      bundle_attempt_id: attemptId,
+      submitted_at: String(params.get("bundle_attempt_started_at") || ""),
+      order_id: urlOrderId,
+      bundle_id: urlBundleId
+    };
+  } catch (_error) {
+    return null;
+  }
 }
 
-function bundleRunStatusIsSuccess(value = "") {
-  return ["success", "succeeded", "completed", "complete"].includes(bundleRunStatus(value));
-}
+function bundleLocalAttemptMeta(orderId = "", bundleId = "") {
+  if (!orderId || !bundleId) return bundleUrlAttemptMeta(orderId, bundleId);
 
-function bundleRunStatusIsActive(value = "") {
-  return ["queued", "running", "processing", "pending", "in_progress", "waiting", "new"].includes(bundleRunStatus(value));
-}
-
-function bundleRunStatusIsFailure(value = "") {
-  return ["failed", "failure", "error", "cancelled", "canceled", "timed_out", "timeout", "aborted", "crashed", "skipped"].includes(bundleRunStatus(value));
-}
-
-function bundleAttemptSequenceMs(attempt = null) {
-  // updated_at changes during polling and must never reorder purchases/runs.
-  return timestampMs(attempt?.created_at) || timestampMs(attempt?.started_at) || timestampMs(attempt?.updated_at);
-}
-
-function latestBundleAttemptForOrder(bundleAttempts = [], orderId = "", bundleId = "") {
-  return (bundleAttempts || [])
-    .filter(attempt => {
-      if (!attempt?.id || String(attempt.order_id || "") !== String(orderId || "")) return false;
-      return !bundleId || !attempt.bundle_id || String(attempt.bundle_id) === String(bundleId);
-    })
-    .sort((a, b) => bundleAttemptSequenceMs(b) - bundleAttemptSequenceMs(a))[0] || null;
-}
-
-function bundleAttemptItems(attempt = null) {
-  return Array.isArray(attempt?.bundle_run_items) ? attempt.bundle_run_items.filter(Boolean) : [];
-}
-
-function exactBundleRunForItem(runs = [], attempt = null, attemptItem = null) {
-  if (!attempt?.id || !attemptItem?.customer_automation_id) return null;
-
-  return (runs || [])
-    .filter(run => {
-      if (!run?.id || String(run.customer_automation_id || "") !== String(attemptItem.customer_automation_id)) return false;
-      if (attemptItem.automation_run_id) {
-        return String(run.id) === String(attemptItem.automation_run_id);
+  let stored = null;
+  if (typeof localStorage !== "undefined") {
+    try {
+      const raw = localStorage.getItem(`nexus_bundle_attempt:${orderId}:${bundleId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        stored = parsed && typeof parsed === "object" ? parsed : null;
       }
-      if (run.bundle_run_item_id) {
-        return String(run.bundle_run_item_id) === String(attemptItem.id || "");
-      }
-      return Boolean(run.bundle_run_attempt_id && String(run.bundle_run_attempt_id) === String(attempt.id));
-    })
-    .sort((a, b) => latestTimestampMs(b?.finished_at, b?.started_at, b?.created_at, b?.updated_at) - latestTimestampMs(a?.finished_at, a?.started_at, a?.created_at, a?.updated_at))[0] || null;
+    } catch (error) {
+      console.warn("Could not read bundle attempt marker", error);
+    }
+  }
+
+  const urlAttempt = bundleUrlAttemptMeta(orderId, bundleId);
+  if (!stored) return urlAttempt;
+  if (urlAttempt?.bundle_attempt_id && urlAttempt.bundle_attempt_id !== stored.bundle_attempt_id) return urlAttempt;
+  return stored;
 }
 
-function bundleItemEffectiveStatus(attemptItem = null, run = null) {
-  const runStatus = bundleRunStatus(run?.status);
-  if (bundleRunStatusIsSuccess(runStatus) || bundleRunStatusIsFailure(runStatus)) return runStatus;
-  return bundleRunStatus(attemptItem?.status || runStatus);
+function bundleLocalAttemptTime(orderId = "", bundleId = "") {
+  return timestampMs(bundleLocalAttemptMeta(orderId, bundleId)?.submitted_at);
 }
 
-function outputMatchesBundleAttemptItem(output = {}, attempt = null, attemptItem = null, run = null) {
-  if (!output?.id || !attempt?.id || !attemptItem?.id) return false;
-  if (String(output.customer_automation_id || "") !== String(attemptItem.customer_automation_id || "")) return false;
+function bundleLocalAttemptId(orderId = "", bundleId = "") {
+  return String(bundleLocalAttemptMeta(orderId, bundleId)?.bundle_attempt_id || "");
+}
 
-  // An attempt/item match is not enough on its own. The persisted output must
-  // explicitly belong to this purchase so an older bundle purchase can never
-  // satisfy a newer order, even if legacy IDs were copied incorrectly.
-  const outputOrderId = String(output.order_id || "");
-  const attemptOrderId = String(attempt.order_id || "");
-  if (!outputOrderId || !attemptOrderId || outputOrderId !== attemptOrderId) return false;
+function runRequestPayload(run = {}) {
+  return run?.request_payload && typeof run.request_payload === "object" ? run.request_payload : {};
+}
 
-  const meta = outputRuntimeMeta(output);
-  const outputItemId = String(output.bundle_run_item_id || meta.bundleRunItemId || "");
-  const outputAttemptId = String(output.bundle_run_attempt_id || meta.bundleAttemptId || "");
-  const outputRunId = String(output.automation_run_id || meta.runId || "");
-  const expectedRunId = String(attemptItem.automation_run_id || run?.id || "");
+function runResponsePayload(run = {}) {
+  return run?.response_payload && typeof run.response_payload === "object" ? run.response_payload : {};
+}
 
-  if (attemptItem.output_id && String(output.id) !== String(attemptItem.output_id)) return false;
+function runBundleAttemptId(run = {}) {
+  const payload = runRequestPayload(run);
+  return String(run?.bundle_run_attempt_id || payload.bundle_run_attempt_id || payload.bundle_attempt_id || payload.bundleAttemptId || payload.bundle_run_id || payload.bundleRunId || "");
+}
+
+function runBundleItemId(run = {}) {
+  const payload = runRequestPayload(run);
+  return String(run?.bundle_run_item_id || payload.bundle_run_item_id || payload.bundleRunItemId || "");
+}
+
+function bundleAttemptItems(attempt = {}) {
+  const nested = attempt?.bundle_run_items || attempt?.items || [];
+  return Array.isArray(nested) ? nested : [];
+}
+
+function latestBundleAttemptForOrder(bundleAttempts = [], orderId = "", bundleId = "", preferredAttemptId = "") {
+  const matches = (bundleAttempts || []).filter(attempt => {
+    const attemptOrderId = String(attempt?.order_id || "");
+    const attemptBundleId = String(attempt?.bundle_id || "");
+    return (!orderId || attemptOrderId === String(orderId)) &&
+      (!bundleId || !attemptBundleId || attemptBundleId === String(bundleId));
+  });
+
+  const sortedMatches = matches
+    .slice()
+    .sort((a, b) => latestTimestampMs(b?.started_at, b?.created_at, b?.updated_at) - latestTimestampMs(a?.started_at, a?.created_at, a?.updated_at));
+  const latest = sortedMatches[0] || null;
+
+  if (preferredAttemptId) {
+    const preferred = matches.find(attempt => String(attempt?.id || "") === String(preferredAttemptId));
+
+    if (preferred && latest) {
+      const preferredTime = latestTimestampMs(preferred?.started_at, preferred?.created_at, preferred?.updated_at);
+      const latestTime = latestTimestampMs(latest?.started_at, latest?.created_at, latest?.updated_at);
+      return latestTime > preferredTime ? latest : preferred;
+    }
+
+    return latest || {
+      id: String(preferredAttemptId),
+      order_id: orderId || "",
+      bundle_id: bundleId || "",
+      status: "running",
+      expected_count: 0,
+      bundle_run_items: []
+    };
+  }
+
+  return latest;
+}
+
+function bundleRunItemForAutomation(attemptItems = [], customerAutomationId = "") {
+  return (attemptItems || []).find(item => String(item?.customer_automation_id || "") === String(customerAutomationId || "")) || null;
+}
+
+function dashboardHasPendingWork(bundleRows = [], states = []) {
+  const pendingLabels = new Set([
+    "Running",
+    "Install in progress",
+    "In progress",
+    "Preparing",
+    "Processing"
+  ]);
 
   return Boolean(
-    outputItemId &&
-    outputItemId === String(attemptItem.id) &&
-    outputAttemptId === String(attempt.id) &&
-    (!expectedRunId || outputRunId === expectedRunId)
+    (bundleRows || []).some(row => pendingLabels.has(String(row?.state?.label || ""))) ||
+    (states || []).some(state => pendingLabels.has(String(state?.label || "")))
   );
 }
 
-function trackedBundleWorkflowState(item = {}, attempt = null, attemptItem = null, run = null, output = null) {
-  const attemptActive = bundleRunStatusIsActive(attempt?.status);
-  const effectiveStatus = bundleItemEffectiveStatus(attemptItem, run);
+function runNeedsN8nExecutionCheck(run = {}) {
+  if (!run || !run.customer_automation_id) return false;
 
-  if (!attemptItem) {
-    return attemptActive
-      ? { label: "Processing", tone: "blue", description: "This workflow is waiting to start for this bundle run.", active: true, issue: false }
-      : { label: "Not started", tone: "red", description: "This workflow did not start during this bundle run.", active: false, issue: true };
-  }
+  const hasRunIdentity = Boolean(
+    run.n8n_execution_id ||
+      run.id ||
+      run.run_key ||
+      runBundleAttemptId(run) ||
+      runBundleItemId(run)
+  );
+  if (!hasRunIdentity) return false;
 
-  if (bundleRunStatusIsSuccess(effectiveStatus)) {
-    return output
-      ? { label: "Ready", tone: "green", description: "This workflow completed and returned its output.", active: false, issue: false }
-      : { label: "Needs attention", tone: "red", description: "This workflow finished but did not return an output for this bundle run.", active: false, issue: true };
-  }
+  const responsePayload = runResponsePayload(run);
+  const recentRunAge = Date.now() - latestTimestampMs(run.updated_at, run.finished_at, run.created_at);
+  const isRecentBundleSuccessWithoutExecution = Boolean(
+    runIsSuccessful(run) &&
+      runBundleItemId(run) &&
+      !run.n8n_execution_id &&
+      recentRunAge < 6 * 60 * 60 * 1000
+  );
+  const isRecentBundleSuccessNeedingVerification = Boolean(
+    runIsSuccessful(run) &&
+      runBundleItemId(run) &&
+      run.n8n_execution_id &&
+      responsePayload.n8n_execution_verified !== true
+  );
 
-  if (bundleRunStatusIsFailure(effectiveStatus)) {
-    const cancelled = ["cancelled", "canceled", "aborted"].includes(effectiveStatus);
-    return {
-      label: cancelled ? "Cancelled" : effectiveStatus === "timed_out" || effectiveStatus === "timeout" ? "Timed out" : "Failed",
-      tone: "red",
-      description: String(attemptItem.error_message || run?.error_message || (cancelled ? "This workflow run was cancelled." : "This workflow did not complete successfully.")),
-      active: false,
-      issue: true
-    };
-  }
-
-  return { label: "Processing", tone: "blue", description: "This workflow is still running for this bundle purchase.", active: true, issue: false };
+  if (runIsIssue(run)) return false;
+  if (runIsSuccessful(run) && !isRecentBundleSuccessWithoutExecution && !isRecentBundleSuccessNeedingVerification) return false;
+  return runIsActiveStatus(run) || isRecentBundleSuccessWithoutExecution || isRecentBundleSuccessNeedingVerification;
 }
 
-function orderScopedBundleWorkflowState(item = {}, run = null, output = null, bundleHasRuntimeActivity = false, outputGraceActive = false) {
-  if (output) {
-    return { label: "Ready", tone: "green", description: "This workflow returned an output for this bundle purchase.", active: false, issue: false };
+async function finalizePendingN8nRuns(runs = []) {
+  if (!window.NexusDB || typeof window.NexusDB.checkN8nExecution !== "function") return false;
+
+  const candidates = (runs || [])
+    .filter(runNeedsN8nExecutionCheck)
+    .slice(0, 8);
+
+  if (!candidates.length) return false;
+
+  let checkedAny = false;
+  await Promise.all(candidates.map(async (run) => {
+    const key = `${run.customer_automation_id}:${run.n8n_execution_id || run.id || "latest"}`;
+    if (dashboardExecutionPollInFlight.has(key)) return;
+
+    dashboardExecutionPollInFlight.add(key);
+    try {
+      await window.NexusDB.checkN8nExecution({
+        customer_automation_id: run.customer_automation_id,
+        run_id: run.id || "",
+        run_key: run.run_key || "",
+        execution_id: run.n8n_execution_id || ""
+      });
+      checkedAny = true;
+    } catch (error) {
+      console.warn("Could not finalize n8n execution", error);
+    } finally {
+      dashboardExecutionPollInFlight.delete(key);
+    }
+  }));
+
+  return checkedAny;
+}
+
+function scheduleDashboardRefreshIfNeeded(bundleRows = [], states = [], runs = []) {
+  const shouldRefresh = dashboardHasPendingWork(bundleRows, states) || (runs || []).some(runNeedsN8nExecutionCheck);
+
+  if (!shouldRefresh) {
+    if (dashboardRefreshTimer) {
+      clearTimeout(dashboardRefreshTimer);
+      dashboardRefreshTimer = null;
+    }
+    return;
   }
 
-  if (runIsFreshActive(run) || (!run && bundleHasRuntimeActivity && outputGraceActive)) {
-    return { label: "Processing", tone: "blue", description: "This workflow is still running for this bundle purchase.", active: true, issue: false };
+  if (dashboardRefreshTimer) return;
+
+  dashboardRefreshTimer = setTimeout(async () => {
+    dashboardRefreshTimer = null;
+
+    try {
+      const { data: sessionData } = await NexusDB.getSession();
+      const user = sessionData?.session?.user;
+
+      if (user) {
+        await finalizePendingN8nRuns(runs);
+        await loadBuyerDashboardRecords(user);
+      }
+    } catch (error) {
+      console.warn("Could not refresh running dashboard state", error);
+    }
+  }, 6000);
+}
+
+function bundleOutputMatchesLatestRunOrAttempt(output = {}, latestRun = null, exactAttemptId = "", attemptItem = null) {
+  const meta = outputRuntimeMeta(output);
+  const outputId = String(output?.id || "");
+  const responsePayload = runResponsePayload(latestRun);
+  const verifiedOutputId = String(responsePayload.output_id || responsePayload.outputId || "");
+  const attemptItemId = String(attemptItem?.id || "");
+  const attemptOutputId = String(attemptItem?.output_id || "");
+  const attemptRunId = String(attemptItem?.automation_run_id || "");
+
+  if (verifiedOutputId && outputId === verifiedOutputId) return true;
+  if (attemptOutputId && outputId === attemptOutputId) return true;
+  if (attemptItemId && meta.bundleRunItemId === attemptItemId) return true;
+  if (attemptRunId && meta.runId && meta.runId === attemptRunId) return true;
+  if (latestRun && outputMatchesRun(output, latestRun)) return true;
+
+  // The bundle attempt id alone is not enough for shared workflows: every child
+  // run in the same bundle shares it, and older/manual output rows can leak into
+  // a fresh purchase. Require a concrete run item, run id, or output id match.
+  return false;
+}
+
+function latestRunBlocksFallbackOutput(latestRun = null) {
+  return Boolean(latestRun && (runIsIssue(latestRun) || runIsFreshActive(latestRun) || runIsStaleActive(latestRun) || !runIsSuccessful(latestRun)));
+}
+function outputFallsWithinVerifiedRunWindow(output = {}, run = null, minimumTime = 0) {
+  if (!output || !run) return false;
+  const outputTime = timestampMs(output.created_at || output.updated_at);
+  if (!outputTime) return false;
+
+  const runActivityTime = latestTimestampMs(run?.finished_at, run?.started_at, run?.updated_at, run?.created_at);
+  const cutoffTime = Number(minimumTime) || 0;
+  if (cutoffTime && (!runActivityTime || runActivityTime + 1000 < cutoffTime)) return false;
+
+  const runStartTime = latestTimestampMs(run?.started_at, run?.created_at, run?.updated_at, cutoffTime);
+  if (runStartTime && outputTime + 1000 < runStartTime) return false;
+
+  const runFinishTime = timestampMs(run?.finished_at || "");
+  if (runFinishTime && outputTime < runFinishTime - 10 * 60 * 1000) return false;
+
+  return true;
+}
+
+function runHasFailedN8nFinalStatus(run = null) {
+  const payload = runResponsePayload(run);
+  const finalStatus = String(
+    payload.n8n_execution_status ||
+    payload.execution_status ||
+    payload.final_status ||
+    payload.status ||
+    run?.n8n_execution_status ||
+    ""
+  ).toLowerCase();
+
+  return ["canceled", "cancelled", "failed", "error", "crashed", "timeout", "timed_out"].includes(finalStatus);
+}
+
+function runHasVerifiedBundleSuccess(run = null, attemptItem = null) {
+  if (!run || !runIsSuccessful(run) || runIsIssue(run)) return false;
+  const payload = runResponsePayload(run);
+  const payloadStatus = String(payload.status || payload.n8n_execution_status || payload.execution_status || "").toLowerCase();
+  const isBundleRun = Boolean(runBundleAttemptId(run) || runBundleItemId(run) || attemptItem?.id);
+  const hasN8nExecution = Boolean(run?.n8n_execution_id || payload.n8n_execution_id || payload.execution_id);
+
+  if (runHasFailedN8nFinalStatus(run)) return false;
+  if (payload.n8n_execution_verified === false) return false;
+  if (payloadStatus === "output_received" || payloadStatus === "waiting_for_output") return false;
+
+  /*
+    Bundle outputs are not complete just because runtime-submit-output received
+    an early callback. n8n can still be canceled or fail on a later node. Once
+    an n8n execution id exists, only check-n8n-execution may promote the run by
+    writing n8n_execution_verified:true. This prevents canceled bundle runs from
+    showing one stale/ghost output as Ready.
+  */
+  if (isBundleRun && hasN8nExecution && payload.n8n_execution_verified !== true) return false;
+
+  return true;
+}
+
+function attemptItemHasVerifiedBundleSuccess(attemptItem = null, latestRun = null) {
+  if (!attemptItem || !runIsSuccessful(attemptItem) || runIsIssue(attemptItem)) return false;
+  return runHasVerifiedBundleSuccess(latestRun, attemptItem);
+}
+
+function bundleOutputIsCurrentForChild(output = {}, item = {}, latestRun = null, minimumTime = 0) {
+  if (!output) return false;
+
+  const outputTime = timestampMs(output.created_at || output.updated_at);
+  const cutoffTime = Number(minimumTime) || 0;
+
+  if (cutoffTime && (!outputTime || outputTime + 1000 < cutoffTime)) {
+    return false;
   }
 
-  if (runIsIssue(run) || runIsStaleActive(run)) {
-    const cancelled = runStatusText(run).includes("cancel") || runStatusText(run).includes("abort");
-    return {
-      label: cancelled ? "Cancelled" : "Issue detected",
-      tone: "red",
-      description: cancelled
-        ? "This workflow run was cancelled."
-        : String(run?.error_message || item?.last_error_message || "This workflow did not complete successfully."),
-      active: false,
-      issue: true
-    };
+  /*
+    Bundles can run the same product many times for the same buyer/order.
+    Prefer the exact runtime id/key when it exists. Some existing/manual outputs
+    do not carry that metadata, so fall back only when the output is newer than
+    this child's latest run/request. That keeps old bundle outputs from leaking
+    into a fresh purchase without hiding valid current outputs.
+  */
+  if (latestRun?.id || latestRun?.run_key) {
+    if (outputMatchesRun(output, latestRun)) return true;
+
+    const runTime = latestTimestampMs(
+      latestRun?.finished_at,
+      latestRun?.started_at,
+      latestRun?.created_at,
+      latestRun?.updated_at
+    );
+
+    if (runTime) {
+      return Boolean(outputTime && outputTime + 1000 >= runTime);
+    }
   }
 
-  if (runIsSuccessful(run)) {
-    return { label: "Needs attention", tone: "red", description: "This workflow finished but did not return an output for this bundle purchase.", active: false, issue: true };
+  const requestTime = latestTimestampMs(
+    item?.last_run_requested_at,
+    cutoffTime
+  );
+
+  if (requestTime) {
+    return Boolean(outputTime && outputTime + 1000 >= requestTime);
   }
 
-  return bundleHasRuntimeActivity && !outputGraceActive
-    ? { label: "No output", tone: "red", description: "Nexus did not receive an output or final run status for this workflow.", active: false, issue: true }
-    : { label: "Not started", tone: "orange", description: "This workflow has not returned an output for this bundle purchase.", active: false, issue: false };
+  return false;
 }
 
 function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs = [], bundleAttempts = []) {
@@ -1350,7 +1566,7 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
     let selectedTime = -1;
 
     candidateOrders.forEach(order => {
-      const orderTime = timestampMs(order?.created_at || order?.updated_at);
+      const orderTime = latestTimestampMs(order?.updated_at, order?.created_at);
       if (!orderTime) return;
       if (itemTime && orderTime > itemTime + 15 * 60 * 1000) return;
       if (orderTime > selectedTime) {
@@ -1385,144 +1601,270 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
 
       const legacyOrderItems = legacyItemsByOrder.get(orderId) || [];
       const includedSource = exactOrderItems.length ? exactOrderItems : legacyOrderItems;
-      const currentAttempt = latestBundleAttemptForOrder(bundleAttempts, orderId, bundleId);
-      const currentAttemptItems = bundleAttemptItems(currentAttempt);
-      const preferredAutomationIds = new Set(
-        currentAttemptItems.map(attemptItem => String(attemptItem?.customer_automation_id || "")).filter(Boolean)
-      );
-      const included = dedupeBundleAutomations(includedSource, orderId, preferredAutomationIds);
+      const included = dedupeBundleAutomations(includedSource, orderId);
       const includedIds = new Set(included.map(item => item.id).filter(Boolean));
       const itemById = new Map(included.map(item => [String(item.id || ""), item]));
       const sameBundleOrders = (ordersByBundle.get(String(bundleId || "")) || [])
         .filter(candidate => String(candidate?.id || "") !== String(orderId || ""));
-      const orderTime = timestampMs(order?.created_at || order?.updated_at);
+      const orderTime = latestTimestampMs(order?.updated_at, order?.created_at);
+      const localAttemptTime = bundleLocalAttemptTime(orderId, bundleId);
+      const localAttemptId = bundleLocalAttemptId(orderId, bundleId);
+      const persistedAttempt = latestBundleAttemptForOrder(bundleAttempts, orderId, bundleId, localAttemptId);
+      const persistedAttemptItems = bundleAttemptItems(persistedAttempt);
+      const exactAttemptId = String(persistedAttempt?.id || localAttemptId || "");
+      const strictAttemptScope = Boolean(exactAttemptId || orderId);
+      const includedRunRequestTime = latestTimestampMs(
+        ...included.map(item => item?.last_run_requested_at || item?.last_run_at || "")
+      );
+      const hasBundleAttemptMarker = Boolean(
+        exactAttemptId ||
+        localAttemptTime ||
+        includedRunRequestTime ||
+        persistedAttempt?.id
+      );
+      let currentBundleAttemptTime = Math.max(
+        orderTime || 0,
+        localAttemptTime || 0,
+        includedRunRequestTime || 0,
+        latestTimestampMs(persistedAttempt?.started_at, persistedAttempt?.created_at, persistedAttempt?.updated_at) || 0
+      );
       const nextNewerOrderTime = sameBundleOrders
-        .map(candidate => timestampMs(candidate?.created_at || candidate?.updated_at))
+        .map(candidate => latestTimestampMs(candidate?.updated_at, candidate?.created_at))
         .filter(time => orderTime && time > orderTime)
         .sort((a, b) => a - b)[0] || 0;
-      const currentAttemptItemByAutomation = new Map(
-        currentAttemptItems.map(attemptItem => [String(attemptItem.customer_automation_id || ""), attemptItem])
-      );
-      const hasTrackedBundleAttempt = Boolean(currentAttempt?.id);
-      const latestRunsByAutomation = new Map();
+      const attemptItemByAutomation = new Map();
+      persistedAttemptItems.forEach(attemptItem => {
+        const customerAutomationId = String(attemptItem?.customer_automation_id || "");
+        if (customerAutomationId) attemptItemByAutomation.set(customerAutomationId, attemptItem);
+      });
 
-      if (hasTrackedBundleAttempt) {
-        currentAttemptItems.forEach(attemptItem => {
-          const exactRun = exactBundleRunForItem(runs, currentAttempt, attemptItem);
-          if (exactRun?.customer_automation_id) {
-            latestRunsByAutomation.set(String(exactRun.customer_automation_id), exactRun);
-          }
-        });
-      } else {
-        (runs || [])
-          .filter(run => {
-            const item = itemById.get(String(run?.customer_automation_id || ""));
-            if (!item) return false;
-            return runBelongsToOrder(run, orderId, item) && runtimeRowFitsOrderWindow(run, order, nextNewerOrderTime);
-          })
-          .sort((a, b) => new Date(b.finished_at || b.started_at || b.created_at || 0) - new Date(a.finished_at || a.started_at || a.created_at || 0))
-          .forEach(run => {
-            if (!latestRunsByAutomation.has(String(run.customer_automation_id))) {
-              latestRunsByAutomation.set(String(run.customer_automation_id), run);
+      const rawBundleOutputs = (outputs || [])
+        .filter(output => {
+          const item = itemById.get(String(output?.customer_automation_id || ""));
+          if (!item) return false;
+
+          if (strictAttemptScope) {
+            const meta = outputRuntimeMeta(output);
+            const attemptItem = attemptItemByAutomation.get(String(output?.customer_automation_id || ""));
+            const outputTime = timestampMs(output?.created_at || output?.updated_at);
+            const outputOrderId = String(output?.order_id || "");
+            const outputBundleOrderId = String(meta.bundleOrderId || "");
+            const mismatchedOrder = Boolean(
+              orderId &&
+              ((outputOrderId && outputOrderId !== orderId) || (outputBundleOrderId && outputBundleOrderId !== orderId))
+            );
+            if (mismatchedOrder) return false;
+            const hasExactRuntimeTag = Boolean(
+              (exactAttemptId && meta.bundleAttemptId === exactAttemptId) ||
+              (attemptItem?.id && meta.bundleRunItemId === String(attemptItem.id)) ||
+              (attemptItem?.output_id && String(output?.id || "") === String(attemptItem.output_id)) ||
+              (attemptItem?.automation_run_id && meta.runId && meta.runId === String(attemptItem.automation_run_id))
+            );
+
+            if (hasExactRuntimeTag) {
+              return hasBundleAttemptMarker && (!currentBundleAttemptTime || Boolean(outputTime && outputTime + 1000 >= currentBundleAttemptTime));
             }
-          });
+
+            const hasForeignAttemptTag = Boolean(
+              (exactAttemptId && meta.bundleAttemptId && meta.bundleAttemptId !== exactAttemptId) ||
+              (attemptItem?.id && meta.bundleRunItemId && meta.bundleRunItemId !== String(attemptItem.id))
+            );
+            if (hasForeignAttemptTag) return false;
+
+            // Keep possible current outputs here. The final filter below only
+            // counts them when the matching run is verified successful.
+            return hasBundleAttemptMarker && (!currentBundleAttemptTime || Boolean(outputTime && outputTime + 1000 >= currentBundleAttemptTime));
+          }
+
+          return runtimeRowExplicitlyBelongsToOrder(output, orderId) && runtimeRowFitsOrderWindow(output, order, nextNewerOrderTime);
+        })
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const matchingBundleRuns = (runs || [])
+        .filter(run => {
+          const item = itemById.get(String(run?.customer_automation_id || ""));
+          if (!item) return false;
+
+          if (strictAttemptScope) {
+            const attemptItem = attemptItemByAutomation.get(String(run?.customer_automation_id || ""));
+            const runPayload = run?.request_payload && typeof run.request_payload === "object" ? run.request_payload : {};
+            const runOrderId = String(run?.order_id || runPayload.order_id || runPayload.bundle_order_id || "");
+            const runTime = timestampMs(run?.finished_at || run?.started_at || run?.created_at || run?.updated_at);
+            const hasExactRunTag = Boolean(
+              (exactAttemptId && runBundleAttemptId(run) === exactAttemptId) ||
+              (attemptItem?.id && runBundleItemId(run) === String(attemptItem.id)) ||
+              (attemptItem?.automation_run_id && String(run?.id || "") === String(attemptItem.automation_run_id))
+            );
+
+            if (hasExactRunTag) return !currentBundleAttemptTime || !runTime || runTime + 1000 >= currentBundleAttemptTime;
+
+            if (!exactAttemptId && orderId && runOrderId === String(orderId)) {
+              return hasBundleAttemptMarker && (!currentBundleAttemptTime || !runTime || runTime + 1000 >= currentBundleAttemptTime);
+            }
+
+            const runAttemptId = runBundleAttemptId(run);
+            const runItemId = runBundleItemId(run);
+            const hasForeignRunAttemptTag = Boolean(
+              (exactAttemptId && runAttemptId && runAttemptId !== exactAttemptId) ||
+              (attemptItem?.id && runItemId && runItemId !== String(attemptItem.id))
+            );
+            if (hasForeignRunAttemptTag) return false;
+            return false;
+          }
+
+          if (!runtimeRowExplicitlyBelongsToOrder(run, orderId) || !runtimeRowFitsOrderWindow(run, order, nextNewerOrderTime)) return false;
+          const runTime = timestampMs(run?.finished_at || run?.started_at || run?.created_at || run?.updated_at);
+          return !currentBundleAttemptTime || !runTime || runTime + 1000 >= currentBundleAttemptTime;
+        });
+      const runsByAttemptId = new Map();
+      matchingBundleRuns.forEach(run => {
+        const attemptId = runBundleAttemptId(run);
+        if (!attemptId) return;
+        if (!runsByAttemptId.has(attemptId)) runsByAttemptId.set(attemptId, []);
+        runsByAttemptId.get(attemptId).push(run);
+      });
+      let scopedBundleRuns = matchingBundleRuns;
+
+      if (!strictAttemptScope && runsByAttemptId.size) {
+        const latestAttempt = Array.from(runsByAttemptId.entries())
+          .map(([attemptId, attemptRuns]) => ({
+            attemptId,
+            attemptRuns,
+            time: latestTimestampMs(...attemptRuns.map(run => run?.finished_at || run?.started_at || run?.created_at || run?.updated_at))
+          }))
+          .sort((a, b) => b.time - a.time)[0];
+
+        if (latestAttempt?.attemptRuns?.length) {
+          scopedBundleRuns = latestAttempt.attemptRuns;
+          currentBundleAttemptTime = Math.max(currentBundleAttemptTime, latestAttempt.time || 0);
+        }
       }
 
-      const rawBundleOutputs = hasTrackedBundleAttempt
-        ? (outputs || [])
-            .filter(output => {
-              const attemptItem = currentAttemptItemByAutomation.get(String(output?.customer_automation_id || ""));
-              if (!attemptItem) return false;
-              const exactRun = latestRunsByAutomation.get(String(output.customer_automation_id || "")) || null;
-              return outputMatchesBundleAttemptItem(output, currentAttempt, attemptItem, exactRun);
-            })
-            .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
-        : (outputs || [])
-            .filter(output => {
-              const item = itemById.get(String(output?.customer_automation_id || ""));
-              if (!item) return false;
-              return outputBelongsToOrder(output, orderId, item) && runtimeRowFitsOrderWindow(output, order, nextNewerOrderTime);
-            })
-            .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const latestRunsByAutomation = new Map();
+      scopedBundleRuns
+        .sort((a, b) => new Date(b.finished_at || b.started_at || b.created_at || 0) - new Date(a.finished_at || a.started_at || a.created_at || 0))
+        .forEach(run => {
+          if (!latestRunsByAutomation.has(run.customer_automation_id)) {
+            latestRunsByAutomation.set(run.customer_automation_id, run);
+          }
+        });
+      persistedAttemptItems.forEach(attemptItem => {
+        const customerAutomationId = String(attemptItem?.customer_automation_id || "");
+        if (!customerAutomationId || latestRunsByAutomation.has(customerAutomationId)) return;
 
-      const bundleOutputs = hasTrackedBundleAttempt
-        ? rawBundleOutputs.filter(output => {
-            const customerAutomationId = String(output.customer_automation_id || "");
-            const attemptItem = currentAttemptItemByAutomation.get(customerAutomationId);
-            const exactRun = latestRunsByAutomation.get(customerAutomationId) || null;
-            return Boolean(attemptItem && bundleRunStatusIsSuccess(bundleItemEffectiveStatus(attemptItem, exactRun)));
-          })
-        : rawBundleOutputs.filter(output => {
-            const item = itemById.get(String(output.customer_automation_id || "")) || {};
-            const latestRun = latestRunsByAutomation.get(String(output.customer_automation_id || "")) || null;
+        const attemptStatus = String(attemptItem.status || persistedAttempt?.status || "running").toLowerCase();
+        if (attemptStatus.includes("success") || attemptStatus.includes("complete") || attemptStatus.includes("finish")) {
+          return;
+        }
 
-            if (latestRun && outputMatchesRun(output, latestRun)) return true;
-            if (latestRun) {
-              const outputTime = timestampMs(output.created_at || output.updated_at);
-              const runTime = latestTimestampMs(latestRun.started_at, latestRun.created_at);
-              if (runTime && (!outputTime || outputTime + 1000 < runTime)) return false;
-            }
+        latestRunsByAutomation.set(customerAutomationId, {
+          id: attemptItem.automation_run_id || "",
+          customer_automation_id: customerAutomationId,
+          bundle_run_attempt_id: exactAttemptId,
+          bundle_run_item_id: attemptItem.id || "",
+          status: attemptStatus,
+          error_message: attemptItem.error_message || "",
+          started_at: attemptItem.started_at || persistedAttempt?.started_at || persistedAttempt?.created_at || "",
+          finished_at: attemptItem.finished_at || "",
+          created_at: attemptItem.created_at || persistedAttempt?.created_at || "",
+          updated_at: attemptItem.updated_at || persistedAttempt?.updated_at || ""
+        });
+      });
+      const bundleOutputs = rawBundleOutputs.filter(output => {
+        const customerAutomationId = String(output.customer_automation_id || "");
+        const item = itemById.get(customerAutomationId) || {};
+        const latestRun = latestRunsByAutomation.get(customerAutomationId) || null;
+        const attemptItem = attemptItemByAutomation.get(customerAutomationId) || null;
+        const matchesCurrentRunOrAttempt = bundleOutputMatchesLatestRunOrAttempt(output, latestRun, exactAttemptId, attemptItem);
 
-            return outputIsFreshForAutomation(output, item, latestRun);
-          });
+        if (strictAttemptScope) {
+          const matchingRunSucceeded = runHasVerifiedBundleSuccess(latestRun, attemptItem);
+          const matchingAttemptItemSucceeded = attemptItemHasVerifiedBundleSuccess(attemptItem, latestRun);
+          const verifiedRunWindowMatch = matchingRunSucceeded && outputFallsWithinVerifiedRunWindow(output, latestRun, currentBundleAttemptTime);
+          if (latestRunBlocksFallbackOutput(latestRun) && !matchesCurrentRunOrAttempt) return false;
+          return Boolean(
+            (matchesCurrentRunOrAttempt && (matchingRunSucceeded || matchingAttemptItemSucceeded)) ||
+            verifiedRunWindowMatch
+          );
+        }
+
+        if (latestRunBlocksFallbackOutput(latestRun) && !matchesCurrentRunOrAttempt) return false;
+        return bundleOutputIsCurrentForChild(output, item, latestRun, currentBundleAttemptTime);
+      });
       const latestBundleOutputsByAutomation = latestOutputByCustomerAutomation(bundleOutputs);
       const latestBundleOutputs = Array.from(latestBundleOutputsByAutomation.values())
         .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
       const outputAutomationIds = new Set(bundleOutputs.map(output => output.customer_automation_id).filter(Boolean));
-      const bundleHasRuntimeActivity = Boolean(bundleOutputs.length || latestRunsByAutomation.size);
-      const outputGraceActive = bundleWithinOutputGrace(order, included);
-      const childStates = hasTrackedBundleAttempt
-        ? included.map(item => {
-            const customerAutomationId = String(item.id || "");
-            const attemptItem = currentAttemptItemByAutomation.get(customerAutomationId) || null;
-            const exactRun = latestRunsByAutomation.get(customerAutomationId) || null;
-            const exactOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
-            return trackedBundleWorkflowState(item, currentAttempt, attemptItem, exactRun, exactOutput);
-          })
-        : included.map(item => {
-            const latestRun = latestRunsByAutomation.get(String(item.id)) || null;
-            const exactOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
-            return orderScopedBundleWorkflowState(item, latestRun, exactOutput, bundleHasRuntimeActivity, outputGraceActive);
-          });
+      const currentAttemptActivityTime = Math.max(
+        localAttemptTime || 0,
+        includedRunRequestTime || 0,
+        latestTimestampMs(persistedAttempt?.started_at, persistedAttempt?.created_at, persistedAttempt?.updated_at) || 0
+      );
+      const currentAttemptFresh = Boolean(
+        currentAttemptActivityTime && Date.now() - currentAttemptActivityTime <= BUNDLE_OUTPUT_GRACE_WINDOW_MS
+      );
+      const bundleHasRuntimeActivity = Boolean(
+        bundleOutputs.length ||
+        latestRunsByAutomation.size ||
+        localAttemptTime ||
+        persistedAttemptItems.length ||
+        (exactAttemptId && currentAttemptFresh)
+      );
+      const childStates = included.map(item =>
+        automationState(item, getLatestOutputForAutomation(bundleOutputs, item.id), latestRunsByAutomation.get(item.id) || null)
+      );
+      const outputGraceActive = currentAttemptFresh || (bundleOutputs.length ? false : bundleWithinOutputGrace(order, included));
       const issueIds = new Set();
       const issueDetails = [];
       const workflowSummaries = included.map((item, index) => {
-        const latestRun = latestRunsByAutomation.get(String(item.id)) || null;
-        const childState = childStates[index] || {};
-        return {
-          id: item.id,
-          title: productTitleFromAutomation(item),
-          label: childState.label || "Not started",
-          tone: childState.tone || "orange",
-          runAt: latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || item.last_run_at || ""
-        };
-      });
-      if (hasTrackedBundleAttempt) {
-        included.forEach((item, index) => {
-          const childState = childStates[index] || {};
-          if (!childState.issue) return;
-          issueIds.add(item.id);
-          issueDetails.push({
-            id: item.id,
-            title: productTitleFromAutomation(item),
-            status: childState.label || "Needs attention",
-            message: String(childState.description || "This workflow needs attention.")
-          });
-        });
-      } else {
-        included.forEach((item, index) => {
-        const latestRun = latestRunsByAutomation.get(item.id);
+        const latestRun = latestRunsByAutomation.get(item.id) || null;
         const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
+        const childState = childStates[index] || {};
+        const hasCurrentOutput = Boolean(latestOutput);
+        const successfulRunWithoutOutput = Boolean(latestRun && runIsSuccessful(latestRun) && !hasCurrentOutput);
         const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
-        const waitingForOutput = !latestOutput && !runIsIssue(latestRun) && (
+        const waitingForOutput = !hasCurrentOutput && !runIsIssue(latestRun) && !successfulRunWithoutOutput && (
           runIsFreshActive(latestRun) ||
           (bundleHasRuntimeActivity && outputGraceActive)
         );
         const staleAfterChange = automationNeedsFreshRun(item, latestOutput, latestRun);
+        const status = staleAfterChange
+          ? "Needs run"
+          : waitingForOutput
+          ? "Processing"
+          : missingAfterActivity
+          ? "Not started"
+          : runIsFreshActive(latestRun)
+          ? "Running"
+          : runIsIssue(latestRun)
+            ? "Failed"
+            : successfulRunWithoutOutput
+              ? "No output"
+              : hasCurrentOutput
+                ? "Ready"
+                : (bundleHasRuntimeActivity || strictAttemptScope)
+                  ? "Not started"
+                  : childState.label || "Needs setup";
 
-        // An exact output for this purchase is authoritative. Product-level
-        // errors may belong to another purchase or a later scheduled run.
-        if (latestOutput) return;
+        return {
+          id: item.id,
+          title: productTitleFromAutomation(item),
+          label: status,
+          tone: staleAfterChange || missingAfterActivity || successfulRunWithoutOutput || runIsIssue(latestRun) || childState.tone === "red" ? "red" : childState.tone || "green",
+          runAt: latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || item.last_run_at || ""
+        };
+      });
+
+      included.forEach((item, index) => {
+        const latestRun = latestRunsByAutomation.get(item.id);
+        const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
+        const hasCurrentOutput = Boolean(latestOutput);
+        const successfulRunWithoutOutput = Boolean(latestRun && runIsSuccessful(latestRun) && !hasCurrentOutput);
+        const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
+        const waitingForOutput = !hasCurrentOutput && !runIsIssue(latestRun) && !successfulRunWithoutOutput && (
+          runIsFreshActive(latestRun) ||
+          (bundleHasRuntimeActivity && outputGraceActive)
+        );
+        const staleAfterChange = automationNeedsFreshRun(item, latestOutput, latestRun);
 
         if (staleAfterChange) {
           issueIds.add(item.id);
@@ -1544,8 +1886,19 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
           issueDetails.push({
             id: item.id,
             title: productTitleFromAutomation(item),
-            status: childStates[index]?.label || "No output",
-            message: childStates[index]?.description || "Nexus did not receive an output or final run status for this workflow."
+            status: "Not started",
+            message: "This workflow did not start during the bundle run. Open setup to run only the missing or failed workflow."
+          });
+          return;
+        }
+
+        if (successfulRunWithoutOutput) {
+          issueIds.add(item.id);
+          issueDetails.push({
+            id: item.id,
+            title: productTitleFromAutomation(item),
+            status: "No output",
+            message: "This workflow finished but did not return an output for this bundle run. Open setup to rerun only this workflow."
           });
           return;
         }
@@ -1553,11 +1906,11 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         if (childStates[index]?.tone === "red" || runIsIssue(latestRun) || runIsStaleActive(latestRun)) {
           issueIds.add(item.id);
           const rawMessage = String(
-            childStates[index]?.description ||
-            latestRun?.error_message ||
             item.last_error_message ||
+            latestRun?.error_message ||
             latestRun?.response_payload?.error ||
             latestRun?.response_payload?.message ||
+            childStates[index]?.description ||
             "This workflow needs attention."
           ).replace(/\s+/g, " ").trim();
           const message = rawMessage.length > 220 ? `${rawMessage.slice(0, 217)}...` : rawMessage;
@@ -1570,28 +1923,22 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
           });
         }
       });
-      }
       const issueCount = issueIds.size;
-      const setupCount = hasTrackedBundleAttempt
-        ? 0
-        : childStates.filter(state => String(state.label || "").toLowerCase().includes("setup") || String(state.label || "").toLowerCase().includes("request needed")).length;
-      const progressCount = hasTrackedBundleAttempt
-        ? childStates.filter(state => state?.active).length
-        : included.filter((item, index) => {
-            const latestRun = latestRunsByAutomation.get(String(item.id));
-            const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
-            if (runIsFreshActive(latestRun)) return true;
-            if (!latestOutput && !runIsIssue(latestRun) && bundleHasRuntimeActivity && outputGraceActive) return true;
-            if (latestRun) return false;
-            if (bundleHasRuntimeActivity && !outputAutomationIds.has(item.id)) return false;
-            return automationLane(childStates[index]) === "progress";
-          }).length;
+      const setupCount = childStates.filter(state => String(state.label || "").toLowerCase().includes("setup") || String(state.label || "").toLowerCase().includes("request needed")).length;
+      const progressCount = included.filter((item, index) => {
+        const latestRun = latestRunsByAutomation.get(item.id);
+        const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
+        if (runIsFreshActive(latestRun)) return true;
+        if (!latestOutput && !runIsIssue(latestRun) && bundleHasRuntimeActivity && outputGraceActive) return true;
+        if (latestRun) return false;
+        if (bundleHasRuntimeActivity && !outputAutomationIds.has(item.id)) return false;
+        return automationLane(childStates[index]) === "progress";
+      }).length;
       const incompleteAfterOutputCount = bundleOutputs.length
         ? included.filter(item => !outputAutomationIds.has(item.id)).length
         : 0;
-      const partialBundleIssue = hasTrackedBundleAttempt
-        ? false
-        : Boolean(bundleOutputs.length && incompleteAfterOutputCount && !progressCount && !outputGraceActive);
+      const partialBundleIssue = Boolean(bundleOutputs.length && incompleteAfterOutputCount && !progressCount && !outputGraceActive);
+
       if (partialBundleIssue) {
         included
           .filter(item => !outputAutomationIds.has(item.id) && !issueIds.has(item.id))
@@ -1931,144 +2278,6 @@ function openAutomationDetail(customerAutomationId) {
       await loadBuyerMessages({ force: true });
     }
 
-    function activeTrackedBundleRuns() {
-      const attempts = dashboardData.bundleAttempts || [];
-      const orders = dashboardData.orders || [];
-      const runs = dashboardData.runs || [];
-
-      const checks = new Map();
-      orders.filter(isBundleOrder).forEach(order => {
-        const snapshot = parseBundleSnapshot(order);
-        const attempt = latestBundleAttemptForOrder(
-          attempts,
-          String(order?.id || ""),
-          String(order?.bundle_id || snapshot?.bundle_id || "")
-        );
-        if (!attempt?.id) return;
-
-        bundleAttemptItems(attempt).forEach(attemptItem => {
-          const customerAutomationId = String(attemptItem?.customer_automation_id || "");
-          if (!customerAutomationId) return;
-          const exactRun = exactBundleRunForItem(runs, attempt, attemptItem);
-          if (!exactRun?.id) {
-            const recoveryKey = "attempt:" + String(attempt.id) + ":" + String(attemptItem.id || customerAutomationId);
-            if (!legacyBundleRecoveryChecks.has(recoveryKey)) {
-              checks.set(recoveryKey, {
-                customer_automation_id: customerAutomationId,
-                order_id: String(order?.id || ""),
-                bundle_run_attempt_id: String(attempt.id),
-                bundle_run_item_id: String(attemptItem.id || ""),
-                recover_missing_run: true,
-                recovery_key: recoveryKey
-              });
-            }
-            return;
-          }
-
-          const effectiveStatus = bundleItemEffectiveStatus(attemptItem, exactRun);
-          const needsActiveRefresh = bundleRunStatusIsActive(effectiveStatus);
-          const needsTerminalVerification = bundleRunStatusIsSuccess(effectiveStatus) && !bundleTerminalRunChecks.has(String(exactRun.id));
-          if (!needsActiveRefresh && !needsTerminalVerification) return;
-
-
-          checks.set(String(exactRun.id), {
-            customer_automation_id: customerAutomationId,
-            run_id: exactRun.id,
-            execution_id: exactRun.n8n_execution_id || undefined,
-            bundle_run_attempt_id: attempt.id,
-            bundle_run_item_id: attemptItem.id
-          });
-        });
-      });
-
-      // Older bundle purchases can predate bundle_run_attempts. Recover only
-      // a missing workflow status for an exact order-linked automation. The
-      // backend must prove both IDs exist in the same n8n execution payload.
-      orders.filter(isBundleOrder).forEach(order => {
-        const orderId = String(order?.id || "");
-        if (!orderId) return;
-        const snapshot = parseBundleSnapshot(order);
-        const trackedAttempt = latestBundleAttemptForOrder(
-          attempts,
-          orderId,
-          String(order?.bundle_id || snapshot?.bundle_id || "")
-        );
-        if (trackedAttempt?.id) return;
-
-        const exactItems = (dashboardData.automations || []).filter(item =>
-          item?.id && !isArchivedAutomationRow(item) && orderIdFromAutomation(item) === orderId
-        );
-        if (!exactItems.length) return;
-
-        const exactRuns = runs.filter(run => runBelongsToOrder(run, orderId));
-        const exactOutputs = (dashboardData.outputs || []).filter(output => outputBelongsToOrder(output, orderId));
-        if (!exactRuns.length && !exactOutputs.length) return;
-
-        exactItems.forEach(item => {
-          const customerAutomationId = String(item.id || "");
-          const hasRun = exactRuns.some(run => String(run.customer_automation_id || "") === customerAutomationId);
-          const hasOutput = exactOutputs.some(output => String(output.customer_automation_id || "") === customerAutomationId);
-          const recoveryKey = "legacy:" + orderId + ":" + customerAutomationId;
-          if (hasRun || hasOutput || legacyBundleRecoveryChecks.has(recoveryKey)) return;
-
-          checks.set(recoveryKey, {
-            customer_automation_id: customerAutomationId,
-            order_id: orderId,
-            recover_missing_run: true,
-            recovery_key: recoveryKey
-          });
-        });
-      });
-      return Array.from(checks.values());
-    }
-
-    function scheduleTrackedBundleStatusRefresh(user) {
-      if (bundleStatusRefreshTimer) clearTimeout(bundleStatusRefreshTimer);
-      bundleStatusRefreshTimer = null;
-      if (!user?.id || bundleStatusRefreshInFlight || bundleStatusRefreshCycles >= 180) return;
-      if (typeof NexusDB.checkN8nExecution !== "function") return;
-
-      const checks = activeTrackedBundleRuns();
-      if (!checks.length) return;
-
-      bundleStatusRefreshTimer = setTimeout(async () => {
-        if (bundleStatusRefreshInFlight) return;
-        bundleStatusRefreshInFlight = true;
-        bundleStatusRefreshCycles += 1;
-
-        try {
-          await Promise.all(checks.map(async payload => {
-            try {
-              const result = await NexusDB.checkN8nExecution(payload);
-              const recoveryCompleted = result && !result.error && result.status !== "legacy_execution_not_found";
-              if (payload.recovery_key && recoveryCompleted) {
-                legacyBundleRecoveryChecks.add(String(payload.recovery_key));
-              }
-              if (payload.recovery_key && !recoveryCompleted) {
-                console.warn("Legacy bundle run recovery did not find a matching execution:", {
-                  order_id: payload.order_id,
-                  customer_automation_id: payload.customer_automation_id,
-                  result
-                });
-              }
-              if (payload.run_id && result && !result.error) {
-                bundleTerminalRunChecks.add(String(payload.run_id));
-              }
-              return result;
-            } catch (error) {
-              return { error };
-            }
-          }));
-        } catch (error) {
-          console.warn("Bundle execution status refresh failed:", error);
-        } finally {
-          bundleStatusRefreshInFlight = false;
-        }
-
-        await loadBuyerDashboardRecords(user);
-      }, bundleStatusRefreshCycles === 0 ? 1200 : 10000);
-    }
-
     async function loadBuyerDashboardRecords(user) {
       const [
         { data: profile },
@@ -2077,7 +2286,7 @@ function openAutomationDetail(customerAutomationId) {
         { data: events },
         { data: outputs },
         { data: runs },
-        { data: bundleAttempts, error: bundleAttemptsError },
+        { data: bundleAttempts },
         { data: savedProducts }
       ] = await Promise.all([
         NexusDB.getBuyerProfile(user.id),
@@ -2098,10 +2307,6 @@ function openAutomationDetail(customerAutomationId) {
           : Promise.resolve({ data: [] })
       ]);
 
-      if (bundleAttemptsError) {
-        console.warn("Exact bundle run history is temporarily unavailable:", bundleAttemptsError);
-      }
-
       dashboardData = {
         profile: profile || null,
         orders: orders || [],
@@ -2114,7 +2319,6 @@ function openAutomationDetail(customerAutomationId) {
       };
 
       renderDashboard();
-      scheduleTrackedBundleStatusRefresh(user);
     }
 
     function runCustomerAutomationEnsure() {
@@ -2244,6 +2448,7 @@ function openAutomationDetail(customerAutomationId) {
       renderOutputs(outputs, visibleAutomations);
       renderEvents(events);
       renderOrders(orders);
+      scheduleDashboardRefreshIfNeeded(bundleRows, allStates, dashboardData.runs || []);
     }
 
     async function refreshSavedProducts() {
@@ -3547,8 +3752,6 @@ function openAutomationDetail(customerAutomationId) {
   </script>
 </body>
 </html>
-
-
 
 
 

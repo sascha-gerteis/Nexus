@@ -1116,12 +1116,21 @@ async function insertAutomationRun(
 
   if (!error) return;
 
+  const requiresBundleIdentity = Boolean(
+    cleanString(payload.bundle_run_attempt_id) || cleanString(payload.bundle_run_item_id)
+  );
+  if (requiresBundleIdentity) {
+    throw new Error("Could not create the tracked bundle run: " + (error.message || "Unknown insert error"));
+  }
+
   const fallbackPayload = { ...payload };
   delete fallbackPayload.run_key;
   delete fallbackPayload.scheduled_for;
   delete fallbackPayload.trigger_source;
   delete fallbackPayload.request_payload;
   delete fallbackPayload.response_payload;
+  delete fallbackPayload.bundle_run_attempt_id;
+  delete fallbackPayload.bundle_run_item_id;
 
   const { error: fallbackError } = await adminClient.from("automation_runs").insert(fallbackPayload);
 
@@ -1147,12 +1156,23 @@ async function createAutomationRun(
     };
   }
 
+  const requiresBundleIdentity = Boolean(
+    cleanString(payload.bundle_run_attempt_id) || cleanString(payload.bundle_run_item_id)
+  );
+  if (requiresBundleIdentity) {
+    throw new Error(
+      "Could not create the tracked bundle run: " + (result.error?.message || "The run row was not returned."),
+    );
+  }
+
   const fallbackPayload = { ...payload };
   delete fallbackPayload.run_key;
   delete fallbackPayload.scheduled_for;
   delete fallbackPayload.trigger_source;
   delete fallbackPayload.request_payload;
   delete fallbackPayload.response_payload;
+  delete fallbackPayload.bundle_run_attempt_id;
+  delete fallbackPayload.bundle_run_item_id;
 
   result = await adminClient
     .from("automation_runs")
@@ -1188,12 +1208,21 @@ async function updateAutomationRunById(
 
   if (!error) return null;
 
+  const requiresBundleIdentity = Boolean(
+    cleanString(payload.bundle_run_attempt_id) || cleanString(payload.bundle_run_item_id)
+  );
+  if (requiresBundleIdentity) {
+    return error;
+  }
+
   const fallbackPayload = { ...payload };
   delete fallbackPayload.run_key;
   delete fallbackPayload.scheduled_for;
   delete fallbackPayload.trigger_source;
   delete fallbackPayload.request_payload;
   delete fallbackPayload.response_payload;
+  delete fallbackPayload.bundle_run_attempt_id;
+  delete fallbackPayload.bundle_run_item_id;
 
   const { error: fallbackError } = await adminClient
     .from("automation_runs")
@@ -1208,6 +1237,116 @@ async function updateAutomationRunById(
   return null;
 }
 
+async function upsertBundleRunAttempt(
+  adminClient: any,
+  payload: Record<string, unknown>,
+) {
+  const attemptId = cleanString(payload.id);
+  if (!isUuid(attemptId)) {
+    throw new Error("A valid bundle run attempt ID is required before workflows can start.");
+  }
+
+  const { data, error } = await adminClient
+    .from("bundle_run_attempts")
+    .upsert({ ...payload, id: attemptId }, { onConflict: "id" })
+    .select("id")
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    throw new Error("Could not create the bundle run attempt: " + (error?.message || "No attempt row was returned."));
+  }
+
+  return data;
+}
+
+async function upsertBundleRunItem(
+  adminClient: any,
+  payload: Record<string, unknown>,
+) {
+  const attemptId = cleanString(payload.bundle_run_attempt_id);
+  const customerAutomationId = cleanString(payload.customer_automation_id);
+  if (!isUuid(attemptId) || !isUuid(customerAutomationId)) {
+    throw new Error("Valid bundle attempt and customer automation IDs are required before this workflow can start.");
+  }
+
+  const { data, error } = await adminClient
+    .from("bundle_run_items")
+    .upsert(payload, { onConflict: "bundle_run_attempt_id,customer_automation_id" })
+    .select("id")
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    throw new Error("Could not create the bundle run item: " + (error?.message || "No run item row was returned."));
+  }
+
+  return data;
+}
+
+async function updateBundleRunItem(
+  adminClient: any,
+  bundleRunItemId: string,
+  payload: Record<string, unknown>,
+) {
+  if (!isUuid(bundleRunItemId)) return null;
+
+  const { error } = await adminClient
+    .from("bundle_run_items")
+    .update(payload)
+    .eq("id", bundleRunItemId);
+
+  if (error) {
+    console.warn("bundle_run_items update failed:", error.message);
+    return error;
+  }
+
+  return null;
+}
+
+async function refreshBundleRunAttemptRollup(adminClient: any, bundleAttemptId: string) {
+  if (!isUuid(bundleAttemptId)) return null;
+
+  const { data: items, error } = await adminClient
+    .from("bundle_run_items")
+    .select("id,status")
+    .eq("bundle_run_attempt_id", bundleAttemptId);
+
+  if (error) {
+    console.warn("bundle_run_attempts rollup read failed:", error.message);
+    return error;
+  }
+
+  const rows = items || [];
+  const expectedCount = rows.length;
+  const completedCount = rows.filter((item: any) => cleanString(item.status).toLowerCase() === "success").length;
+  const failedCount = rows.filter((item: any) => ["failed", "cancelled", "timed_out"].includes(cleanString(item.status).toLowerCase())).length;
+  const runningCount = rows.filter((item: any) => ["queued", "running", "processing", "pending", "in_progress"].includes(cleanString(item.status).toLowerCase())).length;
+  const status = expectedCount && completedCount >= expectedCount
+    ? "success"
+    : expectedCount && failedCount >= expectedCount
+    ? "failed"
+    : failedCount && !runningCount
+    ? "partial_failed"
+    : "running";
+
+  const { error: updateError } = await adminClient
+    .from("bundle_run_attempts")
+    .update({
+      status,
+      expected_count: expectedCount,
+      completed_count: completedCount,
+      failed_count: failedCount,
+      finished_at: ["success", "failed", "partial_failed"].includes(status) ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", bundleAttemptId);
+
+  if (updateError) {
+    console.warn("bundle_run_attempts rollup update failed:", updateError.message);
+    return updateError;
+  }
+
+  return null;
+}
 const RUNTIME_DUPLICATE_WINDOW_MS = 45 * 60 * 1000;
 
 function runtimeFreshTimestamp(value: unknown) {
@@ -1720,6 +1859,10 @@ async function triggerN8nWebhook(params: {
   submissionId: string;
   runId?: string;
   runKey?: string;
+  bundleAttemptId?: string;
+  bundleRunItemId?: string;
+  bundleId?: string;
+  bundleOrderId?: string;
 }) {
   const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
   const callbackUrl = buildCallbackUrl();
@@ -1733,6 +1876,10 @@ async function triggerN8nWebhook(params: {
     buyer_id: params.customerAutomation.buyer_id,
     run_id: params.runId || "",
     run_key: params.runKey || "",
+    bundle_run_attempt_id: params.bundleAttemptId || "",
+    bundle_run_item_id: params.bundleRunItemId || "",
+    bundle_id: params.bundleId || params.customerAutomation.bundle_id || "",
+    bundle_order_id: params.bundleOrderId || params.customerAutomation.order_id || "",
 
     setup: setupPayload,
     secrets: params.secrets || {},
@@ -1749,6 +1896,10 @@ async function triggerN8nWebhook(params: {
       setup_submission_id: params.submissionId,
       run_id: params.runId || "",
       run_key: params.runKey || "",
+      bundle_run_attempt_id: params.bundleAttemptId || "",
+      bundle_run_item_id: params.bundleRunItemId || "",
+      bundle_id: params.bundleId || params.customerAutomation.bundle_id || "",
+      bundle_order_id: params.bundleOrderId || params.customerAutomation.order_id || "",
       saved_credential_keys: params.savedCredentialKeys || [],
       skipped_setup_sections: setupSkips.skipped_sections,
       skipped_setup_section_keys: setupSkips.skipped_section_keys,
@@ -1832,7 +1983,16 @@ async function triggerN8nWebhook(params: {
   };
 }
 
-async function callCheckN8nExecution(customerAutomationId: string) {
+async function callCheckN8nExecution(
+  customerAutomationId: string,
+  context: {
+    runId?: string;
+    executionId?: string;
+    bundleAttemptId?: string;
+    bundleRunItemId?: string;
+    workflowId?: string;
+  } = {},
+) {
   const supabaseUrl = env("SUPABASE_URL").replace(/\/+$/, "");
   const serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
   const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
@@ -1854,6 +2014,11 @@ async function callCheckN8nExecution(customerAutomationId: string) {
     },
     body: JSON.stringify({
       customer_automation_id: customerAutomationId,
+      run_id: context.runId || undefined,
+      execution_id: context.executionId || undefined,
+      bundle_run_attempt_id: context.bundleAttemptId || undefined,
+      bundle_run_item_id: context.bundleRunItemId || undefined,
+      workflow_id: context.workflowId || undefined,
     }),
   });
 
@@ -1874,7 +2039,16 @@ async function callCheckN8nExecution(customerAutomationId: string) {
   };
 }
 
-async function checkN8nExecutionAfterTrigger(customerAutomationId: string) {
+async function checkN8nExecutionAfterTrigger(
+  customerAutomationId: string,
+  context: {
+    runId?: string;
+    executionId?: string;
+    bundleAttemptId?: string;
+    bundleRunItemId?: string;
+    workflowId?: string;
+  } = {},
+) {
   /*
     Give n8n time to create/fail the execution.
     This is intentionally bounded so the customer submit request does not hang forever.
@@ -1886,7 +2060,7 @@ async function checkN8nExecutionAfterTrigger(customerAutomationId: string) {
   for (const delay of delays) {
     await sleep(delay);
 
-    const check = await callCheckN8nExecution(customerAutomationId);
+    const check = await callCheckN8nExecution(customerAutomationId, context);
     lastResult = check;
 
     if (!check.checked) {
@@ -1987,6 +2161,10 @@ async function triggerPythonRunner(params: {
   submissionId: string;
   runId?: string;
   runKey?: string;
+  bundleAttemptId?: string;
+  bundleRunItemId?: string;
+  bundleId?: string;
+  bundleOrderId?: string;
 }) {
   const runtimeSecret = env("NEXUS_RUNTIME_SECRET");
   const supabaseUrl = env("SUPABASE_URL").replace(/\/+$/, "");
@@ -2005,6 +2183,10 @@ async function triggerPythonRunner(params: {
     buyer_id: params.customerAutomation.buyer_id,
     run_id: params.runId || "",
     run_key: params.runKey || "",
+    bundle_run_attempt_id: params.bundleAttemptId || "",
+    bundle_run_item_id: params.bundleRunItemId || "",
+    bundle_id: params.bundleId || params.customerAutomation.bundle_id || "",
+    bundle_order_id: params.bundleOrderId || params.customerAutomation.order_id || "",
 
     setup: setupPayload,
     secrets: params.secrets || {},
@@ -2021,6 +2203,10 @@ async function triggerPythonRunner(params: {
       setup_submission_id: params.submissionId,
       run_id: params.runId || "",
       run_key: params.runKey || "",
+      bundle_run_attempt_id: params.bundleAttemptId || "",
+      bundle_run_item_id: params.bundleRunItemId || "",
+      bundle_id: params.bundleId || params.customerAutomation.bundle_id || "",
+      bundle_order_id: params.bundleOrderId || params.customerAutomation.order_id || "",
       saved_credential_keys: params.savedCredentialKeys || [],
       skipped_setup_sections: setupSkips.skipped_sections,
       skipped_setup_section_keys: setupSkips.skipped_section_keys,
@@ -2253,6 +2439,19 @@ Deno.serve(async (req) => {
       return errorResponse("A valid customer_automation_id is required.", 400);
     }
 
+    const bundleAttemptId = cleanString(
+      body.bundle_attempt_id ||
+        body.bundleAttemptId ||
+        body.bundle_run_id ||
+        body.bundleRunId,
+    );
+    let bundleOrderId = cleanString(body.bundle_order_id || body.bundleOrderId);
+    let submittedBundleId = cleanString(body.bundle_id || body.bundleId);
+    const bundleExpectedCountValue = Number(body.bundle_expected_count || body.bundleExpectedCount || 0);
+    const bundleExpectedCount = Number.isFinite(bundleExpectedCountValue) && bundleExpectedCountValue > 0
+      ? Math.floor(bundleExpectedCountValue)
+      : 0;
+
     const answers = normalizeJsonObject(body.answers || body.setup || {});
 
     const loaded = await loadCustomerAutomation(adminClient, customerAutomationId);
@@ -2267,6 +2466,30 @@ Deno.serve(async (req) => {
     const customerAutomation = loaded.data;
     const automation = loaded.automation || {};
     const order = loaded.order || {};
+    bundleOrderId = bundleOrderId || cleanString(customerAutomation.order_id) || cleanString(order.id);
+    submittedBundleId = submittedBundleId || cleanString(customerAutomation.bundle_id) || cleanString(order.bundle_id);
+    const orderIsBundle = lowerString(order.order_type) === "bundle" || Boolean(submittedBundleId);
+
+    if (orderIsBundle) {
+      if (!isUuid(bundleAttemptId)) {
+        return errorResponse(
+          "This bundle run is missing its unique attempt ID. Reload the bundle setup page and submit again.",
+          409,
+        );
+      }
+      if (!isUuid(bundleOrderId) || !isUuid(submittedBundleId)) {
+        return errorResponse(
+          "This bundle run is missing its order or bundle identity. Reload the bundle setup page and submit again.",
+          409,
+        );
+      }
+      if (bundleExpectedCount < 1) {
+        return errorResponse(
+          "This bundle run is missing its expected workflow count. Reload the bundle setup page and submit again.",
+          409,
+        );
+      }
+    }
     const developerOwnsAutomation = Boolean(
       developerProfile?.id &&
         (
@@ -2639,6 +2862,43 @@ Deno.serve(async (req) => {
 
     const runKey = `setup:${customerAutomation.id}:${submission.id}`;
     const runStartedAt = new Date().toISOString();
+    const runtimeBundleAttemptId = isUuid(bundleAttemptId) ? bundleAttemptId : "";
+    let bundleRunItemId = "";
+
+    if (runtimeBundleAttemptId) {
+      await upsertBundleRunAttempt(adminClient, {
+        id: runtimeBundleAttemptId,
+        order_id: bundleOrderId || customerAutomation.order_id || null,
+        bundle_id: submittedBundleId || customerAutomation.bundle_id || null,
+        buyer_id: customerAutomation.buyer_id || user.id || null,
+        status: "running",
+        expected_count: bundleExpectedCount || 0,
+        started_at: runStartedAt,
+        updated_at: runStartedAt,
+      });
+
+      const bundleRunItem = await upsertBundleRunItem(adminClient, {
+        bundle_run_attempt_id: runtimeBundleAttemptId,
+        order_id: bundleOrderId || customerAutomation.order_id || null,
+        bundle_id: submittedBundleId || customerAutomation.bundle_id || null,
+        buyer_id: customerAutomation.buyer_id || user.id || null,
+        customer_automation_id: customerAutomation.id,
+        automation_id: customerAutomation.automation_id || null,
+        status: "running",
+        started_at: runStartedAt,
+        updated_at: runStartedAt,
+      });
+      bundleRunItemId = cleanString(bundleRunItem?.id);
+      if (!isUuid(bundleRunItemId)) {
+        return errorResponse("Nexus could not create this workflow's bundle run item. No workflow was started.", 500);
+      }
+      await refreshBundleRunAttemptRollup(adminClient, runtimeBundleAttemptId);
+    }
+
+    if (orderIsBundle && (!isUuid(runtimeBundleAttemptId) || !isUuid(bundleRunItemId))) {
+      return errorResponse("Nexus could not establish exact bundle run tracking. No workflow was started.", 500);
+    }
+
     const activeRun = await createAutomationRun(adminClient, {
       customer_automation_id: customerAutomation.id,
       buyer_id: customerAutomation.buyer_id,
@@ -2649,15 +2909,35 @@ Deno.serve(async (req) => {
       trigger_source: isAdmin ? "admin_setup_submit" : isDeveloper ? "developer_setup_submit" : "buyer_setup_submit",
       status: "running",
       run_key: runKey,
+      bundle_run_attempt_id: runtimeBundleAttemptId || null,
+      bundle_run_item_id: bundleRunItemId || null,
       request_payload: {
         setup_submission_id: submission.id,
         setup_keys: Object.keys(setupAnswers),
         credential_keys_available: Object.keys(savedSecrets),
+        bundle_attempt_id: runtimeBundleAttemptId || null,
+        bundle_run_attempt_id: runtimeBundleAttemptId || null,
+        bundle_run_item_id: bundleRunItemId || null,
+        bundle_order_id: bundleOrderId || customerAutomation.order_id || null,
+        bundle_id: submittedBundleId || customerAutomation.bundle_id || null,
       },
       started_at: runStartedAt,
       created_at: runStartedAt,
       updated_at: runStartedAt,
     });
+
+    if (orderIsBundle && !isUuid(activeRun.id)) {
+      return errorResponse("Nexus could not create the tracked automation run. The workflow was not started.", 500);
+    }
+
+    if (bundleRunItemId) {
+      await updateBundleRunItem(adminClient, bundleRunItemId, {
+        automation_run_id: activeRun.id || null,
+        status: "running",
+        updated_at: new Date().toISOString(),
+      });
+      await refreshBundleRunAttemptRollup(adminClient, runtimeBundleAttemptId);
+    }
 
     await insertAutomationEvent(adminClient, {
       customer_automation_id: customerAutomation.id,
@@ -2695,6 +2975,10 @@ Deno.serve(async (req) => {
           submissionId: submission.id,
           runId: activeRun.id,
           runKey: activeRun.run_key || runKey,
+          bundleAttemptId: runtimeBundleAttemptId,
+          bundleRunItemId,
+          bundleId: submittedBundleId || customerAutomation.bundle_id || "",
+          bundleOrderId: bundleOrderId || customerAutomation.order_id || "",
         })
         : await triggerN8nWebhook({
           webhookUrl,
@@ -2708,6 +2992,10 @@ Deno.serve(async (req) => {
           submissionId: submission.id,
           runId: activeRun.id,
           runKey: activeRun.run_key || runKey,
+          bundleAttemptId: runtimeBundleAttemptId,
+          bundleRunItemId,
+          bundleId: submittedBundleId || customerAutomation.bundle_id || "",
+          bundleOrderId: bundleOrderId || customerAutomation.order_id || "",
         });
     } catch (error) {
       let message = error instanceof Error ? error.message : String(error);
@@ -2758,7 +3046,11 @@ Deno.serve(async (req) => {
               submissionId: submission.id,
               runId: activeRun.id,
               runKey: activeRun.run_key || runKey,
-            });
+          bundleAttemptId: runtimeBundleAttemptId,
+          bundleRunItemId,
+          bundleId: submittedBundleId || customerAutomation.bundle_id || "",
+          bundleOrderId: bundleOrderId || customerAutomation.order_id || "",
+        });
 
             await safeUpdateCustomerAutomation(adminClient, customerAutomation.id, {
               runtime_webhook_url: templateWebhookUrl,
@@ -2829,7 +3121,11 @@ Deno.serve(async (req) => {
                 submissionId: submission.id,
                 runId: activeRun.id,
                 runKey: activeRun.run_key || runKey,
-              });
+          bundleAttemptId: runtimeBundleAttemptId,
+          bundleRunItemId,
+          bundleId: submittedBundleId || customerAutomation.bundle_id || "",
+          bundleOrderId: bundleOrderId || customerAutomation.order_id || "",
+        });
             } catch (retryError) {
               message = retryError instanceof Error ? retryError.message : String(retryError);
             }
@@ -2876,7 +3172,11 @@ Deno.serve(async (req) => {
                 submissionId: submission.id,
                 runId: activeRun.id,
                 runKey: activeRun.run_key || runKey,
-              });
+          bundleAttemptId: runtimeBundleAttemptId,
+          bundleRunItemId,
+          bundleId: submittedBundleId || customerAutomation.bundle_id || "",
+          bundleOrderId: bundleOrderId || customerAutomation.order_id || "",
+        });
             } catch (reprovisionError) {
               message = reprovisionError instanceof Error ? reprovisionError.message : String(reprovisionError);
               reprovisionRetry = {
@@ -2910,6 +3210,16 @@ Deno.serve(async (req) => {
           activation_retry: activationRetry,
           reprovision_retry: reprovisionRetry,
         });
+
+        if (bundleRunItemId) {
+          await updateBundleRunItem(adminClient, bundleRunItemId, {
+            status: "failed",
+            finished_at: new Date().toISOString(),
+            error_message: message,
+            updated_at: new Date().toISOString(),
+          });
+          await refreshBundleRunAttemptRollup(adminClient, runtimeBundleAttemptId);
+        }
 
         await updateAutomationRunById(adminClient, activeRun.id, {
           status: "error",
@@ -2998,7 +3308,13 @@ Deno.serve(async (req) => {
       ? { checked: false, reason: "Python runner handles execution and callback status." }
       : triggerResult?.acceptedWithoutFinalResponse
       ? { checked: false, reason: "n8n is still running; Nexus will receive the output callback when it finishes." }
-      : await checkN8nExecutionAfterTrigger(customerAutomation.id);
+      : await checkN8nExecutionAfterTrigger(customerAutomation.id, {
+        runId: activeRun.id || "",
+        executionId,
+        bundleAttemptId: runtimeBundleAttemptId || "",
+        bundleRunItemId: bundleRunItemId || "",
+        workflowId: runtimeWorkflowId(customerAutomation, automation, order),
+      });
 
     return jsonResponse({
       ok: true,
@@ -3012,6 +3328,9 @@ Deno.serve(async (req) => {
       n8n_execution_id: executionId || null,
       run_id: activeRun.id || null,
       run_key: activeRun.run_key || runKey,
+      bundle_attempt_id: runtimeBundleAttemptId || null,
+      bundle_run_attempt_id: runtimeBundleAttemptId || null,
+      bundle_run_item_id: bundleRunItemId || null,
       n8n_check: n8nCheckResult,
       runtime_pending_response: Boolean(triggerResult?.acceptedWithoutFinalResponse),
     });
@@ -3024,3 +3343,10 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+
+
+
+
+
+
