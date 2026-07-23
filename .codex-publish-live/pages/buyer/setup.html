@@ -1,0 +1,2428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260719-bundle-setup-validation">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Complete Setup | Nexus</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-page="buyer-setup">
+  <header class="site-header">
+    <div class="container nav">
+      <a class="logo" href="/index.html">
+        <span>Nexus&nbsp;</span>
+      </a>
+
+      <nav class="nav-links">
+        <a class="nav-link" href="/index.html">Home</a>
+        <a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a>
+        <a class="nav-link active" href="/pages/buyer/dashboard.html">Dashboard</a>
+        <a class="nav-link" href="/pages/contact/index.html">Support</a>
+        <button class="btn btn-secondary btn-small" type="button" onclick="NexusDB.signOut()">Logout</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="buyer-setup-page">
+    <section class="container">
+      <div id="setupRoot">
+        <div class="card">
+          <h2>Loading setup form...</h2>
+          <p>Please wait while Nexus prepares your automation setup form.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260719-bundle-setup-validation"></script>
+
+  <script>
+    let activeCustomerAutomation = null;
+    let activeProduct = null;
+    let latestSubmission = null;
+    let activeBundleSetup = null;
+    let activeBundleRuntime = {
+      outputsByAutomation: new Map(),
+      runsByAutomation: new Map()
+    };
+
+    function getParam(name) {
+      return new URLSearchParams(location.search).get(name);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function normalizeSetupSchema(schema) {
+      if (!schema) return [];
+
+      if (Array.isArray(schema)) return schema;
+
+      if (typeof schema === "string") {
+        try {
+          const parsed = JSON.parse(schema);
+          return normalizeSetupSchema(parsed);
+        } catch {
+          return [];
+        }
+      }
+
+      if (typeof schema === "object") {
+        const candidates = [
+          schema.fields,
+          schema.setup_fields,
+          schema.setupFields,
+          schema.questions,
+          schema.schema,
+          schema.items
+        ];
+
+        for (const candidate of candidates) {
+          const normalized = normalizeSetupSchema(candidate);
+          if (normalized.length) return normalized;
+        }
+      }
+
+      return [];
+    }
+
+    function normalizeAnswerKey(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    }
+
+    function asAnswerObject(value) {
+      if (!value) return {};
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+        } catch {
+          return {};
+        }
+      }
+      return typeof value === "object" && !Array.isArray(value) ? value : {};
+    }
+
+    function mergeSetupAnswers(submission) {
+      const source = submission || {};
+      const answers = asAnswerObject(source.answers);
+      const setupAnswers = asAnswerObject(source.setup_answers);
+      const setup = asAnswerObject(source.setup);
+
+      return {
+        ...answers,
+        ...setupAnswers,
+        ...setup,
+        ...asAnswerObject(answers.setup),
+        ...asAnswerObject(answers.setup_answers)
+      };
+    }
+
+    function answerValue(existingAnswers, name) {
+      const answers = existingAnswers || {};
+
+      if (answers[name] !== undefined && answers[name] !== null) {
+        return answers[name];
+      }
+
+      const normalizedName = normalizeAnswerKey(name);
+      const match = Object.keys(answers).find(key => normalizeAnswerKey(key) === normalizedName);
+
+      return match ? answers[match] : "";
+    }
+
+    function fieldRequired(field) {
+      return field.required ? `data-original-required="true"` : `data-original-required="false"`;
+    }
+
+    const SKIP_FIELD_PREFIX = "__nexus_skip__";
+
+    function setupSkipInputName(group) {
+      return `${SKIP_FIELD_PREFIX}${canonicalBundleToken(group)}`;
+    }
+
+    function setupFieldSkipGroup(field = {}) {
+      const explicit = canonicalBundleToken(field.skip_group || field.optional_group || field.section || field.group || "");
+      if (explicit && !["setup", "general", "details", "credentials", "access"].includes(explicit)) {
+        return explicit;
+      }
+
+      const text = fieldTextForMatching(field);
+
+      if (/\btiktok\b/.test(text)) return "tiktok";
+      if (/\byoutube\b/.test(text)) return "youtube";
+      if (/\b(instagram|ig)\b/.test(text)) return "instagram";
+      if (/\b(facebook|fb|meta)\b/.test(text)) return "meta";
+      if (/\blinkedin\b/.test(text)) return "linkedin";
+      if (/\b(twitter|x profile|x account|x handle)\b/.test(text)) return "x_twitter";
+      if (/\b(pinterest)\b/.test(text)) return "pinterest";
+      if (/\b(reddit)\b/.test(text)) return "reddit";
+      if (/\b(snapchat)\b/.test(text)) return "snapchat";
+      if (/\b(threads)\b/.test(text)) return "threads";
+      if (/\bcompetitor|competitors\b/.test(text)) return "competitors";
+      if (/\b(google\s*)?(sheet|sheets|spreadsheet)\b/.test(text)) return "google_sheets";
+      if (/\b(google\s*analytics|ga4)\b/.test(text)) return "google_analytics";
+      if (/\b(google\s*ads|adwords)\b/.test(text)) return "google_ads";
+      if (/\b(mailchimp|klaviyo|email\s*marketing)\b/.test(text)) return "email_marketing";
+      if (/\b(shopify|woocommerce|stripe|hubspot|salesforce|airtable|notion|slack|telegram|whatsapp|webflow|wordpress|calendly|pipedrive|zoho|quickbooks|xero)\b/.test(text)) {
+        return detectBundleProvider(text) || "external_tool";
+      }
+
+      return "";
+    }
+
+    function setupSkipGroupLabel(group) {
+      const labels = {
+        tiktok: "TikTok data",
+        youtube: "YouTube data",
+        instagram: "Instagram data",
+        meta: "Meta / Facebook data",
+        linkedin: "LinkedIn data",
+        x_twitter: "X / Twitter data",
+        pinterest: "Pinterest data",
+        reddit: "Reddit data",
+        snapchat: "Snapchat data",
+        threads: "Threads data",
+        competitors: "Competitor data",
+        google_sheets: "Google Sheets data",
+        google_analytics: "Google Analytics data",
+        google_ads: "Google Ads data",
+        email_marketing: "Email marketing data",
+        shopify: "Shopify data",
+        woocommerce: "WooCommerce data",
+        stripe: "Stripe data",
+        hubspot: "HubSpot data",
+        salesforce: "Salesforce data",
+        airtable: "Airtable data",
+        notion: "Notion data",
+        slack: "Slack data",
+        telegram: "Telegram data",
+        whatsapp: "WhatsApp data",
+        webflow: "Webflow data",
+        wordpress: "WordPress data",
+        calendly: "Calendly data",
+        pipedrive: "Pipedrive data",
+        zoho: "Zoho data",
+        quickbooks: "QuickBooks data",
+        xero: "Xero data",
+        external_tool: "External tool data"
+      };
+
+      return labels[group] || group.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function fieldCanBeSkipped(field = {}) {
+      if (field.allow_skip === false || field.skippable === false) return false;
+
+      const name = fieldNameForMatching(field);
+      const text = fieldTextForMatching(field);
+      const group = setupFieldSkipGroup(field);
+
+      if (!group) return false;
+
+      if ([
+        "business_name",
+        "brand_name",
+        "company_name",
+        "report_recipient_email",
+        "contact_email",
+        "technical_contact_email",
+        "buyer_email",
+        "email"
+      ].includes(name)) {
+        return false;
+      }
+
+      if (/\b(recipient|contact|buyer|technical)\b/.test(text) && /\bemail\b/.test(text)) return false;
+
+      return true;
+    }
+
+    function renderFieldListWithSkips(fields = [], existingAnswers = {}, options = {}) {
+      const renderedGroups = new Set();
+      const chunks = [];
+
+      for (const field of fields) {
+        const group = fieldCanBeSkipped(field) ? setupFieldSkipGroup(field) : "";
+
+        if (!group) {
+          chunks.push(renderField(field, existingAnswers, options));
+          continue;
+        }
+
+        if (renderedGroups.has(group)) continue;
+        renderedGroups.add(group);
+
+        const groupFields = fields.filter(item => fieldCanBeSkipped(item) && setupFieldSkipGroup(item) === group);
+        const skipName = setupSkipInputName(group);
+        const wasSkipped = String(answerValue(existingAnswers, skipName)).toLowerCase() === "true";
+
+        chunks.push(`
+          <section class="setup-skip-group full" data-skip-group-card="${escapeHtml(group)}">
+            <div class="setup-skip-group-head">
+              <div>
+                <strong>${escapeHtml(setupSkipGroupLabel(group))}</strong>
+                <small>If you do not have this data, tick the box and Nexus will tell the workflow to skip that path.</small>
+              </div>
+              <label class="setup-skip-toggle">
+                <input type="checkbox" name="${escapeHtml(skipName)}" value="true" data-skip-toggle="${escapeHtml(group)}" ${wasSkipped ? "checked" : ""}>
+                <span>I do not have this data</span>
+              </label>
+            </div>
+            <div class="setup-skip-group-fields">
+              ${groupFields.map(item => renderField(item, existingAnswers, { ...options, forceSkipGroup: group })).join("")}
+            </div>
+          </section>
+        `);
+      }
+
+      return chunks.join("");
+    }
+
+    function isMonthlyCadenceSetupField(field = {}) {
+      const name = normalizeAnswerKey(field.name || field.key || field.credential_key || "");
+      const label = String(field.label || "").trim().toLowerCase();
+      const text = [
+        field.name,
+        field.key,
+        field.label,
+        field.description,
+        field.placeholder
+      ].map(value => String(value || "")).join(" ").toLowerCase();
+
+      if (/report[_\s-]*(period|range)|date[_\s-]*range|time[_\s-]*frame|period[_\s-]*(start|end)/.test(text)) {
+        return false;
+      }
+
+      return (
+        [
+          "frequency",
+          "run_frequency",
+          "schedule_frequency",
+          "report_frequency",
+          "delivery_frequency",
+          "cadence",
+          "run_cadence",
+          "schedule_cadence",
+          "how_often",
+          "repeat_every",
+          "interval"
+        ].includes(name) ||
+        /\b(run|schedule|delivery|report)\s+(frequency|cadence)\b/.test(text) ||
+        /\bhow often\b|\brepeat every\b|\bmonthly cadence\b/.test(text) ||
+        label === "frequency" ||
+        label === "cadence"
+      );
+    }
+
+    function shouldRenderBuyerSetupField(field = {}, options = {}) {
+      const name = normalizeAnswerKey(field.name || field.key || field.credential_key || "");
+      const label = String(field.label || "").trim().toLowerCase();
+      const text = [
+        field.name,
+        field.key,
+        field.label,
+        field.description,
+        field.placeholder
+      ].map(value => String(value || "")).join(" ").toLowerCase();
+
+      if (
+        name === "google_sheet_access_mode" ||
+        name === "nexus_sheet_access_mode" ||
+        name === "sheet_access_mode" ||
+        label === "how should nexus get access?" ||
+        /how should nexus get access/.test(text)
+      ) {
+        return false;
+      }
+
+      if (options.hideMonthlyCadence && isMonthlyCadenceSetupField(field)) {
+        return false;
+      }
+
+      return true;
+    }
+
+    function renderField(field, existingAnswers = {}, options = {}) {
+      const name = field.name || "";
+      const label = field.label || name;
+      const type = field.type || "text";
+      const required = fieldRequired(field);
+      const value = type === "secret" ? "" : answerValue(existingAnswers, name);
+
+      if (!name) return "";
+
+      const skipGroup = options.forceSkipGroup || (fieldCanBeSkipped(field) ? setupFieldSkipGroup(field) : "");
+      const skipAttrs = skipGroup
+        ? `data-skip-group="${escapeHtml(skipGroup)}" data-skip-field="${escapeHtml(name)}"`
+        : "";
+
+      if (type === "textarea") {
+        return `
+          <div class="full" ${skipGroup ? `data-skip-field-wrap="${escapeHtml(skipGroup)}"` : ""}>
+            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            <textarea
+              class="textarea"
+              name="${escapeHtml(name)}"
+              ${required}
+              ${skipAttrs}
+              placeholder="${escapeHtml(field.placeholder || "")}"
+            >${escapeHtml(value)}</textarea>
+            ${field.description ? `<small>${escapeHtml(field.description)}</small>` : ""}
+          </div>
+        `;
+      }
+
+      if (type === "select") {
+        const optionsList = Array.isArray(field.options) ? field.options : [];
+
+        return `
+          <div ${skipGroup ? `data-skip-field-wrap="${escapeHtml(skipGroup)}"` : ""}>
+            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            <select class="select" name="${escapeHtml(name)}" ${required} ${skipAttrs}>
+              <option value="">Choose...</option>
+              ${optionsList.map(option => `
+                <option value="${escapeHtml(option)}" ${String(value) === String(option) ? "selected" : ""}>
+                  ${escapeHtml(option)}
+                </option>
+              `).join("")}
+            </select>
+            ${field.description ? `<small>${escapeHtml(field.description)}</small>` : ""}
+          </div>
+        `;
+      }
+
+      if (type === "secret") {
+        const secretRequired = field.required && !options.hasSubmitted
+          ? `data-original-required="true"`
+          : `data-original-required="false"`;
+        const placeholder = options.hasSubmitted
+          ? "Leave blank to keep saved credential"
+          : (field.placeholder || "Paste API key, token, or secret value");
+
+        return `
+          <div ${skipGroup ? `data-skip-field-wrap="${escapeHtml(skipGroup)}"` : ""}>
+            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            <input
+              class="input"
+              type="password"
+              name="${escapeHtml(name)}"
+              value=""
+              ${secretRequired}
+              ${skipAttrs}
+              placeholder="${escapeHtml(placeholder)}"
+              autocomplete="off"
+              data-secret-field="true"
+            >
+            <small>
+              ${escapeHtml(field.description || "This credential is used only for this automation and is never shown back after saving.")}
+              ${options.hasSubmitted ? " Leave blank to keep the saved value." : ""}
+            </small>
+          </div>
+        `;
+      }
+
+      const htmlType = ["text", "email", "url", "number"].includes(type) ? type : "text";
+
+      return `
+        <div ${skipGroup ? `data-skip-field-wrap="${escapeHtml(skipGroup)}"` : ""}>
+          <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+          <input
+            class="input"
+            type="${htmlType}"
+            name="${escapeHtml(name)}"
+            value="${escapeHtml(value)}"
+            ${required}
+            ${skipAttrs}
+            placeholder="${escapeHtml(field.placeholder || "")}"
+          >
+          ${field.description ? `<small>${escapeHtml(field.description)}</small>` : ""}
+        </div>
+      `;
+    }
+
+    function bundleFieldWorkflowIds(field = {}) {
+      return [...new Set((field.sources || [])
+        .map(source => source.customer_automation_id)
+        .filter(Boolean)
+        .map(String))];
+    }
+
+    function bundleEntryKey(entry = {}) {
+      return String(entry.automation?.id || entry.automation?.customer_automation_id || entry.automation?.automation_id || "");
+    }
+
+    function bundleEntryTitle(entry = {}) {
+      return entry.product?.title || entry.automation?.name || entry.automation?.automation_title || "Workflow";
+    }
+
+    function bundleFieldIsShared(field = {}) {
+      return false;
+    }
+
+    function bundleFieldLabel(field = {}, productTitle = "") {
+      const label = field.label || field.name || "";
+      const prefix = productTitle ? `${productTitle}:` : "";
+      return prefix && label.startsWith(prefix) ? label.slice(prefix.length).trim() : label;
+    }
+
+    function renderBundleFieldList(fields = [], existingAnswers = {}, options = {}) {
+      const normalizedFields = fields.map(field => {
+        const label = bundleFieldLabel(field, options.productTitle || "");
+        return { ...field, label };
+      });
+
+      return renderFieldListWithSkips(normalizedFields, existingAnswers, options);
+    }
+
+    function openBundleSetupSection(index) {
+      const sections = [...document.querySelectorAll("[data-bundle-section]")];
+      if (!sections.length) return;
+      const nextIndex = Math.max(0, Math.min(index, sections.length - 1));
+
+      sections.forEach((section, sectionIndex) => {
+        section.open = sectionIndex === nextIndex;
+      });
+
+      sections[nextIndex]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    window.openBundleSetupSection = openBundleSetupSection;
+
+    function renderBundleSetupFields(bundleSetup, setupFields = [], credentialFields = [], existingAnswers = {}, options = {}) {
+      const entries = bundleSetup?.entries || [];
+      const workflowFields = [...setupFields, ...credentialFields];
+
+      const workflowSections = entries.map((entry, index) => {
+        const entryKey = bundleEntryKey(entry);
+        const productTitle = bundleEntryTitle(entry);
+        const fields = workflowFields.filter(field => bundleFieldWorkflowIds(field).includes(entryKey));
+        const countLabel = `${fields.length} question${fields.length === 1 ? "" : "s"}`;
+
+        return `
+          <details class="bundle-setup-section" data-bundle-section ${index === 0 ? "open" : ""}>
+            <summary class="bundle-setup-summary-row">
+              <span>
+                <strong>${escapeHtml(productTitle)}</strong>
+                <small>${escapeHtml(countLabel)}</small>
+              </span>
+              <span class="bundle-setup-expand">Expand</span>
+            </summary>
+
+            <div class="bundle-setup-section-body">
+              ${
+                fields.length
+                  ? `<div class="bundle-setup-grid">${renderBundleFieldList(fields, existingAnswers, { ...options, productTitle })}</div>`
+                  : `<p class="bundle-setup-empty">No setup questions were found for this workflow.</p>`
+              }
+
+              ${
+                index < entries.length - 1
+                  ? `<button type="button" class="btn btn-secondary bundle-setup-next" onclick="openBundleSetupSection(${index + 1})">Next workflow</button>`
+                  : `<p class="bundle-setup-finish">All workflow sections are visible. Submit once below to start the included workflows.</p>`
+              }
+            </div>
+          </details>
+        `;
+      }).join("");
+
+      return `
+        <div class="full bundle-setup-flow">
+          <section class="bundle-setup-workflows">
+            <div class="setup-form-section-title">
+              <h3>Workflow setup</h3>
+              <p>Open each workflow and complete its exact questions. Nexus submits everything together at the end.</p>
+            </div>
+
+            ${workflowSections}
+          </section>
+        </div>
+      `;
+    }
+
+    function setupCssEscape(value) {
+      if (window.CSS?.escape) return CSS.escape(value);
+      return String(value || "").replace(/["\\]/g, "\\$&");
+    }
+
+    function applySetupSkipToggle(toggle) {
+      const group = toggle?.dataset?.skipToggle || "";
+      if (!group) return;
+
+      const checked = Boolean(toggle.checked);
+      const selector = `[data-skip-group="${setupCssEscape(group)}"]`;
+      const fields = [...document.querySelectorAll(selector)];
+
+      for (const field of fields) {
+        if (field.dataset.originalRequired === undefined) {
+          field.dataset.originalRequired = field.required ? "true" : "false";
+        }
+
+        field.disabled = checked;
+        field.required = false;
+
+        const wrap = field.closest("[data-skip-field-wrap]");
+        if (wrap) wrap.classList.toggle("setup-skip-field-disabled", checked);
+      }
+
+      document
+        .querySelectorAll(`[data-skip-toggle="${setupCssEscape(group)}"]`)
+        .forEach(other => {
+          if (other !== toggle) other.checked = checked;
+          other.closest("[data-skip-group-card]")?.classList.toggle("is-skipped", checked);
+        });
+
+      toggle.closest("[data-skip-group-card]")?.classList.toggle("is-skipped", checked);
+    }
+
+    function mountSetupSkipControls(root = document) {
+      root.querySelectorAll("[data-skip-toggle]").forEach(toggle => {
+        toggle.addEventListener("change", () => applySetupSkipToggle(toggle));
+        applySetupSkipToggle(toggle);
+      });
+    }
+
+    function collectSkippedSetup(form, answers) {
+      const skippedSections = [];
+      const skippedFields = [];
+
+      form.querySelectorAll("[data-skip-toggle]:checked").forEach(toggle => {
+        const group = toggle.dataset.skipToggle || "";
+        if (!group) return;
+
+        skippedSections.push({
+          group,
+          label: setupSkipGroupLabel(group)
+        });
+
+        form.querySelectorAll(`[data-skip-group="${setupCssEscape(group)}"]`).forEach(field => {
+          const name = field.getAttribute("name") || "";
+          if (!name) return;
+
+          answers[name] = "";
+          skippedFields.push({
+            name,
+            group,
+            label: setupSkipGroupLabel(group)
+          });
+        });
+      });
+
+      if (skippedSections.length || skippedFields.length) {
+        answers.__nexus_skipped_sections = JSON.stringify(skippedSections);
+        answers.__nexus_skipped_fields = JSON.stringify(skippedFields);
+        answers.__nexus_skip_summary = skippedSections.map(section => section.label).join(", ");
+      }
+    }
+
+    function missingUnconfirmedSkipGroups(form) {
+      const missing = [];
+
+      form.querySelectorAll("[data-skip-group-card]").forEach(card => {
+        const toggle = card.querySelector("[data-skip-toggle]");
+        if (!toggle || toggle.checked) return;
+
+        const fields = [...card.querySelectorAll("[data-skip-group]")]
+          .filter(field => {
+            const name = field.getAttribute("name") || "";
+            return name && !name.startsWith(SKIP_FIELD_PREFIX) && !field.disabled;
+          });
+
+        if (!fields.length) return;
+
+        const hasAnyValue = fields.some(field => {
+          const type = String(field.type || "").toLowerCase();
+          if (type === "checkbox" || type === "radio") return field.checked;
+          return String(field.value || "").trim() !== "";
+        });
+
+        if (!hasAnyValue) {
+          const label = card.querySelector(".setup-skip-group-head strong")?.textContent?.trim() || "this data";
+          missing.push(label);
+        }
+      });
+
+      return missing;
+    }
+
+    function setupFieldHasValue(field) {
+      const type = String(field.type || "").toLowerCase();
+      if (type === "checkbox" || type === "radio") return Boolean(field.checked);
+      return String(field.value || "").trim() !== "";
+    }
+
+    function setupFieldFriendlyLabel(field) {
+      const wrap = field.closest("[data-skip-field-wrap]") || field.closest("div, section") || field.parentElement;
+      const label = wrap?.querySelector("label")?.textContent || field.getAttribute("name") || "this field";
+      return String(label).replace(/\s*\*\s*$/, "").trim() || "this field";
+    }
+
+    function revealSetupField(field) {
+      const section = field.closest("[data-bundle-section]");
+      if (section) section.open = true;
+
+      const skipCard = field.closest("[data-skip-group-card]");
+      if (skipCard) {
+        skipCard.classList.remove("is-skipped");
+        const toggle = skipCard.querySelector("[data-skip-toggle]");
+        if (toggle?.checked) {
+          toggle.checked = false;
+          applySetupSkipToggle(toggle);
+        }
+      }
+
+      const target = field.closest("[data-skip-field-wrap]") || field.closest("[data-bundle-section]") || field;
+      setTimeout(() => {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        try {
+          field.focus({ preventScroll: true });
+        } catch {
+          field.focus();
+        }
+      }, 60);
+    }
+
+    function showSetupValidationMessage(message, field) {
+      NexusUI.toast(message);
+      const resultEl = document.getElementById("setupSubmitResult");
+      if (resultEl) {
+        resultEl.innerHTML = `
+          <div class="error" style="margin-top:1rem">
+            <strong>Complete the missing setup detail.</strong><br>
+            ${escapeHtml(message)}
+          </div>
+        `;
+      }
+
+      if (field) revealSetupField(field);
+    }
+
+    function validateRequiredSetupFields(form) {
+      const requiredFields = [...form.querySelectorAll('[data-original-required="true"]')];
+
+      for (const field of requiredFields) {
+        const name = field.getAttribute("name") || "";
+        if (!name || name.startsWith(SKIP_FIELD_PREFIX) || field.disabled) continue;
+        if (setupFieldHasValue(field)) continue;
+
+        const label = setupFieldFriendlyLabel(field);
+        const skipCard = field.closest("[data-skip-group-card]");
+        const skipLabel = skipCard?.querySelector(".setup-skip-toggle span")?.textContent?.trim();
+        const message = skipCard && skipLabel
+          ? `Please complete ${label}, or tick "${skipLabel}" for that section.`
+          : `Please complete ${label}.`;
+
+        showSetupValidationMessage(message, field);
+        return false;
+      }
+
+      return true;
+    }
+
+    function cleanFlag(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function isBuyerOwnedCredentialField(field, product = {}) {
+      const owner = cleanFlag(field.owner || field.credential_owner || field.credentialOwner || field.scope);
+      const mode = cleanFlag(field.mode || field.credential_mode || field.credentialMode);
+      const source = cleanFlag(field.source || field.source_type || field.sourceType);
+      const visibility = cleanFlag(field.visibility || field.audience || field.exposed_to);
+
+      if (
+        field.customer_owned === true ||
+        field.buyer_owned === true ||
+        field.customer_visible === true ||
+        field.buyer_visible === true ||
+        field.expose_to_buyer === true ||
+        owner === "customer" ||
+        owner === "buyer" ||
+        mode === "customer_owned" ||
+        source === "customer" ||
+        source === "buyer" ||
+        visibility === "customer" ||
+        visibility === "buyer"
+      ) {
+        return true;
+      }
+
+      if (
+        field.developer_owned === true ||
+        field.internal === true ||
+        field.admin_only === true ||
+        owner === "developer" ||
+        owner === "dev" ||
+        owner === "admin" ||
+        owner === "nexus" ||
+        owner === "internal" ||
+        mode === "developer_owned" ||
+        mode === "private_per_customer" ||
+        source === "developer" ||
+        source === "admin" ||
+        source === "nexus" ||
+        source === "internal"
+      ) {
+        return false;
+      }
+
+      const fieldName = normalizeAnswerKey(field.name || field.key || field.credential_key);
+      const devSlots = Array.isArray(product.developer_credential_requirements)
+        ? product.developer_credential_requirements
+        : [];
+      const devSlotMatches = devSlots.some(slot => {
+        const keys = [
+          slot.credential_key,
+          slot.key,
+          slot.provider,
+          slot.provider_label,
+          slot.n8n_credential_type,
+          slot.node_name
+        ].map(normalizeAnswerKey).filter(Boolean);
+
+        return fieldName && keys.some(key => key === fieldName || key.includes(fieldName) || fieldName.includes(key));
+      });
+
+      if (devSlotMatches) return false;
+
+      /*
+        In customer setup, credential_schema means "buyer-provided access" unless the
+        product explicitly marks the field as developer/internal owned. This keeps bundle
+        setup from announcing a required Meta/Google/etc. token without rendering the input.
+      */
+      return true;
+    }
+
+    function fieldTextForMatching(field = {}) {
+      return [
+        field.name,
+        field.key,
+        field.credential_key,
+        field.label,
+        field.description,
+        field.placeholder,
+        field.provider,
+        field.service,
+        field.scope,
+        field.owner
+      ].map(value => String(value || "")).join(" ").toLowerCase();
+    }
+
+    function canonicalBundleToken(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/([a-z])([A-Z])/g, "$1_$2")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    }
+
+    function fieldNameForMatching(field = {}) {
+      return canonicalBundleToken(field.name || field.key || field.credential_key || field.label || "");
+    }
+
+    function detectBundleProvider(text) {
+      if (/\b(openai|chatgpt|gpt)\b/.test(text)) return "openai";
+      if (/\b(apify)\b/.test(text)) return "apify";
+      if (/\b(gemini|google_ai|palm)\b/.test(text)) return "gemini";
+      if (/\b(anthropic|claude)\b/.test(text)) return "anthropic";
+      if (/\b(meta|facebook|fb|instagram|ig)\b/.test(text)) return "meta";
+      if (/\b(google|gmail|sheets|drive|calendar)\b/.test(text)) return "google";
+      if (/\b(slack)\b/.test(text)) return "slack";
+      if (/\b(telegram)\b/.test(text)) return "telegram";
+      if (/\b(stripe)\b/.test(text)) return "stripe";
+      if (/\b(shopify)\b/.test(text)) return "shopify";
+      if (/\b(hubspot)\b/.test(text)) return "hubspot";
+      if (/\b(airtable)\b/.test(text)) return "airtable";
+      if (/\b(notion)\b/.test(text)) return "notion";
+      if (/\b(sendgrid)\b/.test(text)) return "sendgrid";
+      if (/\b(resend)\b/.test(text)) return "resend";
+      if (/\b(smtp|email_server|mail_server)\b/.test(text)) return "smtp";
+      if (/\b(twilio|whatsapp)\b/.test(text)) return "twilio";
+      if (/\b(serpapi)\b/.test(text)) return "serpapi";
+      if (/\b(serper)\b/.test(text)) return "serper";
+      return "";
+    }
+
+    function detectBundleService(text, provider = "") {
+      if (provider === "meta") {
+        const hasInstagram = /\b(instagram|ig)\b/.test(text);
+        const hasFacebook = /\b(facebook|fb|page)\b/.test(text);
+        if (hasInstagram && !hasFacebook) return "instagram";
+        if (hasFacebook && !hasInstagram) return "facebook";
+        return "";
+      }
+
+      if (provider === "google") {
+        if (/\b(gmail)\b/.test(text)) return "gmail";
+        if (/\b(sheet|sheets|spreadsheet)\b/.test(text)) return "sheets";
+        if (/\b(drive)\b/.test(text)) return "drive";
+        if (/\b(calendar)\b/.test(text)) return "calendar";
+      }
+
+      return "";
+    }
+
+    function detectBundleCredentialKind(text) {
+      if (/\b(refresh[_\s-]*token)\b/.test(text)) return "refresh_token";
+      if (/\b(access[_\s-]*token|bearer|token)\b/.test(text)) return "access_token";
+      if (/\b(client[_\s-]*secret|consumer[_\s-]*secret)\b/.test(text)) return "client_secret";
+      if (/\b(client[_\s-]*id|consumer[_\s-]*key)\b/.test(text)) return "client_id";
+      if (/\b(api[_\s-]*key|apikey|secret[_\s-]*key|key)\b/.test(text)) return "api_key";
+      if (/\b(password|pass)\b/.test(text)) return "password";
+      if (/\b(username|user)\b/.test(text)) return "username";
+      if (/\b(webhook)\b/.test(text)) return "webhook_url";
+      return "credential";
+    }
+
+    function detectBundleSetupPurpose(field = {}) {
+      const text = fieldTextForMatching(field);
+      const name = fieldNameForMatching(field);
+
+      if (/\b(instagram|ig)\b/.test(text) && /\b(url|profile|handle|account)\b/.test(text)) return "instagram_profile";
+      if (/\b(tiktok)\b/.test(text) && /\b(url|profile|handle|account)\b/.test(text)) return "tiktok_profile";
+      if (/\b(facebook|fb)\b/.test(text) && /\b(url|page|profile|handle|account)\b/.test(text)) return "facebook_page";
+      if (/\b(linkedin)\b/.test(text) && /\b(url|page|profile|handle|account)\b/.test(text)) return "linkedin_page";
+      if (/\b(youtube)\b/.test(text) && /\b(url|channel|profile|handle|account)\b/.test(text)) return "youtube_channel";
+      if (/\b(competitor|competitors)\b/.test(text) && /\b(url|website|site|domain|websites)\b/.test(text)) return "competitor_urls";
+      if (/\b(company|business|brand|buyer|main)\b/.test(text) && /\b(url|website|site|domain)\b/.test(text)) return "company_website";
+      if (/\b(report)\b/.test(text) && /\b(title|name)\b/.test(text)) return "report_title";
+      if (/\b(focus|topics|areas|keywords)\b/.test(text)) return "focus_areas";
+      if (/\b(market|region|country|location)\b/.test(text)) return "market_region";
+      if (/\b(company|business|brand)\b/.test(text) && /\b(name)\b/.test(text)) return "business_name";
+      if (/\b(customer|audience|buyer)\b/.test(text) && /\b(type|profile|persona|target)\b/.test(text)) return "target_customer";
+      if (/\b(email)\b/.test(text)) return "contact_email";
+      if (/\b(phone|whatsapp)\b/.test(text)) return "contact_phone";
+
+      return name || "setup_field";
+    }
+
+    function describeBundleField(field = {}, kind = "setup") {
+      const text = fieldTextForMatching(field);
+
+      if (kind === "credential") {
+        const provider = detectBundleProvider(text) || canonicalBundleToken(field.provider || field.service || "credential");
+        return {
+          kind,
+          provider,
+          service: detectBundleService(text, provider),
+          credentialKind: detectBundleCredentialKind(text),
+          rawKey: fieldNameForMatching(field)
+        };
+      }
+
+      return {
+        kind,
+        purpose: detectBundleSetupPurpose(field),
+        rawKey: fieldNameForMatching(field)
+      };
+    }
+
+    function makeMetaAccessTokenField() {
+      return {
+        name: "meta_access_token",
+        label: "Meta access token",
+        type: "secret",
+        required: true,
+        customer_owned: true,
+        provider: "meta",
+        service: "meta",
+        credential_kind: "access_token",
+        placeholder: "EAAB...",
+        description: "Paste the Meta access token for the Facebook or Instagram assets this automation should use. Do not paste this in brand notes."
+      };
+    }
+
+    function hasMetaAccessCredentialField(fields = []) {
+      return fields.some(field => {
+        const text = fieldTextForMatching(field);
+        const name = fieldNameForMatching(field);
+        return (
+          /\b(meta|facebook|fb|instagram|ig)\b/.test(text) &&
+          /\b(access[_\s-]*token|bearer|token)\b/.test(text)
+        ) || [
+          "meta_access_token",
+          "facebook_access_token",
+          "instagram_access_token",
+          "fb_access_token",
+          "ig_access_token"
+        ].includes(name);
+      });
+    }
+
+    function productLooksLikeMetaSetup(product = {}, setupSchema = []) {
+      const detected = asAnswerObject(product.detected_placeholders);
+      const placeholderText = JSON.stringify([
+        detected,
+        product.placeholder_mappings,
+        product.placeholderMappings,
+        product.workflow_variables,
+        product.workflowVariables,
+        product.n8n_import_result,
+        product.n8n_last_import_result
+      ] || {}).toLowerCase();
+      const productText = [
+        product.title,
+        product.slug,
+        product.category,
+        product.badge,
+        product.short_description,
+        product.long_description,
+        product.problem,
+        product.outcome,
+        product.name,
+        product.description,
+        product.workflow_source_platform,
+        placeholderText
+      ].map(value => String(value || "")).join(" ").toLowerCase();
+
+      const setupText = setupSchema.map(field => fieldTextForMatching(field)).join(" ");
+      const hasSocialProduct = /\b(meta|facebook|fb|instagram|ig|social media|social listening)\b/.test(productText);
+      const hasMetaSetupField = /\b(meta|facebook|fb|instagram|ig)\b/.test(setupText);
+      const hasTokenPlaceholder = /\b(meta|facebook|fb|instagram|ig)[_\s-]*(access[_\s-]*)?token\b|\b(access[_\s-]*)?token\b.*\b(meta|facebook|instagram)\b/.test(placeholderText);
+      const hasLegacyBrandNotes = setupSchema.some(field => fieldNameForMatching(field) === "brand_notes");
+      const hasLegacySocialNotes = setupSchema.some(field => {
+        const name = fieldNameForMatching(field);
+        const text = fieldTextForMatching(field);
+        return (
+          name === "brand_notes" ||
+          name === "notes" ||
+          name === "social_notes" ||
+          name === "brand_context" ||
+          /\b(brand|social|facebook|instagram|meta)\b/.test(text)
+        );
+      });
+
+      return hasTokenPlaceholder || hasMetaSetupField || hasLegacyBrandNotes || (hasSocialProduct && hasLegacySocialNotes);
+    }
+
+    function inferBuyerCredentialFields(setupSchema = [], credentialSchema = [], product = {}) {
+      const fields = [...credentialSchema];
+      if (productLooksLikeMetaSetup(product, setupSchema) && !hasMetaAccessCredentialField(fields)) {
+        fields.push(makeMetaAccessTokenField());
+      }
+      return fields;
+    }
+
+    function bundleFieldLabelFromSemantic(semantic, fallback = "") {
+      const key = String(semantic || "").replace(/^setup:/, "").replace(/^credential:/, "");
+      const labels = {
+        instagram_profile: "Instagram profile URL",
+        tiktok_profile: "TikTok profile URL",
+        facebook_page: "Facebook page URL",
+        linkedin_page: "LinkedIn page URL",
+        youtube_channel: "YouTube channel URL",
+        competitor_urls: "Competitor websites",
+        company_website: "Company website",
+        report_title: "Report title",
+        focus_areas: "Focus areas",
+        market_region: "Market or region",
+        business_name: "Business name",
+        target_customer: "Target customer",
+        contact_email: "Contact email",
+        contact_phone: "Contact phone"
+      };
+
+      if (labels[key]) return labels[key];
+
+      if (key.includes(":")) {
+        const parts = key.split(":").filter(Boolean);
+        const provider = parts[0] || "";
+        const service = parts[1] && parts[1] !== "general" ? `${parts[1]} ` : "";
+        const kind = parts[2] || parts[1] || "credential";
+        return `${service}${provider} ${kind}`.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      }
+
+      return fallback || key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function mergeBundleFieldType(currentType, nextType) {
+      if (currentType === "secret" || nextType === "secret") return "secret";
+      if (currentType === "textarea" || nextType === "textarea") return "textarea";
+      if (currentType === nextType) return currentType;
+      if (["url", "email", "number"].includes(currentType) && nextType === "text") return currentType;
+      if (["url", "email", "number"].includes(nextType) && currentType === "text") return nextType;
+      return "text";
+    }
+
+    function bundleFieldFormName(semantic) {
+      return `bundle_${canonicalBundleToken(semantic).slice(0, 80) || "field"}`;
+    }
+
+    const SHARED_BUNDLE_SETUP_PURPOSES = new Set([
+      "instagram_profile",
+      "tiktok_profile",
+      "facebook_page",
+      "linkedin_page",
+      "youtube_channel",
+      "company_website",
+      "business_name",
+      "contact_email",
+      "contact_phone",
+      "market_region"
+    ]);
+
+    function shouldShareBundleSetupSource(source = {}) {
+      if (source.kind !== "setup") return true;
+      const purpose = source.descriptor?.purpose || source.descriptor?.rawKey || "";
+      return SHARED_BUNDLE_SETUP_PURPOSES.has(purpose);
+    }
+
+    function productScopedBundleSemantic(source = {}) {
+      const descriptor = source.descriptor || {};
+      const fieldKey = descriptor.rawKey || fieldNameForMatching(source.field) || "field";
+      const purpose = descriptor.purpose || fieldKey;
+      const automationId =
+        source.entry?.automation?.id ||
+        source.entry?.automation?.automation_id ||
+        source.entry?.product?.id ||
+        "workflow";
+
+      return `setup:${purpose}:${automationId}:${fieldKey}`;
+    }
+
+    function isLegacyBrandNotesField(field = {}) {
+      return (
+        field.semantic === "setup:brand_notes" ||
+        fieldNameForMatching(field) === "brand_notes" ||
+        (Array.isArray(field.original_field_names) && field.original_field_names.some(name => canonicalBundleToken(name) === "brand_notes"))
+      );
+    }
+
+    function isMetaAccessTokenField(field = {}) {
+      const text = fieldTextForMatching(field);
+      const semantic = String(field.semantic || "").toLowerCase();
+      return (
+        semantic.includes("credential:meta") ||
+        fieldNameForMatching(field) === "meta_access_token" ||
+        (/\b(meta|facebook|instagram)\b/.test(text) && /\b(access[_\s-]*token|token)\b/.test(text))
+      );
+    }
+
+    function buildBundleScopedField(entry, field, kind, index) {
+      const entryKey = bundleEntryKey(entry);
+      const productTitle = bundleEntryTitle(entry);
+      const originalName = field.name || field.key || field.credential_key;
+      const shortEntryKey = canonicalBundleToken(entryKey).slice(0, 32) || `workflow_${index}`;
+      const shortFieldKey = canonicalBundleToken(originalName).slice(0, 64) || `field_${index}`;
+      const formName = `bundle_${shortEntryKey}_${kind}_${shortFieldKey}`;
+      const sourceRecord = {
+        customer_automation_id: entry.automation?.id,
+        automation_id: entry.automation?.automation_id,
+        product_title: productTitle,
+        field_name: originalName,
+        kind
+      };
+
+      return {
+        ...field,
+        name: formName,
+        label: field.label || bundleFieldLabelFromSemantic(originalName, originalName),
+        type: kind === "credential" ? "secret" : field.type || "text",
+        required: Boolean(field.required),
+        semantic: `${kind}:${entryKey}:${originalName}`,
+        sources: [sourceRecord],
+        original_field_names: [originalName],
+        bundle_field: true
+      };
+    }
+
+    function buildBundleSetupModel(entries, meta = {}) {
+      const fields = [];
+      const existingAnswers = {};
+
+      for (const [entryIndex, entry] of (entries || []).entries()) {
+        const product = entry.product || {};
+        const setupSchema = normalizeSetupSchema(product.setup_schema);
+        const credentialSchema = inferBuyerCredentialFields(
+          setupSchema,
+          normalizeSetupSchema(product.credential_schema)
+            .filter(field => isBuyerOwnedCredentialField(field, product)),
+          product
+        );
+        const entryAnswers = mergeSetupAnswers(entry.submission);
+
+        for (const [fieldIndex, field] of setupSchema.entries()) {
+          const originalName = field?.name || field?.key || field?.credential_key;
+          if (!originalName) continue;
+          const scopedField = buildBundleScopedField(entry, { ...field, name: originalName }, "setup", `${entryIndex}_${fieldIndex}`);
+          fields.push(scopedField);
+          const value = answerValue(entryAnswers, originalName);
+          if (value !== undefined && value !== null && String(value).trim()) {
+            existingAnswers[scopedField.name] = value;
+          }
+        }
+
+        for (const [fieldIndex, field] of credentialSchema.entries()) {
+          const originalName = field?.name || field?.key || field?.credential_key;
+          if (!originalName) continue;
+          const scopedField = buildBundleScopedField(entry, { ...field, name: originalName }, "credential", `${entryIndex}_${fieldIndex}`);
+          fields.push(scopedField);
+        }
+      }
+
+      return {
+        is_bundle_setup: true,
+        entries,
+        fields,
+        existingAnswers,
+        order_id: meta.orderId || "",
+        bundle_id: meta.bundleId || ""
+      };
+    }
+
+    function bundleRuntimeTimestamp(value) {
+      const time = Date.parse(value || "");
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function bundleEntryRuntimeId(entry = {}) {
+      return String(entry.automation?.id || "");
+    }
+
+    function webhookPathFromUrl(url = "") {
+      const value = String(url || "").trim();
+      if (!value) return "";
+
+      try {
+        const parsed = new URL(value);
+        const match = parsed.pathname.match(/\/webhook\/([^/?#]+)/);
+        return match?.[1] ? decodeURIComponent(match[1]) : "";
+      } catch (_error) {
+        const match = value.match(/\/webhook\/([^/?#]+)/);
+        return match?.[1] ? decodeURIComponent(match[1]) : "";
+      }
+    }
+
+    function bundleEntryHasOwnRuntime(entry = {}) {
+      const automation = entry?.automation || {};
+      const product = entry?.product || {};
+      const customerWorkflowId = String(automation.n8n_workflow_id || "").trim();
+      const productWorkflowId = String(product.n8n_workflow_id || "").trim();
+
+      if (customerWorkflowId && (!productWorkflowId || customerWorkflowId !== productWorkflowId)) {
+        return true;
+      }
+
+      const customerPath =
+        String(automation.runtime_webhook_path || automation.n8n_webhook_path || "").trim() ||
+        webhookPathFromUrl(automation.runtime_webhook_url || automation.n8n_webhook_url || "");
+      const productPath =
+        String(product.runtime_webhook_path || product.n8n_webhook_path || "").trim() ||
+        webhookPathFromUrl(product.runtime_webhook_url || product.n8n_webhook_url || "");
+
+      return Boolean(customerPath && customerPath !== productPath && customerPath.startsWith("nexus-customer-"));
+    }
+
+    function bundleEntryHasProductRuntimeSource(entry = {}) {
+      const product = entry?.product || {};
+      return Boolean(
+        String(product.n8n_workflow_id || product.runtime_webhook_url || product.n8n_webhook_url || product.runtime_webhook_path || product.n8n_webhook_path || "").trim()
+      );
+    }
+
+    function bundleEntryOutputs(entry = {}) {
+      return activeBundleRuntime.outputsByAutomation.get(bundleEntryRuntimeId(entry)) || [];
+    }
+
+    function bundleEntryRuns(entry = {}) {
+      return activeBundleRuntime.runsByAutomation.get(bundleEntryRuntimeId(entry)) || [];
+    }
+
+    function bundleEntryLatestRun(entry = {}) {
+      return bundleEntryRuns(entry)[0] || null;
+    }
+
+    function bundleRunIsFreshActive(run = {}) {
+      const status = String(run?.status || "").toLowerCase();
+      const active = ["queued", "pending", "running", "processing", "in_progress", "started"].some(item => status.includes(item));
+      if (!active) return false;
+
+      const timestamp = bundleRuntimeTimestamp(run.updated_at || run.started_at || run.created_at);
+      if (!timestamp) return true;
+
+      return Date.now() - timestamp < 45 * 60 * 1000;
+    }
+
+    function bundleRunIsFailure(run = {}) {
+      const status = String(run?.status || "").toLowerCase();
+      return Boolean(
+        run?.error_message ||
+          ["fail", "error", "timeout", "cancel", "rejected"].some(item => status.includes(item))
+      );
+    }
+
+    function bundleRunIsFinished(run = {}) {
+      const status = String(run?.status || "").toLowerCase();
+      return Boolean(
+        run?.finished_at ||
+          ["success", "succeeded", "complete", "completed", "done", "finished"].some(item => status.includes(item))
+      );
+    }
+
+    function bundleEntryLatestRuntimeTime(entry = {}) {
+      const latestRun = bundleEntryLatestRun(entry);
+      const latestOutput = bundleEntryOutputs(entry)[0] || {};
+
+      return Math.max(
+        bundleRuntimeTimestamp(latestRun?.finished_at || latestRun?.updated_at || latestRun?.started_at || latestRun?.created_at),
+        bundleRuntimeTimestamp(latestOutput?.created_at || latestOutput?.updated_at)
+      );
+    }
+
+    function bundleEntryRuntimeIsStale(entry = {}) {
+      const latestRuntimeTime = bundleEntryLatestRuntimeTime(entry);
+      const sourceUpdatedTime = bundleRuntimeTimestamp(entry?.product?.updated_at || entry?.product?.created_at);
+
+      return Boolean(sourceUpdatedTime && (!latestRuntimeTime || sourceUpdatedTime > latestRuntimeTime + 1000));
+    }
+
+    function bundleEntryLatestRunNeedsOutput(entry = {}) {
+      const outputs = bundleEntryOutputs(entry);
+      const latestRun = bundleEntryLatestRun(entry);
+
+      if (!latestRun || bundleRunIsFailure(latestRun)) return false;
+      if (!bundleRunIsFinished(latestRun)) return false;
+
+      const latestRunTime = bundleRuntimeTimestamp(latestRun.finished_at || latestRun.updated_at || latestRun.started_at || latestRun.created_at);
+      const latestOutputTime = bundleRuntimeTimestamp(outputs[0]?.created_at || outputs[0]?.updated_at);
+
+      return Boolean(latestRunTime && (!latestOutputTime || latestRunTime > latestOutputTime + 1000));
+    }
+
+    function bundleAutomationHasStoredIssue(automation = {}) {
+      const values = [
+        automation.status,
+        automation.setup_status,
+        automation.runtime_status,
+        automation.health_status,
+        automation.last_error_code,
+        automation.last_error_message
+      ].map(value => String(value || "").toLowerCase());
+
+      return Boolean(
+        automation.needs_customer_action ||
+          values.some(value =>
+            value.includes("fail") ||
+            value.includes("error") ||
+            value.includes("attention") ||
+            value.includes("review")
+          )
+      );
+    }
+
+    function bundleEntryNeedsRuntimeSubmit(entry = {}) {
+      const id = bundleEntryRuntimeId(entry);
+      if (!id) return false;
+
+      const outputs = bundleEntryOutputs(entry);
+      const latestRun = bundleEntryLatestRun(entry);
+
+      if (bundleRunIsFreshActive(latestRun)) return false;
+      if (bundleEntryRuntimeIsStale(entry)) return true;
+      if (bundleRunIsFailure(latestRun)) return true;
+      if (bundleAutomationHasStoredIssue(entry.automation || {})) return true;
+      if (bundleEntryLatestRunNeedsOutput(entry)) return true;
+      if (!outputs.length) return true;
+
+      return false;
+    }
+
+    function groupBundleRuntimeRows(rows = [], key = "customer_automation_id") {
+      const grouped = new Map();
+
+      for (const row of rows || []) {
+        const id = String(row?.[key] || "");
+        if (!id) continue;
+        if (!grouped.has(id)) grouped.set(id, []);
+        grouped.get(id).push(row);
+      }
+
+      for (const items of grouped.values()) {
+        items.sort((a, b) =>
+          bundleRuntimeTimestamp(b.created_at || b.updated_at || b.started_at) -
+          bundleRuntimeTimestamp(a.created_at || a.updated_at || a.started_at)
+        );
+      }
+
+      return grouped;
+    }
+
+    async function hydrateBundleRuntimeStatus(entries = [], orderId = "") {
+      const ids = [...new Set((entries || []).map(entry => bundleEntryRuntimeId(entry)).filter(Boolean))];
+      const expectedOrderId = String(orderId || "");
+      activeBundleRuntime = {
+        outputsByAutomation: new Map(),
+        runsByAutomation: new Map()
+      };
+
+      if (!ids.length) return;
+
+      try {
+        const outputLoader = typeof NexusDB.listBuyerAutomationOutputsByCustomerAutomationIds === "function"
+          ? NexusDB.listBuyerAutomationOutputsByCustomerAutomationIds(ids)
+          : NexusDB.listBuyerAutomationOutputs();
+        const runLoader = typeof NexusDB.listBuyerAutomationRunsByCustomerAutomationIds === "function"
+          ? NexusDB.listBuyerAutomationRunsByCustomerAutomationIds(ids)
+          : NexusDB.listBuyerAutomationRuns();
+
+        const [outputsResult, runsResult] = await Promise.all([outputLoader, runLoader]);
+
+        if (outputsResult?.error) {
+          console.warn("Could not load bundle output history:", outputsResult.error);
+        } else {
+          const outputs = (outputsResult?.data || [])
+            .filter(row => ids.includes(String(row.customer_automation_id || "")))
+            .filter(row => !expectedOrderId || String(row.order_id || "") === expectedOrderId);
+          activeBundleRuntime.outputsByAutomation = groupBundleRuntimeRows(outputs);
+        }
+
+        if (runsResult?.error) {
+          console.warn("Could not load bundle run history:", runsResult.error);
+        } else {
+          const runs = (runsResult?.data || [])
+            .filter(row => ids.includes(String(row.customer_automation_id || "")))
+            .filter(row => !expectedOrderId || String(row.order_id || "") === expectedOrderId);
+          activeBundleRuntime.runsByAutomation = groupBundleRuntimeRows(runs);
+        }
+      } catch (error) {
+        console.warn("Could not hydrate bundle runtime state:", error);
+      }
+    }
+
+    function customerAutomationOrder(row = {}) {
+      return Array.isArray(row.orders) ? row.orders[0] || {} : row.orders || {};
+    }
+
+    function customerAutomationBundleId(row = {}) {
+      const rowOrder = customerAutomationOrder(row);
+      return String(row.bundle_id || rowOrder.bundle_id || "");
+    }
+
+    function customerAutomationOrderId(row = {}) {
+      const rowOrder = customerAutomationOrder(row);
+      return String(row.order_id || rowOrder.id || "");
+    }
+
+    function customerAutomationProductId(row = {}) {
+      const joinedProduct = Array.isArray(row.automations)
+        ? row.automations[0] || {}
+        : row.automations || {};
+      return String(row.automation_id || joinedProduct.id || "");
+    }
+
+    function customerAutomationUpdatedTime(row = {}) {
+      const time = Date.parse(row.updated_at || row.created_at || "");
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function isArchivedCustomerAutomationRow(row = {}) {
+      const values = [
+        row.status,
+        row.setup_status,
+        row.runtime_status,
+        row.health_status
+      ].map(value => String(value || "").toLowerCase());
+
+      return values.some(value =>
+        value.includes("archived") ||
+        value.includes("deleted") ||
+        value.includes("removed")
+      );
+    }
+
+    function scoreBundleSetupRow(row = {}, expectedOrderId = "") {
+      let score = customerAutomationUpdatedTime(row);
+      const orderId = customerAutomationOrderId(row);
+
+      if (expectedOrderId && orderId === expectedOrderId) score += 10_000_000_000_000;
+      if (row.last_error_message || String(row.runtime_status || "").toLowerCase().includes("error")) score -= 500_000;
+      if (isArchivedCustomerAutomationRow(row)) score -= 10_000_000_000_000;
+
+      return score;
+    }
+
+    function canonicalBundleSetupRows(rows = [], expectedOrderId = "", expectedBundleId = "", options = {}) {
+      const allowOrphans = Boolean(options.allowOrphans);
+      const byProductId = new Map();
+
+      for (const row of rows || []) {
+        if (!row?.id) continue;
+        if (isArchivedCustomerAutomationRow(row)) continue;
+
+        const rowBundleId = customerAutomationBundleId(row);
+        const rowOrderId = customerAutomationOrderId(row);
+        const belongsToOrder = expectedOrderId && rowOrderId === expectedOrderId;
+        const belongsToOrphanBundle = allowOrphans && expectedBundleId && rowBundleId === expectedBundleId && !rowOrderId;
+
+        if (expectedBundleId && rowBundleId && rowBundleId !== expectedBundleId) continue;
+        if (expectedOrderId && !belongsToOrder && !belongsToOrphanBundle) continue;
+        if (!expectedOrderId && expectedBundleId && rowBundleId !== expectedBundleId) continue;
+
+        const productKey = customerAutomationProductId(row) || row.id;
+        const current = byProductId.get(productKey);
+
+        if (!current || scoreBundleSetupRow(row, expectedOrderId) > scoreBundleSetupRow(current, expectedOrderId)) {
+          byProductId.set(productKey, row);
+        }
+      }
+
+      return Array.from(byProductId.values())
+        .sort((a, b) => customerAutomationUpdatedTime(a) - customerAutomationUpdatedTime(b));
+    }
+
+    async function loadBundleSetupRows(orderId, bundleId, rows = []) {
+      const expectedOrderId = String(orderId || "");
+      const expectedBundleId = String(bundleId || "");
+
+      const currentOrderRows = canonicalBundleSetupRows(
+        Array.isArray(rows) ? rows : [],
+        expectedOrderId,
+        expectedBundleId,
+        { allowOrphans: false }
+      );
+
+      if (currentOrderRows.length) {
+        return currentOrderRows;
+      }
+
+      /*
+        Exact paid-order isolation:
+        Never borrow orphaned workflows from another purchase when an order ID
+        is present. Stripe/ensure-customer-automations must provision the exact
+        order_items selected at checkout.
+      */
+      if (expectedOrderId) {
+        return [];
+      }
+
+      /*
+        Legacy fallback is only available for old links that have no order ID.
+      */
+      if (expectedBundleId && typeof NexusDB.getBuyerCustomerAutomationsByBundleId === "function") {
+        const { data: bundleRows, error } = await NexusDB.getBuyerCustomerAutomationsByBundleId(expectedBundleId);
+        if (error) {
+          console.warn("Could not load bundle fallback automations:", error);
+        } else {
+          return canonicalBundleSetupRows(
+            bundleRows || [],
+            expectedOrderId,
+            expectedBundleId,
+            { allowOrphans: true }
+          );
+        }
+      }
+
+      return [];
+    }
+
+    async function loadBundleSetupContext(primaryAutomation, primaryProduct, primarySubmission) {
+      const order = Array.isArray(primaryAutomation?.orders)
+        ? primaryAutomation.orders[0] || {}
+        : primaryAutomation?.orders || {};
+      const orderId = primaryAutomation?.order_id || order.id;
+      const bundleId = primaryAutomation?.bundle_id || order.bundle_id;
+
+      if (!orderId || typeof NexusDB.getBuyerCustomerAutomationsByOrderId !== "function") return null;
+
+      if (bundleId && typeof NexusDB.ensureCustomerAutomations === "function") {
+        try {
+          await NexusDB.ensureCustomerAutomations(orderId);
+        } catch (error) {
+          console.warn("Could not repair bundle customer automations before loading setup:", error);
+        }
+      }
+
+      const { data: rows, error } = await NexusDB.getBuyerCustomerAutomationsByOrderId(orderId);
+      if (error) {
+        if (error) console.warn("Could not load bundle setup automations:", error);
+      }
+
+      const bundleRows = await loadBundleSetupRows(orderId, bundleId, rows || []);
+
+      if (bundleRows.length < 2) return null;
+
+      const entries = await Promise.all(bundleRows.map(async row => {
+        const product = row.id === primaryAutomation.id
+          ? primaryProduct
+          : await resolveProductFromCustomerAutomation(row);
+        const submission = row.id === primaryAutomation.id
+          ? primarySubmission
+          : (await NexusDB.getLatestSetupSubmission(row.id)).data || null;
+
+        return { automation: row, product: product || {}, submission };
+      }));
+
+      await hydrateBundleRuntimeStatus(entries, orderId);
+      const model = buildBundleSetupModel(entries, { orderId, bundleId });
+      return model.fields.length ? model : null;
+    }
+
+    async function loadBundleSetupContextByOrderId(orderId, bundleId = "") {
+      if (!orderId || typeof NexusDB.getBuyerCustomerAutomationsByOrderId !== "function") {
+        return null;
+      }
+
+      if (typeof NexusDB.ensureCustomerAutomations === "function") {
+        try {
+          await NexusDB.ensureCustomerAutomations(orderId);
+        } catch (error) {
+          console.warn("Could not ensure bundle customer automations:", error);
+        }
+      }
+
+      const { data: rows, error } = await NexusDB.getBuyerCustomerAutomationsByOrderId(orderId);
+      if (error) {
+        if (error) console.warn("Could not load order setup automations:", error);
+      }
+
+      const loadedRows = await loadBundleSetupRows(orderId, bundleId, rows || []);
+      const bundleRows = bundleId
+        ? loadedRows
+        : loadedRows.filter(row => {
+            const rowOrder = customerAutomationOrder(row);
+            return row.bundle_id || rowOrder.bundle_id || rowOrder.order_type === "bundle";
+          });
+
+      const rowsForSetup = bundleRows.length ? bundleRows : (rows || []);
+      if (!rowsForSetup.length) return null;
+
+      const entries = await Promise.all(rowsForSetup.map(async row => {
+        const product = await resolveProductFromCustomerAutomation(row);
+        const submission = (await NexusDB.getLatestSetupSubmission(row.id)).data || null;
+        return { automation: row, product: product || {}, submission };
+      }));
+
+      await hydrateBundleRuntimeStatus(entries, orderId);
+      const model = buildBundleSetupModel(entries, { orderId, bundleId });
+      if (!model.fields.length) return null;
+
+      return {
+        model,
+        primaryAutomation: entries[0]?.automation || rowsForSetup[0],
+        primaryProduct: entries[0]?.product || {},
+        primarySubmission: entries[0]?.submission || null
+      };
+    }
+
+
+
+async function resolveProductFromCustomerAutomation(automation) {
+  /*
+    Try every possible shape first.
+    Supabase joins can come back as object, array, or under different keys depending on the query.
+  */
+  const possibleProduct =
+    (Array.isArray(automation.automations) ? automation.automations[0] : automation.automations) ||
+    (Array.isArray(automation.automation) ? automation.automation[0] : automation.automation) ||
+    (Array.isArray(automation.product) ? automation.product[0] : automation.product) ||
+    null;
+
+  const joinedSetupSchema = normalizeSetupSchema(possibleProduct?.setup_schema);
+  const joinedCredentialSchema = normalizeSetupSchema(possibleProduct?.credential_schema);
+
+  if (possibleProduct && (joinedSetupSchema.length || joinedCredentialSchema.length)) {
+    return possibleProduct;
+  }
+
+  /*
+    Fallback:
+    If the customer automation only has automation_id, fetch the product directly.
+    This prevents the setup form from falling back to generic notes just because the join failed.
+  */
+  const automationId =
+    automation.automation_id ||
+    automation.automations_id ||
+    automation.product_id ||
+    automation.orders?.automation_id ||
+    (Array.isArray(automation.orders) ? automation.orders[0]?.automation_id : "");
+
+  if (!automationId) {
+    console.warn("Could not resolve automation_id from customer automation:", automation);
+    return possibleProduct || {};
+  }
+
+  if (typeof NexusDB.getAutomationById === "function") {
+    const { data, error } = await NexusDB.getAutomationById(automationId);
+
+    if (!error && data) {
+      return {
+        ...(possibleProduct || {}),
+        ...data,
+        setup_schema: data.setup_schema || possibleProduct?.setup_schema || [],
+        credential_schema: data.credential_schema || possibleProduct?.credential_schema || []
+      };
+    }
+
+    console.warn("Fallback getAutomationById failed:", error);
+  }
+
+  return possibleProduct || {};
+}
+
+
+
+
+
+
+    async function initSetupPage() {
+      const root = document.getElementById("setupRoot");
+      const customerAutomationId = getParam("id");
+      const orderId = getParam("order_id");
+      const bundleId = getParam("bundle_id");
+
+      const user = await NexusDB.requireBuyer(location.pathname + location.search);
+      if (!user) return;
+
+      if (!customerAutomationId && orderId) {
+        const bundleContext = await loadBundleSetupContextByOrderId(orderId, bundleId);
+
+        if (bundleContext?.model) {
+          activeCustomerAutomation = bundleContext.primaryAutomation;
+          activeProduct = bundleContext.primaryProduct;
+          latestSubmission = bundleContext.primarySubmission;
+          activeBundleSetup = bundleContext.model;
+          renderSetupForm(root);
+          return;
+        }
+      }
+
+      if (!customerAutomationId) {
+        root.innerHTML = `
+          <div class="card">
+            <h2>Setup link is missing.</h2>
+            <p>Go back to your buyer dashboard and choose the automation you want to set up.</p>
+            <a class="btn btn-primary" href="/pages/buyer/dashboard.html">Go to dashboard</a>
+          </div>
+        `;
+        return;
+      }
+
+      let automation = null;
+      let submission = null;
+      let error = null;
+      let loadedProduct = null;
+
+      if (typeof NexusDB.getBuyerAutomationSetupData === "function") {
+        const serverResult = await NexusDB.getBuyerAutomationSetupData(customerAutomationId);
+
+        if (!serverResult.error && serverResult.data?.customer_automation) {
+          automation = {
+            ...serverResult.data.customer_automation,
+            automations: serverResult.data.automation || null,
+            orders: serverResult.data.order || null
+          };
+          loadedProduct = serverResult.data.automation || null;
+          submission = serverResult.data.latest_submission || null;
+        } else {
+          error = serverResult.error || null;
+          console.warn("Server setup loader failed, falling back to browser query:", serverResult.error);
+        }
+      }
+
+      if (!automation) {
+        const [{ data: fallbackAutomation, error: fallbackError }, { data: fallbackSubmission }] = await Promise.all([
+          NexusDB.getBuyerCustomerAutomationById(customerAutomationId),
+          NexusDB.getLatestSetupSubmission(customerAutomationId)
+        ]);
+
+        automation = fallbackAutomation;
+        submission = fallbackSubmission;
+        error = fallbackError;
+      }
+
+      if (error || !automation) {
+        root.innerHTML = `
+          <div class="card">
+            <h2>Automation not found.</h2>
+            <p>This setup page could not be loaded. Please return to your dashboard.</p>
+            <a class="btn btn-primary" href="/pages/buyer/dashboard.html">Go to dashboard</a>
+          </div>
+        `;
+        return;
+      }
+
+      activeCustomerAutomation = automation;
+      activeProduct = loadedProduct || await resolveProductFromCustomerAutomation(automation);
+      latestSubmission = submission;
+      activeBundleSetup = await loadBundleSetupContext(automation, activeProduct, latestSubmission);
+
+      renderSetupForm(root);
+    }
+
+    function renderSetupForm(root) {
+      const product = activeProduct || {};
+      const automation = activeCustomerAutomation || {};
+      const bundleSetup = activeBundleSetup?.is_bundle_setup ? activeBundleSetup : null;
+      const order = Array.isArray(automation.orders)
+        ? automation.orders[0] || {}
+        : automation.orders || {};
+
+      const setupSchema = bundleSetup
+        ? bundleSetup.fields.filter(field => field.type !== "secret")
+        : normalizeSetupSchema(product.setup_schema);
+      const visibleSetupSchema = setupSchema.filter(field => shouldRenderBuyerSetupField(field, {
+        hideMonthlyCadence: Boolean(bundleSetup)
+      }));
+      const allCredentialSchema = bundleSetup
+        ? bundleSetup.fields.filter(field => field.type === "secret")
+        : normalizeSetupSchema(product.credential_schema);
+      const credentialSchema = bundleSetup
+        ? allCredentialSchema
+        : inferBuyerCredentialFields(
+            setupSchema,
+            allCredentialSchema.filter(field => isBuyerOwnedCredentialField(field, product)),
+            product
+          );
+
+      const existingAnswers = bundleSetup ? bundleSetup.existingAnswers || {} : mergeSetupAnswers(latestSubmission);
+      const installType = automation.install_type || order.install_type || "self_serve";
+      const hasSubmitted = bundleSetup
+        ? bundleSetup.entries.every(entry => entry.submission)
+        : !!latestSubmission;
+      const isGuided = installType === "nexus_guided";
+
+      const runtimeStatus = String(automation.runtime_status || "").toLowerCase();
+      const status = String(automation.status || "").toLowerCase();
+
+      const isRunning =
+        runtimeStatus === "running" ||
+        status === "running";
+
+      const needsCustomerAction =
+        automation.needs_customer_action === true &&
+        !isRunning;
+
+      const hasRuntimeError =
+        runtimeStatus === "error" &&
+        !needsCustomerAction &&
+        !isRunning;
+
+      const lastErrorMessage = automation.last_error_message || "";
+      const lastErrorCode = automation.last_error_code || "";
+      const lastErrorNode = automation.last_error_node || "";
+      const hasAnySchema = visibleSetupSchema.length || credentialSchema.length;
+
+      const setupFieldsHtml = visibleSetupSchema.length
+        ? renderFieldListWithSkips(visibleSetupSchema, existingAnswers, { hasSubmitted })
+        : (
+            hasAnySchema
+              ? ""
+              : `
+                <div class="full">
+                  <div class="error">
+                    <strong>This automation setup is not ready yet.</strong><br>
+                    Nexus could not load the setup questions for this automation. Please message Nexus from your dashboard and we will fix the setup link.
+                  </div>
+                </div>
+              `
+          );
+
+      const credentialFieldsHtml = credentialSchema.length
+        ? `
+          <div class="full setup-form-section-title">
+            <h3>Credentials / Access</h3>
+            <p>
+              Paste customer-owned credentials only, such as a Meta access token.
+              Developer-paid services like Apify, Gemini, YouTube API keys, and internal infrastructure are handled by Nexus.
+            </p>
+          </div>
+
+          ${renderFieldListWithSkips(credentialSchema, existingAnswers, { hasSubmitted, isCredential: true })}
+        `
+        : "";
+
+      const showCredentialsFirst = Boolean(bundleSetup && credentialSchema.some(field => isMetaAccessTokenField(field)));
+      const formFields = bundleSetup
+        ? renderBundleSetupFields(bundleSetup, visibleSetupSchema, credentialSchema, existingAnswers, { hasSubmitted })
+        : showCredentialsFirst
+          ? credentialFieldsHtml + setupFieldsHtml
+          : setupFieldsHtml + credentialFieldsHtml;
+      const workflowCount = bundleSetup?.entries?.length || 1;
+      const title = bundleSetup
+        ? order.automation_title || product.title || "Bundle setup"
+        : product.title || automation.name || "Automation setup";
+      const description = bundleSetup
+        ? `This one page prepares ${workflowCount} workflows in your bundle. Each workflow keeps its own exact setup questions.`
+        : product.short_description || "Complete the setup details so Nexus can launch this automation.";
+
+      root.innerHTML = `
+        <div class="buyer-setup-layout">
+          <aside class="buyer-setup-summary">
+            <span class="${NexusUI.pillClass(product.color || "blue")}">
+              ${escapeHtml(bundleSetup ? "Bundle setup" : product.badge || product.category || "Automation")}
+            </span>
+
+            <h1>${escapeHtml(title)}</h1>
+
+            <p>
+              ${escapeHtml(description)}
+            </p>
+
+            <div class="setup-meta-list">
+              <div>
+                <span>Payment</span>
+                <strong>${escapeHtml(order.payment_status || "paid")}</strong>
+              </div>
+
+              <div>
+                <span>Setup method</span>
+                <strong>${isGuided ? "Nexus Guided Install" : "Self-Serve"}</strong>
+              </div>
+
+              <div>
+                <span>${bundleSetup ? "Workflows" : "Setup status"}</span>
+                <strong>${bundleSetup ? workflowCount : hasSubmitted ? "Submitted" : "Required"}</strong>
+              </div>
+
+              <div>
+                <span>Setup status</span>
+                <strong>${hasSubmitted ? "Submitted" : "Required"}</strong>
+              </div>
+            </div>
+
+            <div class="setup-help-box">
+              <strong>${bundleSetup ? "Single bundle form" : isGuided ? "Guided install selected" : "Self-serve setup"}</strong>
+              <p>
+                ${
+                  bundleSetup
+                    ? "Complete each workflow section, then submit once. Nexus sends the right values to each included workflow."
+                    : isGuided
+                    ? "Submit the intake details below. Nexus will contact you to complete configuration."
+                    : "Submit the required setup details. If this automation is self-serve, Nexus will start the workflow automatically."
+                }
+              </p>
+            </div>
+
+            ${
+              credentialSchema.length
+                ? `
+                  <div class="setup-help-box">
+                    <strong>Credentials required</strong>
+                    <p>
+                      ${bundleSetup ? "This bundle" : "This automation"} asks for ${credentialSchema.length} credential field${credentialSchema.length === 1 ? "" : "s"}.
+                      Customer-owned credentials appear inside the workflow that needs them. Leave a saved credential blank if you are updating setup details and do not want to change it.
+                    </p>
+                  </div>
+                `
+                : ""
+            }
+
+            <a class="btn btn-secondary btn-full" href="/pages/buyer/dashboard.html">
+              Back to dashboard
+            </a>
+          </aside>
+
+          <section class="buyer-setup-card">
+            <span class="eyebrow">${hasSubmitted ? "Update setup" : "Complete setup"}</span>
+
+            <h2>${hasSubmitted ? "Your setup was submitted." : bundleSetup ? "Set up every workflow in this bundle." : "Tell Nexus what this automation needs."}</h2>
+
+            <p>
+              ${
+                hasSubmitted
+                  ? "You can update the form below if something changed. Nexus will use the latest submission."
+                  : bundleSetup
+                    ? "Open each workflow section and answer the exact questions for that workflow. Submit once when all sections are complete."
+                    : "These questions are specific to this automation. After submission, Nexus will prepare the workflow and display outputs in your dashboard."
+              }
+            </p>
+
+            ${
+              isRunning
+                ? `
+                  <div class="success" style="margin:1rem 0">
+                    <strong>Automation running</strong><br>
+                    Nexus is currently processing your automation. Outputs or errors will appear in your dashboard when the run finishes.
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              needsCustomerAction
+                ? `
+                  <div class="error" style="margin:1rem 0">
+                    <strong>Action required</strong><br>
+                    ${escapeHtml(lastErrorMessage || "Some setup details need to be updated before this automation can continue.")}
+                    ${
+                      lastErrorCode
+                        ? `<br><small>Error code: ${escapeHtml(lastErrorCode)}</small>`
+                        : ""
+                    }
+                    ${
+                      lastErrorNode
+                        ? `<br><small>Failed step: ${escapeHtml(lastErrorNode)}</small>`
+                        : ""
+                    }
+                    <br><br>
+                    Please update the fields below and submit again.
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              hasRuntimeError
+                ? `
+                  <div class="error" style="margin:1rem 0">
+                    <strong>Automation failed</strong><br>
+                    Nexus has been notified. You do not need to change anything right now.
+                  </div>
+                `
+                : ""
+            }
+
+            <form id="buyerSetupForm" novalidate>
+              <div class="form-grid">
+                ${formFields}
+
+                ${
+                  isGuided
+                    ? `
+                      <div>
+                        <label>Best contact person</label>
+                        <input class="input" name="guided_contact_name" value="${escapeHtml(answerValue(existingAnswers, "guided_contact_name") || "")}" placeholder="Name">
+                      </div>
+
+                      <div>
+                        <label>Preferred contact method</label>
+                        <select class="select" name="guided_contact_method">
+                          <option value="">Choose...</option>
+                          <option value="Email" ${answerValue(existingAnswers, "guided_contact_method") === "Email" ? "selected" : ""}>Email</option>
+                          <option value="Phone" ${answerValue(existingAnswers, "guided_contact_method") === "Phone" ? "selected" : ""}>Phone</option>
+                          <option value="WhatsApp" ${answerValue(existingAnswers, "guided_contact_method") === "WhatsApp" ? "selected" : ""}>WhatsApp</option>
+                          <option value="Google Meet" ${answerValue(existingAnswers, "guided_contact_method") === "Google Meet" ? "selected" : ""}>Google Meet</option>
+                        </select>
+                      </div>
+
+                      <div class="full">
+                        <label>Preferred setup time / notes</label>
+                        <textarea class="textarea" name="guided_notes" placeholder="Tell Nexus when and how to contact your team.">${escapeHtml(answerValue(existingAnswers, "guided_notes") || "")}</textarea>
+                      </div>
+                    `
+                    : ""
+                }
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="margin-top:1rem">
+                ${
+                  bundleSetup
+                    ? hasSubmitted ? "Update bundle setup" : "Submit bundle setup and start workflows"
+                    : hasSubmitted ? "Update setup details" : "Submit setup details"
+                }
+              </button>
+            </form>
+
+            <div id="setupSubmitResult"></div>
+          </section>
+        </div>
+      `;
+
+      document.getElementById("buyerSetupForm").onsubmit = submitSetupForm;
+      mountSetupSkipControls(root);
+    }
+
+    function buildBundleAnswersForWorkflow(entry, answers) {
+      const mappedAnswers = {};
+      const customerAutomationId = entry?.automation?.id;
+
+      for (const field of activeBundleSetup?.fields || []) {
+        const value = answers[field.name];
+        const hasValue = value !== undefined && value !== null && String(value).trim() !== "";
+
+        if (!hasValue && field.type === "secret") continue;
+
+        for (const source of field.sources || []) {
+          if (source.customer_automation_id !== customerAutomationId) continue;
+          if (!source.field_name) continue;
+          mappedAnswers[source.field_name] = value || "";
+        }
+      }
+
+      for (const guidedKey of ["guided_contact_name", "guided_contact_method", "guided_notes"]) {
+        if (answers[guidedKey]) mappedAnswers[guidedKey] = answers[guidedKey];
+      }
+
+      return mappedAnswers;
+    }
+
+    async function submitBundleSetupForm(form, button, originalText, answers) {
+      const entries = activeBundleSetup?.entries || [];
+      const resultEl = document.getElementById("setupSubmitResult");
+
+      if (!entries.length) {
+        NexusUI.toast("Bundle setup was not loaded. Refresh and try again.");
+        button.disabled = false;
+        button.textContent = originalText;
+        form.dataset.submitting = "false";
+        return;
+      }
+
+      const bundleAttemptStartedAt = new Date().toISOString();
+      const firstAutomation = entries[0]?.automation || {};
+      const firstOrder = customerAutomationOrder(firstAutomation);
+      const bundleAttemptOrderId = activeBundleSetup?.order_id || getParam("order_id") || firstAutomation.order_id || firstOrder.id || "";
+      const bundleAttemptBundleId = activeBundleSetup?.bundle_id || getParam("bundle_id") || firstAutomation.bundle_id || firstOrder.bundle_id || "";
+      const bundleAttemptId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, marker => {
+          const random = Math.random() * 16 | 0;
+          const value = marker === "x" ? random : (random & 0x3) | 0x8;
+          return value.toString(16);
+        });
+
+      if (bundleAttemptOrderId && bundleAttemptBundleId) {
+        try {
+          localStorage.setItem(
+            `nexus_bundle_attempt:${bundleAttemptOrderId}:${bundleAttemptBundleId}`,
+            JSON.stringify({
+              bundle_attempt_id: bundleAttemptId,
+              submitted_at: bundleAttemptStartedAt,
+              order_id: bundleAttemptOrderId,
+              bundle_id: bundleAttemptBundleId,
+              customer_automation_ids: entries
+                .map(entry => entry?.automation?.id)
+                .filter(Boolean)
+            })
+          );
+        } catch (error) {
+          console.warn("Could not store bundle attempt marker", error);
+        }
+      }
+
+      const bundleDashboardUrl = (() => {
+        const params = new URLSearchParams();
+        if (bundleAttemptOrderId) params.set("order_id", bundleAttemptOrderId);
+        if (bundleAttemptBundleId) params.set("bundle_id", bundleAttemptBundleId);
+        params.set("bundle_attempt_id", bundleAttemptId);
+        params.set("bundle_attempt_started_at", bundleAttemptStartedAt);
+        return `/pages/buyer/dashboard.html?${params.toString()}`;
+      })();
+
+      const submitOneBundleWorkflow = async entry => {
+        const customerAutomationId = entry?.automation?.id;
+        if (!customerAutomationId) {
+          return {
+            entry,
+            data: null,
+            error: { message: "This workflow is missing its customer automation record." },
+            answers: {}
+          };
+        }
+
+        const mappedAnswers = buildBundleAnswersForWorkflow(entry, answers);
+        const { data, error } = await NexusDB.submitAutomationSetup({
+          customer_automation_id: customerAutomationId,
+          answers: mappedAnswers,
+          bundle_attempt_id: bundleAttemptId,
+          bundle_order_id: bundleAttemptOrderId,
+          bundle_id: bundleAttemptBundleId,
+          bundle_expected_count: entries.length
+        });
+
+        return {
+          entry,
+          data,
+          error,
+          answers: mappedAnswers
+        };
+      };
+
+      const results = [];
+
+      for (const [index, entry] of entries.entries()) {
+        const title = bundleEntryTitle(entry);
+
+        button.textContent = `Starting ${index + 1}/${entries.length}: ${title}`;
+
+        try {
+          results.push(await submitOneBundleWorkflow(entry));
+        } catch (error) {
+          results.push({
+            entry,
+            data: null,
+            error: {
+              message: error?.message || "This workflow could not be submitted."
+            },
+            answers: {}
+          });
+        }
+      }
+
+      const failures = results.filter(item => item.error);
+      const attemptedCount = results.length;
+      const submittedCount = results.filter(item => !item.error).length;
+      const workflowWord = attemptedCount === 1 ? "workflow" : "workflows";
+
+      if (failures.length) {
+        const onlyRuntimeWaits = failures.every(item =>
+          /submit-automation-setup timed out|timed out/i.test(String(item.error?.message || ""))
+        );
+
+        if (onlyRuntimeWaits) {
+          const waitMessage = `Your bundle setup was saved. The included workflow${entries.length === 1 ? "" : "s"} may still be running, so outputs will appear in your dashboard when they finish.`;
+
+          if (resultEl) {
+            resultEl.innerHTML = `
+              <div class="success" style="margin-top:1rem">
+                <strong>Bundle setup submitted.</strong><br>
+                ${escapeHtml(waitMessage)}<br>
+                Started ${submittedCount}/${attemptedCount || entries.length} included ${workflowWord}.
+              </div>
+            `;
+          }
+
+          NexusUI.toast("Bundle setup submitted. Check your dashboard for outputs.");
+          button.disabled = false;
+          button.textContent = "Update setup details";
+          form.dataset.submitting = "false";
+          setTimeout(function () {
+            location.href = bundleDashboardUrl;
+          }, 1800);
+          return;
+        }
+
+        const failureDetails = failures.map(item => {
+          const title = bundleEntryTitle(item.entry);
+          const message = item.error?.message || "This workflow could not start.";
+          return `${title}: ${message}`;
+        });
+        const safeMessage = "Your bundle setup was saved, but at least one included workflow needs review before the bundle is complete.";
+        NexusUI.toast(safeMessage);
+
+        if (resultEl) {
+          resultEl.innerHTML = `
+            <div class="error" style="margin-top:1rem">
+              <strong>Bundle setup needs review.</strong><br>
+              ${escapeHtml(safeMessage)}
+              <br>Started ${submittedCount}/${attemptedCount || entries.length} workflow${(attemptedCount || entries.length) === 1 ? "" : "s"} from this bundle attempt.
+              ${
+                failureDetails.length
+                  ? `<ul style="margin:0.75rem 0 0 1.2rem">${failureDetails.map(detail => `<li>${escapeHtml(detail)}</li>`).join("")}</ul>`
+                  : ""
+              }
+            </div>
+          `;
+        }
+
+        button.disabled = false;
+        button.textContent = originalText;
+        form.dataset.submitting = "false";
+        return;
+      }
+
+      latestSubmission = {
+        answers
+      };
+
+      for (const result of results) {
+        const entry = activeBundleSetup.entries.find(item => item.automation?.id === result.entry?.automation?.id);
+        if (entry) {
+          entry.submission = result.data?.submission || { answers: result.answers };
+        }
+      }
+
+      activeBundleSetup.existingAnswers = answers;
+
+      if (resultEl) {
+        resultEl.innerHTML = `
+          <div class="success" style="margin-top:1rem">
+            <strong>Bundle setup submitted.</strong><br>
+            Nexus started ${submittedCount}/${attemptedCount} workflow${attemptedCount === 1 ? "" : "s"} for this bundle attempt.
+          </div>
+        `;
+      }
+
+      NexusUI.toast("Bundle setup submitted. Nexus is preparing every included workflow.");
+
+      button.disabled = false;
+      button.textContent = "Update setup details";
+      form.dataset.submitting = "false";
+
+      setTimeout(function () {
+        location.href = bundleDashboardUrl;
+      }, 1800);
+    }
+
+    async function submitSetupForm(event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const button = form.querySelector("button[type='submit']");
+      const originalText = button.textContent;
+
+      if (form.dataset.submitting === "true") {
+        NexusUI.toast("Setup is already being submitted. Please wait.");
+        return;
+      }
+
+      if (!validateRequiredSetupFields(form)) {
+        return;
+      }
+
+      form.dataset.submitting = "true";
+      button.disabled = true;
+      button.textContent = "Submitting setup...";
+
+      const formData = new FormData(form);
+      const answers = {};
+
+      for (const [key, value] of formData.entries()) {
+        answers[key] = String(value || "").trim();
+      }
+
+      const missingSkipGroups = missingUnconfirmedSkipGroups(form);
+      if (missingSkipGroups.length) {
+        const message = `Fill in or tick "I do not have this data" for: ${missingSkipGroups.join(", ")}.`;
+        NexusUI.toast(message);
+        document.getElementById("setupSubmitResult").innerHTML = `
+          <div class="error" style="margin-top:1rem">
+            <strong>Confirm missing data.</strong><br>
+            ${escapeHtml(message)}
+          </div>
+        `;
+        button.disabled = false;
+        button.textContent = originalText;
+        form.dataset.submitting = "false";
+        return;
+      }
+
+      collectSkippedSetup(form, answers);
+
+      const automation = activeCustomerAutomation;
+
+      if (!automation || !automation.id) {
+        NexusUI.toast("Automation was not loaded. Refresh and try again.");
+        button.disabled = false;
+        button.textContent = originalText;
+        form.dataset.submitting = "false";
+        return;
+      }
+
+      if (typeof NexusDB.submitAutomationSetup !== "function") {
+        NexusUI.toast("Setup submit function is missing in nexus-db.js.");
+        button.disabled = false;
+        button.textContent = originalText;
+        form.dataset.submitting = "false";
+        return;
+      }
+
+      if (activeBundleSetup?.is_bundle_setup) {
+        await submitBundleSetupForm(form, button, originalText, answers);
+        return;
+      }
+
+      const { data, error } = await NexusDB.submitAutomationSetup({
+        customer_automation_id: automation.id,
+        answers
+      });
+
+      if (error) {
+        const rawMessage = String(error.message || "");
+        if (/submit-automation-setup timed out|timed out/i.test(rawMessage)) {
+          const waitMessage = "Your setup was saved. The automation may still be running, so outputs will appear in your dashboard when it finishes.";
+
+          NexusUI.toast("Setup submitted. Check your dashboard for outputs.");
+          document.getElementById("setupSubmitResult").innerHTML = `
+            <div class="success" style="margin-top:1rem">
+              <strong>Setup submitted.</strong><br>
+              ${escapeHtml(waitMessage)}
+            </div>
+          `;
+
+          button.disabled = false;
+          button.textContent = "Update setup details";
+          form.dataset.submitting = "false";
+          setTimeout(function () {
+            location.href = "/pages/buyer/dashboard.html";
+          }, 1800);
+          return;
+        }
+
+        const safeMessage =
+          /n8n|webhook|runtime|supabase|authorization header|requested webhook|function/i.test(rawMessage)
+            ? "Your setup could not be fully started yet. Nexus has received the issue and will review the automation."
+            : rawMessage || "Could not submit setup.";
+
+        NexusUI.toast(safeMessage);
+
+        document.getElementById("setupSubmitResult").innerHTML = `
+          <div class="error" style="margin-top:1rem">
+            <strong>Setup needs review.</strong><br>
+            ${escapeHtml(safeMessage)}
+          </div>
+        `;
+
+        button.disabled = false;
+        button.textContent = originalText;
+        form.dataset.submitting = "false";
+        return;
+      }
+
+      latestSubmission = data?.submission || {
+        answers
+      };
+
+      document.getElementById("setupSubmitResult").innerHTML = `
+        <div class="success" style="margin-top:1rem">
+          <strong>Setup submitted.</strong><br>
+          ${
+            data?.triggered_n8n
+              ? "Your automation has started. Outputs will appear in your dashboard when it finishes."
+              : data?.message || "Nexus has received your setup details. Your automation will be prepared next."
+          }
+        </div>
+      `;
+
+      NexusUI.toast(
+        data?.triggered_n8n
+          ? "Setup submitted. Automation started."
+          : "Setup submitted. Nexus is preparing the automation."
+      );
+
+      button.disabled = false;
+      button.textContent = "Update setup details";
+      form.dataset.submitting = "false";
+
+      setTimeout(function () {
+        location.href = "/pages/buyer/dashboard.html";
+      }, 1800);
+    }
+
+    document.addEventListener("DOMContentLoaded", initSetupPage);
+  </script>
+</body>
+</html>
+
+
+
+

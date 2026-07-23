@@ -1,0 +1,50 @@
+[functions.import-n8n-workflow]
+verify_jwt = false
+
+[functions.test-n8n-connection]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.submit-review]
+verify_jwt = false
+
+[functions.submit-developer-waitlist]
+verify_jwt = false
+
+[functions.developer-stripe-account]
+verify_jwt = false
+
+[functions.developer-credentials]
+verify_jwt = false
+
+[functions.runtime-submit-output]
+verify_jwt = false
+
+[functions.system-health]
+verify_jwt = false
+
+[functions.run-scheduled-automations]
+verify_jwt = false
+
+[functions.product-health-checker]
+verify_jwt = false
+
+[functions.test-n8n-workflow]
+verify_jwt = false
+
+[functions.make-import-assistant]
+verify_jwt = false
+
+[functions.n8n-editor-gateway]
+verify_jwt = false
+
+[functions.analytics-events]
+verify_jwt = false
+
+[functions.oauth-connections]
+verify_jwt = false
+
+[functions.run-python-automation]
+verify_jwt = false

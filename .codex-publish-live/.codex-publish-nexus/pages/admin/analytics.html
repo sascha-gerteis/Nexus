@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Analytics | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-admin="true" data-admin-page="analytics">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+    </aside>
+
+    <main class="main">
+      <section class="admin-launch-hero">
+        <div>
+          <span class="eyebrow">Analytics</span>
+          <h1>Platform activity dashboard.</h1>
+          <p>Track page views, product interest, developer profile visits, checkout starts, and buyer message intent.</p>
+        </div>
+
+        <div class="admin-launch-actions">
+          <select class="select" id="analyticsDays" onchange="loadAnalytics()">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="365">Last year</option>
+          </select>
+          <button class="btn btn-primary" type="button" onclick="loadAnalytics()">Refresh</button>
+          <a class="btn btn-secondary" href="/pages/admin/dashboard.html">Back to dashboard</a>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Readout</span>
+            <h2>Traffic and intent</h2>
+            <p id="analyticsUpdatedAt">Loading analytics...</p>
+          </div>
+        </div>
+
+        <div class="admin-metric-grid" id="analyticsSummary">
+          <article class="admin-metric-card"><span>Status</span><strong>Loading...</strong><p>Preparing analytics.</p></article>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="analytics-grid">
+          <article class="admin-health-section">
+            <div class="admin-health-section-head">
+              <h3>Top products</h3>
+              <span>Views and clicks</span>
+            </div>
+            <div class="admin-health-list" id="topProducts"></div>
+          </article>
+
+          <article class="admin-health-section">
+            <div class="admin-health-section-head">
+              <h3>Top developers</h3>
+              <span>Profile/product activity</span>
+            </div>
+            <div class="admin-health-list" id="topDevelopers"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="analytics-grid">
+          <article class="admin-health-section">
+            <div class="admin-health-section-head">
+              <h3>Top pages</h3>
+              <span>Page views</span>
+            </div>
+            <div class="admin-health-list" id="topPages"></div>
+          </article>
+
+          <article class="admin-health-section">
+            <div class="admin-health-section-head">
+              <h3>Events</h3>
+              <span>What people did</span>
+            </div>
+            <div class="admin-health-list" id="eventBreakdown"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Timeline</span>
+            <h2>Daily activity</h2>
+            <p>Simple launch signal by day.</p>
+          </div>
+        </div>
+        <div class="analytics-bars" id="dailyActivity"></div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Recent</span>
+            <h2>Latest events</h2>
+            <p>Recent platform activity for debugging launch flows.</p>
+          </div>
+        </div>
+        <div class="admin-health-list" id="recentEvents"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+
+  <script>
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function labelEvent(name) {
+      return String(name || "event").replaceAll("_", " ");
+    }
+
+    function metric(label, value, note) {
+      return `
+        <article class="admin-metric-card">
+          <span>${escapeHtml(label)}</span>
+          <strong>${Number(value || 0).toLocaleString()}</strong>
+          <p>${escapeHtml(note)}</p>
+        </article>
+      `;
+    }
+
+    function listRows(items, getTitle, getMeta) {
+      return (items || []).map((item) => `
+        <article class="admin-health-row green">
+          <div>
+            <span class="pill green">${Number(item.count || 0).toLocaleString()}</span>
+            <strong>${escapeHtml(getTitle(item))}</strong>
+            <p>${escapeHtml(getMeta(item))}</p>
+          </div>
+        </article>
+      `).join("") || `<div class="admin-health-empty">No analytics yet.</div>`;
+    }
+
+    function renderDaily(items) {
+      const max = Math.max(1, ...(items || []).map((item) => Number(item.count || 0)));
+      return (items || []).map((item) => {
+        const width = Math.max(4, Math.round((Number(item.count || 0) / max) * 100));
+        return `
+          <div class="analytics-bar-row">
+            <span>${escapeHtml(item.date)}</span>
+            <div><i style="width:${width}%"></i></div>
+            <strong>${Number(item.count || 0).toLocaleString()}</strong>
+          </div>
+        `;
+      }).join("") || `<div class="admin-health-empty">No daily activity yet.</div>`;
+    }
+
+    function renderAnalytics(data) {
+      const totals = data?.totals || {};
+      document.getElementById("analyticsUpdatedAt").textContent = `Last refreshed ${new Date().toLocaleString()}`;
+      document.getElementById("analyticsSummary").innerHTML = [
+        metric("Events", totals.events, "All tracked platform events."),
+        metric("Visitors", totals.unique_visitors, "Unique anonymous or logged-in visitors."),
+        metric("Page views", totals.page_views, "Website and dashboard views."),
+        metric("Product views", totals.product_views, "Product preview/open events."),
+        metric("Profile views", totals.profile_views, "Developer profile visits."),
+        metric("Checkout starts", totals.checkout_starts, "Buyers who started Stripe checkout."),
+        metric("Messages", totals.message_clicks, "Buyer intent to contact a developer."),
+        metric("Custom requests", totals.custom_request_starts, "Custom automation request intent.")
+      ].join("");
+
+      document.getElementById("topProducts").innerHTML = listRows(
+        data?.top_products,
+        (item) => item.product_title || item.product_slug || "Untitled product",
+        (item) => [item.developer_name, item.product_slug].filter(Boolean).join(" | ")
+      );
+      document.getElementById("topDevelopers").innerHTML = listRows(
+        data?.top_developers,
+        (item) => item.developer_name || "Unknown developer",
+        (item) => item.developer_id || "Developer activity"
+      );
+      document.getElementById("topPages").innerHTML = listRows(
+        data?.top_pages,
+        (item) => item.page_path || "Unknown page",
+        (item) => item.page_url || ""
+      );
+      document.getElementById("eventBreakdown").innerHTML = listRows(
+        data?.events_by_name,
+        (item) => labelEvent(item.event_name),
+        () => "Tracked event type"
+      );
+      document.getElementById("dailyActivity").innerHTML = renderDaily(data?.daily || []);
+      document.getElementById("recentEvents").innerHTML = (data?.recent_events || []).map((event) => `
+        <article class="admin-health-row green">
+          <div>
+            <span class="pill green">${escapeHtml(labelEvent(event.event_name))}</span>
+            <strong>${escapeHtml(event.product_title || event.page_path || "Platform event")}</strong>
+            <p>${escapeHtml([event.developer_name, event.user_role, event.created_at ? new Date(event.created_at).toLocaleString() : ""].filter(Boolean).join(" | "))}</p>
+          </div>
+        </article>
+      `).join("") || `<div class="admin-health-empty">No recent events yet.</div>`;
+    }
+
+    async function loadAnalytics() {
+      const days = Number(document.getElementById("analyticsDays").value || 30);
+      document.getElementById("analyticsSummary").innerHTML = `<article class="admin-metric-card"><span>Status</span><strong>Loading...</strong><p>Reading analytics events.</p></article>`;
+      const { data, error } = await NexusDB.getAdminAnalytics(days);
+      if (error) {
+        NexusNotice.error("Could not load analytics", error.message || "Analytics failed.");
+        document.getElementById("analyticsSummary").innerHTML = `<article class="admin-metric-card health-red"><span>Error</span><strong>Failed</strong><p>${escapeHtml(error.message || "Could not load analytics.")}</p></article>`;
+        return;
+      }
+      renderAnalytics(data);
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      await NexusUI.mountGlobalNav?.();
+      NexusUI.mountAdminSidebar?.({ force: true });
+      const admin = await NexusDB.requireAdminAccess();
+      if (!admin) return;
+      await loadAnalytics();
+    });
+  </script>
+</body>
+</html>

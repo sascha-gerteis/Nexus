@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+  <title>Finance | Nexus AI Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+<body data-admin="true" data-admin-page="finance">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+  <div class="dashboard">
+    <aside class="sidebar"></aside>
+    <main class="main">
+      <section class="admin-launch-hero finance-hero">
+        <div>
+          <span class="eyebrow">Finance</span>
+          <h1>Revenue and payout control.</h1>
+          <p>
+            Track all paid orders, Nexus revenue, Stripe fees, developer earnings, and manual payout requests
+            from one clean finance view.
+          </p>
+        </div>
+
+        <div class="admin-launch-actions">
+          <a class="btn btn-primary" href="/pages/admin/orders.html">View orders</a>
+          <a class="btn btn-secondary" href="/pages/admin/dashboard.html">Admin overview</a>
+        </div>
+      </section>
+
+      <section class="finance-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Snapshot</span>
+            <h2>Money overview</h2>
+            <p>Total paid volume, platform revenue, developer share, and payout pressure.</p>
+          </div>
+        </div>
+
+        <div id="financeSummary"></div>
+      </section>
+
+      <section class="finance-section finance-panel">
+        <div class="admin-table-head">
+          <div>
+            <span class="eyebrow">Orders</span>
+            <h2>Paid order finance</h2>
+            <p>Every paid order appears here, including Nexus-owned products and developer products.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap finance-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Buyer / developer</th>
+                <th>Product</th>
+                <th>Gross</th>
+                <th>Nexus net</th>
+                <th>Developer share</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="financeRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="finance-section finance-panel">
+        <div class="admin-table-head">
+          <div>
+            <span class="eyebrow">Payouts</span>
+            <h2>Manual payout requests</h2>
+            <p>Send the money outside Nexus, then mark the request as paid with a payment reference and optional receipt link.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap finance-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Developer</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Method</th>
+                <th>Requested</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="payoutRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <input id="payoutReceiptInput" type="file" accept="image/*,.pdf,application/pdf" hidden>
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
+</body>
+</html>

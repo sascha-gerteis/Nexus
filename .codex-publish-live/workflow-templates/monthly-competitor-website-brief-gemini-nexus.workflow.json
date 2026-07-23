@@ -1,0 +1,256 @@
+{
+  "name": "Monthly Competitor Website Brief - Gemini Raw Nexus Import Test",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "2d7ba993-16fe-4b6e-b720-a0ac28220313",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Raw Nexus import test workflow\nThis workflow intentionally has no Nexus Webhook Trigger and no Nexus Submit Output node. Nexus should add those during import. Dynamic buyer values use NEXUS_CODE_SETUP(...) placeholders. The Gemini API key is bound later through the Nexus credentials page.",
+        "height": 320,
+        "width": 720
+      },
+      "id": "4d0e4548-b64c-45f7-a1ee-6f2b3c5fcb3f",
+      "name": "Sticky Note - Nexus Input",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const setup = {\n  company_url: NEXUS_CODE_SETUP(\"company_url\"),\n  competitor_urls: NEXUS_CODE_SETUP(\"competitor_urls\"),\n  focus_areas: NEXUS_CODE_SETUP(\"focus_areas\"),\n  market_region: NEXUS_CODE_SETUP(\"market_region\"),\n  report_title: NEXUS_CODE_SETUP(\"report_title\")\n};\n\nconst customer = {\n  company: NEXUS_CODE_CUSTOMER(\"company\"),\n  name: NEXUS_CODE_CUSTOMER(\"name\")\n};\n\nfunction normalizeUrl(value) {\n  const text = String(value || '').trim();\n  if (!text) return '';\n  if (/^https?:\\/\\//i.test(text)) return text;\n  return 'https://' + text;\n}\n\nconst companyUrl = normalizeUrl(setup.company_url);\nconst competitorRaw = Array.isArray(setup.competitor_urls)\n  ? setup.competitor_urls.join('\\n')\n  : String(setup.competitor_urls || '');\n\nconst competitors = competitorRaw\n  .split(/[\\n,]+/)\n  .map(normalizeUrl)\n  .filter(Boolean)\n  .slice(0, 3);\n\nif (!companyUrl) {\n  throw new Error('Missing setup.company_url. Add the buyer company website in the Nexus setup form.');\n}\n\nconst focusAreas = String(setup.focus_areas || 'positioning, offers, messaging, services, pricing signals, and practical next actions').trim();\nconst marketRegion = String(setup.market_region || 'the buyer market').trim();\nconst reportTitle = String(setup.report_title || 'Monthly Competitor Website Brief').trim();\n\nconst targets = [\n  {\n    label: 'Buyer company',\n    role: 'company',\n    url: companyUrl\n  },\n  ...competitors.map((url, index) => ({\n    label: 'Competitor ' + (index + 1),\n    role: 'competitor',\n    url\n  }))\n];\n\nreturn targets.map((target, index) => ({\n  json: {\n    ...target,\n    index,\n    focus_areas: focusAreas,\n    market_region: marketRegion,\n    report_title: reportTitle,\n    buyer_company: customer.company || '',\n    buyer_name: customer.name || ''\n  }\n}));"
+      },
+      "id": "a54ee045-aa40-4f6f-a927-98e3f151c1dc",
+      "name": "Prepare Website Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "responseFormat": "string",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "f5a0a25f-3507-42ac-a52c-2e9ea0af7322",
+      "name": "Fetch Website HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        240
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "page_title",
+              "cssSelector": "title"
+            },
+            {
+              "key": "page_text",
+              "cssSelector": "body",
+              "skipSelectors": "script, style, noscript, svg, img, nav, header, footer, form, iframe"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9e2a8ba4-724f-4abe-b705-d98db860df37",
+      "name": "Extract Page Text",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        1360,
+        240
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const previous = $('Prepare Website Targets').item.json;\nconst pageTitle = String($json.page_title || previous.url || '').replace(/\\s+/g, ' ').trim();\nconst rawText = String($json.page_text || $json.data || '').replace(/\\s+/g, ' ').trim();\n\nreturn [\n  {\n    json: {\n      ...previous,\n      page_title: pageTitle,\n      page_text: rawText.slice(0, 12000),\n      fetch_status: rawText ? 'success' : 'empty_or_failed'\n    }\n  }\n];"
+      },
+      "id": "f954aa64-6ac3-44d8-a006-bb099a84e08e",
+      "name": "Normalize Page Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pages = $input.all().map(item => item.json);\nconst first = pages[0] || {};\n\nconst sections = pages.map(page => {\n  return [\n    'SOURCE: ' + page.label,\n    'ROLE: ' + page.role,\n    'URL: ' + page.url,\n    'PAGE TITLE: ' + (page.page_title || 'Unknown'),\n    'FETCH STATUS: ' + page.fetch_status,\n    'TEXT: ' + (page.page_text || 'No readable text extracted.')\n  ].join('\\n');\n}).join('\\n\\n---\\n\\n');\n\nreturn [\n  {\n    json: {\n      report_title: first.report_title || 'Monthly Competitor Website Brief',\n      focus_areas: first.focus_areas || '',\n      market_region: first.market_region || '',\n      buyer_company: first.buyer_company || '',\n      buyer_name: first.buyer_name || '',\n      source_count: pages.length,\n      pages,\n      prompt_context: sections\n    }\n  }\n];"
+      },
+      "id": "75cb1197-fb8d-4fcb-9b09-196406e296b1",
+      "name": "Combine Website Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ system_instruction: { parts: [{ text: 'You are a business analyst. Create concise, practical competitor website briefs for business operators. Focus on useful observations and next actions. Return only clean embeddable HTML. Do not include markdown fences, scripts, external CSS, or unsafe markup.' }] }, contents: [{ parts: [{ text: `Create a monthly competitor website brief.\\n\\nReport title: ${$json.report_title}\\nBuyer company: ${$json.buyer_company || 'Buyer company'}\\nMarket/region: ${$json.market_region || 'Not specified'}\\nFocus areas: ${$json.focus_areas || 'positioning, offers, messaging, services, pricing signals, and next actions'}\\n\\nUse this structure:\\n<h1>...</h1>\\n<section><h2>Executive summary</h2><ul>...</ul></section>\\n<section><h2>Positioning and messaging</h2>...</section>\\n<section><h2>Competitor signals</h2>...</section>\\n<section><h2>Opportunities</h2>...</section>\\n<section><h2>Recommended next actions</h2><ol>...</ol></section>\\n<section><h2>Sources checked</h2><ul>...</ul></section>\\n\\nWebsite source text:\\n${$json.prompt_context}` }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 4096 } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "f3549343-a491-43fb-b6d9-19108b4b0226",
+      "name": "Generate Competitor Brief with Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        240
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const promptData = $('Combine Website Text').first().json;\nconst parts = $json.candidates?.[0]?.content?.parts || [];\nconst aiHtml = String(parts.map(part => part.text || '').join('') || $json.text || '').trim();\nconst title = promptData.report_title || 'Monthly Competitor Website Brief';\nconst summary = `Checked ${promptData.source_count || 0} website source${Number(promptData.source_count || 0) === 1 ? '' : 's'} and produced a competitor brief for ${promptData.buyer_company || 'the buyer'}.`;\n\nreturn [\n  {\n    json: {\n      output_type: 'report',\n      title,\n      summary,\n      content_html: aiHtml || '<h1>Monthly Competitor Website Brief</h1><p>No Gemini report content was returned.</p>',\n      content_json: {\n        report_title: title,\n        buyer_company: promptData.buyer_company || '',\n        market_region: promptData.market_region || '',\n        focus_areas: promptData.focus_areas || '',\n        source_count: promptData.source_count || 0,\n        sources: (promptData.pages || []).map(page => ({ label: page.label, role: page.role, url: page.url, status: page.fetch_status }))\n      }\n    }\n  }\n];"
+      },
+      "id": "f5bfe0c7-d266-4a98-80dc-a2243fdba16d",
+      "name": "NEXUS_FINAL_OUTPUT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Website Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Website Targets": {
+      "main": [
+        [
+          {
+            "node": "Fetch Website HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Website HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Page Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Page Text": {
+      "main": [
+        [
+          {
+            "node": "Normalize Page Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Page Text": {
+      "main": [
+        [
+          {
+            "node": "Combine Website Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Website Text": {
+      "main": [
+        [
+          {
+            "node": "Generate Competitor Brief with Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Competitor Brief with Gemini": {
+      "main": [
+        [
+          {
+            "node": "NEXUS_FINAL_OUTPUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "nexusProduct": {
+      "setupFields": [
+        "company_url",
+        "competitor_urls",
+        "focus_areas",
+        "market_region",
+        "report_title"
+      ],
+      "developerCredentialTypes": [
+        "httpHeaderAuth"
+      ],
+      "note": "Importer should replace Manual Test Trigger with Nexus Webhook Trigger, add Nexus Runtime Context, and append Nexus Submit Output."
+    },
+    "rawNexusImportTest": true
+  }
+}

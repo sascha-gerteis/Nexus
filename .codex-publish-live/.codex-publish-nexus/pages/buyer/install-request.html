@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Nexus Guided Install | Nexus</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-page="buyer-install-request">
+  <header class="site-header" id="globalNav" data-active="dashboard"></header>
+
+  <main class="guided-install-page">
+    <section class="guided-install-hero">
+      <div class="container">
+        <div class="guided-install-hero-inner">
+          <div>
+            <span class="eyebrow">Nexus Guided Install</span>
+
+            <h1>Let Nexus coordinate your automation setup.</h1>
+
+            <p>
+              This form gives Nexus the right contact and handoff details so we can help install your automation
+              with you or your technical team. Do not paste passwords, API keys, or private access tokens here.
+            </p>
+
+            <div class="guided-install-hero-actions">
+              <a class="btn btn-secondary btn-small" href="/pages/buyer/dashboard.html">
+                Back to dashboard
+              </a>
+
+              <a class="btn btn-secondary btn-small" href="/pages/contact/index.html">
+                Contact support
+              </a>
+            </div>
+          </div>
+
+          <div class="guided-install-summary-card">
+            <span class="pill blue">How this works</span>
+
+            <ol>
+              <li>You submit contact and technical handoff details.</li>
+              <li>Nexus reviews your order and contacts the right person.</li>
+              <li>Nexus coordinates setup safely with your team.</li>
+              <li>Your dashboard updates when the install is complete.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="guided-install-content">
+      <div class="container guided-install-layout">
+        <aside class="guided-install-side">
+          <div class="guided-install-side-card warning">
+            <span class="pill orange">Important</span>
+            <h3>Do not paste secrets here.</h3>
+            <p>
+              This page is only for contact, access coordination, and setup notes. Nexus will never ask you to paste
+              passwords or API keys into this form.
+            </p>
+          </div>
+
+          <div class="guided-install-side-card">
+            <span class="eyebrow">Recommended</span>
+            <h3>Add a technical contact.</h3>
+            <p>
+              Add someone who can grant access, join a setup call, or connect tools such as Meta Business Manager,
+              YouTube, Google Sheets, CRM systems, or reporting platforms.
+            </p>
+          </div>
+
+          <div class="guided-install-side-card">
+            <span class="eyebrow">Need help?</span>
+            <h3>You can update this later.</h3>
+            <p>
+              If your details change, resubmit the form. Nexus will use the latest information available on your order.
+            </p>
+          </div>
+        </aside>
+
+        <div class="guided-install-main">
+          <div class="guided-install-status" id="installStatusCard" style="display:none"></div>
+
+          <form class="guided-install-form-card" id="installRequestForm">
+            <input type="hidden" id="customerAutomationId" name="customer_automation_id">
+
+            <div class="guided-install-form-head">
+              <span class="eyebrow">Install request</span>
+              <h2 id="productTitle">Loading install request...</h2>
+              <p id="productSubtitle">
+                Loading your order details...
+              </p>
+            </div>
+
+            <div class="guided-install-section">
+              <div class="guided-install-section-head">
+                <span class="step-badge">1</span>
+                <div>
+                  <h3>Main contact</h3>
+                  <p>
+                    This is the person Nexus should contact first about the install.
+                  </p>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div>
+                  <label>Your name *</label>
+                  <input class="input" name="contact_name" required placeholder="Main contact name">
+                </div>
+
+                <div>
+                  <label>Your email *</label>
+                  <input class="input" type="email" name="contact_email" required placeholder="you@company.com">
+                </div>
+
+                <div>
+                  <label>Phone / WhatsApp</label>
+                  <input class="input" name="contact_phone" placeholder="+66...">
+                </div>
+
+                <div>
+                  <label>Company name</label>
+                  <input class="input" name="company_name" placeholder="Company name">
+                </div>
+              </div>
+            </div>
+
+            <div class="guided-install-section">
+              <div class="guided-install-section-head">
+                <span class="step-badge">2</span>
+                <div>
+                  <h3>Technical handoff</h3>
+                  <p>
+                    Add the person who can provide access, approve connection steps, or join a setup call.
+                  </p>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div>
+                  <label>Technical contact name</label>
+                  <input class="input" name="technical_contact_name" placeholder="Technical/admin contact">
+                </div>
+
+                <div>
+                  <label>Technical contact email</label>
+                  <input class="input" type="email" name="technical_contact_email" placeholder="tech@company.com">
+                </div>
+
+                <div>
+                  <label>Technical contact phone</label>
+                  <input class="input" name="technical_contact_phone" placeholder="+66...">
+                </div>
+
+                <div>
+                  <label>Preferred contact method</label>
+                  <select class="select" name="preferred_contact_method">
+                    <option value="email">Email</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="phone">Phone call</option>
+                    <option value="video_call">Video call</option>
+                  </select>
+                </div>
+
+                <div class="full">
+                  <label>Best time to contact</label>
+                  <input class="input" name="preferred_contact_time" placeholder="Example: Weekdays after 2 PM Bangkok time">
+                </div>
+              </div>
+            </div>
+
+            <div class="guided-install-section">
+              <div class="guided-install-section-head">
+                <span class="step-badge">3</span>
+                <div>
+                  <h3>Tools and access notes</h3>
+                  <p>
+                    Tell Nexus which systems are involved. Do not paste passwords, private tokens, or API keys.
+                  </p>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="full">
+                  <label>Which accounts/tools are involved?</label>
+                  <textarea
+                    class="textarea"
+                    name="tools_involved"
+                    placeholder="Example: Facebook Page, Instagram Business account, YouTube channel, Meta Ads, Google Sheets, HubSpot, CRM, reporting dashboard..."
+                  ></textarea>
+                </div>
+
+                <div class="full">
+                  <label>Account access notes</label>
+                  <textarea
+                    class="textarea"
+                    name="account_access_notes"
+                    placeholder="Example: We have Meta Business Manager admin access. Our marketing team controls YouTube. Our technical contact can join a call."
+                  ></textarea>
+                </div>
+
+                <div class="full">
+                  <label>Extra notes for Nexus</label>
+                  <textarea
+                    class="textarea"
+                    name="install_notes"
+                    placeholder="Anything Nexus should know before contacting you?"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="guided-install-safety-note">
+              <strong>Security reminder:</strong>
+              <span>
+                Only share contact and coordination information here. Nexus will coordinate sensitive access securely if needed.
+              </span>
+            </div>
+
+            <div class="guided-install-actions">
+              <button class="btn btn-primary" type="submit" id="submitButton">
+                Submit install request
+              </button>
+
+              <a class="btn btn-secondary" href="/pages/buyer/dashboard.html">
+                Back to dashboard
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="nexus-modal-lite" id="noticeModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeNoticeModal()"></div>
+
+    <div class="nexus-modal-lite-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeNoticeModal()">x</button>
+
+      <span class="eyebrow" id="noticeEyebrow">Success</span>
+
+      <h2 id="noticeTitle">Request submitted</h2>
+
+      <p id="noticeMessage">
+        Your request was submitted.
+      </p>
+
+      <div class="modal-lite-actions">
+        <button class="btn btn-primary" type="button" onclick="closeNoticeModal()">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+
+  <script>
+    let currentCustomerAutomation = null;
+    let existingInstallRequest = null;
+
+    function q(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function statusLabel(status) {
+      const safe = String(status || "pending").toLowerCase();
+
+      if (safe === "completed") return "Install complete";
+      if (safe === "contacted") return "Nexus contacted you";
+      if (safe === "in_progress") return "Install in progress";
+      if (safe === "blocked") return "Needs attention";
+      if (safe === "cancelled") return "Cancelled";
+
+      return "Request submitted";
+    }
+
+    function statusPillClass(status) {
+      const safe = String(status || "pending").toLowerCase();
+
+      if (safe === "completed") return "pill green";
+      if (safe === "blocked" || safe === "cancelled") return "pill red";
+      if (safe === "contacted" || safe === "in_progress") return "pill blue";
+
+      return "pill orange";
+    }
+
+    function openNoticeModal(type, title, message) {
+      document.getElementById("noticeEyebrow").textContent = type === "error" ? "Error" : "Success";
+      document.getElementById("noticeTitle").textContent = title || "Update";
+      document.getElementById("noticeMessage").textContent = message || "";
+
+      const modal = document.getElementById("noticeModal");
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeNoticeModal() {
+      const modal = document.getElementById("noticeModal");
+
+      if (!modal) return;
+
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    function fillFormFromRequest(request) {
+      if (!request) return;
+
+      const form = document.getElementById("installRequestForm");
+
+      [
+        "contact_name",
+        "contact_email",
+        "contact_phone",
+        "company_name",
+        "technical_contact_name",
+        "technical_contact_email",
+        "technical_contact_phone",
+        "preferred_contact_method",
+        "preferred_contact_time",
+        "tools_involved",
+        "account_access_notes",
+        "install_notes"
+      ].forEach((key) => {
+        const element = form.querySelector(`[name="${key}"]`);
+        if (element) element.value = request[key] || "";
+      });
+    }
+
+    function renderStatus() {
+      const card = document.getElementById("installStatusCard");
+
+      if (!card) return;
+
+      if (!existingInstallRequest) {
+        card.style.display = "none";
+        return;
+      }
+
+      card.style.display = "";
+
+      const status = existingInstallRequest.status || "pending";
+
+      card.innerHTML = `
+        <div class="guided-install-status-top">
+          <span class="${statusPillClass(status)}">
+            ${escapeHtml(statusLabel(status))}
+          </span>
+
+          <span>${escapeHtml(new Date(existingInstallRequest.updated_at || existingInstallRequest.created_at || Date.now()).toLocaleString())}</span>
+        </div>
+
+        <h3>${escapeHtml(statusLabel(status))}</h3>
+
+        <p>
+          Nexus has received your guided install information. Current status:
+          <strong>${escapeHtml(status)}</strong>.
+        </p>
+
+        ${
+          existingInstallRequest.admin_notes
+            ? `
+              <div class="guided-install-admin-note">
+                <strong>Nexus note</strong>
+                <p>${escapeHtml(existingInstallRequest.admin_notes)}</p>
+              </div>
+            `
+            : ""
+        }
+
+        <p class="guided-install-status-help">
+          You can update and resubmit this form if your contact details or setup notes change.
+        </p>
+      `;
+    }
+
+    async function loadInstallRequestPage() {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      const customerAutomationId = q("id") || q("customer_automation_id") || "";
+
+      const { data, error } = await NexusDB.getNexusInstallRequest(customerAutomationId);
+
+      if (error) {
+        openNoticeModal("error", "Could not load install request", error.message || "Please try again.");
+        return;
+      }
+
+      currentCustomerAutomation = data?.customer_automation || null;
+      existingInstallRequest = data?.install_request || null;
+
+      if (!currentCustomerAutomation) {
+        openNoticeModal(
+          "error",
+          "No automation found",
+          "We could not find a guided install order for your account. Please return to your dashboard."
+        );
+        return;
+      }
+
+      document.getElementById("customerAutomationId").value = currentCustomerAutomation.id;
+
+      const automation = Array.isArray(currentCustomerAutomation.automations)
+        ? currentCustomerAutomation.automations[0]
+        : currentCustomerAutomation.automations;
+
+      const order = Array.isArray(currentCustomerAutomation.orders)
+        ? currentCustomerAutomation.orders[0]
+        : currentCustomerAutomation.orders;
+
+      document.getElementById("productTitle").textContent =
+        automation?.title || "Nexus Guided Install";
+
+      document.getElementById("productSubtitle").textContent =
+        order?.buyer_email
+          ? `Order for ${order.buyer_email}. Complete or update the install request below.`
+          : "Complete or update this form so Nexus can coordinate setup.";
+
+      fillFormFromRequest(existingInstallRequest);
+      renderStatus();
+    }
+
+    async function submitInstallRequest(event) {
+      event.preventDefault();
+
+      const form = event.currentTarget;
+      const button = document.getElementById("submitButton");
+      const originalText = button ? button.textContent : "Submit install request";
+      const formData = new FormData(form);
+
+      const payload = Object.fromEntries(formData.entries());
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Submitting...";
+      }
+
+      try {
+        const { data, error } = await NexusDB.submitNexusInstallRequest(payload);
+
+        if (error) {
+          throw new Error(error.message || "Could not submit install request.");
+        }
+
+        existingInstallRequest = data?.request || existingInstallRequest;
+
+        fillFormFromRequest(existingInstallRequest);
+        renderStatus();
+
+        openNoticeModal(
+          "success",
+          "Install request submitted",
+          data?.message || "Nexus will contact you to complete setup."
+        );
+      } catch (error) {
+        openNoticeModal("error", "Could not submit request", error.message || "Please try again.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      const form = document.getElementById("installRequestForm");
+
+      if (form) {
+        form.addEventListener("submit", submitInstallRequest);
+      }
+
+      await loadInstallRequestPage();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Automation Output | Nexus</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-page="buyer-output">
+  <header class="site-header">
+    <div class="container nav">
+      <a class="logo" href="/index.html">
+        <span>Nexus&nbsp;</span>
+      </a>
+
+      <nav class="nav-links">
+        <a class="nav-link" href="/index.html">Home</a>
+        <a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a>
+        <a class="nav-link active" href="/pages/buyer/dashboard.html">Dashboard</a>
+        <a class="nav-link" href="/pages/contact/index.html">Support</a>
+        <button class="btn btn-secondary btn-small" type="button" onclick="NexusDB.signOut()">Logout</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="buyer-output-page">
+    <section class="container">
+      <div id="outputRoot">
+        <div class="card">
+          <h2>Loading output...</h2>
+          <p>Please wait while Nexus loads your automation result.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+
+  <script>
+    function getParam(name) {
+      return new URLSearchParams(location.search).get(name);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function dateLabel(value) {
+      if (!value) return "Not recorded";
+      return new Date(value).toLocaleString();
+    }
+
+    function outputTypeLabel(value) {
+      const raw = String(value || "report").trim();
+      return raw
+        .replaceAll("_", " ")
+        .replaceAll("-", " ")
+        .replace(/\b\w/g, char => char.toUpperCase());
+    }
+
+    function developerName(output) {
+      const nested = output?.customer_automations?.developers || {};
+      const direct = output?.developers || {};
+      return nested.display_name || direct.display_name || "Nexus";
+    }
+
+    function outputFormatLabel(output) {
+      if (output.file_url) return "File";
+      if (output.content_html) return "HTML report";
+      if (output.content_text) return "Text report";
+      return "Structured data";
+    }
+
+    function renderOutputBody(output) {
+      if (output.content_html) {
+        return `
+          <div class="output-frame-shell">
+            <iframe
+              id="outputHtmlFrame"
+              class="output-html-frame"
+              title="Automation output report"
+              sandbox=""
+            ></iframe>
+          </div>
+        `;
+      }
+
+      if (output.content_text) {
+        return `<pre class="output-text output-reader-text">${escapeHtml(output.content_text)}</pre>`;
+      }
+
+      return `<pre class="output-text output-reader-text">${escapeHtml(JSON.stringify(output.content_json || {}, null, 2))}</pre>`;
+    }
+
+    function outputHistoryRows(outputs, currentId) {
+      const history = (outputs || [])
+        .filter(item => item.id !== currentId)
+        .slice(0, 8);
+
+      if (!history.length) {
+        return `<div class="buyer-output-history-empty">No previous outputs for this automation yet.</div>`;
+      }
+
+      return history.map(item => `
+        <a class="buyer-output-history-link" href="/pages/buyer/output.html?id=${encodeURIComponent(item.id)}">
+          <div>
+            <strong>${escapeHtml(item.title || "Automation output")}</strong>
+            <span>${escapeHtml(dateLabel(item.created_at))}</span>
+          </div>
+        </a>
+      `).join("");
+    }
+
+    async function initOutputPage() {
+      const root = document.getElementById("outputRoot");
+      const outputId = getParam("id");
+
+      const user = await NexusDB.requireBuyer(location.pathname + location.search);
+      if (!user) return;
+
+      if (!outputId) {
+        root.innerHTML = `
+          <div class="card">
+            <h2>Output not found</h2>
+            <p>No output ID was provided.</p>
+            <a class="btn btn-primary" href="/pages/buyer/dashboard.html">Back to dashboard</a>
+          </div>
+        `;
+        return;
+      }
+
+      const { data: output, error } = await NexusDB.getBuyerAutomationOutput(outputId);
+
+      if (error || !output) {
+        root.innerHTML = `
+          <div class="card">
+            <h2>Output not found</h2>
+            <p>This output could not be loaded.</p>
+            <a class="btn btn-primary" href="/pages/buyer/dashboard.html">Back to dashboard</a>
+          </div>
+        `;
+        return;
+      }
+
+      const product = output.automations || {};
+      const customerAutomation = output.customer_automations || {};
+      const builder = developerName(output);
+      const createdDate = dateLabel(output.created_at);
+      const { data: outputHistory } = output.customer_automation_id
+        ? await NexusDB.listOutputsForCustomerAutomation(output.customer_automation_id)
+        : { data: [] };
+
+      root.innerHTML = `
+        <div class="buyer-output-reader">
+          <div class="buyer-output-reader-toolbar">
+            <a class="btn btn-secondary btn-small" href="/pages/buyer/dashboard.html?tab=outputs">
+              Back to outputs
+            </a>
+
+            <div>
+              <a class="btn btn-secondary btn-small" href="/pages/buyer/dashboard.html?tab=automations">
+                My automations
+              </a>
+              ${
+                output.file_url
+                  ? `<a class="btn btn-primary btn-small" href="${escapeHtml(output.file_url)}" target="_blank" rel="noopener">Open file</a>`
+                  : ""
+              }
+            </div>
+          </div>
+
+          <section class="buyer-output-reader-hero">
+            <div class="automation-icon ${escapeHtml(product.color || "")}">
+              ${escapeHtml(product.icon || "AI")}
+            </div>
+
+            <div>
+              <span class="${NexusUI.pillClass(product.color || "blue")}">
+                ${escapeHtml(product.category || outputTypeLabel(output.output_type))}
+              </span>
+              <h1>${escapeHtml(output.title || "Automation output")}</h1>
+              <p>${escapeHtml(output.summary || "Your automation completed and produced this output.")}</p>
+
+              <div class="buyer-output-reader-meta">
+                <span>${escapeHtml(product.title || customerAutomation.name || "Automation")}</span>
+                <span>Built by ${escapeHtml(builder)}</span>
+                <span>${escapeHtml(createdDate)}</span>
+              </div>
+            </div>
+          </section>
+
+          <div class="buyer-output-reader-grid">
+            <aside class="buyer-output-context-panel">
+              <section>
+                <span class="eyebrow">Output details</span>
+                <div class="buyer-output-detail-list">
+                  <div>
+                    <span>Automation</span>
+                    <strong>${escapeHtml(product.title || customerAutomation.name || "Automation")}</strong>
+                  </div>
+                  <div>
+                    <span>Builder</span>
+                    <strong>${escapeHtml(builder)}</strong>
+                  </div>
+                  <div>
+                    <span>Output type</span>
+                    <strong>${escapeHtml(outputTypeLabel(output.output_type))}</strong>
+                  </div>
+                  <div>
+                    <span>Format</span>
+                    <strong>${escapeHtml(outputFormatLabel(output))}</strong>
+                  </div>
+                  <div>
+                    <span>Created</span>
+                    <strong>${escapeHtml(createdDate)}</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <span class="eyebrow">Previous outputs</span>
+                <div class="buyer-output-history-list">
+                  ${outputHistoryRows(outputHistory || [], output.id)}
+                </div>
+              </section>
+            </aside>
+
+            <section class="buyer-output-report-panel">
+              <div class="buyer-output-report-head">
+                <div>
+                  <span class="eyebrow">Automation result</span>
+                  <h2>${escapeHtml(output.title || "Output")}</h2>
+                </div>
+                <span>${escapeHtml(outputFormatLabel(output))}</span>
+              </div>
+
+              ${renderOutputBody(output)}
+            </section>
+          </div>
+        </div>
+      `;
+
+      const frame = document.getElementById("outputHtmlFrame");
+      if (frame && output.content_html) {
+        frame.srcdoc = output.content_html;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", initOutputPage);
+  </script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260701-bundle-preview-width">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+
+  <title>Payment Successful | Nexus AI</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-page="checkout-success">
+  <header class="site-header" id="globalNav" data-active="marketplace"></header>
+
+  <main class="checkout-result-page">
+    <section class="container">
+      <div class="checkout-result-card success">
+        <span class="eyebrow">Payment successful</span>
+
+        <h1 id="successTitle">Your automation is being prepared.</h1>
+
+        <p id="successMessage">
+          Payment confirmed. Nexus is preparing your next step.
+        </p>
+
+        <div id="successStatus" class="checkout-status-box">
+          Creating your automation page...
+        </div>
+
+        <div class="hero-actions">
+          <a class="btn btn-primary" id="setupButton" href="/pages/buyer/dashboard.html">
+            Go to dashboard
+          </a>
+
+          <a class="btn btn-secondary" href="/pages/marketplace/index.html">
+            Browse marketplace
+          </a>
+        </div>
+
+        <p class="checkout-success-helper">
+          If this page does not redirect automatically, use the button above or open your buyer dashboard.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
+  <script src="/assets/js/nexus-buyer-nav.js"></script>
+  <script src="/assets/js/nexus-notice.js"></script>
+
+  <script>
+    function getBuyerNextStep(automation) {
+      const installType = String(automation?.install_type || "").toLowerCase();
+
+      const isGuidedInstall =
+        installType.includes("guided") ||
+        installType.includes("nexus");
+
+      if (isGuidedInstall) {
+        return {
+          url: `/pages/buyer/install-request.html?id=${encodeURIComponent(automation.id)}`,
+          title: "Your Nexus Guided Install is ready.",
+          buttonText: "Complete install request",
+          statusText: "Your guided install request form is ready. Redirecting you now...",
+          message: "Payment received. Complete the Nexus Guided Install request so our team can coordinate setup with you or your technical contact."
+        };
+      }
+
+      return {
+        url: `/pages/buyer/setup.html?id=${encodeURIComponent(automation.id)}`,
+        title: "Your setup page is ready.",
+        buttonText: "Complete setup",
+        statusText: "Your setup form is ready. Redirecting you now...",
+        message: "Payment received. Complete the setup form to launch your automation."
+      };
+    }
+
+    function setSuccessState({ title, message, status, buttonText, buttonHref }) {
+      const titleEl = document.getElementById("successTitle");
+      const messageEl = document.getElementById("successMessage");
+      const statusBox = document.getElementById("successStatus");
+      const setupButton = document.getElementById("setupButton");
+
+      if (titleEl && title) titleEl.textContent = title;
+      if (messageEl && message) messageEl.textContent = message;
+      if (statusBox && status) statusBox.innerHTML = status;
+      if (setupButton && buttonText) setupButton.textContent = buttonText;
+      if (setupButton && buttonHref) setupButton.href = buttonHref;
+    }
+
+    async function ensureAutomationForOrder(orderId) {
+      if (typeof NexusDB.ensureCustomerAutomations !== "function") {
+        return;
+      }
+
+      try {
+        await NexusDB.ensureCustomerAutomations(orderId);
+      } catch (error) {
+        console.warn("ensureCustomerAutomations failed:", error);
+      }
+    }
+
+    async function initSuccessPage() {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      const params = new URLSearchParams(location.search);
+      const orderId = params.get("order_id");
+
+      const user = await NexusDB.requireBuyer(location.pathname + location.search);
+      if (!user) return;
+
+      if (!orderId) {
+        setSuccessState({
+          title: "Payment confirmed.",
+          message: "Payment succeeded, but no order ID was found in the redirect URL.",
+          status: "Go to your dashboard to continue.",
+          buttonText: "Go to dashboard",
+          buttonHref: "/pages/buyer/dashboard.html"
+        });
+
+        return;
+      }
+
+      let attempts = 0;
+      const maxAttempts = 12;
+
+      async function pollForAutomation() {
+        attempts += 1;
+
+        setSuccessState({
+          status: `Preparing your automation page... (${attempts}/${maxAttempts})`,
+          buttonText: "Go to dashboard",
+          buttonHref: "/pages/buyer/dashboard.html"
+        });
+
+        await ensureAutomationForOrder(orderId);
+
+        const { data: automation, error } = await NexusDB.getCustomerAutomationByOrderId(orderId);
+
+        if (error) {
+          console.warn("getCustomerAutomationByOrderId error:", error);
+        }
+
+        if (automation && automation.id) {
+          const nextStep = getBuyerNextStep(automation);
+
+          setSuccessState({
+            title: nextStep.title,
+            message: nextStep.message,
+            status: nextStep.statusText,
+            buttonText: nextStep.buttonText,
+            buttonHref: nextStep.url
+          });
+
+          setTimeout(function () {
+            location.href = nextStep.url;
+          }, 900);
+
+          return;
+        }
+
+        if (attempts >= maxAttempts) {
+          setSuccessState({
+            title: "Payment received.",
+            message: "Your payment was successful. Your automation is still being prepared.",
+            status: "This can happen if payment confirmation is slightly delayed. You can continue from your dashboard; your next step will appear there automatically.",
+            buttonText: "Go to dashboard",
+            buttonHref: "/pages/buyer/dashboard.html"
+          });
+
+          return;
+        }
+
+        setTimeout(pollForAutomation, 1500);
+      }
+
+      pollForAutomation();
+    }
+
+    document.addEventListener("DOMContentLoaded", initSuccessPage);
+  </script>
+</body>
+</html>

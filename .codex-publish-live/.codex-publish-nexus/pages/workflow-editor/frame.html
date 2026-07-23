@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus Workflow Frame</title>
+</head>
+<body>
+  <script>
+    (() => {
+      const trustedOrigin = window.location.origin;
+
+      window.addEventListener("message", (event) => {
+        if (event.origin !== trustedOrigin) return;
+        const data = event.data || {};
+        if (data.type !== "nexus:n8n-html") return;
+        if (!data.html || typeof data.html !== "string") return;
+
+        document.open("text/html", "replace");
+        document.write(data.html);
+        document.close();
+      });
+
+      window.parent.postMessage({ type: "nexus:n8n-frame-ready" }, trustedOrigin);
+    })();
+  </script>
+</body>
+</html>

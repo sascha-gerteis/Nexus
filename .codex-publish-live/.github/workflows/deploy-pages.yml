@@ -1,0 +1,85 @@
+name: Deploy Nexus static site
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build static Pages artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
+
+          for path in \
+            assets \
+            pages \
+            docs \
+            custom-business-automation \
+            customer-support-automation \
+            lead-automation \
+            reporting-automation \
+            social-listening-automation
+          do
+            if [ -e "$path" ]; then
+              cp -R "$path" "dist/$path"
+            fi
+          done
+
+          for file in \
+            index.html \
+            llms.txt \
+            robots.txt \
+            sitemap.xml \
+            site.webmanifest \
+            favicon.ico \
+            favicon.PNG \
+            _headers
+          do
+            if [ -f "$file" ]; then
+              cp "$file" dist/
+            fi
+          done
+
+          echo "nexus-ai.software" > dist/CNAME
+          touch dist/.nojekyll
+
+          find dist -type d -name node_modules -prune -exec rm -rf {} +
+          find dist -type f -size +95M -print -delete
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

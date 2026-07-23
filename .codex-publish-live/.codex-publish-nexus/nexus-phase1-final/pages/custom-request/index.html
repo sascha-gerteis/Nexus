@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260624-analytics">
+  <title>Custom Automation Request | Nexus Workflow and AI Agent Builds</title>
+  <meta name="description" content="Request a custom automation, workflow, AI agent, reporting system, internal tool, or micro-SaaS solution built around your business process.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nexus-ai.software/pages/custom-request/index.html">
+  <link rel="alternate" type="text/markdown" href="/llms.txt">
+  <meta property="og:title" content="Request a Custom Automation | Nexus">
+  <meta property="og:description" content="Tell Nexus what process you want automated and share the tools, timeline, budget, and output you need.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nexus-ai.software/pages/custom-request/index.html">
+  <meta property="og:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Request a Custom Automation | Nexus">
+  <meta name="twitter:description" content="Request a custom workflow, AI agent, reporting system, or internal automation built around your process.">
+  <meta name="twitter:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    "name": "Custom automation request",
+    "url": "https://nexus-ai.software/pages/custom-request/index.html",
+    "provider": {
+      "@type": "Organization",
+      "name": "Nexus",
+      "url": "https://nexus-ai.software/"
+    },
+    "serviceType": "Custom workflow automation, AI agent, reporting system, and internal tool request intake",
+    "areaServed": "Global",
+    "description": "Nexus reviews custom automation requests for business processes, tools, timelines, budgets, desired outputs, and setup paths."
+  }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="/assets/js/config.js"></script>
+</head>
+<body data-page="custom-request">
+  <header class="site-header" id="globalNav" data-active="marketplace"></header>
+
+  <main>
+    <section class="section alt">
+      <div class="container">
+        <a class="btn btn-secondary btn-small" id="backLink" href="/pages/marketplace/index.html">Back</a>
+        <div class="section-head left" style="margin-top:1rem">
+          <span class="eyebrow">Custom automation request</span>
+          <h1 id="requestTitle">Request a custom automation.</h1>
+          <p id="requestIntro">Tell Nexus what you want automated and we will review the scope, tools, timeline, and next step.</p>
+        </div>
+
+        <div class="grid-2">
+          <article class="card" id="productContext">
+            <span class="pill blue">Custom quote</span>
+            <h3>Built around your process</h3>
+            <p>Use this form for AI agents, workflow automations, dashboards, reporting systems, and micro-SaaS style internal tools.</p>
+          </article>
+
+          <form class="card" id="customRequestForm">
+            <div class="form-grid">
+              <div><label>Name</label><input class="input" name="name" required></div>
+              <div><label>Email</label><input class="input" name="email" type="email" required></div>
+              <div><label>Company</label><input class="input" name="company"></div>
+              <div><label>Phone</label><input class="input" name="phone"></div>
+              <div class="full"><label>Website</label><input class="input" name="website"></div>
+              <div class="full"><label>What do you want automated?</label><textarea class="textarea" name="automation_goal" required></textarea></div>
+              <div class="full"><label>Current manual process</label><textarea class="textarea" name="current_process"></textarea></div>
+              <div class="full"><label>Tools/systems involved</label><input class="input" name="tools" placeholder="Google Sheets, Slack, HubSpot, n8n, APIs..."></div>
+              <div class="full"><label>Desired output/result</label><textarea class="textarea" name="desired_output"></textarea></div>
+              <div><label>Budget range</label><input class="input" name="budget_range" placeholder="Example: 10,000-30,000 THB"></div>
+              <div><label>Timeline/urgency</label><input class="input" name="timeline" placeholder="This week, this month, flexible..."></div>
+              <div class="full"><label>Extra notes</label><textarea class="textarea" name="notes"></textarea></div>
+            </div>
+            <button class="btn btn-primary" style="margin-top:1rem">Send request</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script defer src="/assets/js/nexus-ui.js?v=20260710-admin-staff-analytics"></script>
+  <script defer src="/assets/js/nexus-db.js?v=20260710-admin-staff-analytics"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async function () {
+      const params = new URLSearchParams(location.search);
+      const slug = params.get("slug") || "";
+      const form = document.getElementById("customRequestForm");
+      let product = null;
+
+      if (document.referrer && document.referrer.startsWith(location.origin)) {
+        document.getElementById("backLink").href = document.referrer;
+      }
+
+      if (slug) {
+        const { data } = await NexusDB.getAutomationBySlug(slug);
+        product = data || null;
+
+        if (product) {
+          document.getElementById("requestTitle").textContent = `Request: ${product.title}`;
+          document.getElementById("requestIntro").textContent = product.short_description || product.outcome || "Send your request and Nexus will review the scope.";
+          document.getElementById("productContext").innerHTML = `
+            <span class="pill blue">Custom quote</span>
+            <h3>${NexusUI.escapeHtml(product.title || "Custom automation")}</h3>
+            <p>${NexusUI.escapeHtml(product.long_description || product.short_description || "")}</p>
+            ${product.outcome ? `<p><strong>Outcome:</strong> ${NexusUI.escapeHtml(product.outcome)}</p>` : ""}
+          `;
+          NexusDB.trackAnalyticsEvent?.("custom_request_start", {
+            automation_id: product.id,
+            product_slug: product.slug || slug,
+            product_title: product.title || "",
+            developer_id: product.developer_id || null,
+            metadata: { source: "custom_request_page" }
+          });
+        }
+      } else {
+        NexusDB.trackAnalyticsEvent?.("custom_request_start", {
+          metadata: { source: "generic_custom_request_page" }
+        });
+      }
+
+      const { data: session } = await NexusDB.getSession();
+      if (session?.session?.user) {
+        const user = session.session.user;
+        form.elements.email.value = user.email || "";
+
+        if (typeof NexusDB.getCurrentBuyerAccount === "function") {
+          const { data } = await NexusDB.getCurrentBuyerAccount();
+          const buyer = data?.buyer_profile || {};
+          form.elements.name.value = buyer.name || data?.profile?.full_name || user.user_metadata?.full_name || "";
+          form.elements.company.value = buyer.company || "";
+          form.elements.phone.value = buyer.phone || "";
+          form.elements.website.value = buyer.website || "";
+        }
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        if (form.dataset.submitting === "true") return;
+
+        const submitButton = form.querySelector("button[type='submit'], button:not([type])");
+        const originalButtonText = submitButton?.textContent || "Send request";
+        form.dataset.submitting = "true";
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = "Sending...";
+        }
+
+        const formData = new FormData(form);
+        const fields = Object.fromEntries(formData.entries());
+        const title = product?.title || "General custom automation";
+        const readable = [
+          `Product: ${title}`,
+          `Name: ${fields.name}`,
+          `Email: ${fields.email}`,
+          `Company: ${fields.company || ""}`,
+          `Phone: ${fields.phone || ""}`,
+          `Website: ${fields.website || ""}`,
+          "",
+          `Goal: ${fields.automation_goal || ""}`,
+          `Current process: ${fields.current_process || ""}`,
+          `Tools: ${fields.tools || ""}`,
+          `Desired output: ${fields.desired_output || ""}`,
+          `Budget: ${fields.budget_range || ""}`,
+          `Timeline: ${fields.timeline || ""}`,
+          `Notes: ${fields.notes || ""}`
+        ].join("\n");
+
+        const payload = {
+          name: fields.name || "",
+          email: fields.email || "",
+          company: fields.company || "",
+          inquiry_type: "custom_automation",
+          source: "custom_request_product",
+          subject: `Custom automation request: ${title}`,
+          message: readable,
+          metadata: {
+            product_id: product?.id || null,
+            product_slug: product?.slug || slug || "",
+            product_title: title,
+            intake: fields
+          },
+          status: "new"
+        };
+
+        const submit = NexusDB.submitContactMessage || NexusDB.createContactMessage || NexusDB.createContact;
+        const { error } = await submit(payload);
+
+        if (error) {
+          NexusUI.toast(error.message || "Could not send request.");
+          form.dataset.submitting = "false";
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = originalButtonText;
+          }
+          return;
+        }
+
+        try {
+          await NexusDB.trackAnalyticsEvent?.("custom_request_submit", {
+            automation_id: product?.id || null,
+            product_slug: product?.slug || slug || "",
+            product_title: title,
+            developer_id: product?.developer_id || null,
+            metadata: { source: "custom_request_page", budget_range: fields.budget_range || "", timeline: fields.timeline || "" }
+          });
+        } catch (analyticsError) {
+          console.warn("Custom request analytics failed", analyticsError);
+        }
+
+        location.href = "/pages/contact/index.html?sent=custom-request";
+      });
+    });
+  </script>
+</body>
+</html>

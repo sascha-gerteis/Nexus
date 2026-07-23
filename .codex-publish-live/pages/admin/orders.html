@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Orders | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-admin="true" data-admin-page="orders">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+
+      <a href="/pages/admin/dashboard.html">Overview</a>
+      <a class="active" href="/pages/admin/orders.html">Orders</a>
+      <a href="/pages/admin/automations.html">Products</a>
+      <a href="/pages/admin/product-form.html">Create Product</a>
+      <a href="/pages/admin/customer-automations.html">Customer Automations</a>
+      <a href="/pages/admin/messages.html">Inquiries</a>
+      <a href="/pages/admin/reviews.html">Reviews</a>
+      <a href="/pages/admin/waitlist.html">Developer Intake</a>
+      <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
+      <a href="/pages/marketplace/index.html">View Marketplace</a>
+      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+    </aside>
+
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Admin operations</span>
+        <h2>All orders.</h2>
+        <p>
+          View every order, track payment status, manage Nexus Guided Install requests, and mark installs complete.
+        </p>
+      </div>
+
+      <div class="grid-4" style="margin-bottom:1rem">
+        <div class="card">
+          <h3 id="totalOrders">0</h3>
+          <p>Total orders</p>
+        </div>
+
+        <div class="card">
+          <h3 id="paidOrders">0</h3>
+          <p>Paid orders</p>
+        </div>
+
+        <div class="card">
+          <h3 id="guidedOrders">0</h3>
+          <p>Guided installs</p>
+        </div>
+
+        <div class="card">
+          <h3 id="completedOrders">0</h3>
+          <p>Completed</p>
+        </div>
+      </div>
+
+      <section class="admin-orders-panel">
+        <div class="admin-orders-toolbar">
+          <div>
+            <h2>Order queue</h2>
+            <p>Use this page to manage paid orders and guided install work.</p>
+          </div>
+
+          <div class="admin-orders-actions">
+            <select class="input" id="orderFilter" onchange="renderOrders()">
+              <option value="all">All orders</option>
+              <option value="paid">Paid</option>
+              <option value="guided">Guided install</option>
+              <option value="needs_install_request">Needs install request</option>
+              <option value="pending">Pending</option>
+              <option value="in_progress">In progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+
+            <button class="btn btn-secondary btn-small" type="button" onclick="loadOrders()">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div id="ordersList" class="admin-orders-list">
+          Loading orders...
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="nexus-modal-lite" id="orderModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeOrderModal()"></div>
+
+    <div class="nexus-modal-lite-card admin-order-modal-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeOrderModal()">&times;</button>
+
+      <span class="eyebrow">Order details</span>
+      <h2 id="orderModalTitle">Order</h2>
+
+      <div id="orderModalBody"></div>
+
+      <label style="margin-top:1rem">Admin notes</label>
+      <textarea
+        class="textarea"
+        id="orderAdminNotes"
+        placeholder="Internal notes about this order or guided install..."
+      ></textarea>
+
+      <div class="admin-order-modal-actions">
+        <button class="btn btn-secondary btn-small" type="button" onclick="closeOrderModal()">
+          Close
+        </button>
+
+        <button class="btn btn-secondary btn-small" type="button" onclick="updateInstallStatus('contacted')">
+          Mark contacted
+        </button>
+
+        <button class="btn btn-secondary btn-small" type="button" onclick="updateInstallStatus('in_progress')">
+          In progress
+        </button>
+
+        <button class="btn btn-secondary btn-small" type="button" onclick="updateInstallStatus('blocked')">
+          Blocked
+        </button>
+
+        <button class="btn btn-primary btn-small" type="button" onclick="updateInstallStatus('completed')">
+          Complete install
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+
+  <script>
+    let allOrderRows = [];
+    let currentOrderRow = null;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function dateLabel(value) {
+      if (!value) return "-";
+
+      try {
+        return new Date(value).toLocaleString();
+      } catch {
+        return value;
+      }
+    }
+
+    function safeLower(value) {
+      return String(value || "").toLowerCase();
+    }
+
+    function pillClass(status) {
+      const value = safeLower(status);
+
+      if (
+        value.includes("paid") ||
+        value.includes("complete") ||
+        value.includes("configured")
+      ) {
+        return "pill green";
+      }
+
+      if (
+        value.includes("cancel") ||
+        value.includes("failed") ||
+        value.includes("blocked") ||
+        value.includes("error")
+      ) {
+        return "pill red";
+      }
+
+      if (
+        value.includes("progress") ||
+        value.includes("contact") ||
+        value.includes("running")
+      ) {
+        return "pill blue";
+      }
+
+      return "pill orange";
+    }
+
+    function normalizeInstallLabel(value) {
+      const installType = safeLower(value);
+
+      if (
+        installType.includes("nexus") ||
+        installType.includes("guided")
+      ) {
+        return "Nexus Guided Install";
+      }
+
+      return "Self-serve";
+    }
+
+    function isGuidedOrder(row) {
+      const order = row.order || {};
+      const customerAutomation = row.customer_automation || {};
+      const installRequest = row.install_request || null;
+
+      const installText = [
+        order.install_type,
+        customerAutomation.install_type,
+        order.order_status,
+        customerAutomation.setup_status
+      ].map(safeLower).join(" ");
+
+      return Boolean(
+        installRequest ||
+        installText.includes("nexus") ||
+        installText.includes("guided")
+      );
+    }
+
+    function getOrderDisplayStatus(row) {
+      const order = row.order || {};
+      const customerAutomation = row.customer_automation || {};
+      const installRequest = row.install_request || null;
+
+      if (installRequest?.status) {
+        return installRequest.status;
+      }
+
+      if (customerAutomation?.setup_status) {
+        return customerAutomation.setup_status;
+      }
+
+      if (order?.order_status) {
+        return order.order_status;
+      }
+
+      return order.payment_status || "pending";
+    }
+
+    function rowMatchesFilter(row, filter) {
+      const order = row.order || {};
+      const customerAutomation = row.customer_automation || {};
+      const installRequest = row.install_request || null;
+
+      const paymentStatus = safeLower(order.payment_status);
+      const orderStatus = safeLower(order.order_status);
+      const setupStatus = safeLower(customerAutomation.setup_status);
+      const installStatus = safeLower(installRequest?.status);
+
+      if (filter === "all") return true;
+
+      if (filter === "paid") {
+        return paymentStatus === "paid";
+      }
+
+      if (filter === "guided") {
+        return isGuidedOrder(row);
+      }
+
+      if (filter === "needs_install_request") {
+        return isGuidedOrder(row) && !installRequest;
+      }
+
+      if (filter === "pending") {
+        return (
+          orderStatus.includes("pending") ||
+          setupStatus.includes("needed") ||
+          installStatus === "pending"
+        );
+      }
+
+      if (filter === "in_progress") {
+        return (
+          installStatus === "in_progress" ||
+          setupStatus.includes("progress")
+        );
+      }
+
+      if (filter === "completed") {
+        return (
+          installStatus === "completed" ||
+          orderStatus.includes("completed") ||
+          setupStatus === "completed"
+        );
+      }
+
+      if (filter === "cancelled") {
+        return (
+          installStatus === "cancelled" ||
+          orderStatus.includes("cancel") ||
+          setupStatus.includes("cancel")
+        );
+      }
+
+      return true;
+    }
+
+    async function initOrdersPage() {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      const profile = await NexusDB.requireAdminAccess();
+
+      if (!profile) return;
+
+      await loadOrders();
+    }
+
+    async function loadOrders() {
+      const list = document.getElementById("ordersList");
+
+      list.innerHTML = `
+        <div class="admin-orders-empty">
+          Loading orders...
+        </div>
+      `;
+
+      const { data, error } = await NexusDB.listAdminOrders();
+
+      if (error) {
+        list.innerHTML = `
+          <div class="admin-orders-empty">
+            ${escapeHtml(error.message || "Could not load orders.")}
+          </div>
+        `;
+
+        console.error("Admin orders error:", error);
+        return;
+      }
+
+      allOrderRows = data || [];
+
+      renderOrders();
+    }
+
+    function renderStats() {
+      const total = allOrderRows.length;
+
+      const paid = allOrderRows.filter(row => {
+        return safeLower(row.order?.payment_status) === "paid";
+      }).length;
+
+      const guided = allOrderRows.filter(row => isGuidedOrder(row)).length;
+
+      const completed = allOrderRows.filter(row => {
+        const status = safeLower(getOrderDisplayStatus(row));
+        return status.includes("complete");
+      }).length;
+
+      document.getElementById("totalOrders").textContent = total;
+      document.getElementById("paidOrders").textContent = paid;
+      document.getElementById("guidedOrders").textContent = guided;
+      document.getElementById("completedOrders").textContent = completed;
+    }
+
+    function renderOrders() {
+      renderStats();
+
+      const list = document.getElementById("ordersList");
+      const filter = document.getElementById("orderFilter")?.value || "all";
+
+      const rows = allOrderRows.filter(row => rowMatchesFilter(row, filter));
+
+      if (!rows.length) {
+        list.innerHTML = `
+          <div class="admin-orders-empty">
+            No orders found for this filter.
+          </div>
+        `;
+
+        return;
+      }
+
+      list.innerHTML = rows.map((row) => {
+        const index = allOrderRows.indexOf(row);
+        const order = row.order || {};
+        const automation = row.automation || {};
+        const customerAutomation = row.customer_automation || {};
+        const installRequest = row.install_request || null;
+
+        const title =
+          automation.title ||
+          order.automation_title ||
+          customerAutomation.name ||
+          "Automation";
+
+        const buyer =
+          order.buyer_name ||
+          order.buyer_email ||
+          "Buyer";
+
+        const buyerEmail = order.buyer_email || "";
+        const company = order.buyer_company || "";
+
+        const paymentStatus = order.payment_status || "pending";
+        const displayStatus = getOrderDisplayStatus(row);
+        const installLabel = normalizeInstallLabel(order.install_type || customerAutomation.install_type);
+
+        const amount = order.price_display || order.amount_display || "";
+        const needsInstallRequest = isGuidedOrder(row) && !installRequest;
+
+        return `
+          <article class="admin-order-row">
+            <div class="admin-order-main">
+              <strong>${escapeHtml(title)}</strong>
+              <span>${escapeHtml(buyer)}</span>
+              <small>${escapeHtml(buyerEmail)}</small>
+              ${company ? `<small>${escapeHtml(company)}</small>` : ""}
+            </div>
+
+            <div class="admin-order-statuses">
+              <span class="${pillClass(paymentStatus)}">${escapeHtml(paymentStatus)}</span>
+              <span class="${pillClass(displayStatus)}">${escapeHtml(displayStatus)}</span>
+              ${
+                needsInstallRequest
+                  ? `<span class="pill orange">install form needed</span>`
+                  : ""
+              }
+            </div>
+
+            <div class="admin-order-install">
+              <strong>${escapeHtml(installLabel)}</strong>
+              <span>${escapeHtml(amount)}</span>
+            </div>
+
+            <div class="admin-order-date">
+              <strong>${escapeHtml(dateLabel(order.created_at))}</strong>
+              <span>${escapeHtml(order.currency || "")}</span>
+            </div>
+
+            <div class="admin-order-action">
+              <button class="btn btn-primary btn-small" type="button" onclick="openOrderModal(${index})">
+                View
+              </button>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function normalizeSchema(value) {
+      if (Array.isArray(value)) return value;
+
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      return [];
+    }
+
+    function fieldOptions(field) {
+      const options = Array.isArray(field.options) ? field.options : [];
+
+      return options.map(option => {
+        if (option && typeof option === "object") {
+          return {
+            label: option.label || option.value || "",
+            value: option.value || option.label || ""
+          };
+        }
+
+        return {
+          label: String(option || ""),
+          value: String(option || "")
+        };
+      }).filter(option => option.value);
+    }
+
+    function renderAdminSetupControl(field, existingAnswers, isCredential, hasSubmitted) {
+      const name = field.name || field.key || "";
+      if (!name) return "";
+
+      const label = field.label || name;
+      const type = String(field.type || "").toLowerCase();
+      const isSecret = isCredential || type === "secret";
+      const placeholder = field.placeholder || (isSecret ? "Leave blank to keep saved value" : "");
+      const description = field.description || "";
+      const required = field.required && !(isSecret && hasSubmitted) ? "required" : "";
+      const value = isSecret ? "" : (existingAnswers[name] || "");
+      const options = fieldOptions(field);
+
+      if (options.length || type === "select") {
+        return `
+          <div>
+            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            <select class="select" name="${escapeHtml(name)}" data-admin-setup-field="1" ${required}>
+              <option value="">Choose...</option>
+              ${options.map(option => `
+                <option value="${escapeHtml(option.value)}" ${String(value) === String(option.value) ? "selected" : ""}>
+                  ${escapeHtml(option.label)}
+                </option>
+              `).join("")}
+            </select>
+            ${description ? `<small>${escapeHtml(description)}</small>` : ""}
+          </div>
+        `;
+      }
+
+      if (type === "textarea" || type === "long_text") {
+        return `
+          <div class="full">
+            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            <textarea class="textarea" name="${escapeHtml(name)}" data-admin-setup-field="1" placeholder="${escapeHtml(placeholder)}" ${required}>${escapeHtml(value)}</textarea>
+            ${description ? `<small>${escapeHtml(description)}</small>` : ""}
+          </div>
+        `;
+      }
+
+      return `
+        <div>
+          <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+          <input
+            class="input"
+            name="${escapeHtml(name)}"
+            data-admin-setup-field="1"
+            type="${isSecret ? "password" : ["text", "email", "url", "number", "date", "time"].includes(type) ? type : "text"}"
+            value="${escapeHtml(value)}"
+            placeholder="${escapeHtml(placeholder)}"
+            ${required}
+          >
+          <small>
+            ${escapeHtml(description || (isSecret ? "Secret values are saved for this customer automation and are not shown again." : ""))}
+            ${isSecret && hasSubmitted ? " Leave blank to keep the saved value." : ""}
+          </small>
+        </div>
+      `;
+    }
+
+    function renderAdminSetupBox(row) {
+      const automation = row.automation || {};
+      const customerAutomation = row.customer_automation || {};
+      const latestSubmission = row.latest_setup_submission || {};
+      const setupSchema = normalizeSchema(automation.setup_schema);
+      const credentialSchema = normalizeSchema(automation.credential_schema);
+      const existingAnswers = latestSubmission.answers || latestSubmission.setup_answers || {};
+      const hasSubmitted = Boolean(latestSubmission.id);
+
+      if (!customerAutomation?.id) {
+        return `
+          <div class="admin-order-detail-box">
+            <h3>Setup on behalf</h3>
+            <p>Create the customer automation row first by confirming payment or opening buyer access.</p>
+          </div>
+        `;
+      }
+
+      if (!setupSchema.length && !credentialSchema.length) {
+        return `
+          <div class="admin-order-detail-box">
+            <h3>Setup on behalf</h3>
+            <p>This product does not have setup fields configured.</p>
+            <div class="admin-order-modal-actions" style="justify-content:flex-start;margin-top:1rem">
+              <button class="btn btn-secondary btn-small" type="button" onclick="runAdminCustomerAutomation()">
+                Run now
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="admin-order-detail-box">
+          <h3>Guided install setup</h3>
+          <p>These are the exact setup fields from this product. Fill them for the customer, then run the workflow.</p>
+
+          <form id="adminSetupForm" class="form-grid" style="margin-top:1rem">
+            ${setupSchema.map(field => renderAdminSetupControl(field, existingAnswers, false, hasSubmitted)).join("")}
+
+            ${
+              credentialSchema.length
+                ? `
+                  <div class="full">
+                    <h4>Credentials / access</h4>
+                    <p>Secret fields are never prefilled. Leave blank to keep saved credentials.</p>
+                  </div>
+                  ${credentialSchema.map(field => renderAdminSetupControl(field, existingAnswers, true, hasSubmitted)).join("")}
+                `
+                : ""
+            }
+          </form>
+
+          <div class="admin-order-modal-actions" style="justify-content:flex-start;margin-top:1rem">
+            <button class="btn btn-primary btn-small" type="button" onclick="completeGuidedInstallRun()">
+              Save, provision and run
+            </button>
+
+            <button class="btn btn-secondary btn-small" type="button" onclick="saveAdminSetupDetails()">
+              Save setup
+            </button>
+
+            <button class="btn btn-secondary btn-small" type="button" onclick="provisionAdminCustomerWorkflow()">
+              Provision workflow
+            </button>
+
+            <button class="btn btn-primary btn-small" type="button" onclick="runAdminCustomerAutomation()">
+              Run now
+            </button>
+          </div>
+
+          <div id="adminSetupResult"></div>
+        </div>
+      `;
+    }
+
+    function openOrderModal(index) {
+      currentOrderRow = allOrderRows[index];
+
+      if (!currentOrderRow) return;
+
+      const order = currentOrderRow.order || {};
+      const automation = currentOrderRow.automation || {};
+      const customerAutomation = currentOrderRow.customer_automation || {};
+      const installRequest = currentOrderRow.install_request || null;
+
+      const title =
+        automation.title ||
+        order.automation_title ||
+        customerAutomation.name ||
+        "Order";
+
+      document.getElementById("orderModalTitle").textContent = title;
+      document.getElementById("orderAdminNotes").value = installRequest?.admin_notes || "";
+
+      const installLabel = normalizeInstallLabel(order.install_type || customerAutomation.install_type);
+      const displayStatus = getOrderDisplayStatus(currentOrderRow);
+
+      document.getElementById("orderModalBody").innerHTML = `
+        <div class="admin-order-detail-box">
+          <h3>Order</h3>
+
+          <p><strong>Product:</strong> ${escapeHtml(title)}</p>
+          <p><strong>Buyer:</strong> ${escapeHtml(order.buyer_name || "")}</p>
+          <p><strong>Email:</strong> ${escapeHtml(order.buyer_email || "")}</p>
+          <p><strong>Company:</strong> ${escapeHtml(order.buyer_company || "")}</p>
+          <p><strong>Payment status:</strong> ${escapeHtml(order.payment_status || "")}</p>
+          <p><strong>Order status:</strong> ${escapeHtml(order.order_status || "")}</p>
+          <p><strong>Install type:</strong> ${escapeHtml(installLabel)}</p>
+          <p><strong>Price:</strong> ${escapeHtml(order.price_display || "")}</p>
+          <p><strong>Created:</strong> ${escapeHtml(dateLabel(order.created_at))}</p>
+        </div>
+
+        <div class="admin-order-detail-box">
+          <h3>Customer automation</h3>
+
+          ${
+            customerAutomation?.id
+              ? `
+                <p><strong>Status:</strong> ${escapeHtml(customerAutomation.status || "")}</p>
+                <p><strong>Setup:</strong> ${escapeHtml(customerAutomation.setup_status || "")}</p>
+                <p><strong>Runtime:</strong> ${escapeHtml(customerAutomation.runtime_status || "")}</p>
+                <p><strong>Health:</strong> ${escapeHtml(customerAutomation.health_status || "")}</p>
+                ${
+                  customerAutomation.last_error_message
+                    ? `<p><strong>Last error:</strong> ${escapeHtml(customerAutomation.last_error_message)}</p>`
+                    : ""
+                }
+              `
+              : `
+                <p>No customer automation row exists yet.</p>
+              `
+          }
+        </div>
+
+        ${renderAdminSetupBox(currentOrderRow)}
+
+        <div class="admin-order-detail-box">
+          <h3>Buyer intake notes</h3>
+
+          ${
+            installRequest
+              ? `
+                <p><strong>Status:</strong> ${escapeHtml(installRequest.status || "")}</p>
+                <p><strong>Main contact:</strong> ${escapeHtml(installRequest.contact_name || "")}</p>
+                <p><strong>Main email:</strong> ${escapeHtml(installRequest.contact_email || "")}</p>
+                <p><strong>Main phone:</strong> ${escapeHtml(installRequest.contact_phone || "")}</p>
+                <p><strong>Company:</strong> ${escapeHtml(installRequest.company_name || "")}</p>
+
+                <hr>
+
+                <p><strong>Technical contact:</strong> ${escapeHtml(installRequest.technical_contact_name || "")}</p>
+                <p><strong>Technical email:</strong> ${escapeHtml(installRequest.technical_contact_email || "")}</p>
+                <p><strong>Technical phone:</strong> ${escapeHtml(installRequest.technical_contact_phone || "")}</p>
+                <p><strong>Preferred contact method:</strong> ${escapeHtml(installRequest.preferred_contact_method || "")}</p>
+                <p><strong>Preferred contact time:</strong> ${escapeHtml(installRequest.preferred_contact_time || "")}</p>
+
+                <hr>
+
+                <p><strong>Tools involved:</strong><br>${escapeHtml(installRequest.tools_involved || "")}</p>
+                <p><strong>Access notes:</strong><br>${escapeHtml(installRequest.account_access_notes || "")}</p>
+                <p><strong>Buyer notes:</strong><br>${escapeHtml(installRequest.install_notes || "")}</p>
+              `
+              : isGuidedOrder(currentOrderRow)
+                ? `
+                  <p class="admin-order-warning">
+                    No separate buyer intake was submitted. You can still complete guided install by filling the product setup fields above.
+                  </p>
+                `
+                : `
+                  <p>This is a self-serve order. No guided install request is required.</p>
+                `
+          }
+        </div>
+      `;
+
+      const modal = document.getElementById("orderModal");
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeOrderModal() {
+      const modal = document.getElementById("orderModal");
+
+      if (!modal) return;
+
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    function collectAdminSetupAnswers() {
+      const form = document.getElementById("adminSetupForm");
+      const answers = {};
+
+      if (!form) return answers;
+
+      const fields = form.querySelectorAll("[data-admin-setup-field]");
+
+      fields.forEach(field => {
+        const name = field.getAttribute("name") || "";
+        if (!name) return;
+
+        answers[name] = String(field.value || "").trim();
+      });
+
+      return answers;
+    }
+
+    function setAdminSetupResult(message, isError) {
+      const target = document.getElementById("adminSetupResult");
+
+      if (!target) return;
+
+      target.innerHTML = `
+        <div class="${isError ? "error" : "success"}" style="margin-top:1rem">
+          ${escapeHtml(message)}
+        </div>
+      `;
+    }
+
+    async function saveAdminSetupDetails(options = {}) {
+      if (!currentOrderRow?.customer_automation?.id) {
+        NexusUI.toast("Customer automation row is missing.");
+        return { ok: false, error: "Customer automation row is missing." };
+      }
+
+      const form = document.getElementById("adminSetupForm");
+      if (form && typeof form.reportValidity === "function" && !form.reportValidity()) {
+        return { ok: false, error: "Please complete the required setup fields." };
+      }
+
+      const answers = collectAdminSetupAnswers();
+
+      const { data, error } = await NexusDB.submitAutomationSetup({
+        customer_automation_id: currentOrderRow.customer_automation.id,
+        answers,
+        skip_runtime_trigger: true
+      });
+
+      if (error) {
+        const message = error.message || "Could not save setup details.";
+        if (!options.quiet) {
+          NexusUI.toast(message);
+          setAdminSetupResult(message, true);
+        }
+        return { ok: false, error: message };
+      }
+
+      if (!options.quiet) {
+        NexusUI.toast("Setup details saved.");
+        setAdminSetupResult(data?.message || "Setup details saved. Provision the workflow when ready.", false);
+        await loadOrders();
+      }
+
+      return { ok: true, data };
+    }
+
+    async function provisionAdminCustomerWorkflow(options = {}) {
+      if (!currentOrderRow?.customer_automation?.id) {
+        NexusUI.toast("Customer automation row is missing.");
+        return { ok: false, error: "Customer automation row is missing." };
+      }
+
+      const { data, error } = await NexusDB.provisionCustomerWorkflow(
+        currentOrderRow.customer_automation.id
+      );
+
+      if (error) {
+        const message = error.message || "Could not provision workflow.";
+        if (!options.quiet) {
+          NexusUI.toast(message);
+          setAdminSetupResult(message, true);
+        }
+        return { ok: false, error: message };
+      }
+
+      if (!options.quiet) {
+        NexusUI.toast("Customer workflow provisioned.");
+        setAdminSetupResult(
+          `Workflow provisioned. Webhook: ${data?.webhook_url || "saved to customer automation"}`,
+          false
+        );
+        await loadOrders();
+      }
+
+      return { ok: true, data };
+    }
+
+    async function runAdminCustomerAutomation(options = {}) {
+      if (!currentOrderRow?.customer_automation?.id) {
+        NexusUI.toast("Customer automation row is missing.");
+        return { ok: false, error: "Customer automation row is missing." };
+      }
+
+      const { data, error } = await NexusDB.runScheduledAutomation({
+        action: "run_one",
+        customer_automation_id: currentOrderRow.customer_automation.id,
+        advance_schedule: true
+      });
+
+      if (error) {
+        const message = error.message || "Could not run automation.";
+        if (!options.quiet) {
+          NexusUI.toast(message);
+          setAdminSetupResult(message, true);
+        }
+        return { ok: false, error: message };
+      }
+
+      const firstResult = data?.results?.[0] || {};
+      const message = firstResult.status === "triggered"
+        ? "Automation run started. Output will appear in the buyer dashboard when the workflow finishes."
+        : firstResult.reason || "Run request completed.";
+
+      if (!options.quiet) {
+        NexusUI.toast(message);
+        setAdminSetupResult(message, firstResult.status === "error");
+        await loadOrders();
+      }
+
+      return {
+        ok: firstResult.status !== "error",
+        data,
+        result: firstResult,
+        message
+      };
+    }
+
+    async function completeGuidedInstallRun() {
+      if (!currentOrderRow?.customer_automation?.id) {
+        NexusUI.toast("Customer automation row is missing.");
+        return;
+      }
+
+      const primaryButton = Array.from(document.querySelectorAll("button"))
+        .find(button => button.textContent.trim() === "Save, provision and run");
+      const originalText = primaryButton ? primaryButton.textContent : "";
+
+      if (primaryButton) {
+        primaryButton.disabled = true;
+        primaryButton.textContent = "Running...";
+      }
+
+      setAdminSetupResult("Saving setup details...", false);
+
+      const saveResult = await saveAdminSetupDetails({ quiet: true });
+      if (!saveResult.ok) {
+        setAdminSetupResult(saveResult.error || "Could not save setup details.", true);
+        NexusUI.toast(saveResult.error || "Could not save setup details.");
+        if (primaryButton) {
+          primaryButton.disabled = false;
+          primaryButton.textContent = originalText;
+        }
+        return;
+      }
+
+      setAdminSetupResult("Provisioning customer workflow...", false);
+
+      const provisionResult = await provisionAdminCustomerWorkflow({ quiet: true });
+      if (!provisionResult.ok) {
+        setAdminSetupResult(provisionResult.error || "Could not provision workflow.", true);
+        NexusUI.toast(provisionResult.error || "Could not provision workflow.");
+        if (primaryButton) {
+          primaryButton.disabled = false;
+          primaryButton.textContent = originalText;
+        }
+        return;
+      }
+
+      setAdminSetupResult("Starting workflow run...", false);
+
+      const runResult = await runAdminCustomerAutomation({ quiet: true });
+      if (!runResult.ok) {
+        setAdminSetupResult(runResult.error || runResult.message || "Could not start workflow.", true);
+        NexusUI.toast(runResult.error || runResult.message || "Could not start workflow.");
+        if (primaryButton) {
+          primaryButton.disabled = false;
+          primaryButton.textContent = originalText;
+        }
+        return;
+      }
+
+      const webhookUrl = provisionResult.data?.webhook_url || "customer workflow webhook";
+      const message = `Guided install run started. Nexus used ${webhookUrl}. The customer will see the output when the workflow calls back.`;
+
+      setAdminSetupResult(message, false);
+      NexusUI.toast("Guided install run started.");
+
+      if (primaryButton) {
+        primaryButton.disabled = false;
+        primaryButton.textContent = originalText;
+      }
+
+      await loadOrders();
+    }
+
+async function updateInstallStatus(status) {
+  if (!currentOrderRow) return;
+
+  const installRequest = currentOrderRow.install_request;
+  const customerAutomation = currentOrderRow.customer_automation;
+  const order = currentOrderRow.order || {};
+  const adminNotes = document.getElementById("orderAdminNotes").value || "";
+
+  if (!isGuidedOrder(currentOrderRow)) {
+    NexusUI.toast("This order is self-serve. There is no guided install to update.");
+    return;
+  }
+
+  if (!customerAutomation?.id) {
+    NexusUI.toast("Customer automation row is missing. Open the buyer dashboard once or run the automation recovery first.");
+    return;
+  }
+
+  if (status === "completed") {
+    const confirmed = await NexusUI.confirmDialog({
+      title: "Mark install complete?",
+      message: "This will update the order and customer automation status.",
+      confirmText: "Mark complete"
+    });
+
+    if (!confirmed) return;
+  }
+
+  const { data, error } = await NexusDB.updateAdminInstallRequest({
+    install_request_id: installRequest?.id || "",
+    customer_automation_id: customerAutomation.id,
+    order_id: order.id || "",
+    status,
+    admin_notes: adminNotes
+  });
+
+  if (error) {
+    NexusUI.toast(error.message || "Could not update guided install.");
+    console.error("Guided install update error:", error);
+    return;
+  }
+
+  NexusUI.toast(data?.message || "Guided install updated.");
+  closeOrderModal();
+  await loadOrders();
+}
+    document.addEventListener("DOMContentLoaded", initOrdersPage);
+  </script>
+</body>
+</html>
