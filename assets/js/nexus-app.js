@@ -3745,6 +3745,13 @@ key === "detected_placeholders" ||
     });
   }
 
+  if (typeof NexusAdminUI !== "undefined" && typeof NexusAdminUI.bindUnifiedFormSubmission === "function") {
+    NexusAdminUI.currentSavedProduct = existingProduct || NexusAdminUI.currentSavedProduct;
+    NexusAdminUI.bindUnifiedFormSubmission(form);
+    await NexusAdminUI.initializeProductWorkspace(existingProduct);
+    return;
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 

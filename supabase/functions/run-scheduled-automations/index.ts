@@ -435,6 +435,13 @@ function subscriptionIsActive(order: any) {
   if (paymentStatus !== "paid") return false;
 
   if (
+    order?.stripe_cancel_at_period_end === true ||
+    cleanString(order?.stripe_cancel_at_period_end).toLowerCase() === "true"
+  ) {
+    return false;
+  }
+
+  if (
     orderStatus.includes("cancel") ||
     orderStatus.includes("expired") ||
     orderStatus.includes("failed")
@@ -1150,11 +1157,30 @@ async function runCandidate(adminClient: any, row: any, options: {
     ? nowIso()
     : cleanString(customerAutomation.next_run_at) || nowIso();
 
+  const cancellationRequested = order?.stripe_cancel_at_period_end === true ||
+    cleanString(order?.stripe_cancel_at_period_end).toLowerCase() === "true";
+  const orderStatus = cleanString(order?.order_status).toLowerCase();
+  const stripeStatus = cleanString(order?.stripe_subscription_status).toLowerCase();
+  const subscriptionCancelled = cancellationRequested ||
+    orderStatus.includes("cancel") ||
+    stripeStatus === "canceled";
   const canBypassInactiveSubscription = isManualRun &&
     options.allowInactiveSubscription === true &&
-    eligibility.reason === "subscription_not_active";
+    eligibility.reason === "subscription_not_active" &&
+    !subscriptionCancelled;
 
   if (!eligibility.ok && !canBypassInactiveSubscription) {
+    if (!isManualRun && ["subscription_not_active", "payment_not_paid"].includes(eligibility.reason)) {
+      const cancelled = subscriptionCancelled;
+
+      await updateCustomerAutomation(adminClient, customerAutomation.id, {
+        schedule_status: cancelled ? "cancelled" : "paused",
+        next_run_at: null,
+        ...(cancelled ? { health_status: "cancelled" } : {}),
+        updated_at: nowIso(),
+      });
+    }
+
     return {
       customer_automation_id: customerAutomation.id,
       status: "skipped",

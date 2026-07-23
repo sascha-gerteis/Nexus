@@ -312,8 +312,7 @@ async function loadCredentialCandidatesForProduct(adminClient: any, product: any
       return !credentialDeveloperId && cleanString(credential.owner_role) === "admin";
     }
 
-    return credentialDeveloperId === productDeveloperId ||
-      (!credentialDeveloperId && cleanString(credential.owner_role) === "admin");
+    return credentialDeveloperId === productDeveloperId;
   });
 }
 

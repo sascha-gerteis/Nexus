@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260723-admin-product-parity">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -792,6 +792,9 @@
             </div>
             <span class="pill blue">Beta</span>
           </div>
+          <div class="credential-action-row" style="margin-bottom:1rem">
+            <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openPythonEditor()">Open code editor</button>
+          </div>
           <div class="form-grid">
             <div class="full">
               <label>Python script</label>
@@ -887,12 +890,59 @@
 </section>
 
         <!-- =====================================================
-             SECTION 6: LISTS
+             SECTION 6: WORKFLOW READINESS
+        ====================================================== -->
+        <section class="admin-accordion open" id="adminWorkflowReadinessSection">
+          <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+            <div>
+              <span class="eyebrow">Step 6</span>
+              <h2>Credentials, test data, and readiness</h2>
+              <p>Use the same import checks, credential binding, and real technical test required in the developer workspace.</p>
+            </div>
+            <span class="accordion-icon">+</span>
+          </button>
+
+          <div class="admin-accordion-body">
+            <div class="admin-unified-workspace-grid">
+              <section class="credential-panel" id="adminReadinessPanel">
+                <h3>Product readiness</h3>
+                <p>Save the product to see its import, credentials, test, and publish status.</p>
+              </section>
+
+              <section class="credential-panel" id="adminCredentialPanel">
+                <div class="technical-test-head">
+                  <div>
+                    <h3>Workflow credentials</h3>
+                    <p>Scan the selected product, bind credentials from the secure Nexus vault, and run the hosted workflow check.</p>
+                  </div>
+                  <a class="btn btn-secondary btn-small" id="adminManageCredentialsLink" href="/pages/admin/credentials.html">Credential vault</a>
+                </div>
+                <div class="credential-action-row">
+                  <button class="btn btn-secondary btn-small" type="button" id="adminRefreshCredentialsButton" onclick="NexusAdminUI.scanProductCredentials()">Refresh credentials</button>
+                  <button class="btn btn-primary btn-small" type="button" id="adminApplyCredentialsButton" onclick="NexusAdminUI.applyProductCredentials()">Apply credentials & run check</button>
+                </div>
+                <div id="adminCredentialScanResult" class="runtime-import-result">Save the product first, then scan its workflow credentials.</div>
+                <div class="security-note">
+                  <strong>Credential security</strong>
+                  <p>Secrets stay in the Nexus credential vault and are only bound server-side. Do not paste provider keys into workflow JSON or buyer-facing fields.</p>
+                </div>
+              </section>
+            </div>
+
+            <section class="credential-panel technical-test-data-panel" id="adminTechnicalTestDataPanel">
+              <h3>Technical test data</h3>
+              <p>Save the product first. Nexus uses realistic setup values here for the required real workflow test.</p>
+            </section>
+          </div>
+        </section>
+
+        <!-- =====================================================
+             SECTION 7: LISTS
         ====================================================== -->
         <section class="admin-accordion">
           <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
             <div>
-              <span class="eyebrow">Step 6</span>
+              <span class="eyebrow">Step 7</span>
               <h2>Product details lists</h2>
               <p>Structured bullet points shown inside the product popup.</p>
             </div>
@@ -940,7 +990,7 @@
         <section class="admin-accordion">
           <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
             <div>
-              <span class="eyebrow">Step 7</span>
+              <span class="eyebrow">Step 8</span>
               <h2>Customization options</h2>
               <p>Optional buyer choices. Each can have its own preview.</p>
             </div>
@@ -1096,7 +1146,7 @@
         <section class="admin-accordion">
           <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
             <div>
-              <span class="eyebrow">Step 8</span>
+              <span class="eyebrow">Step 9</span>
               <h2>Internal notes</h2>
               <p>Private notes for admin/Nexus only.</p>
             </div>
@@ -1114,8 +1164,12 @@
         </section>
 
         <div class="product-editor-actions">
-          <button type="submit" class="btn btn-primary">
-            Save product
+          <button type="submit" class="btn btn-secondary" id="adminSaveDraftButton">
+            Save draft
+          </button>
+
+          <button type="button" class="btn btn-primary" id="adminPublishProductButton" onclick="NexusAdminUI.publishProduct()">
+            Publish product
           </button>
 
           <a class="btn btn-secondary" href="/pages/admin/automations.html">
@@ -1124,6 +1178,48 @@
         </div>
       </form>
     </main>
+  </div>
+
+  <div class="modal-backdrop" id="adminPythonEditorModal" hidden aria-hidden="true">
+    <div class="modal admin-python-editor-modal" role="dialog" aria-modal="true" aria-labelledby="adminPythonEditorTitle">
+      <div class="modal-main">
+        <div class="technical-test-head">
+          <div>
+            <span class="eyebrow">Python runner</span>
+            <h2 id="adminPythonEditorTitle">Python code editor</h2>
+            <p>Edit the script, packages, entrypoint, and timeout. Save test data before running the required real check.</p>
+          </div>
+          <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.closePythonEditor()">Close</button>
+        </div>
+        <div class="admin-python-editor-grid">
+          <label class="full">
+            <span>Script</span>
+            <textarea class="textarea code-textarea xlarge" id="adminPythonEditorScript" rows="22"></textarea>
+          </label>
+          <div class="admin-python-editor-side">
+            <label>
+              <span>Extra packages</span>
+              <textarea class="textarea code-textarea" id="adminPythonEditorRequirements" rows="8"></textarea>
+            </label>
+            <div class="form-grid">
+              <label>
+                <span>Entrypoint</span>
+                <input class="input" id="adminPythonEditorEntrypoint" value="run">
+              </label>
+              <label>
+                <span>Timeout</span>
+                <input class="input" id="adminPythonEditorTimeout" type="number" min="5" max="300" value="120">
+              </label>
+            </div>
+            <div class="credential-action-row">
+              <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.savePythonEditor(false)">Save script</button>
+              <button class="btn btn-primary btn-small" type="button" onclick="NexusAdminUI.savePythonEditor(true)">Save & run test</button>
+            </div>
+            <div id="adminPythonEditorLog" class="runtime-import-result">No Python technical test has run yet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="modal-backdrop" id="productModal">
@@ -1137,13 +1233,17 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
 <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
-  <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-app.js?v=20260723-admin-product-parity"></script>
   <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
 
  <script>
   const NexusAdminUI = {
     currentSavedProduct: null,
     importInProgress: false,
+    testProfile: null,
+    credentialScan: null,
+    workflowTestPoller: null,
+    unifiedFormBound: false,
 
     escapeHtml(value) {
       return String(value || "")
@@ -1675,6 +1775,7 @@
       const formData = new FormData(form);
       const currentId = this.getCurrentProductId();
       const existingProduct = options.existingProduct || this.currentSavedProduct || {};
+      const requestedStatus = String(options.statusOverride || formData.get("status") || "draft");
 
       const title = String(formData.get("title") || "").trim();
       const developerId = String(formData.get("developer_id") || "").trim();
@@ -1700,6 +1801,35 @@
 
       const runtimeTypeElement = document.querySelector("[name='runtime_type']");
       const workflowProvider = String(document.getElementById("workflowProvider")?.value || "n8n");
+      const sourceBlueprintText = String(document.getElementById("adminMakeBlueprintJson")?.value || "").trim();
+      let sourceBlueprint = existingProduct.make_blueprint || null;
+      if (sourceBlueprintText) {
+        try {
+          sourceBlueprint = JSON.parse(sourceBlueprintText);
+        } catch (error) {
+          throw new Error((workflowProvider === "zapier" ? "Zapier workflow" : "Make blueprint") + " must be valid JSON. " + error.message);
+        }
+      }
+
+      const stableJson = (value) => {
+        try {
+          return JSON.stringify(value || null);
+        } catch {
+          return "";
+        }
+      };
+      const normalizedWorkflowJson = ["python", "manual"].includes(workflowProvider) ? null : n8nWorkflowJson;
+      const workflowJsonChanged = Boolean(existingProduct.id) &&
+        stableJson(existingProduct.n8n_workflow_json) !== stableJson(normalizedWorkflowJson);
+      const pythonChanged = Boolean(existingProduct.id) && (
+        String(existingProduct.python_script_code || "") !== String(formData.get("python_script_code") || "") ||
+        String(existingProduct.python_requirements || "") !== String(formData.get("python_requirements") || "") ||
+        String(existingProduct.python_entrypoint || "run") !== String(formData.get("python_entrypoint") || "run") ||
+        Number(existingProduct.python_timeout_seconds || 120) !== Number(formData.get("python_timeout_seconds") || 120)
+      );
+      const providerChanged = Boolean(existingProduct.id) &&
+        String(existingProduct.workflow_source_platform || "") !== workflowProvider;
+      const runtimeChanged = workflowJsonChanged || pythonChanged || providerChanged;
 
       if ((workflowProvider === "n8n" || workflowProvider === "make" || workflowProvider === "zapier") && runtimeTypeElement) {
         runtimeTypeElement.value = "n8n_managed";
@@ -1718,7 +1848,7 @@
         badge: String(formData.get("badge") || ""),
         icon: String(formData.get("icon") || "AI").slice(0, 3).toUpperCase(),
         color: String(formData.get("color") || "blue"),
-        status: String(formData.get("status") || "draft"),
+        status: requestedStatus,
         featured: formData.get("featured") === "on",
 
         pricing_type: String(formData.get("pricing_type") || "custom_quote"),
@@ -1771,6 +1901,8 @@
         runtime_response_mode: String(formData.get("runtime_response_mode") || existingProduct.runtime_response_mode || "dashboard_output"),
         runtime_event_schema: runtimeEventSchema,
         workflow_source_platform: workflowProvider,
+        make_blueprint: ["make", "zapier"].includes(workflowProvider) ? sourceBlueprint : null,
+        make_import_session_id: ["make", "zapier"].includes(workflowProvider) ? existingProduct.make_import_session_id || null : null,
         python_script_code: String(formData.get("python_script_code") || ""),
         python_requirements: String(formData.get("python_requirements") || ""),
         python_entrypoint: String(formData.get("python_entrypoint") || "run"),
@@ -1797,16 +1929,24 @@
         output_schema: existingProduct.output_schema || {},
         output_mapping: existingProduct.output_mapping || {},
 
-        n8n_workflow_json: n8nWorkflowJson,
-        n8n_workflow_id: existingProduct.n8n_workflow_id || "",
-        n8n_workflow_name: existingProduct.n8n_workflow_name || "",
-        n8n_normalized_workflow_json: existingProduct.n8n_normalized_workflow_json || null,
-        n8n_import_status: existingProduct.n8n_import_status || "not_imported",
-        n8n_import_error: existingProduct.n8n_import_error || null,
-        n8n_last_synced_at: existingProduct.n8n_last_synced_at || null,
-        n8n_imported_at: existingProduct.n8n_imported_at || null,
-        n8n_webhook_url: existingProduct.n8n_webhook_url || "",
-        n8n_last_import_result: existingProduct.n8n_last_import_result || {},
+        n8n_workflow_json: normalizedWorkflowJson,
+        n8n_workflow_id: runtimeChanged ? "" : existingProduct.n8n_workflow_id || "",
+        n8n_workflow_name: runtimeChanged ? "" : existingProduct.n8n_workflow_name || "",
+        n8n_normalized_workflow_json: runtimeChanged ? null : existingProduct.n8n_normalized_workflow_json || null,
+        n8n_import_status: runtimeChanged ? "not_imported" : existingProduct.n8n_import_status || "not_imported",
+        n8n_import_error: runtimeChanged ? null : existingProduct.n8n_import_error || null,
+        n8n_last_synced_at: runtimeChanged ? null : existingProduct.n8n_last_synced_at || null,
+        n8n_imported_at: runtimeChanged ? null : existingProduct.n8n_imported_at || null,
+        n8n_webhook_url: runtimeChanged ? "" : existingProduct.n8n_webhook_url || "",
+        n8n_last_import_result: runtimeChanged ? {} : existingProduct.n8n_last_import_result || {},
+        n8n_last_test_status: runtimeChanged ? "not_tested" : existingProduct.n8n_last_test_status || "not_tested",
+        n8n_last_test_error: runtimeChanged ? "Workflow changed. Run a fresh real technical test before publishing." : existingProduct.n8n_last_test_error || null,
+        n8n_last_test_result: runtimeChanged ? null : existingProduct.n8n_last_test_result || null,
+        n8n_last_tested_at: runtimeChanged ? null : existingProduct.n8n_last_tested_at || null,
+        health_status: runtimeChanged ? "needs_recheck" : existingProduct.health_status || "unknown",
+        health_failure_reason: runtimeChanged ? "Workflow changed. Run a fresh real technical test before publishing." : existingProduct.health_failure_reason || null,
+        health_failure_details: runtimeChanged ? { workflow_changed: true, at: new Date().toISOString() } : existingProduct.health_failure_details || {},
+        health_next_check_at: runtimeChanged ? null : existingProduct.health_next_check_at || null,
 
         admin_run_instructions: String(formData.get("admin_run_instructions") || ""),
         internal_notes: String(formData.get("internal_notes") || ""),
@@ -1820,7 +1960,8 @@
       const {
         silent = false,
         syncStripe = true,
-        statusMessage = "Saving product..."
+        statusMessage = "Saving product...",
+        statusOverride = ""
       } = options;
 
       if (typeof NexusDB.upsertAutomation !== "function") {
@@ -1829,7 +1970,7 @@
 
       const existingId = this.getCurrentProductId();
       const existingProduct = await this.getExistingProduct(existingId);
-      const payload = this.buildProductPayloadFromForm({ existingProduct });
+      const payload = this.buildProductPayloadFromForm({ existingProduct, statusOverride });
 
       if (!silent) {
         this.toast(statusMessage);
@@ -1917,148 +2058,536 @@
         `);
       }
 
+      const pythonValues = {
+        python_script_code: product.python_script_code || "",
+        python_requirements: product.python_requirements || "",
+        python_entrypoint: product.python_entrypoint || "run",
+        python_timeout_seconds: product.python_timeout_seconds || 120
+      };
+      Object.entries(pythonValues).forEach(([name, value]) => {
+        const field = document.querySelector(`[name="${name}"]`);
+        if (field) field.value = value;
+      });
+      this.inferWorkflowProviderFromRuntime();
       this.scanWorkflowPlaceholders();
+      await this.initializeProductWorkspace(product);
     },
 
+    schemaArray(value) {
+      if (Array.isArray(value)) return value.filter((item) => item && typeof item === "object");
+      if (!value) return [];
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item === "object") : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    },
+
+    isPassingTestStatus(status) {
+      return ["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"]
+        .includes(String(status || "").toLowerCase());
+    },
+
+    testResultUsesSavedProfile(result = {}) {
+      const response = result.webhook_response && typeof result.webhook_response === "object" ? result.webhook_response : {};
+      return Boolean(result.used_test_profile || result.test_profile_id || response.used_test_profile || response.test_profile_id);
+    },
+
+    hasRealPassingTest(product = this.currentSavedProduct) {
+      return Boolean(this.isPassingTestStatus(product?.n8n_last_test_status) && this.testResultUsesSavedProfile(product?.n8n_last_test_result || {}));
+    },
+
+    workflowProvider(product = this.currentSavedProduct) {
+      const explicit = String(product?.workflow_source_platform || document.getElementById("workflowProvider")?.value || "").toLowerCase();
+      if (["n8n", "make", "zapier", "python", "manual"].includes(explicit)) return explicit;
+      if (String(product?.runtime_type || "") === "python_runner") return "python";
+      if (String(product?.runtime_type || "") === "n8n_managed") return "n8n";
+      return "manual";
+    },
+
+    bindUnifiedFormSubmission(form) {
+      if (!form || this.unifiedFormBound) return;
+      this.unifiedFormBound = true;
+      form.dataset.adminUnifiedSubmit = "true";
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        await this.saveDraft();
+      }, true);
+    },
+
+    async saveDraft() {
+      const button = document.getElementById("adminSaveDraftButton");
+      const originalText = button?.textContent || "Save draft";
+      if (button) { button.disabled = true; button.textContent = "Saving..."; }
+      try {
+        const saved = await this.saveProductFromEditor({ silent: true, syncStripe: false, statusOverride: "draft" });
+        const status = document.querySelector("[name='status']");
+        if (status) status.value = "draft";
+        await this.refreshProductWorkflowFields(saved.id);
+        this.toast("Draft saved. Product, setup, mappings, workflow, preview, and pricing are stored.");
+        return saved;
+      } catch (error) {
+        this.toast(error.message || "Could not save draft.");
+        return null;
+      } finally {
+        if (button) { button.disabled = false; button.textContent = originalText; }
+      }
+    },
+
+    async publishProduct() {
+      const button = document.getElementById("adminPublishProductButton");
+      const originalText = button?.textContent || "Publish product";
+      if (button) { button.disabled = true; button.textContent = "Checking..."; }
+      try {
+        let product = await this.saveProductFromEditor({ silent: true, syncStripe: false, statusOverride: "draft" });
+        await this.refreshProductWorkflowFields(product.id);
+        product = this.currentSavedProduct || product;
+        if (!["python", "manual"].includes(this.workflowProvider(product))) await this.scanProductCredentials({ silent: true });
+        const readiness = this.validatePublishReadiness(product);
+        this.renderAdminReadiness(product, readiness);
+        if (!readiness.ready) {
+          const blocked = readiness.checks.filter((check) => !check.ok).map((check) => check.label).join(", ");
+          const message = `Complete before publishing: ${blocked}.`;
+          this.setResult("n8nImportResult", `<div class="error"><strong>Product is not ready to publish.</strong><br>${this.escapeHtml(message)}</div>`);
+          document.getElementById("adminWorkflowReadinessSection")?.classList.add("open");
+          document.getElementById("adminReadinessPanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          this.toast(message);
+          return;
+        }
+        product = await this.saveProductFromEditor({ silent: true, syncStripe: true, statusOverride: "live" });
+        const status = document.querySelector("[name='status']");
+        if (status) status.value = "live";
+        await this.refreshProductWorkflowFields(product.id);
+        this.toast("Product published. The developer product readiness rules passed.");
+      } catch (error) {
+        this.toast(error.message || "Could not publish product.");
+      } finally {
+        if (button) { button.disabled = false; button.textContent = originalText; }
+      }
+    },
+
+    validatePublishReadiness(product = this.currentSavedProduct) {
+      const provider = this.workflowProvider(product);
+      const isCustom = String(product?.listing_type || "") === "custom_request";
+      const detectedSetup = product?.detected_placeholders?.setup;
+      const setupPlaceholders = Array.isArray(detectedSetup) ? detectedSetup : detectedSetup && typeof detectedSetup === "object" ? Object.values(detectedSetup).flat() : [];
+      const credentialErrors = Array.isArray(this.credentialScan?.errors) ? this.credentialScan.errors : [];
+      const checks = [
+        { label: "Product details", ok: Boolean(String(product?.title || "").trim() && String(product?.short_description || "").trim()), detail: "Title and short description are required." },
+        { label: "Buyer output preview", ok: Boolean(String(product?.preview_code || "").trim() || String(product?.preview_image_url || "").trim() || String(product?.preview_base64 || "").trim()), detail: "Add the exact sample output buyers should expect." },
+        { label: "Buyer setup schema", ok: !setupPlaceholders.length || this.schemaArray(product?.setup_schema).length > 0, detail: setupPlaceholders.length ? "The workflow uses buyer placeholders, so setup fields are required." : "No buyer setup placeholders detected." }
+      ];
+      if (!isCustom && provider === "python") {
+        checks.push(
+          { label: "Python script", ok: Boolean(String(product?.python_script_code || "").trim()), detail: "Save a Python script and entrypoint." },
+          { label: "Real technical test", ok: this.hasRealPassingTest(product), detail: "Run with saved Technical test data; a generated placeholder test is not enough." }
+        );
+      } else if (!isCustom && ["n8n", "make", "zapier"].includes(provider)) {
+        checks.push(
+          { label: "Hosted workflow", ok: Boolean(product?.n8n_import_status === "imported" && product?.n8n_workflow_id), detail: "Save, import, and test the hosted n8n workflow." },
+          { label: "Placeholder mappings", ok: String(product?.placeholder_validation_status || "not_checked") !== "needs_fix", detail: "Every setup and credential placeholder must resolve." },
+          { label: "Developer credentials", ok: credentialErrors.length === 0, detail: credentialErrors[0]?.message || "All detected credential requirements must be bound." },
+          { label: "Real technical test", ok: this.hasRealPassingTest(product), detail: "Run with saved Technical test data; an import-only test is not enough." }
+        );
+      }
+      return { ready: checks.every((check) => check.ok), checks };
+    },
+
+    renderAdminReadiness(product = this.currentSavedProduct, readiness = this.validatePublishReadiness(product)) {
+      const root = document.getElementById("adminReadinessPanel");
+      if (!root) return;
+      if (!product?.id) {
+        root.innerHTML = "<h3>Product readiness</h3><p>Save the product to see the same approval checks used for developer products.</p>";
+        return;
+      }
+      root.innerHTML = `
+        <div class="admin-readiness-head"><div><h3>Product readiness</h3><p>${readiness.ready ? "This draft meets the Nexus publish gates." : "Finish the blocked items before publishing."}</p></div><span class="${readiness.ready ? "pill green" : "pill orange"}">${readiness.ready ? "Ready" : "Action needed"}</span></div>
+        <div class="admin-readiness-grid">${readiness.checks.map((check) => `<article class="admin-readiness-item ${check.ok ? "ready" : "blocked"}"><span class="${check.ok ? "pill green" : "pill red"}">${check.ok ? "Good" : "Blocked"}</span><div><strong>${this.escapeHtml(check.label)}</strong><p>${this.escapeHtml(check.detail || "")}</p></div></article>`).join("")}</div>
+      `;
+    },
+    testFieldNeedsRealValue(field = {}) {
+      const name = String(field.name || "").toLowerCase();
+      const type = String(field.type || "").toLowerCase();
+      return Boolean(field.real_test_required || field.requires_real_value || ["file", "image", "spreadsheet", "sheet", "range"].includes(type) || /(sheet|spreadsheet|file|folder|range)_?(id|url|name)?$/.test(name));
+    },
+
+    renderAdminTestField(field = {}, values = {}, secret = false) {
+      const name = String(field.name || "").trim();
+      if (!name) return "";
+      const label = field.label || name.replaceAll("_", " ");
+      const value = values[name] ?? field.default ?? field.default_value ?? "";
+      const required = field.required || this.testFieldNeedsRealValue(field);
+      const attr = secret ? "data-admin-test-secret" : "data-admin-test-setup";
+      const type = String(field.type || (secret ? "password" : "text")).toLowerCase();
+      const options = Array.isArray(field.options) ? field.options : [];
+      let control = "";
+      if (type === "select" && options.length) {
+        control = `<select class="select" ${attr}="${this.escapeHtml(name)}"><option value="">Choose...</option>${options.map((option) => { const optionValue = typeof option === "object" ? option.value : option; const optionLabel = typeof option === "object" ? (option.label || option.value) : option; return `<option value="${this.escapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${this.escapeHtml(optionLabel)}</option>`; }).join("")}</select>`;
+      } else if (["textarea", "json"].includes(type)) {
+        const display = type === "json" && typeof value === "object" ? JSON.stringify(value, null, 2) : String(value || "");
+        control = `<textarea class="textarea ${type === "json" ? "code-textarea" : ""}" rows="4" ${attr}="${this.escapeHtml(name)}">${this.escapeHtml(display)}</textarea>`;
+      } else if (["checkbox", "boolean"].includes(type)) {
+        control = `<label class="checkbox-row"><input type="checkbox" ${attr}="${this.escapeHtml(name)}" ${value === true || String(value) === "true" ? "checked" : ""}> <span>Enabled</span></label>`;
+      } else {
+        const inputType = secret ? "password" : ["email", "url", "number"].includes(type) ? type : "text";
+        control = `<input class="input" type="${inputType}" ${attr}="${this.escapeHtml(name)}" value="${this.escapeHtml(String(value || ""))}" placeholder="${this.escapeHtml(field.placeholder || "")}">`;
+      }
+      return `<div class="admin-test-field"><label>${this.escapeHtml(label)}${required ? " *" : ""}</label>${control}${field.description || field.help_text ? `<small>${this.escapeHtml(field.description || field.help_text)}</small>` : ""}</div>`;
+    },
+
+    collectAdminTestValues(attribute) {
+      const values = {};
+      document.querySelectorAll(`[${attribute}]`).forEach((field) => {
+        const name = field.getAttribute(attribute);
+        if (!name) return;
+        if (field.type === "checkbox") values[name] = field.checked;
+        else if (field.type === "number" && field.value !== "") values[name] = Number(field.value);
+        else values[name] = field.value;
+      });
+      return values;
+    },
+
+    renderAdminTechnicalTestData(product = this.currentSavedProduct, profile = this.testProfile, message = "") {
+      const root = document.getElementById("adminTechnicalTestDataPanel");
+      if (!root) return;
+      if (!product?.id) {
+        root.innerHTML = "<h3>Technical test data</h3><p>Save the product first. Nexus uses realistic values here for the required real workflow test.</p>";
+        return;
+      }
+      if (String(product.listing_type || "") === "custom_request") {
+        root.innerHTML = "<h3>Technical test data</h3><p>Custom request listings do not require a hosted technical test.</p>";
+        return;
+      }
+      const setupSchema = this.schemaArray(product.setup_schema);
+      const provider = this.workflowProvider(product);
+      const isPythonProduct = provider === "python";
+      const credentialSchema = this.schemaArray(product.credential_schema);
+      const setupValues = profile?.setup_values || {};
+      const secretValues = profile?.secret_values || {};
+      const busy = /loading|running|saving/i.test(String(message || ""));
+      root.innerHTML = `
+        <div class="technical-test-head"><div><h3>Technical test data</h3><p>${isPythonProduct ? 'Use realistic buyer inputs. Python test keys are passed as <code>context["credentials"]</code>.' : "Use realistic buyer inputs and real customer-owned test credentials. Secrets are sent only in the test payload and are never written into workflow JSON."}</p></div><span class="${profile?.id ? "pill green" : "pill orange"}">${profile?.id ? "Saved profile" : "Not saved"}</span></div>
+        ${message ? `<div class="runtime-import-result compact">${this.escapeHtml(message)}</div>` : ""}
+        ${setupSchema.length ? `<div class="admin-technical-test-grid">${setupSchema.map((field) => this.renderAdminTestField(field, setupValues, false)).join("")}</div>` : `<div class="runtime-import-result compact">No buyer setup fields. Save an empty profile and run once to create real-test evidence.</div>`}
+        ${credentialSchema.length ? `<div class="runtime-import-result compact"><strong>${isPythonProduct ? "Python test credentials" : "Customer credential test values"}</strong><br>${isPythonProduct ? "Used only by the Python technical test." : "Use a test token/account here. Buyers provide their own credentials during setup."}</div><div class="admin-technical-test-grid">${credentialSchema.map((field) => this.renderAdminTestField(field, secretValues, true)).join("")}</div>` : ""}
+        <div class="credential-action-row"><button class="btn btn-secondary btn-small" type="button" id="adminReloadTestDataButton" ${busy ? "disabled" : ""}>Reload saved data</button><button class="btn btn-primary btn-small" type="button" id="adminSaveRunRealTestButton" ${busy ? "disabled" : ""}>Save & run real test</button><button class="btn btn-secondary btn-small" type="button" id="adminRunSavedRealTestButton" ${profile?.id && !busy ? "" : "disabled"}>Run saved real test</button></div>
+      `;
+      document.getElementById("adminReloadTestDataButton")?.addEventListener("click", () => this.loadAdminTestProfile(product.id));
+      document.getElementById("adminSaveRunRealTestButton")?.addEventListener("click", () => this.saveAdminTestProfile(true));
+      document.getElementById("adminRunSavedRealTestButton")?.addEventListener("click", (event) => this.runAdminRealTest(product.id, event.currentTarget));
+    },
+
+    async loadAdminTestProfile(automationId = this.getCurrentProductId()) {
+      const product = this.currentSavedProduct;
+      if (!automationId || !product?.id) { this.renderAdminTechnicalTestData(null); return; }
+      this.renderAdminTechnicalTestData(product, this.testProfile, "Loading saved Technical test data...");
+      try {
+        const { data, error } = await NexusDB.getAutomationTestProfile(automationId);
+        if (error) throw new Error(error.message || "Could not load Technical test data.");
+        this.testProfile = data?.profile || null;
+        this.renderAdminTechnicalTestData(this.currentSavedProduct || product, this.testProfile);
+      } catch (error) {
+        this.testProfile = null;
+        this.renderAdminTechnicalTestData(product, null, error.message || "Could not load Technical test data.");
+      }
+    },
+
+    async saveAdminTestProfile(runAfterSave = false) {
+      const product = this.currentSavedProduct;
+      if (!product?.id) { this.toast("Save the draft first."); return; }
+      const setupValues = this.collectAdminTestValues("data-admin-test-setup");
+      const enteredSecrets = this.collectAdminTestValues("data-admin-test-secret");
+      const secretValues = { ...(this.testProfile?.secret_values || {}) };
+      Object.entries(enteredSecrets).forEach(([key, value]) => { if (String(value ?? "").trim()) secretValues[key] = value; });
+      const missingSetup = this.schemaArray(product.setup_schema).filter((field) => (field.required || this.testFieldNeedsRealValue(field)) && !String(setupValues[field.name] ?? "").trim()).map((field) => field.label || field.name);
+      const missingSecrets = this.schemaArray(product.credential_schema).filter((field) => field.required !== false && !String(secretValues[field.name] ?? "").trim()).map((field) => field.label || field.name);
+      if (missingSetup.length || missingSecrets.length) {
+        const missing = [missingSetup.length ? `test values for ${missingSetup.join(", ")}` : "", missingSecrets.length ? `test credentials for ${missingSecrets.join(", ")}` : ""].filter(Boolean).join("; ");
+        this.toast(`Add ${missing}.`);
+        return;
+      }
+      this.renderAdminTechnicalTestData(product, this.testProfile, "Saving Technical test data...");
+      try {
+        const { data, error } = await NexusDB.saveAutomationTestProfile(product.id, { name: "Default test profile", setup_values: setupValues, secret_values: secretValues });
+        if (error) throw new Error(error.message || "Could not save Technical test data.");
+        this.testProfile = data?.profile || null;
+        this.renderAdminTechnicalTestData(product, this.testProfile);
+        this.toast(runAfterSave ? "Technical test data saved. Starting real test..." : "Technical test data saved.");
+        if (runAfterSave) await this.runAdminRealTest(product.id, document.getElementById("adminRunSavedRealTestButton"));
+      } catch (error) {
+        this.renderAdminTechnicalTestData(product, this.testProfile, error.message || "Could not save Technical test data.");
+        this.toast(error.message || "Could not save Technical test data.");
+      }
+    },
+
+    workflowTestFailureMessage(result = {}, fallback = "Workflow test did not pass.") {
+      const message = result.error_message || result.message || fallback;
+      const context = [result.error_node, result.error_node_type].filter(Boolean).join(" / ");
+      return context && !String(message).includes("Node:") ? `${message} Node: ${context}` : message;
+    },
+
+    async pollAdminWorkflowTest(automationId, initialResult = {}, message = "Workflow test is running") {
+      let result = initialResult || {};
+      for (let index = 0; index < 60 && String(result.status || "").toLowerCase() === "running"; index += 1) {
+        this.renderAdminTechnicalTestData(this.currentSavedProduct, this.testProfile, `${message} (${index + 1}/60)...`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const checked = await NexusDB.checkN8nWorkflowTest({ test_run_id: result.test_run_id, automation_id: automationId });
+        if (checked.error) throw new Error(checked.error.message || "Could not check workflow test.");
+        result = checked.data || result;
+      }
+      return result;
+    },
+
+    async runAdminRealTest(automationId = this.getCurrentProductId(), button = null) {
+      const product = this.currentSavedProduct;
+      if (!automationId || !product?.id) { this.toast("Save the draft first."); return; }
+      if (!this.testProfile?.id) { this.toast("Save Technical test data first."); document.getElementById("adminTechnicalTestDataPanel")?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+      const provider = this.workflowProvider(product);
+      if (provider === "python" && !String(product.python_script_code || "").trim()) { this.toast("Save the Python script first."); return; }
+      if (["n8n", "make", "zapier"].includes(provider) && (!product.n8n_workflow_id || product.n8n_import_status !== "imported")) { this.toast("Import the hosted workflow first."); return; }
+      const originalText = button?.textContent || "Run saved real test";
+      if (button) { button.disabled = true; button.textContent = "Running..."; }
+      this.renderAdminTechnicalTestData(product, this.testProfile, "Starting real technical test...");
+      try {
+        const started = await NexusDB.startN8nWorkflowTest(automationId, { force_new: true, skip_credential_binding: true, preserve_hosted_workflow: true, reason: "real_test_profile" });
+        if (started.error) throw new Error(started.error.message || "Real workflow test failed to start.");
+        let result = started.data || {};
+        if (!this.testResultUsesSavedProfile(result)) throw new Error("Nexus did not start with saved Technical test data. Save the profile again and retry.");
+        result = await this.pollAdminWorkflowTest(automationId, result, "Running real workflow check");
+        if (!this.isPassingTestStatus(result.status) || !this.testResultUsesSavedProfile(result)) throw new Error(this.workflowTestFailureMessage(result, "Real technical test failed."));
+        await this.refreshProductWorkflowFields(automationId);
+        this.toast("Real technical test passed.");
+      } catch (error) {
+        this.renderAdminTechnicalTestData(this.currentSavedProduct || product, this.testProfile, error.message || "Real technical test failed.");
+        this.toast(error.message || "Real technical test failed.");
+      } finally {
+        if (button) { button.disabled = false; button.textContent = originalText; }
+      }
+    },
+    renderAdminCredentialScan(data = this.credentialScan) {
+      const root = document.getElementById("adminCredentialScanResult");
+      if (!root) return;
+      if (!data) { root.innerHTML = "Save and import the workflow to scan credential requirements."; return; }
+      const slots = Array.isArray(data.slots) ? data.slots : [];
+      const errors = Array.isArray(data.errors) ? data.errors : [];
+      const bindings = Array.isArray(data.bindings) ? data.bindings : [];
+      const product = data.product || this.currentSavedProduct || {};
+      const groups = new Map();
+      slots.forEach((slot) => {
+        const key = String(slot.provider || slot.provider_label || slot.n8n_credential_type || slot.credential_type || "Credential");
+        if (!groups.has(key)) groups.set(key, { provider: key, slots: [], bindings: [], errors: [] });
+        groups.get(key).slots.push(slot);
+      });
+      bindings.forEach((binding) => {
+        const key = String(binding.provider || binding.provider_label || binding.n8n_credential_type || "Credential");
+        const target = groups.get(key) || Array.from(groups.values()).find((group) => group.slots.some((slot) => String(slot.n8n_credential_type || slot.credential_type || "") === String(binding.n8n_credential_type || "")));
+        if (target) target.bindings.push(binding);
+      });
+      errors.forEach((error) => {
+        const key = String(error.provider || error.provider_label || error.n8n_credential_type || "");
+        const target = groups.get(key) || Array.from(groups.values()).find((group) => group.slots.some((slot) => String(slot.node_name || "") === String(error.node_name || "")));
+        if (target) target.errors.push(error);
+      });
+      root.innerHTML = `
+        <div class="admin-credential-summary"><strong>${bindings.length}/${slots.length} node bindings applied</strong><span class="${errors.length ? "pill red" : "pill green"}">${errors.length ? `${errors.length} issue${errors.length === 1 ? "" : "s"}` : "Credential check clear"}</span></div>
+        <p>Workflow ${this.escapeHtml(product.n8n_workflow_id || "not imported")} · ${this.escapeHtml(product.n8n_import_status || "unknown")}</p>
+        <div class="admin-credential-list">${groups.size ? Array.from(groups.values()).map((group) => { const issue = group.errors[0]?.message || ""; const bound = group.bindings.length > 0 && !issue; const nodes = group.slots.map((slot) => slot.node_name || "Workflow node"); return `<article class="admin-credential-item"><div><strong>${this.escapeHtml(group.provider)}</strong><p>${this.escapeHtml(nodes.join(", "))}</p>${issue ? `<small class="error">${this.escapeHtml(issue)}</small>` : ""}</div><span class="${bound ? "pill green" : issue ? "pill red" : "pill orange"}">${bound ? "Bound" : issue ? "Missing" : "Detected"}</span></article>`; }).join("") : `<article class="admin-credential-item"><div><strong>No provider credentials detected</strong><p>This workflow may only use buyer setup fields.</p></div><span class="pill green">Clear</span></article>`}</div>
+      `;
+    },
+
+    async scanProductCredentials(options = {}) {
+      const product = this.currentSavedProduct;
+      const root = document.getElementById("adminCredentialScanResult");
+      if (!product?.id) { if (root) root.innerHTML = "Save the draft first."; return null; }
+      if (this.workflowProvider(product) === "python") {
+        this.credentialScan = { slots: [], errors: [], bindings: [], product };
+        if (root) root.innerHTML = "Python developer keys are stored in Technical test data and passed to <code>context[\"credentials\"]</code>.";
+        return this.credentialScan;
+      }
+      if (!product.n8n_workflow_id || product.n8n_import_status !== "imported") {
+        this.credentialScan = { slots: [], errors: [], bindings: [], product };
+        if (root) root.innerHTML = "Import the hosted workflow before scanning credentials.";
+        return this.credentialScan;
+      }
+      if (root && !options.silent) root.innerHTML = "Scanning workflow credentials...";
+      const { data, error } = await NexusDB.scanAutomationCredentials(product.id);
+      this.credentialScan = error
+        ? { slots: [], errors: [{ message: error.message || "Could not scan credentials." }], bindings: [], product }
+        : data || { slots: [], errors: [], bindings: [], product };
+      if (data?.product) this.currentSavedProduct = { ...product, ...data.product };
+      this.renderAdminCredentialScan(this.credentialScan);
+      this.renderAdminReadiness(this.currentSavedProduct);
+      return this.credentialScan;
+    },
+
+    async applyProductCredentials() {
+      const product = this.currentSavedProduct;
+      if (!product?.id) { this.toast("Save and import the product first."); return; }
+      const button = document.getElementById("adminApplyCredentialsButton");
+      const originalText = button?.textContent || "Apply credentials & run check";
+      if (button) { button.disabled = true; button.textContent = "Applying..."; }
+      try {
+        const { data, error } = await NexusDB.applyAutomationCredentials(product.id);
+        if (error) throw new Error(error.message || "Could not apply credentials.");
+        this.credentialScan = data || this.credentialScan;
+        this.renderAdminCredentialScan(this.credentialScan);
+        if (Array.isArray(data?.errors) && data.errors.length) throw new Error(data.errors.map((item) => item?.message).find(Boolean) || "Add or update the missing credentials first.");
+        if (button) button.textContent = "Running check...";
+        const started = await NexusDB.startN8nWorkflowTest(product.id, { force_new: true, skip_credential_binding: true, preserve_hosted_workflow: true, reason: "credential_update" });
+        if (started.error) throw new Error(started.error.message || "Workflow test failed to start.");
+        const result = await this.pollAdminWorkflowTest(product.id, started.data || {}, "Checking credentials");
+        if (!this.isPassingTestStatus(result.status)) throw new Error(this.workflowTestFailureMessage(result, "Credential check failed."));
+        await this.refreshProductWorkflowFields(product.id);
+        this.toast("Credentials applied and workflow check passed.");
+      } catch (error) {
+        this.toast(error.message || "Could not apply credentials.");
+        await this.scanProductCredentials({ silent: true });
+      } finally {
+        if (button) { button.disabled = false; button.textContent = originalText; }
+      }
+    },
+
+    openPythonEditor() {
+      const modal = document.getElementById("adminPythonEditorModal");
+      if (!modal) return;
+      document.getElementById("adminPythonEditorScript").value = document.querySelector("[name='python_script_code']")?.value || "";
+      document.getElementById("adminPythonEditorRequirements").value = document.querySelector("[name='python_requirements']")?.value || "";
+      document.getElementById("adminPythonEditorEntrypoint").value = document.querySelector("[name='python_entrypoint']")?.value || "run";
+      document.getElementById("adminPythonEditorTimeout").value = document.querySelector("[name='python_timeout_seconds']")?.value || "120";
+      const product = this.currentSavedProduct || {};
+      const result = product.n8n_last_test_result || {};
+      const log = document.getElementById("adminPythonEditorLog");
+      if (log) log.innerHTML = `<strong>Status:</strong> ${this.escapeHtml(product.n8n_last_test_status || "not tested")}<br><strong>Message:</strong> ${this.escapeHtml(product.n8n_last_test_error || result.message || "No Python technical test has run yet.")}`;
+      modal.hidden = false;
+      modal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("modal-open");
+    },
+
+    closePythonEditor() {
+      const modal = document.getElementById("adminPythonEditorModal");
+      if (!modal) return;
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("modal-open");
+    },
+
+    async savePythonEditor(runAfterSave = false) {
+      const values = {
+        python_script_code: document.getElementById("adminPythonEditorScript")?.value || "",
+        python_requirements: document.getElementById("adminPythonEditorRequirements")?.value || "",
+        python_entrypoint: document.getElementById("adminPythonEditorEntrypoint")?.value || "run",
+        python_timeout_seconds: document.getElementById("adminPythonEditorTimeout")?.value || "120"
+      };
+      Object.entries(values).forEach(([name, value]) => { const field = document.querySelector(`[name='${name}']`); if (field) field.value = value; });
+      try {
+        const saved = await this.saveProductFromEditor({ silent: true, syncStripe: false, statusOverride: "draft" });
+        await this.refreshProductWorkflowFields(saved.id);
+        this.toast("Python script saved.");
+        if (runAfterSave) {
+          if (!this.testProfile?.id) {
+            this.closePythonEditor();
+            document.getElementById("adminTechnicalTestDataPanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            this.toast("Save Technical test data, then run the Python test.");
+            return;
+          }
+          await this.runAdminRealTest(saved.id);
+          this.openPythonEditor();
+        }
+      } catch (error) {
+        const log = document.getElementById("adminPythonEditorLog");
+        if (log) log.innerHTML = `<div class="error">${this.escapeHtml(error.message || "Could not save Python script.")}</div>`;
+        this.toast(error.message || "Could not save Python script.");
+      }
+    },
+
+    async initializeProductWorkspace(product = this.currentSavedProduct) {
+      if (product?.id) this.currentSavedProduct = product;
+      const current = this.currentSavedProduct;
+      const credentialLink = document.getElementById("adminManageCredentialsLink");
+      if (credentialLink) credentialLink.href = current?.id ? `/pages/admin/credentials.html?automation_id=${encodeURIComponent(current.id)}` : "/pages/admin/credentials.html";
+      this.renderAdminReadiness(current);
+      this.renderAdminTechnicalTestData(current, this.testProfile);
+      if (!current?.id) return;
+      await this.loadAdminTestProfile(current.id);
+      if (!["python", "manual"].includes(this.workflowProvider(current)) && current.n8n_import_status === "imported") await this.scanProductCredentials({ silent: true });
+    },
     async importWorkflowToN8n() {
       const result = document.getElementById("n8nImportResult");
       const importButton = document.getElementById("importN8nWorkflowButton");
-      const originalText = importButton ? importButton.textContent : "Import / update n8n workflow";
-
+      const provider = String(document.getElementById("workflowProvider")?.value || "n8n").toLowerCase();
+      const originalText = importButton?.textContent || "Save, import & test";
       if (this.importInProgress) return;
-
-      const provider = String(document.getElementById("workflowProvider")?.value || "n8n");
-
-      if (provider !== "n8n" && provider !== "make") {
-        this.toast("This workflow platform is coming soon.");
-        if (result) {
-          result.innerHTML = `
-            <div class="error">
-              <strong>${this.escapeHtml(provider)} is coming soon.</strong><br>
-              For launch, only n8n workflows can be imported automatically.
-            </div>
-          `;
-        }
-        return;
-      }
-
-      if (typeof NexusDB.importN8nWorkflow !== "function") {
-        this.toast("Import function is missing in nexus-db.js.");
+      if (!["n8n", "make", "zapier", "python"].includes(provider)) {
+        this.toast("Manual products only need Save draft. No runtime import is required.");
         return;
       }
 
       this.importInProgress = true;
-
-      if (importButton) {
-        importButton.disabled = true;
-        importButton.textContent = "Saving product...";
-      }
-
+      if (importButton) { importButton.disabled = true; importButton.textContent = "Saving draft..."; }
       try {
-        if (result) {
-          result.innerHTML = "Saving latest product data before import...";
+        if (provider === "python") {
+          const script = String(document.querySelector("[name='python_script_code']")?.value || "").trim();
+          if (!script) throw new Error("Paste a Python script before saving and testing.");
+          const saved = await this.saveProductFromEditor({ silent: true, syncStripe: false, statusOverride: "draft" });
+          await this.refreshProductWorkflowFields(saved.id);
+          this.setResult("n8nImportResult", `<div class="success"><strong>Python script saved.</strong><br>Add realistic Technical test data below, then run the required real test.</div>`);
+          if (this.testProfile?.id) await this.runAdminRealTest(saved.id, importButton);
+          else document.getElementById("adminTechnicalTestDataPanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          this.toast(this.testProfile?.id ? "Python script saved and tested." : "Python script saved. Add Technical test data next.");
+          return;
         }
 
-        const runtimeType = document.querySelector("[name='runtime_type']");
-        if (runtimeType) runtimeType.value = "n8n_managed";
-
+        if (typeof NexusDB.importN8nWorkflow !== "function") throw new Error("Import function is missing in nexus-db.js.");
         const workflowText = String(document.querySelector("[name='n8n_workflow_json']")?.value || "").trim();
         if (!workflowText) {
-          throw new Error("Upload or paste an n8n workflow JSON before importing.");
+          const sourceName = provider === "make" ? "Make blueprint" : provider === "zapier" ? "Zapier workflow" : "n8n workflow";
+          throw new Error(`${sourceName} has not produced import-ready n8n JSON yet. ${provider === "n8n" ? "Upload or paste the workflow JSON." : "Scan and resolve the source workflow first."}`);
         }
+        try { JSON.parse(workflowText); } catch { throw new Error("The generated n8n workflow JSON is invalid."); }
 
-        const savedProduct = await this.saveProductFromEditor({
-          silent: true,
-          syncStripe: true
-        });
-
-        if (result) {
-          result.innerHTML = "Product saved. Importing workflow into hosted n8n...";
-        }
-
-        if (importButton) {
-          importButton.textContent = "Importing workflow...";
-        }
-
-        const { data, error } = await NexusDB.importN8nWorkflow(savedProduct.id);
-
-        if (error) {
-          throw new Error(error.message || "n8n import failed.");
-        }
-
+        if (result) result.innerHTML = "Saving latest draft before import...";
+        const savedProduct = await this.saveProductFromEditor({ silent: true, syncStripe: false, statusOverride: "draft" });
+        if (importButton) importButton.textContent = "Importing workflow...";
+        const imported = await NexusDB.importN8nWorkflow(savedProduct.id);
+        if (imported.error) throw new Error(imported.error.message || "Hosted n8n import failed.");
         await this.refreshProductWorkflowFields(savedProduct.id);
 
-        const warnings = Array.isArray(data?.warnings)
-          ? data.warnings
-          : Array.isArray(data?.import_warnings)
-            ? data.import_warnings
-            : [];
-
-        const warningHtml = warnings.length
-          ? `
-            <div class="placeholder-errors" style="margin-top:.75rem">
-              <strong>Import warnings:</strong>
-              <ul>
-                ${warnings.map(warning => `<li>${this.escapeHtml(warning)}</li>`).join("")}
-              </ul>
-            </div>
-          `
-          : "";
-
-        if (result) {
-          const workflowId = data?.workflow_id || data?.n8n_workflow_id || "";
-          result.innerHTML = `
-            <div class="success">
-              <strong>Workflow imported.</strong><br>
-              Workflow ID: ${this.escapeHtml(workflowId || "created/updated")}<br>
-              Webhook URL: ${this.escapeHtml(data?.webhook_url || data?.runtime_webhook_url || "saved to product")}
-              ${workflowId ? `
-                <div style="margin-top:.75rem">
-                  <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openWorkflowEditor('${this.escapeHtml(savedProduct.id || "")}')">
-                    Edit workflow
-                  </button>
-                </div>
-              ` : ""}
-            </div>
-            ${warningHtml}
-          `;
+        const workflowId = imported.data?.workflow_id || imported.data?.n8n_workflow_id || this.currentSavedProduct?.n8n_workflow_id || "";
+        this.setResult("n8nImportResult", `<div class="success"><strong>Workflow imported.</strong><br>Workflow ID: ${this.escapeHtml(workflowId || "created/updated")}<br>Checking required credentials...</div>`);
+        if (importButton) importButton.textContent = "Checking credentials...";
+        const scan = await this.scanProductCredentials({ silent: true });
+        const scanErrors = Array.isArray(scan?.errors) ? scan.errors : [];
+        if (scanErrors.length) {
+          const message = scanErrors.map((item) => item?.message).find(Boolean) || "Add or sync the missing developer credentials.";
+          this.setResult("n8nImportResult", `<div class="error"><strong>Workflow imported. Credentials are required before testing.</strong><br>${this.escapeHtml(message)}</div>`);
+          document.getElementById("adminCredentialPanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          this.toast(message);
+          return;
         }
 
-        this.toast("Product saved and n8n workflow imported.");
-
-        if (importButton) {
-          importButton.textContent = "Imported";
-        }
-
-        setTimeout(() => {
-          if (importButton) {
-            importButton.disabled = false;
-            importButton.textContent = originalText;
-          }
-        }, 1200);
+        if (importButton) importButton.textContent = "Running technical check...";
+        this.setResult("n8nImportResult", `<div class="success"><strong>Workflow imported and credentials checked.</strong><br>Running the hosted workflow test...</div>`);
+        const started = await NexusDB.startN8nWorkflowTest(savedProduct.id, { force_new: true, skip_credential_binding: true, preserve_hosted_workflow: true, reason: "manual_import_test" });
+        if (started.error) throw new Error(started.error.message || "Workflow test failed to start.");
+        const testResult = await this.pollAdminWorkflowTest(savedProduct.id, started.data || {}, "Running import check");
+        if (!this.isPassingTestStatus(testResult.status)) throw new Error(this.workflowTestFailureMessage(testResult, "Workflow import test failed."));
+        await this.refreshProductWorkflowFields(savedProduct.id);
+        this.setResult("n8nImportResult", `<div class="success"><strong>Import and technical check passed.</strong><br>Workflow ID: ${this.escapeHtml(this.currentSavedProduct?.n8n_workflow_id || workflowId)}<div style="margin-top:.75rem"><button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openWorkflowEditor('${this.escapeHtml(savedProduct.id)}')">Edit workflow</button></div></div>`);
+        this.toast("Workflow imported and technical check passed. Save real Technical test data before publishing.");
       } catch (error) {
-        console.error("n8n import error:", error);
-
-        if (result) {
-          result.innerHTML = `
-            <div class="error">
-              <strong>Import failed.</strong><br>
-              ${this.escapeHtml(error.message || "Unknown error")}
-            </div>
-          `;
-        }
-
-        this.toast(error.message || "n8n import failed.");
-
-        if (importButton) {
-          importButton.disabled = false;
-          importButton.textContent = originalText;
-        }
+        console.error("Admin workflow import/test error:", error);
+        this.setResult("n8nImportResult", `<div class="error"><strong>Action needed.</strong><br>${this.escapeHtml(error.message || "Workflow import/test failed.")}</div>`);
+        this.toast(error.message || "Workflow import/test failed.");
       } finally {
         this.importInProgress = false;
+        if (importButton) { importButton.disabled = provider === "manual"; importButton.textContent = provider === "python" ? "Save Python & test" : "Save, import & test"; }
       }
     },
-
     currentSourceImportPlatform() {
       const provider = String(document.getElementById("workflowProvider")?.value || "make").toLowerCase();
       return provider === "zapier" ? "zapier" : "make";
@@ -2305,7 +2834,7 @@
       const sourceScanButton = document.getElementById("adminScanMakeBlueprintButton");
 
       const showMake = provider === "make" || provider === "zapier";
-      const showN8n = provider === "n8n";
+      const showN8n = provider === "n8n" || provider === "make" || provider === "zapier";
       const showPython = provider === "python";
       makeSections.forEach((section) => section.classList.toggle("hidden", !showMake));
       n8nSections.forEach((section) => section.classList.toggle("hidden", !showN8n));
@@ -2328,7 +2857,7 @@
             </div>
           `;
         }
-        if (importButton) importButton.disabled = false;
+        if (importButton) { importButton.disabled = false; importButton.textContent = "Save, import & test"; }
         if (upload) upload.disabled = false;
         if (makeUpload) makeUpload.disabled = true;
         if (workflowTextarea) workflowTextarea.disabled = false;
@@ -2348,7 +2877,7 @@
             </div>
           `;
         }
-        if (importButton) importButton.disabled = false;
+        if (importButton) { importButton.disabled = false; importButton.textContent = "Save, import & test"; }
         if (upload) upload.disabled = true;
         if (makeUpload) makeUpload.disabled = false;
         if (workflowTextarea) workflowTextarea.disabled = false;
@@ -2368,7 +2897,7 @@
             </div>
           `;
         }
-        if (importButton) importButton.disabled = true;
+        if (importButton) { importButton.disabled = false; importButton.textContent = "Save Python & test"; }
         if (upload) upload.disabled = true;
         if (makeUpload) makeUpload.disabled = true;
         if (workflowTextarea) workflowTextarea.disabled = true;
@@ -2978,7 +3507,9 @@
       runtimeType.addEventListener("change", () => {
         const provider = document.getElementById("workflowProvider");
         if (!provider) return;
-        if (runtimeType.value !== "n8n_managed") {
+        if (runtimeType.value === "python_runner") {
+          provider.value = "python";
+        } else if (runtimeType.value !== "n8n_managed") {
           provider.value = "manual";
         } else if (!["make", "zapier"].includes(provider.value)) {
           provider.value = "n8n";
@@ -3053,6 +3584,7 @@
       NexusAdminUI.inferWorkflowProviderFromRuntime();
       NexusAdminUI.scanWorkflowPlaceholders();
       NexusAdminUI.renderRuntimeSummary();
+      NexusAdminUI.initializeProductWorkspace(NexusAdminUI.currentSavedProduct);
     }, 700);
   });
 </script>

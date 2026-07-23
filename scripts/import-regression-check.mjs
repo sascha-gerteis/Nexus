@@ -183,6 +183,12 @@ scenario("Stale imported n8n credential IDs cannot mark a product ready", () => 
   assert(developerCredentials.includes("const manualNativeBinding = liveWorkflow ? manualNativeBindingFromSlot(slot) : null;"), "Dashboard scan may only trust native n8n account IDs from the live hosted workflow.");
   assert(developerCredentials.includes("product.n8n_normalized_workflow_json"), "Dashboard scan must keep uploaded/normalized workflow JSON separate from live hosted workflow scans.");
   assert(credentialsShared.includes("until the key is saved and synced from the Nexus credential manager"), "Shared binder must warn that uploaded n8n credential IDs are not portable.");
+  assert(importFunction.includes("allowExistingNativeN8nCredentials: false"), "Initial imports must never trust credential IDs embedded in uploaded JSON.");
+  assert(credentialsShared.includes("nativeAccountSetupRequired &&"), "Only true native OAuth/account credentials may preserve an editor-selected n8n ID.");
+  assert(credentialsShared.includes('type === "googleapi" || type === "openaiapi"'), "OpenAI API-key credentials must stay eligible for automatic resync and stale-ID recreation.");
+  assert(credentialsShared.includes("return credentialDeveloperId === productDeveloperId;"), "Shared binding candidates must belong to the product developer.");
+  assert(developerCredentials.includes("return credentialDeveloperId === productDeveloperId;"), "Developer scans must expose only the product developer's saved credentials.");
+  assert(!credentialsShared.includes('credentialDeveloperId === productDeveloperId ||\n      (!credentialDeveloperId && cleanString(credential.owner_role) === "admin")'), "Developer products must not fall back to Nexus/admin credentials.");
 });
 
 scenario("Credential scanner traces Set/Edit Fields API key carriers into HTTP nodes", () => {
@@ -204,11 +210,13 @@ scenario("Credential scanner traces Set/Edit Fields API key carriers into HTTP n
   assert(credentialsShared.includes("removeCredentialLikeHttpParameters"), "Credential apply must remove raw credential headers/query params from HTTP nodes.");
 });
 
-scenario("Nexus dynamic placeholders are not force-prefixed with equals", () => {
-  assert(importFunction.includes("return `{{ ${path} }}`;"), "Nexus placeholder mapper must emit interpolation placeholders without a leading equals sign.");
-  assert(!importFunction.includes("return expressionMode ? `={{ ${path} }}`"), "Nexus placeholder mapper must not force expression-mode equals prefixes.");
-  assert(!importFunction.includes("return `=${output}`"), "Importer must not auto-prefix runtime placeholders with equals.");
-  assert(importFunction.includes("field-based credentials and setup values should remain exactly"), "Importer should document why field placeholders are not forced into expression mode.");
+scenario("Nexus dynamic placeholders always import as real n8n expressions", () => {
+  assert(importFunction.includes('if (!output.includes("Nexus Runtime Context")) return output;'), "Expression guard must detect every injected Nexus runtime reference.");
+  assert(importFunction.includes("if (isCodeParameterKey(childKey)) return output;"), "Code-node placeholders must remain valid direct JavaScript accessors.");
+  assert(importFunction.includes('if (output.trimStart().startsWith("=")) return output;'), "Expression guard must avoid double-prefixing existing n8n expressions.");
+  assert(importFunction.includes("return `=${output}`;"), "Every non-code runtime placeholder must be imported in n8n expression mode.");
+  assert(importFunction.includes('requestedSource === "setup" && isLikelyCredentialPlaceholderKey(key)'), "Token-like setup aliases must route to the secrets bucket.");
+  assert(importFunction.includes('type === "SETUP" && isLikelyCredentialPlaceholderKey(name)'), "Detected NEXUS_SETUP token aliases must generate credential fields instead of plain setup fields.");
 });
 
 scenario("Native OpenAI model credentials are treated as openAiApi, not generic HTTP", () => {
@@ -240,6 +248,22 @@ scenario("Technical test data is explicit for external sheets/files/ranges", () 
   assert(testWorkflow.includes("This workflow needs real technical test data"), "Technical test must fail early when real setup values are missing.");
   assert(testWorkflow.includes("spreadsheet"), "Technical test must recognize spreadsheet/sheet setup requirements.");
   assert(testWorkflow.includes("Google Sheets rejected the saved credential"), "Technical test must explain Google Sheets permission failures.");
+});
+
+scenario("Customer-owned HTTP credentials require real technical-test values", () => {
+  const devDashboard = read("pages/developer/dashboard.html");
+  const adminProductForm = read("pages/admin/product-form.html");
+  const testWorkflow = read("supabase/functions/test-n8n-workflow/index.ts");
+
+  assert(importFunction.includes('meta_token: "meta_access_token"'), "Importer must normalize Meta token aliases.");
+  assert(importFunction.includes("customer_owned: true"), "Imported secret placeholders must be marked customer-owned.");
+  assert(importFunction.includes("test_value_required: true"), "Imported customer credentials must require a technical-test value.");
+  assert(devDashboard.includes("Customer credential test values"), "Developer test panel must render n8n customer credentials.");
+  assert(devDashboard.includes('data-test-secret-saved="${hasSavedValue ? "true" : "false"}"'), "Developer test fields must record whether a secret is already saved.");
+  assert(devDashboard.includes('${required && !hasSavedValue ? "required" : ""}'), "A saved test credential must not leave an empty required input that blocks product submission after reload.");
+  assert(devDashboard.includes("The saved value will be reused. Enter a new value only to replace it."), "Developer test panel must explain that blank saved-secret fields preserve the existing value.");
+  assert(adminProductForm.includes("Customer credential test values"), "Admin test panel must render n8n customer credentials.");
+  assert(testWorkflow.includes("missingCredentialTestFields(credentialSchema, testProfile)"), "All workflow types must require saved real test credentials.");
 });
 
 scenario("Google Sheets access modes are only shown for sheet workflows and reach runtime payloads", () => {

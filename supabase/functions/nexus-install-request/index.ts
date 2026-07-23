@@ -26,6 +26,13 @@ function subscriptionIsActive(order: any) {
   if (paymentStatus !== "paid") return false;
 
   if (
+    order?.stripe_cancel_at_period_end === true ||
+    cleanString(order?.stripe_cancel_at_period_end).toLowerCase() === "true"
+  ) {
+    return false;
+  }
+
+  if (
     orderStatus.includes("cancel") ||
     orderStatus.includes("expired") ||
     orderStatus.includes("failed")

@@ -2692,10 +2692,7 @@ async function loadCredentialsForProduct(adminClient: SupabaseAdminClient, produ
       return !credentialDeveloperId && cleanString(credential.owner_role) === "admin";
     }
 
-    return (
-      credentialDeveloperId === productDeveloperId ||
-      (!credentialDeveloperId && cleanString(credential.owner_role) === "admin")
-    );
+    return credentialDeveloperId === productDeveloperId;
   });
 }
 
@@ -3365,12 +3362,17 @@ export async function bindAutomationCredentials(options: {
     const existingNativeCredentialId = cleanString(slot.current_id);
     const existingNativeCredentialName = cleanString(slot.current_name);
     const nativeN8nSlot = isNativeN8nCredentialSlot(slot, slot.n8n_credential_type || slot.credential_key);
+    const nativeAccountSetupRequired = requiresNativeAccountSetup(
+      slot,
+      slot.n8n_credential_type || slot.credential_key,
+    );
     const reusableNativeCredential = nativeN8nSlot
       ? reusableNativeCredentials.get(nativeReuseKey(slot))
       : null;
     const canUseExistingNativeCredential = Boolean(
       allowExistingNativeN8nCredentials &&
       nativeN8nSlot &&
+      nativeAccountSetupRequired &&
       (existingNativeCredentialId || existingNativeCredentialName),
     );
 
@@ -3428,6 +3430,7 @@ export async function bindAutomationCredentials(options: {
 
     if (
       nativeN8nSlot &&
+      nativeAccountSetupRequired &&
       allowExistingNativeN8nCredentials &&
       credential?.n8n_credential_id &&
       !credential.manual_n8n_credential &&

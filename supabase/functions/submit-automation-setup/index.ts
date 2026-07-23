@@ -890,6 +890,13 @@ function subscriptionIsActive(order: any) {
   if (paymentStatus !== "paid") return false;
 
   if (
+    order?.stripe_cancel_at_period_end === true ||
+    cleanString(order?.stripe_cancel_at_period_end).toLowerCase() === "true"
+  ) {
+    return false;
+  }
+
+  if (
     orderStatus.includes("cancel") ||
     orderStatus.includes("expired") ||
     orderStatus.includes("failed")
@@ -909,6 +916,13 @@ function orderIsPaidAndOpen(order: any) {
   const orderStatus = cleanString(order?.order_status).toLowerCase();
 
   if (paymentStatus !== "paid") return false;
+
+  if (
+    order?.stripe_cancel_at_period_end === true ||
+    cleanString(order?.stripe_cancel_at_period_end).toLowerCase() === "true"
+  ) {
+    return false;
+  }
 
   return !(
     orderStatus.includes("cancel") ||
@@ -998,6 +1012,7 @@ function runtimeScheduleUpdate(order: any, automation: any, current: any, firstR
       runtime_trigger_mode: triggerMode,
       run_frequency: frequency,
       schedule_status: "paused",
+      next_run_at: null,
     };
   }
 
@@ -1007,6 +1022,7 @@ function runtimeScheduleUpdate(order: any, automation: any, current: any, firstR
       run_frequency: frequency,
       schedule_status: "inactive",
       schedule_anchor_at: current?.schedule_anchor_at || now.toISOString(),
+      next_run_at: null,
     };
   }
 

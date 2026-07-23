@@ -215,6 +215,11 @@ function subscriptionIsActiveStatus(status: string) {
   return value === "active" || value === "trialing";
 }
 
+function subscriptionCancellationRequested(order: any) {
+  return order?.stripe_cancel_at_period_end === true ||
+    cleanString(order?.stripe_cancel_at_period_end).toLowerCase() === "true";
+}
+
 function getRuntimeWebhookUrl(customerAutomation: any, automationProduct: any, order: any) {
   return pickFirstString(
     customerAutomation?.runtime_webhook_url,
@@ -730,44 +735,60 @@ async function markDeveloperEarningForCharge(
 async function activateScheduleIfReady(order: any, subscriptionStatus = "") {
   const status = cleanString(subscriptionStatus || order?.stripe_subscription_status).toLowerCase();
 
+  if (subscriptionCancellationRequested(order)) {
+    await safeUpdateCustomerAutomationsByOrder(order.id, {
+      schedule_status: "cancelled",
+      next_run_at: null,
+      updated_at: nowIso(),
+    });
+    return;
+  }
+
   if (!subscriptionIsActiveStatus(status) && status) {
     await safeUpdateCustomerAutomationsByOrder(order.id, {
       schedule_status: "paused",
+      next_run_at: null,
       updated_at: nowIso(),
     });
     return;
   }
 
-  const { data: customerAutomation } = await adminClient
+  const { data: customerAutomations, error } = await adminClient
     .from("customer_automations")
     .select("*, automations(*)")
-    .eq("order_id", order.id)
-    .maybeSingle();
+    .eq("order_id", order.id);
 
-  if (!customerAutomation) return;
-
-  const automationProduct = one(customerAutomation.automations) || {};
-  const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automationProduct, order);
-  const runFrequency = normalizeProductRunFrequency(automationProduct, true);
-
-  if (!setupIsReady(customerAutomation) || !webhookUrl) {
-    await safeUpdateCustomerAutomationsByOrder(order.id, {
-      run_frequency: runFrequency,
-      schedule_status: "inactive",
-      updated_at: nowIso(),
-    });
+  if (error) {
+    console.warn("Could not load customer automations for schedule activation:", error.message);
     return;
   }
 
-  await safeUpdateCustomerAutomationsByOrder(order.id, {
-    run_frequency: runFrequency,
-    schedule_status: "active",
-    schedule_anchor_at: customerAutomation.schedule_anchor_at || nowIso(),
-    next_run_at: customerAutomation.next_run_at || nowIso(),
+  for (const customerAutomation of customerAutomations || []) {
+    const automationProduct = one(customerAutomation.automations) || {};
+    const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automationProduct, order);
+    const runFrequency = normalizeProductRunFrequency(automationProduct, true);
+    const ready = setupIsReady(customerAutomation) && Boolean(webhookUrl);
+
+    await adminClient
+      .from("customer_automations")
+      .update({
+        run_frequency: runFrequency,
+        schedule_status: ready ? "active" : "inactive",
+        schedule_anchor_at: customerAutomation.schedule_anchor_at || null,
+        next_run_at: ready ? customerAutomation.next_run_at || nowIso() : null,
+        updated_at: nowIso(),
+      })
+      .eq("id", customerAutomation.id);
+  }
+}
+
+async function deactivateSubscriptionSchedules(orderId: string, scheduleStatus: "paused" | "cancelled") {
+  await safeUpdateCustomerAutomationsByOrder(orderId, {
+    schedule_status: scheduleStatus,
+    next_run_at: null,
     updated_at: nowIso(),
   });
 }
-
 async function loadBundleOrderProducts(order: any) {
   const { data: orderItems, error: itemError } = await adminClient
     .from("order_items")
@@ -936,11 +957,13 @@ async function handlePaidBundleOrder(order: any, isPaid: boolean, isSubscription
 async function activateBundleSchedulesIfReady(order: any, subscriptionStatus = "") {
   const status = cleanString(subscriptionStatus || order?.stripe_subscription_status).toLowerCase();
 
+  if (subscriptionCancellationRequested(order)) {
+    await deactivateSubscriptionSchedules(order.id, "cancelled");
+    return;
+  }
+
   if (!subscriptionIsActiveStatus(status) && status) {
-    await safeUpdateCustomerAutomationsByOrder(order.id, {
-      schedule_status: "paused",
-      updated_at: nowIso(),
-    });
+    await deactivateSubscriptionSchedules(order.id, "paused");
     return;
   }
 
@@ -979,7 +1002,7 @@ async function activateBundleSchedulesIfReady(order: any, subscriptionStatus = "
         run_frequency: runFrequency,
         schedule_status: ready ? "active" : "inactive",
         schedule_anchor_at: customerAutomation.schedule_anchor_at || null,
-        next_run_at: ready ? customerAutomation.next_run_at || nowIso() : customerAutomation.next_run_at || null,
+        next_run_at: ready ? customerAutomation.next_run_at || nowIso() : null,
         updated_at: nowIso(),
       })
       .eq("id", customerAutomation.id);
@@ -1054,6 +1077,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, stripeC
         ...order,
         payment_status: isPaid ? "paid" : "pending",
         stripe_subscription_status: subscriptionSnapshot.status || (isSubscription ? "active" : ""),
+        stripe_cancel_at_period_end: subscriptionSnapshot.cancel_at_period_end,
       },
       isPaid,
       isSubscription,
@@ -1123,7 +1147,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, stripeC
   if (existingCustomerAutomation || !isPaid) {
     if (isSubscription) {
       await activateScheduleIfReady(
-        { ...order, stripe_subscription_status: subscriptionSnapshot.status || "active" },
+        {
+          ...order,
+          stripe_subscription_status: subscriptionSnapshot.status || "active",
+          stripe_cancel_at_period_end: subscriptionSnapshot.cancel_at_period_end,
+        },
         subscriptionSnapshot.status || "active",
       );
     }
@@ -1285,7 +1313,12 @@ async function handleInvoicePaid(invoice: Stripe.Invoice, stripeClient = liveStr
 
   if (order.order_type === "bundle" || order.bundle_id) {
     await activateBundleSchedulesIfReady(
-      { ...order, payment_status: "paid", stripe_subscription_status: subscriptionSnapshot.status || "active" },
+      {
+        ...order,
+        payment_status: "paid",
+        stripe_subscription_status: subscriptionSnapshot.status || "active",
+        stripe_cancel_at_period_end: subscriptionSnapshot.cancel_at_period_end,
+      },
       subscriptionSnapshot.status || "active",
     );
     return;
@@ -1319,7 +1352,12 @@ async function handleInvoicePaid(invoice: Stripe.Invoice, stripeClient = liveStr
   }
 
   await activateScheduleIfReady(
-    { ...order, payment_status: "paid", stripe_subscription_status: subscriptionSnapshot.status || "active" },
+    {
+        ...order,
+        payment_status: "paid",
+        stripe_subscription_status: subscriptionSnapshot.status || "active",
+        stripe_cancel_at_period_end: subscriptionSnapshot.cancel_at_period_end,
+      },
     subscriptionSnapshot.status || "active",
   );
 }
@@ -1352,6 +1390,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     status: "payment_failed",
     health_status: "payment_issue",
     schedule_status: "paused",
+    next_run_at: null,
     updated_at: nowIso(),
   });
 }
@@ -1362,6 +1401,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   const status = cleanString(subscription.status);
   const isActive = subscriptionIsActiveStatus(status);
+  const cancelAtPeriodEnd = Boolean((subscription as any).cancel_at_period_end);
 
   const { data: order } = await adminClient
     .from("orders")
@@ -1373,31 +1413,55 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   await safeUpdateOrder(order.id, {
     payment_status: isActive ? "paid" : order.payment_status || "pending",
-    order_status: isActive
-      ? order.order_status || "setup_requested"
-      : status === "canceled"
-        ? "cancelled"
-        : order.order_status || status,
+    order_status: status === "canceled"
+      ? "cancelled"
+      : cancelAtPeriodEnd
+        ? "cancellation_pending"
+        : isActive
+          ? order.order_status || "setup_requested"
+          : order.order_status || status,
     stripe_subscription_status: status,
     stripe_current_period_start: fromUnix((subscription as any).current_period_start),
     stripe_current_period_end: fromUnix((subscription as any).current_period_end),
-    stripe_cancel_at_period_end: Boolean((subscription as any).cancel_at_period_end),
+    stripe_cancel_at_period_end: cancelAtPeriodEnd,
     updated_at: nowIso(),
   });
 
-  if (isActive) {
-    await activateScheduleIfReady({ ...order, payment_status: "paid", stripe_subscription_status: status }, status);
+  const scheduleOrder = {
+    ...order,
+    payment_status: isActive ? "paid" : order.payment_status,
+    stripe_subscription_status: status,
+    stripe_cancel_at_period_end: cancelAtPeriodEnd,
+  };
+
+  if (isActive && !cancelAtPeriodEnd) {
+    if (order.order_type === "bundle" || order.bundle_id) {
+      await activateBundleSchedulesIfReady(scheduleOrder, status);
+    } else {
+      await activateScheduleIfReady(scheduleOrder, status);
+    }
+    return;
+  }
+
+  if (cancelAtPeriodEnd || status === "canceled") {
+    await safeUpdateCustomerAutomationsByOrder(order.id, {
+      ...(status === "canceled" ? { status: "cancelled" } : {}),
+      schedule_status: "cancelled",
+      health_status: status === "canceled" ? "cancelled" : "cancellation_requested",
+      next_run_at: null,
+      updated_at: nowIso(),
+    });
     return;
   }
 
   await safeUpdateCustomerAutomationsByOrder(order.id, {
-    schedule_status: status === "canceled" ? "cancelled" : "paused",
-    status: status === "canceled" ? "cancelled" : order.status || "payment_failed",
-    health_status: status === "canceled" ? "cancelled" : "payment_issue",
+    status: "payment_failed",
+    schedule_status: "paused",
+    health_status: "payment_issue",
+    next_run_at: null,
     updated_at: nowIso(),
   });
 }
-
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const subscriptionId = cleanString(subscription.id);
   if (!subscriptionId) return;
@@ -1424,6 +1488,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     status: "cancelled",
     schedule_status: "cancelled",
     health_status: "cancelled",
+    next_run_at: null,
     updated_at: nowIso(),
   });
 }

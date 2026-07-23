@@ -642,9 +642,7 @@ function buildTestSetupAndSecrets(automation: any, testProfile: any) {
   const setupSchema = schemaWithInferredWorkflowSetupFields(normalizeSchema(automation.setup_schema), automation);
   const credentialSchema = normalizeSchema(automation.credential_schema);
   const missingRealFields = missingRealTestFields(setupSchema, testProfile);
-  const missingCredentialFields = isPythonAutomation(automation)
-    ? missingCredentialTestFields(credentialSchema, testProfile)
-    : [];
+  const missingCredentialFields = missingCredentialTestFields(credentialSchema, testProfile);
 
   if (missingRealFields.length) {
     throw new Error(
@@ -653,8 +651,9 @@ function buildTestSetupAndSecrets(automation: any, testProfile: any) {
   }
 
   if (missingCredentialFields.length) {
+    const workflowKind = isPythonAutomation(automation) ? "Python workflow" : "workflow";
     throw new Error(
-      `This Python workflow needs developer-owned credentials before Nexus can run it. Save credential values for: ${missingCredentialFields.join(", ")}. Python scripts read these values from context["credentials"].`,
+      `This ${workflowKind} needs real technical-test credentials before Nexus can run it. Save secure test values for: ${missingCredentialFields.join(", ")}. Nexus injects them only into the technical test payload; buyers provide their own customer credentials during setup.`,
     );
   }
 

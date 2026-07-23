@@ -16688,3 +16688,130 @@ iframe {
     min-height: 240px;
   }
 }
+
+/* Unified admin product workspace */
+.admin-unified-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-readiness-head,
+.admin-credential-summary,
+.admin-credential-item,
+.admin-readiness-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .85rem;
+}
+
+.admin-readiness-grid,
+.admin-credential-list {
+  display: grid;
+  gap: .7rem;
+  margin-top: 1rem;
+}
+
+.admin-readiness-item,
+.admin-credential-item {
+  padding: .9rem;
+  border: 1px solid var(--line, #dce6f2);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-readiness-item.blocked {
+  border-color: #fecaca;
+  background: #fffafa;
+}
+
+.admin-readiness-item p,
+.admin-credential-item p {
+  margin: .2rem 0 0;
+  color: var(--muted, #63738b);
+}
+
+.admin-technical-test-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+  margin: 1rem 0;
+}
+
+.admin-test-field {
+  min-width: 0;
+}
+
+.admin-test-field label {
+  display: block;
+  margin-bottom: .35rem;
+  font-weight: 700;
+}
+
+.admin-python-editor-modal {
+  width: min(1120px, calc(100vw - 2rem));
+  max-height: calc(100svh - 2rem);
+  overflow: auto;
+}
+
+.admin-python-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, .8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-python-editor-grid > *,
+.admin-python-editor-side,
+.admin-python-editor-side > * {
+  min-width: 0;
+}
+
+.admin-python-editor-side {
+  display: grid;
+  gap: .85rem;
+}
+
+#adminPythonEditorScript {
+  min-height: min(62svh, 680px);
+  resize: vertical;
+}
+
+@media (max-width: 900px) {
+  .admin-unified-workspace-grid,
+  .admin-python-editor-grid,
+  .admin-technical-test-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-python-editor-modal {
+    width: calc(100vw - 1rem);
+    max-height: calc(100svh - 1rem);
+  }
+
+  #adminPythonEditorScript {
+    min-height: 45svh;
+  }
+}
+
+@media (max-width: 560px) {
+  .admin-readiness-head,
+  .admin-credential-summary,
+  .admin-credential-item,
+  .admin-readiness-item {
+    flex-direction: column;
+  }
+
+  .admin-unified-workspace-grid .credential-action-row,
+  .admin-python-editor-side .credential-action-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .admin-unified-workspace-grid .btn,
+  .admin-python-editor-side .btn {
+    width: 100%;
+  }
+}

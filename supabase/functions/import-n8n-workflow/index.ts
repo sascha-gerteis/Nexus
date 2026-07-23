@@ -82,7 +82,11 @@ function runtimeContextPath(section: string, key: string) {
 }
 
 function contextPathForMapping(source: string, key: string) {
-  const cleanSource = cleanString(source).toLowerCase();
+  const requestedSource = cleanString(source).toLowerCase();
+  const cleanSource =
+    requestedSource === "setup" && isLikelyCredentialPlaceholderKey(key)
+      ? "secret"
+      : requestedSource;
   const cleanKey = cleanSource === "setup"
     ? canonicalSetupKey(key)
     : isSecretSource(cleanSource)
@@ -123,9 +127,8 @@ function contextExpressionForMapping(source: string, key: string, expressionMode
   const path = contextPathForMapping(source, key);
   if (!path) return "";
 
-  // Keep Nexus placeholders in interpolation form. We do not force "=" here,
-  // because field-based credentials and setup values should remain exactly in
-  // the field where the developer placed them.
+  // Build neutral interpolation first. The recursive field normalizer adds n8n's
+  // leading expression marker to every non-code value that contains this path.
   return `{{ ${path} }}`;
 }
 
@@ -209,7 +212,10 @@ function normalizeKnownNexusPlaceholderMapping(mapping: any) {
 
 function forceN8nExpressionModeIfNeeded(value: string, childKey = "") {
   const output = String(value || "");
-  return output;
+  if (!output.includes("Nexus Runtime Context")) return output;
+  if (isCodeParameterKey(childKey)) return output;
+  if (output.trimStart().startsWith("=")) return output;
+  return `=${output}`;
 }
 
 function repairBadMixedCredentialValue(output: string) {
@@ -530,7 +536,10 @@ function extractPlaceholders(text: string) {
     const type = String(match[1] || match[2] || "").toUpperCase();
     const name = match[3];
 
-    if (type === "SETUP") found.setup.push(canonicalSetupKey(name));
+    if (type === "SETUP" && isLikelyCredentialPlaceholderKey(name)) {
+      found.secret.push(canonicalSecretKey(name));
+    }
+    else if (type === "SETUP") found.setup.push(canonicalSetupKey(name));
     else if (type === "SECRET") found.secret.push(canonicalSecretKey(name));
     else if (type === "CUSTOMER") found.customer.push(name);
     else if (type === "SYSTEM") found.system.push(name);
@@ -616,7 +625,17 @@ function convertNexusPlaceholders(value: any, childKey = ""): any {
       output = output.replace(item.regex, (fullMatch: string, key: string) => {
         const whole = isWholeString(value, fullMatch);
         const expressionMode = whole && isLikelyExpressionField(childKey);
-        return contextExpressionForMapping(item.source, key, expressionMode);
+        const source =
+          item.source === "setup" && isLikelyCredentialPlaceholderKey(key)
+            ? "secret"
+            : item.source;
+        const canonicalKey =
+          source === "secret"
+            ? canonicalSecretKey(key)
+            : source === "setup"
+              ? canonicalSetupKey(key)
+              : key;
+        return contextExpressionForMapping(source, canonicalKey, expressionMode);
       });
     }
 
@@ -707,8 +726,10 @@ function makeCredentialField(name: string) {
     name,
     label: inferFieldLabel(name),
     type: "secret",
-    required: false,
-    description: "Auto-added by Nexus because the uploaded workflow uses this credential placeholder.",
+    required: true,
+    customer_owned: true,
+    test_value_required: true,
+    description: "Buyer-owned access required by this workflow. Add a real test value in Technical test data; buyers provide their own value during setup.",
   };
 }
 
@@ -804,12 +825,25 @@ function canonicalSecretKey(value: unknown) {
     chatgpt_api_key: "openai_api_key",
     gpt_key: "openai_api_key",
     gpt_api_key: "openai_api_key",
+    meta_token: "meta_access_token",
+    meta_api_token: "meta_access_token",
+    meta_api_key: "meta_access_token",
+    facebook_token: "meta_access_token",
+    facebook_access_token: "meta_access_token",
+    fb_token: "meta_access_token",
+    fb_access_token: "meta_access_token",
   };
 
   if (aliases[key]) return aliases[key];
   if (key.includes("apify") && (key.includes("tok") || key.includes("key"))) return "apify_token";
   if ((key.includes("openai") || key.includes("chatgpt") || key === "gpt_key") && (key.includes("key") || key.includes("token"))) {
     return "openai_api_key";
+  }
+  if (
+    (key.includes("meta") || key.includes("facebook") || key.startsWith("fb_")) &&
+    (key.includes("key") || key.includes("token"))
+  ) {
+    return "meta_access_token";
   }
 
   return key;
@@ -848,6 +882,7 @@ function isLikelySetupPlaceholderKey(value: unknown) {
 }
 
 function addSetupName(target: Set<string>, value: unknown) {
+  if (isLikelyCredentialPlaceholderKey(value)) return;
   const key = canonicalSetupKey(value);
   if (key) target.add(key);
 }
@@ -3839,7 +3874,9 @@ Deno.serve(async (req) => {
       n8nApiKey,
       credentialSecret: env("NEXUS_CREDENTIAL_SECRET"),
       syncMissingN8nCredentials: true,
-      allowExistingNativeN8nCredentials: true,
+      // Uploaded n8n credential IDs are never proof of ownership. Initial
+      // imports may bind only credentials owned by this product's developer.
+      allowExistingNativeN8nCredentials: false,
     });
 
     productForImport.n8n_workflow_json = credentialBinding.ok

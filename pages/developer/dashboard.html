@@ -2644,7 +2644,8 @@ company_url = context["inputs"].get("company_url")
         : field.placeholder || "Paste a developer-owned test key";
       const common = `
         data-test-secret-name="${NexusUI.escapeAttribute(name)}"
-        ${required ? "required" : ""}
+        data-test-secret-saved="${hasSavedValue ? "true" : "false"}"
+        ${required && !hasSavedValue ? "required" : ""}
       `;
 
       const control = type === "textarea" || type === "json" || type === "object"
@@ -2653,10 +2654,10 @@ company_url = context["inputs"].get("company_url")
 
       return `
         <label>
-          <span>${NexusUI.escapeHtml(field.label || name)}${required ? " *" : ""}</span>
+          <span>${NexusUI.escapeHtml(field.label || name)}${required ? " *" : ""}${hasSavedValue ? ' <span class="pill green">Saved</span>' : ""}</span>
           ${control}
           ${description}
-          <small class="technical-test-real-note">${hasSavedValue ? "A value is saved for this technical test profile." : "Saved into the technical test profile and passed to Python as context.credentials."}</small>
+          <small class="technical-test-real-note">${hasSavedValue ? "The saved value will be reused. Enter a new value only to replace it." : "Saved into the technical test profile and reused for future real tests."}</small>
         </label>
       `;
     }
@@ -2685,8 +2686,7 @@ company_url = context["inputs"].get("company_url")
     }
 
     function technicalCredentialSchema(product = selectedProduct()) {
-      const provider = normalizeWorkflowProvider(product?.workflow_source_platform || product?.runtime_type, product);
-      return provider === "python" ? schemaArray(product?.credential_schema) : [];
+      return schemaArray(product?.credential_schema);
     }
 
     function renderDeveloperTestDataPanel(product = selectedProduct(), profile = state.testProfile, loadingMessage = "") {
@@ -2711,6 +2711,8 @@ company_url = context["inputs"].get("company_url")
 
       const setupSchema = schemaArray(product.setup_schema);
       const credentialSchema = technicalCredentialSchema(product);
+      const workflowProvider = normalizeWorkflowProvider(product.workflow_source_platform || product.runtime_type, product);
+      const isPythonProduct = workflowProvider === "python";
       const values = profile?.setup_values || {};
       const secretValues = profile?.secret_values || {};
       const realFields = setupSchema.filter(setupFieldNeedsRealTestValue);
@@ -2754,8 +2756,10 @@ company_url = context["inputs"].get("company_url")
 
       const credentialBlock = credentialSchema.length ? `
         <div class="technical-test-warning neutral">
-          <strong>Developer credentials for Python</strong>
-          <p>These values are only for the technical test profile. Your script reads them from <code>context["credentials"]</code>. Buyer-owned secrets should be setup fields, not developer credentials.</p>
+          <strong>${isPythonProduct ? "Python test credentials" : "Customer credential test values"}</strong>
+          <p>${isPythonProduct
+            ? 'These values are only for the technical test profile. Your script reads them from <code>context["credentials"]</code>.'
+            : "Use a real test account token for customer-owned access such as Meta. Nexus sends it only in the technical test payload. It is not written into workflow JSON, and buyers provide their own value during setup."}</p>
         </div>
         <div class="technical-test-grid">
           ${credentialSchema.map((field) => renderTechnicalSecretField(field, secretValues)).join("")}
@@ -2766,7 +2770,9 @@ company_url = context["inputs"].get("company_url")
         <div class="technical-test-head">
           <div>
             <h3>Technical test data</h3>
-            <p>Save realistic buyer setup values and developer-owned Python keys before running the workflow check. The runner passes setup as <code>context["inputs"]</code> and developer keys as <code>context["credentials"]</code>.</p>
+            <p>${isPythonProduct
+              ? 'Save realistic buyer setup values and Python test keys. The runner passes setup as <code>context["inputs"]</code> and keys as <code>context["credentials"]</code>.'
+              : "Save realistic buyer inputs and customer-owned test credentials before running the workflow check. Nexus injects them into this test run only."}</p>
           </div>
           <span class="${profile?.id ? "pill green" : "pill orange"}">${NexusUI.escapeHtml(profileLabel)}</span>
         </div>
@@ -2832,7 +2838,7 @@ company_url = context["inputs"].get("company_url")
       if (missingRequired.length || missingSecrets.length) {
         const parts = [];
         if (missingRequired.length) parts.push(`test values for: ${missingRequired.join(", ")}`);
-        if (missingSecrets.length) parts.push(`Python credentials for: ${missingSecrets.join(", ")}`);
+        if (missingSecrets.length) parts.push(`test credentials for: ${missingSecrets.join(", ")}`);
         const message = `Add ${parts.join("; ")}`;
         NexusUI.toast(message);
         openProductWorkspaceSection("developerProductCredentialsSection", { scrollTargetId: "developerTechnicalTestDataPanel" });
