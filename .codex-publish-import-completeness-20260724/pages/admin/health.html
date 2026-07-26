@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>System Health | Nexus</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-admin="true" data-admin-page="health">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+    </aside>
+
+    <main class="main">
+      <section class="admin-launch-hero">
+        <div>
+          <span class="eyebrow">System health</span>
+          <h1>Launch readiness checks.</h1>
+          <p>
+            Check core secrets, Supabase tables, n8n, Stripe, and monthly runner signals before opening Nexus to testers.
+          </p>
+        </div>
+
+        <div class="admin-launch-actions">
+          <button class="btn btn-primary" type="button" onclick="loadSystemHealth()">Run health check</button>
+          <a class="btn btn-secondary" href="/pages/admin/dashboard.html">Back to dashboard</a>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Readout</span>
+            <h2>Current status</h2>
+            <p id="healthCheckedAt">Run the check to see current system status.</p>
+          </div>
+        </div>
+
+        <div id="healthSummary" class="admin-metric-grid">
+          <article class="admin-metric-card">
+            <span>Status</span>
+            <strong>Ready?</strong>
+            <p>Waiting for health check.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Checks</span>
+            <h2>What Nexus verified</h2>
+            <p>Errors should be fixed before launch. Warnings are reminders to manually confirm.</p>
+          </div>
+        </div>
+
+        <div id="healthSections" class="admin-health-sections">
+          <div class="admin-health-empty">No checks loaded yet.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+
+  <script>
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function healthTone(status) {
+      if (status === "ok") return "green";
+      if (status === "warning") return "orange";
+      return "red";
+    }
+
+    function healthLabel(status) {
+      if (status === "ok") return "OK";
+      if (status === "warning") return "Warning";
+      return "Error";
+    }
+
+    function renderHealth(data) {
+      const summary = data?.summary || {};
+      const summaryRoot = document.getElementById("healthSummary");
+      const sectionRoot = document.getElementById("healthSections");
+      const checkedAt = document.getElementById("healthCheckedAt");
+      const tone = healthTone(summary.status);
+
+      if (checkedAt) {
+        checkedAt.textContent = data?.checked_at
+          ? `Last checked ${new Date(data.checked_at).toLocaleString()}`
+          : "Health check completed.";
+      }
+
+      if (summaryRoot) {
+        summaryRoot.innerHTML = `
+          <article class="admin-metric-card health-${tone}">
+            <span>Status</span>
+            <strong>${escapeHtml(healthLabel(summary.status))}</strong>
+            <p>${summary.errors || 0} errors, ${summary.warnings || 0} warnings.</p>
+          </article>
+          <article class="admin-metric-card">
+            <span>Total checks</span>
+            <strong>${Number(summary.checks || 0)}</strong>
+            <p>Secrets, database, services, and scheduler signals.</p>
+          </article>
+          <article class="admin-metric-card health-red">
+            <span>Errors</span>
+            <strong>${Number(summary.errors || 0)}</strong>
+            <p>Fix before public launch.</p>
+          </article>
+          <article class="admin-metric-card health-orange">
+            <span>Warnings</span>
+            <strong>${Number(summary.warnings || 0)}</strong>
+            <p>Manual checks or non-blocking issues.</p>
+          </article>
+        `;
+      }
+
+      if (sectionRoot) {
+        sectionRoot.innerHTML = (data?.sections || []).map(section => `
+          <section class="admin-health-section">
+            <div class="admin-health-section-head">
+              <h3>${escapeHtml(section.title)}</h3>
+              <span>${(section.checks || []).length} checks</span>
+            </div>
+
+            <div class="admin-health-list">
+              ${(section.checks || []).map(item => `
+                <article class="admin-health-row ${healthTone(item.status)}">
+                  <div>
+                    <span class="pill ${healthTone(item.status)}">${escapeHtml(healthLabel(item.status))}</span>
+                    <strong>${escapeHtml(item.name)}</strong>
+                    <p>${escapeHtml(item.message)}</p>
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          </section>
+        `).join("") || `<div class="admin-health-empty">No health checks returned.</div>`;
+      }
+    }
+
+    async function loadSystemHealth() {
+      const summaryRoot = document.getElementById("healthSummary");
+      const sectionRoot = document.getElementById("healthSections");
+
+      if (summaryRoot) {
+        summaryRoot.innerHTML = `<article class="admin-metric-card"><span>Status</span><strong>Checking...</strong><p>Running system health checks.</p></article>`;
+      }
+
+      if (sectionRoot) {
+        sectionRoot.innerHTML = `<div class="admin-health-empty">Running checks...</div>`;
+      }
+
+      const { data, error } = await NexusDB.getSystemHealth();
+
+      if (error) {
+        NexusNotice.error("Could not load health", error.message || "System health check failed.");
+        if (sectionRoot) {
+          sectionRoot.innerHTML = `<div class="admin-health-empty error">${escapeHtml(error.message || "Health check failed.")}</div>`;
+        }
+        return;
+      }
+
+      renderHealth(data);
+
+      if (data?.summary?.errors) {
+        NexusNotice.warning("Health check completed", `${data.summary.errors} errors need attention before launch.`);
+      } else {
+        NexusNotice.success("Health check completed", "No blocking system errors were reported.");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountAdminSidebar === "function") {
+        NexusUI.mountAdminSidebar({ force: true });
+      }
+
+      const admin = await NexusDB.requireAdminAccess();
+      if (!admin) return;
+
+      await loadSystemHealth();
+    });
+  </script>
+</body>
+</html>

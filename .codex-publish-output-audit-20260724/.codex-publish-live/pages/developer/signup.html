@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+  <title>Developer Signup | Nexus AI</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+<body data-page="developer-signup">
+  <main class="buyer-auth-page">
+    <div class="buyer-auth-card buyer-auth-card-wide">
+      <a class="logo" href="/index.html"><span>Nexus&nbsp;</span></a>
+      <h1>Create developer account.</h1>
+      <p>Apply for developer access. Nexus reviews every developer before their profile becomes public or products can be submitted for review.</p>
+
+      <form id="developerSignupForm">
+        <div class="form-grid">
+          <div><label>Display name / studio</label><input class="input" name="display_name" required></div>
+          <div><label>Handle</label><input class="input" name="handle" placeholder="automation-studio"></div>
+          <div><label>Email</label><input class="input" name="email" type="email" required></div>
+          <div><label>Password</label><input class="input" name="password" type="password" minlength="8" required></div>
+          <div><label>Website</label><input class="input" name="website"></div>
+          <div><label>Type</label><input class="input" name="type" placeholder="n8n Developer, AI Agent Builder..."></div>
+          <div class="full"><label>Short profile intro</label><textarea class="textarea" name="short_description" required></textarea></div>
+          <div class="full"><label>Skills</label><textarea class="textarea" name="skills" placeholder="n8n, Make, Python, OpenAI, APIs"></textarea></div>
+        </div>
+        <button class="btn btn-primary btn-full" style="margin-top:1rem">Apply for developer access</button>
+      </form>
+
+      <div class="buyer-auth-links">
+        <span>Already have an account?</span>
+        <a href="/pages/developer/login.html" id="loginLink">Login</a>
+      </div>
+      <div id="developerSignupStatus"></div>
+    </div>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const params = new URLSearchParams(location.search);
+      const next = params.get("next") || "/pages/developer/dashboard.html";
+      const status = document.getElementById("developerSignupStatus");
+      document.getElementById("loginLink").href = "/pages/developer/login.html?next=" + encodeURIComponent(next);
+
+      document.getElementById("developerSignupForm").addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const metadata = {
+          developer_display_name: String(formData.get("display_name") || ""),
+          developer_handle: String(formData.get("handle") || ""),
+          website: String(formData.get("website") || ""),
+          type: String(formData.get("type") || ""),
+          short_description: String(formData.get("short_description") || ""),
+          skills: String(formData.get("skills") || "")
+        };
+
+        const { data, error } = await NexusDB.developerSignUp(
+          String(formData.get("email") || "").trim(),
+          String(formData.get("password") || ""),
+          metadata
+        );
+
+        if (error) {
+          NexusUI.toast(NexusDB.friendlyAuthMessage(error));
+          return;
+        }
+
+        if (data?.session?.user || data?.user) {
+          const ensured = await NexusDB.ensureDeveloperProfile({
+            display_name: metadata.developer_display_name,
+            handle: metadata.developer_handle,
+            website: metadata.website,
+            type: metadata.type,
+            short_description: metadata.short_description,
+            skills: metadata.skills
+          });
+
+          if (ensured.error) {
+            NexusUI.toast(ensured.error.message || "Could not create developer profile.");
+            return;
+          }
+
+          NexusUI.toast("Developer account created. Nexus will review your profile before it goes public.");
+          setTimeout(() => {
+            location.href = NexusDB.safeNextPath(next, "/pages/developer/dashboard.html");
+          }, 500);
+          return;
+        }
+
+        status.innerHTML = `<div class="success"><strong>Application created.</strong><br>Confirm your email, then login. Nexus will review your developer profile before it goes public.</div>`;
+      });
+    });
+  </script>
+</body>
+</html>

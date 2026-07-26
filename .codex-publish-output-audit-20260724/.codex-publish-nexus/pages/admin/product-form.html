@@ -1,0 +1,3060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Product Editor | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-admin="true" data-admin-page="automation-form">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+  <div class="sidebar-title">Nexus Admin</div>
+
+  <a href="/pages/admin/dashboard.html">Overview</a>
+  <a href="/pages/admin/orders.html">Orders</a>
+  <a href="/pages/admin/automations.html">Products</a>
+  <a class="active" href="/pages/admin/product-form.html">Create Product</a>
+  <a href="/pages/admin/credentials.html">Credentials</a>
+  <a href="/pages/admin/make-imports.html">Import Assistant</a>
+  <a href="/pages/admin/customer-automations.html">Cancellation Requests</a>
+  <a href="/pages/admin/messages.html">Inquiries</a>
+  <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
+  <a href="/pages/admin/waitlist.html">Developer Intake</a>
+  <a href="/pages/admin/reviews.html">Reviews</a>
+  <a href="/pages/admin/developer-profile.html">Developer Profile</a>
+  <a href="/pages/marketplace/index.html">View Marketplace</a>
+  <a href="#" onclick="NexusDB.signOut()">Logout</a>
+</aside>
+
+    <main class="main">
+      <section class="product-editor-hero-clean">
+  <div>
+    <span class="eyebrow">Product editor</span>
+    <h1>Create or edit a marketplace product.</h1>
+    <p>
+      Build the buyer-facing product listing, pricing, setup questions, and n8n workflow in one place.
+      Keep the product clear for buyers and safe for operations.
+    </p>
+  </div>
+
+  <div class="product-editor-quick-guide">
+    <span class="pill blue">Launch checklist</span>
+
+    <ul>
+      <li>Write a clear product title and outcome.</li>
+      <li>Set simple pricing.</li>
+      <li>Add buyer setup questions.</li>
+      <li>Upload and scan the n8n workflow.</li>
+      <li>Upload a workflow, then import. New products are saved automatically first.</li>
+    </ul>
+  </div>
+</section>
+
+      <section class="admin-product-runtime-panel" id="adminProductRuntimePanel" hidden>
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>Loading this product's run history and next scheduled output...</p>
+        </div>
+      </section>
+
+      <form id="automationForm" class="product-editor-shell">
+
+        <!-- =====================================================
+             SECTION 1: PRODUCT BASICS
+        ====================================================== -->
+        <section class="admin-accordion open">
+          <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+            <div>
+              <span class="eyebrow">Step 1</span>
+              <h2>Product basics</h2>
+              <p>The public marketplace information buyers see first.</p>
+            </div>
+            <span class="accordion-icon">+</span>
+          </button>
+
+          <div class="admin-accordion-body">
+            <div class="form-grid">
+              <div class="full">
+                <label>Developer / operator</label>
+                <select class="select" name="developer_id" id="developer_id" required></select>
+              </div>
+
+              <div class="full">
+                <label>Listing type</label>
+                <select class="select" name="listing_type" id="listingType" onchange="NexusAdminUI.syncListingType && NexusAdminUI.syncListingType()">
+                  <option value="standard">Standard product</option>
+                  <option value="custom_request">Custom automation request</option>
+                </select>
+                <small>
+                  Custom request listings skip checkout and send buyers to the intake form.
+                </small>
+              </div>
+
+              <div>
+                <label>Title</label>
+                <input class="input" name="title" required placeholder="AI Social Media Report">
+              </div>
+
+              <div>
+                <label>Slug</label>
+                <input class="input" name="slug" placeholder="ai-social-media-report">
+              </div>
+
+              <div>
+                <label>Category</label>
+                <input class="input" name="category" placeholder="Marketing">
+              </div>
+
+              <div>
+                <label>Badge</label>
+                <input class="input" name="badge" placeholder="Brand Intelligence">
+              </div>
+
+              <div>
+                <label>Icon letters</label>
+                <input class="input" name="icon" maxlength="3" placeholder="AI">
+              </div>
+
+              <div>
+                <label>Color</label>
+                <select class="select" name="color">
+  <option value="blue">Blue</option>
+  <option value="cyan">Cyan</option>
+  <option value="teal">Teal</option>
+  <option value="green">Green</option>
+  <option value="lime">Lime</option>
+  <option value="yellow">Yellow</option>
+  <option value="orange">Orange</option>
+  <option value="red">Red</option>
+  <option value="pink">Pink</option>
+  <option value="rose">Rose</option>
+  <option value="purple">Purple</option>
+  <option value="violet">Violet</option>
+  <option value="indigo">Indigo</option>
+  <option value="slate">Slate</option>
+  <option value="dark">Dark</option>
+</select>
+              </div>
+
+              <div>
+                <label>Status</label>
+                <select class="select" name="status">
+                  <option value="draft">Draft</option>
+                  <option value="pending_review">Pending review</option>
+                  <option value="live">Live</option>
+                  <option value="paused">Paused</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+
+              <div>
+                <label>Featured</label>
+                <select class="select" name="featured">
+                  <option value="">No</option>
+                  <option value="on">Yes</option>
+                </select>
+              </div>
+
+              <div>
+                <label>Delivery time</label>
+                <input class="input" name="delivery_time" placeholder="24-48 hours">
+              </div>
+
+              <div>
+                <label>Setup type label</label>
+                <input class="input" name="setup_type" placeholder="Self-serve or guided">
+              </div>
+
+              <div class="full">
+                <label class="clean-checkbox">
+                  <input type="checkbox" name="guided_install_enabled">
+                  <span>Offer guided install at checkout</span>
+                </label>
+                <small>
+                  Nexus-owned products can offer guided install automatically. Enable this for operator/developer products when setup help is available. The optional setup fee below is charged only when the buyer chooses guided install.
+                </small>
+              </div>
+
+              <div>
+                <label>Best for</label>
+                <input class="input" name="best_for" placeholder="Marketing teams">
+              </div>
+
+              <div class="full">
+                <label>Short description</label>
+                <textarea class="textarea" name="short_description" required placeholder="Brief marketplace card description."></textarea>
+              </div>
+
+              <div class="full">
+                <label>Long description</label>
+                <textarea class="textarea" name="long_description" placeholder="Explain what the automation does and how it helps the buyer."></textarea>
+              </div>
+
+              <div class="full">
+                <label>Problem it solves</label>
+                <textarea class="textarea" name="problem" placeholder="What pain does this remove for the business?"></textarea>
+              </div>
+
+              <div class="full">
+                <label>Business outcome</label>
+                <textarea class="textarea" name="outcome" placeholder="What result should the customer expect?"></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =====================================================
+             SECTION 2: PRICING
+        ====================================================== -->
+<!-- =====================================================
+     SECTION 2: SIMPLE PRICING
+====================================================== -->
+<section class="admin-accordion open">
+  <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+    <div>
+      <span class="eyebrow">Step 2</span>
+      <h2>Pricing</h2>
+      <p>
+        Choose one currency and one price. Nexus handles currency conversion and Stripe sync automatically.
+      </p>
+    </div>
+    <span class="accordion-icon">+</span>
+  </button>
+
+  <div class="admin-accordion-body">
+    <div class="pricing-clean-card">
+      <div class="pricing-clean-header">
+        <div>
+          <h3>Simple pricing setup</h3>
+          <p>
+            Enter the price in the main currency you want to use. The hidden technical fields are kept for Stripe and checkout compatibility.
+          </p>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div>
+          <label>Pricing model</label>
+          <select class="select" name="pricing_type" id="simplePricingType" onchange="NexusAdminUI.syncSimplePricingToHiddenFields()">
+            <option value="one_time">One-time payment</option>
+            <option value="monthly">Monthly subscription</option>
+            <option value="setup_fee">Setup fee only</option>
+            <option value="custom_quote">Custom quote</option>
+            <option value="free_demo">Free demo</option>
+          </select>
+          <small>
+            Use "Setup fee only" if this product is sold as a one-time setup/install service.
+          </small>
+        </div>
+
+        <div>
+          <label>Main currency</label>
+          <select class="select" name="currency" id="simpleCurrency" onchange="NexusAdminUI.syncSimplePricingToHiddenFields()">
+            <option value="USD">USD</option>
+            <option value="THB">THB</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="JPY">JPY</option>
+          </select>
+          <small>
+            Buyers can still switch currency in checkout. Nexus converts automatically.
+          </small>
+        </div>
+
+        <div>
+          <label>Main price</label>
+          <input
+            class="input"
+            id="simplePriceAmount"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="19"
+            oninput="NexusAdminUI.syncSimplePricingToHiddenFields()"
+          >
+          <small>
+            For monthly products, this is the monthly price. For one-time products, this is the total price.
+          </small>
+        </div>
+
+        <div>
+          <label>Optional setup fee</label>
+
+          <div class="clean-toggle-row">
+            <label class="clean-checkbox">
+              <input
+                type="checkbox"
+                id="hasSetupFee"
+                onchange="NexusAdminUI.toggleSetupFeeFields(); NexusAdminUI.syncSimplePricingToHiddenFields();"
+              >
+              <span>Include setup fee</span>
+            </label>
+          </div>
+
+          <small>
+            Saves a setup fee for products that need onboarding or guided installation.
+          </small>
+        </div>
+
+        <div id="setupFeeAmountWrap" style="display:none">
+          <label>Setup fee amount</label>
+          <input
+            class="input"
+            id="simpleSetupFeeAmount"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="299"
+            oninput="NexusAdminUI.syncSimplePricingToHiddenFields()"
+          >
+          <small>
+            This uses the same currency selected above.
+          </small>
+        </div>
+
+        <div class="pricing-clean-summary">
+          <strong>What Nexus will save</strong>
+          <p id="simplePricingSummary">
+            Enter pricing details to see what will be saved.
+          </p>
+        </div>
+      </div>
+
+      <!-- Hidden compatibility fields used by existing Nexus save/checkout/Stripe logic. -->
+      <input type="hidden" name="price_usd" value="">
+      <input type="hidden" name="price_thb" value="">
+      <input type="hidden" name="setup_fee_usd" value="">
+      <input type="hidden" name="setup_fee_thb" value="">
+      <input type="hidden" name="price" value="">
+      <input type="hidden" name="setup_fee" value="">
+    </div>
+  </div>
+</section>
+
+        <!-- =====================================================
+             SECTION 3: MARKETPLACE PREVIEW
+        ====================================================== -->
+        <section class="admin-accordion">
+          <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+            <div>
+              <span class="eyebrow">Step 3</span>
+              <h2>Marketplace preview</h2>
+              <p>Add the visual preview buyers see before they purchase.</p>
+            </div>
+            <span class="accordion-icon">+</span>
+          </button>
+
+          <div class="admin-accordion-body">
+            <div class="form-grid">
+              <div>
+                <label>Template preview type</label>
+                <select class="select" name="preview_type">
+                  <option value="custom">Custom</option>
+                  <option value="listening">Listening</option>
+                  <option value="reports">Reports</option>
+                  <option value="chatbot">Chatbot</option>
+                </select>
+              </div>
+
+              <div>
+                <label>Preview mode</label>
+                <select class="select" name="preview_mode">
+                  <option value="template">Template</option>
+                  <option value="code">Code / HTML</option>
+                  <option value="image">Screenshot URL</option>
+                  <option value="base64">Base64 image</option>
+                </select>
+              </div>
+
+              <div>
+                <label>Preview title</label>
+                <input class="input" name="preview_title" placeholder="Example output preview">
+              </div>
+
+              <div>
+                <label>Rating</label>
+                <input class="input" name="rating" type="number" step="0.1" placeholder="4.9">
+              </div>
+
+              <div>
+                <label>Review count</label>
+                <input class="input" name="review_count" type="number" placeholder="0">
+              </div>
+
+              <div>
+                <label>Sales count</label>
+                <input class="input" name="sales_count" type="number" placeholder="0">
+              </div>
+
+              <div class="full">
+                <label>Preview description</label>
+                <textarea class="textarea" name="preview_description" placeholder="Short explanation of what this preview shows."></textarea>
+              </div>
+
+              <div class="full">
+                <label>Preview code / HTML / JSON</label>
+                <textarea class="textarea code-textarea" name="preview_code" placeholder="Paste code snippet, HTML preview, or example JSON output."></textarea>
+              </div>
+
+              <div class="full">
+                <label>Preview screenshot URL</label>
+                <input class="input" name="preview_image_url" placeholder="https://...">
+              </div>
+
+              <div class="full">
+                <label>Preview base64 image</label>
+                <textarea class="textarea code-textarea" name="preview_base64" placeholder="data:image/png;base64,..."></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+<!-- =====================================================
+     SECTION 4: CUSTOMER SETUP + CREDENTIALS
+====================================================== -->
+<section class="admin-accordion open">
+  <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+    <div>
+      <span class="eyebrow">Step 4</span>
+      <h2>Buyer setup form</h2>
+      <p>
+        Define what the buyer must provide after purchase. Keep this simple unless the product truly needs technical setup.
+      </p>
+    </div>
+    <span class="accordion-icon">+</span>
+  </button>
+
+  <div class="admin-accordion-body">
+    <div class="product-editor-explain-card">
+      <span class="pill blue">How this works</span>
+      <h3>Setup fields become the buyer's setup form.</h3>
+      <p>
+        These fields are shown after checkout for self-serve products. For Nexus Guided Install,
+        use these fields only for non-sensitive business information. Do not ask buyers to paste passwords here.
+      </p>
+    </div>
+
+    <div class="form-grid">
+      <div class="full">
+        <label>Buyer setup questions</label>
+
+        <textarea
+          class="textarea code-textarea large"
+          name="setup_schema"
+          placeholder='[
+  {
+    "name": "facebook_page_url",
+    "label": "Facebook Page URL",
+    "type": "url",
+    "required": true,
+    "description": "Paste the public Facebook page URL."
+  },
+  {
+    "name": "report_frequency",
+    "label": "Report Frequency",
+    "type": "select",
+    "options": ["Weekly", "Monthly"],
+    "required": true
+  }
+]'
+        ></textarea>
+
+        <small>
+          Use this for normal buyer information such as URLs, emails, report frequency, company notes,
+          target audience, or business goals. In n8n, reference these as
+          <code>{{NEXUS_SETUP.field_name}}</code>.
+        </small>
+      </div>
+
+      <div class="full">
+        <label>On-demand request fields</label>
+
+        <textarea
+          class="textarea code-textarea"
+          name="runtime_event_schema"
+          placeholder='[
+  {
+    "name": "question",
+    "label": "Question",
+    "type": "textarea",
+    "required": true,
+    "description": "Used for chatbot or on-demand products when the buyer sends a request."
+  }
+]'
+        ></textarea>
+
+        <small>
+          Use this for per-request inputs on on-demand products. Setup fields are saved once; request fields are sent each time the buyer triggers the automation.
+        </small>
+      </div>
+
+      <div class="full">
+        <label>Credential fields / secrets</label>
+
+        <textarea
+          class="textarea code-textarea"
+          name="credential_schema"
+          placeholder='[
+  {
+    "name": "facebook_access_token",
+    "label": "Facebook Access Token",
+    "type": "secret",
+    "required": true,
+    "description": "Used only if the buyer can provide their own Meta API token."
+  }
+]'
+        ></textarea>
+
+        <small>
+          Use this only for future self-serve credential collection. For launch, most sensitive access should be handled
+          through Nexus Guided Install instead of asking buyers to paste secrets.
+          In n8n, reference these as <code>{{NEXUS_SECRET.field_name}}</code>.
+        </small>
+      </div>
+
+      <div class="setup-schema-helper product-editor-helper-card">
+        <h3>Insert example setup</h3>
+        <p>
+          Start with an example, then edit the field names to match the placeholders used inside your workflow.
+        </p>
+
+        <div class="product-editor-button-row">
+          <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.insertSetupExample('social_report')">
+            Social media report
+          </button>
+
+          <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.insertSetupExample('chatbot')">
+            Chatbot
+          </button>
+
+          <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.insertSetupExample('lead_generation')">
+            Lead generation
+          </button>
+        </div>
+      </div>
+
+      <div class="placeholder-guide-card product-editor-placeholder-card">
+        <h3>Placeholder rules</h3>
+
+        <div class="placeholder-grid">
+          <div>
+            <strong>{{NEXUS_SETUP.facebook_page_url}}</strong>
+            <span>Normal setup answer from the buyer form.</span>
+          </div>
+
+          <div>
+            <strong>{{NEXUS_SECRET.facebook_access_token}}</strong>
+            <span>Sensitive credential field. Use carefully.</span>
+          </div>
+
+          <div>
+            <strong>{{NEXUS_CUSTOMER.email}}</strong>
+            <span>Buyer profile or order data from Nexus.</span>
+          </div>
+
+          <div>
+            <strong>{{NEXUS_SYSTEM.customer_automation_id}}</strong>
+            <span>Runtime IDs that Nexus fills automatically.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="full">
+  <label>Workflow Placeholder Mappings</label>
+
+  <p class="field-help">
+    Map any placeholder used inside the uploaded n8n workflow to Nexus setup, secret, customer, or system fields.
+    Nexus will replace these automatically during import.
+  </p>
+
+  <textarea
+    class="textarea code-textarea"
+    name="workflow_placeholder_mappings"
+    rows="12"
+    placeholder='[
+  {
+    "placeholder": "[[Nexus_Facebook_Page_Id]]",
+    "source": "setup",
+    "key": "facebook_page_id"
+  },
+  {
+    "placeholder": "[[Nexus_Meta_access-token]]",
+    "source": "secret",
+    "key": "meta_access_token"
+  }
+]'
+  ></textarea>
+</div>
+</section>
+
+        <!-- =====================================================
+             SECTION 5: AUTOMATION WORKFLOW UPLOAD
+        ====================================================== -->
+        <!-- =====================================================
+     SECTION 5: AUTOMATION WORKFLOW UPLOAD
+====================================================== -->
+<section class="admin-accordion open">
+  <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+    <div>
+      <span class="eyebrow">Step 5</span>
+      <h2>Workflow platform</h2>
+      <p>
+        Choose the automation platform, upload the workflow, and let Nexus normalize runtime setup automatically.
+      </p>
+    </div>
+    <span class="accordion-icon">+</span>
+  </button>
+
+  <div class="admin-accordion-body">
+    <div class="product-editor-workflow-grid">
+      <div class="product-editor-explain-card">
+        <span class="pill blue">Workflow rules</span>
+        <h3>Before importing, check these basics.</h3>
+
+        <ul>
+          <li>The buyer result node should be named <strong>NEXUS_FINAL_OUTPUT</strong>.</li>
+          <li>Use <strong>{{NEXUS_SETUP.field}}</strong> for buyer setup answers.</li>
+          <li>Use <strong>{{NEXUS_SECRET.field}}</strong> only for sensitive credential placeholders.</li>
+          <li>Click Import any time. Nexus saves new products first, then imports automatically.</li>
+        </ul>
+      </div>
+
+      <div class="product-editor-explain-card warning">
+        <span class="pill orange">Production mode</span>
+        <h3>Import can save first automatically.</h3>
+        <p>
+          For new products, Nexus saves this form as a draft/current product first, updates the URL with the new product ID,
+          then imports the n8n workflow without making you leave and reopen the editor.
+        </p>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="full">
+        <label>Workflow platform</label>
+        <select class="select" id="workflowProvider" onchange="NexusAdminUI.handleWorkflowProviderChange()">
+          <option value="n8n">n8n - available now</option>
+          <option value="make">Make.com - beta import assistant</option>
+          <option value="zapier">Zapier - beta import assistant</option>
+          <option value="python">Python script - beta</option>
+          <option value="pipedream" disabled>Pipedream - coming soon</option>
+          <option value="manual">Manual / Nexus fulfilled</option>
+        </select>
+        <small>
+          n8n is the hosted runtime. Make.com and Zapier workflows can be scanned and converted into n8n JSON before import.
+        </small>
+        <div id="workflowProviderNotice" class="runtime-import-result" style="margin-top:.75rem"></div>
+      </div>
+
+      <div class="full">
+        <label>Automation mode</label>
+        <select class="select" name="runtime_type" id="runtimeTypeSelect">
+          <option value="manual">Manual first / Nexus fulfilled</option>
+          <option value="n8n_managed">Automatic with n8n</option>
+          <option value="python_runner">Automatic with Python runner</option>
+        </select>
+
+        <small>
+          Use manual mode for products fulfilled by Nexus. Use automatic mode when the uploaded n8n workflow should run after setup.
+        </small>
+      </div>
+
+      <div>
+        <label>Runtime behavior</label>
+        <select class="select" name="runtime_trigger_mode">
+          <option value="setup_complete">Run after buyer setup</option>
+          <option value="on_demand">On demand / question triggered</option>
+          <option value="scheduled_interval">Run on a schedule</option>
+          <option value="subscription_monthly">Monthly output</option>
+          <option value="manual">Manual delivery</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Run cadence</label>
+        <select class="select" name="runtime_run_frequency">
+          <option value="manual">Only when triggered</option>
+          <option value="on_demand">On demand</option>
+          <option value="every_30_minutes">Every 30 minutes</option>
+          <option value="hourly">Hourly</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+
+      <div>
+        <label>No-change behavior</label>
+        <select class="select" name="runtime_no_change_policy">
+          <option value="no_output">No dashboard output unless something changed</option>
+          <option value="status_event">Log a status event only</option>
+          <option value="empty_output">Show a "no change" output</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Customer response</label>
+        <select class="select" name="runtime_response_mode">
+          <option value="dashboard_output">Dashboard output</option>
+          <option value="instant_message">Instant answer/message</option>
+          <option value="alert_only">Alert only when triggered</option>
+          <option value="webhook_ack">Webhook acknowledgement</option>
+        </select>
+        <small>Dashboard output requires visible content. Use alert/message/webhook modes for email bots or automations where the buyer sees the result somewhere else.</small>
+      </div>
+
+      <div class="full workflow-source-panel workflow-source-make hidden">
+        <div class="make-import-assistant">
+          <div class="make-import-head">
+            <div>
+              <h3 id="adminSourceImportAssistantTitle">Make.com import assistant</h3>
+              <p id="adminSourceImportAssistantCopy">Scan a Make blueprint, resolve unsupported module groups with HTTP substitutes, then import the generated n8n workflow.</p>
+            </div>
+            <span class="pill blue">Beta</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="full">
+              <label id="adminSourceBlueprintUploadLabel">Upload Make blueprint JSON</label>
+              <input class="input" type="file" id="adminMakeBlueprintFile" accept=".json,application/json">
+            </div>
+            <div class="full">
+              <label id="adminSourceBlueprintJsonLabel">Make blueprint JSON</label>
+              <textarea class="textarea code-textarea" id="adminMakeBlueprintJson" rows="7" placeholder="Paste exported Make.com blueprint JSON here..."></textarea>
+            </div>
+          </div>
+
+          <button class="btn btn-secondary btn-small" id="adminScanMakeBlueprintButton" type="button" onclick="NexusAdminUI.scanMakeBlueprint(this)">
+            Scan Make blueprint
+          </button>
+
+          <div id="adminMakeImportResult" class="runtime-import-result">
+            Optional for Make products. Resolved blueprints will fill the n8n workflow JSON field below.
+          </div>
+        </div>
+      </div>
+
+      <div class="full workflow-source-panel workflow-source-n8n">
+        <label>Upload n8n workflow JSON file</label>
+        <input
+          class="input"
+          type="file"
+          id="n8nWorkflowFile"
+          accept=".json,application/json"
+        >
+
+        <small>
+          Export the workflow from n8n as JSON, then upload it here. Nexus will place it into the workflow JSON field below.
+        </small>
+      </div>
+
+      <div class="full workflow-source-panel workflow-source-n8n">
+        <label>n8n workflow JSON</label>
+
+        <textarea
+          class="textarea code-textarea xlarge"
+          name="n8n_workflow_json"
+          placeholder="Paste exported n8n workflow JSON here or upload a .json file above..."
+        ></textarea>
+
+        <small>
+          Nexus scans this JSON for placeholders and imports it into hosted n8n after the product is saved.
+        </small>
+      </div>
+
+      <div class="full workflow-source-panel workflow-source-python hidden">
+        <div class="make-import-assistant">
+          <div class="make-import-head">
+            <div>
+              <h3>Python script runner</h3>
+              <p>Paste a Python script. Nexus supports <code>run(context)</code>, <code>main(context)</code>, <code>handler(event, context)</code>, async functions, <code>RESULT</code>, or printed JSON/text. Buyer setup is in <code>context["inputs"]</code>; developer keys are in <code>context["credentials"]</code> and matching environment variables.</p>
+            </div>
+            <span class="pill blue">Beta</span>
+          </div>
+          <div class="form-grid">
+            <div class="full">
+              <label>Python script</label>
+              <textarea class="textarea code-textarea xlarge" name="python_script_code" placeholder='def run(context):&#10;    setup = context["setup"]&#10;    return {&#10;        "title": "Automation output",&#10;        "summary": "What happened",&#10;        "content_html": "&lt;h1&gt;Result&lt;/h1&gt;",&#10;        "content_json": {"setup": setup}&#10;    }'></textarea>
+            </div>
+            <div class="full">
+              <label>Extra Python packages</label>
+              <textarea class="textarea code-textarea" name="python_requirements" rows="4" placeholder="requests==2.32.3&#10;beautifulsoup4==4.12.3"></textarea>
+              <small>Common packages are already included in the runner image. Add only product-specific packages here.</small>
+            </div>
+            <div>
+              <label>Entrypoint function</label>
+              <input class="input" name="python_entrypoint" value="run" placeholder="run">
+            </div>
+            <div>
+              <label>Timeout seconds</label>
+              <input class="input" name="python_timeout_seconds" type="number" min="5" max="300" step="1" value="120">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="full workflow-source-panel workflow-source-n8n">
+        <div class="placeholder-scan-card product-editor-scan-card">
+          <div>
+            <h3>Scan workflow placeholders</h3>
+            <p>
+              Check if every <code>NEXUS_SETUP</code> and <code>NEXUS_SECRET</code> placeholder has a matching field in Step 4.
+            </p>
+          </div>
+
+          <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.scanWorkflowPlaceholders()">
+            Scan workflow
+          </button>
+
+          <div id="placeholderScanResult" class="placeholder-scan-result">
+            Upload or paste an n8n workflow JSON, then click Scan workflow.
+          </div>
+        </div>
+      </div>
+
+      <input type="hidden" name="detected_placeholders" value="{}">
+      <input type="hidden" name="placeholder_validation_status" value="not_checked">
+      <input type="hidden" name="placeholder_validation_errors" value="[]">
+
+      <div class="full">
+        <div class="runtime-import-card product-editor-import-card">
+          <div>
+            <h3>Import / update hosted n8n workflow</h3>
+            <p>
+              Click this to save the latest product data and create/update the hosted n8n workflow.
+              New products are saved automatically before import.
+            </p>
+          </div>
+
+          <button id="importN8nWorkflowButton" class="btn btn-primary btn-small" type="button" onclick="NexusAdminUI.importWorkflowToN8n()">
+            Import / update n8n workflow
+          </button>
+          <a class="btn btn-secondary btn-small" href="/pages/admin/credentials.html">
+            Manage credentials
+          </a>
+
+          <div id="n8nImportResult" class="runtime-import-result">
+            Ready. Upload/paste a workflow, then click Import. Nexus will save first if needed.
+          </div>
+        </div>
+      </div>
+
+      <div class="full">
+        <label>Internal workflow notes</label>
+
+        <textarea
+          class="textarea"
+          name="admin_run_instructions"
+          placeholder="Example: This workflow expects Facebook page URL, Instagram handle, report frequency, and brand notes."
+        ></textarea>
+
+        <small>
+          Private notes for Nexus/admin only. Buyers do not see this.
+        </small>
+      </div>
+
+      <!-- Hidden technical fields. Backend manages these. -->
+      <input type="hidden" name="runtime_webhook_url" value="">
+      <input type="hidden" name="runtime_webhook_path" value="">
+      <input type="hidden" name="runtime_output_mode" value="standard">
+      <input type="hidden" name="n8n_workflow_id" value="">
+      <input type="hidden" name="n8n_workflow_name" value="">
+      <input type="hidden" name="output_schema" value="{}">
+      <input type="hidden" name="output_mapping" value="{}">
+    </div>
+  </div>
+</section>
+
+        <!-- =====================================================
+             SECTION 6: LISTS
+        ====================================================== -->
+        <section class="admin-accordion">
+          <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+            <div>
+              <span class="eyebrow">Step 6</span>
+              <h2>Product details lists</h2>
+              <p>Structured bullet points shown inside the product popup.</p>
+            </div>
+            <span class="accordion-icon">+</span>
+          </button>
+
+          <div class="admin-accordion-body">
+            <div class="form-grid">
+              <div class="full">
+                <label>Who it is for, one per line</label>
+                <textarea class="textarea" name="who_it_is_for"></textarea>
+              </div>
+
+              <div class="full">
+                <label>Outputs, one per line</label>
+                <textarea class="textarea" name="outputs"></textarea>
+              </div>
+
+              <div class="full">
+                <label>Required inputs, one per line</label>
+                <textarea class="textarea" name="required_inputs"></textarea>
+              </div>
+
+              <div class="full">
+                <label>Required tools, one per line</label>
+                <textarea class="textarea" name="required_tools"></textarea>
+              </div>
+
+              <div class="full">
+                <label>Setup steps, one per line</label>
+                <textarea class="textarea" name="setup_steps"></textarea>
+              </div>
+
+              <div class="full">
+                <label>Trust points, one per line</label>
+                <textarea class="textarea" name="trust_points"></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =====================================================
+             SECTION 7: CUSTOMIZATIONS
+        ====================================================== -->
+        <section class="admin-accordion">
+          <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+            <div>
+              <span class="eyebrow">Step 7</span>
+              <h2>Customization options</h2>
+              <p>Optional buyer choices. Each can have its own preview.</p>
+            </div>
+            <span class="accordion-icon">+</span>
+          </button>
+
+          <div class="admin-accordion-body">
+            <div class="customization-stack">
+              <div class="card">
+                <h3>Customization 1</h3>
+
+                <div class="form-grid">
+                  <div>
+                    <label>Name</label>
+                    <input class="input" name="custom_1_name">
+                  </div>
+
+                  <div>
+                    <label>Price note</label>
+                    <input class="input" name="custom_1_price_note" placeholder="+$20/mo or included">
+                  </div>
+
+                  <div class="full">
+                    <label>Description</label>
+                    <textarea class="textarea" name="custom_1_description"></textarea>
+                  </div>
+
+                  <div>
+                    <label>Preview mode</label>
+                    <select class="select" name="custom_1_preview_mode">
+                      <option value="template">Template</option>
+                      <option value="code">Code</option>
+                      <option value="image">Screenshot URL</option>
+                      <option value="base64">Base64 image</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label>Screenshot URL</label>
+                    <input class="input" name="custom_1_preview_image_url">
+                  </div>
+
+                  <div class="full">
+                    <label>Preview code</label>
+                    <textarea class="textarea" name="custom_1_preview_code"></textarea>
+                  </div>
+
+                  <div class="full">
+                    <label>Preview base64 image</label>
+                    <textarea class="textarea" name="custom_1_preview_base64"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h3>Customization 2</h3>
+
+                <div class="form-grid">
+                  <div>
+                    <label>Name</label>
+                    <input class="input" name="custom_2_name">
+                  </div>
+
+                  <div>
+                    <label>Price note</label>
+                    <input class="input" name="custom_2_price_note">
+                  </div>
+
+                  <div class="full">
+                    <label>Description</label>
+                    <textarea class="textarea" name="custom_2_description"></textarea>
+                  </div>
+
+                  <div>
+                    <label>Preview mode</label>
+                    <select class="select" name="custom_2_preview_mode">
+                      <option value="template">Template</option>
+                      <option value="code">Code</option>
+                      <option value="image">Screenshot URL</option>
+                      <option value="base64">Base64 image</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label>Screenshot URL</label>
+                    <input class="input" name="custom_2_preview_image_url">
+                  </div>
+
+                  <div class="full">
+                    <label>Preview code</label>
+                    <textarea class="textarea" name="custom_2_preview_code"></textarea>
+                  </div>
+
+                  <div class="full">
+                    <label>Preview base64 image</label>
+                    <textarea class="textarea" name="custom_2_preview_base64"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h3>Customization 3</h3>
+
+                <div class="form-grid">
+                  <div>
+                    <label>Name</label>
+                    <input class="input" name="custom_3_name">
+                  </div>
+
+                  <div>
+                    <label>Price note</label>
+                    <input class="input" name="custom_3_price_note">
+                  </div>
+
+                  <div class="full">
+                    <label>Description</label>
+                    <textarea class="textarea" name="custom_3_description"></textarea>
+                  </div>
+
+                  <div>
+                    <label>Preview mode</label>
+                    <select class="select" name="custom_3_preview_mode">
+                      <option value="template">Template</option>
+                      <option value="code">Code</option>
+                      <option value="image">Screenshot URL</option>
+                      <option value="base64">Base64 image</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label>Screenshot URL</label>
+                    <input class="input" name="custom_3_preview_image_url">
+                  </div>
+
+                  <div class="full">
+                    <label>Preview code</label>
+                    <textarea class="textarea" name="custom_3_preview_code"></textarea>
+                  </div>
+
+                  <div class="full">
+                    <label>Preview base64 image</label>
+                    <textarea class="textarea" name="custom_3_preview_base64"></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =====================================================
+             SECTION 8: INTERNAL NOTES
+        ====================================================== -->
+        <section class="admin-accordion">
+          <button class="admin-accordion-head" type="button" onclick="NexusAdminUI.toggleSection(this)">
+            <div>
+              <span class="eyebrow">Step 8</span>
+              <h2>Internal notes</h2>
+              <p>Private notes for admin/Nexus only.</p>
+            </div>
+            <span class="accordion-icon">+</span>
+          </button>
+
+          <div class="admin-accordion-body">
+            <div class="form-grid">
+              <div class="full">
+                <label>Internal notes</label>
+                <textarea class="textarea" name="internal_notes"></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="product-editor-actions">
+          <button type="submit" class="btn btn-primary">
+            Save product
+          </button>
+
+          <a class="btn btn-secondary" href="/pages/admin/automations.html">
+            Cancel
+          </a>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="productModal">
+    <div class="modal">
+      <div class="modal-side" id="modalSide"></div>
+      <div class="modal-main" id="modalMain"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+<script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+
+ <script>
+  const NexusAdminUI = {
+    currentSavedProduct: null,
+    importInProgress: false,
+
+    escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    },
+
+    getCurrentProductId() {
+      return new URLSearchParams(location.search).get("id") || "";
+    },
+
+    setCurrentProductId(id) {
+      if (!id) return;
+
+      const url = new URL(location.href);
+      url.searchParams.set("id", id);
+      window.history.replaceState({}, "", url.toString());
+
+      const activeSidebarLink = document.querySelector('.sidebar a.active');
+      if (activeSidebarLink) {
+        activeSidebarLink.href = `/pages/admin/product-form.html?id=${encodeURIComponent(id)}`;
+        activeSidebarLink.textContent = "Edit Product";
+      }
+    },
+
+    workflowEditorUrl(productId) {
+      const returnPath = `${location.pathname}${location.search}${location.hash}`;
+      return `/pages/workflow-editor/index.html?automation_id=${encodeURIComponent(productId)}&return=${encodeURIComponent(returnPath)}`;
+    },
+
+    openWorkflowEditor(productId = "") {
+      const id = productId || this.getCurrentProductId();
+      if (!id) {
+        this.toast("Import the workflow before opening the editor.");
+        return;
+      }
+      window.open(this.workflowEditorUrl(id), "_blank", "noopener");
+    },
+
+    setResult(elementId, html) {
+      const element = document.getElementById(elementId);
+      if (element) element.innerHTML = html;
+    },
+
+    toast(message) {
+      if (window.NexusUI && typeof NexusUI.toast === "function") {
+        NexusUI.toast(message);
+      } else {
+        const fallback = document.createElement("div");
+        fallback.className = "notice notice-warning";
+        fallback.textContent = message;
+        fallback.style.position = "fixed";
+        fallback.style.right = "18px";
+        fallback.style.bottom = "18px";
+        fallback.style.zIndex = "9999";
+        document.body.appendChild(fallback);
+        setTimeout(() => fallback.remove(), 5000);
+      }
+    },
+
+    formatRuntimeDate(value) {
+      if (!value) return "Not scheduled";
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "Not scheduled";
+
+      return date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    },
+
+    runtimePillClass(status) {
+      const value = String(status || "").toLowerCase();
+
+      if (["success", "succeeded", "completed", "passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error", "healthy"].includes(value)) return "pill green";
+      if (["failed", "error", "cancelled", "canceled", "paused_by_health_check"].includes(value)) return "pill red";
+      if (["running", "queued", "warning", "needs_recheck", "paused"].includes(value)) return "pill orange";
+
+      return "pill";
+    },
+
+    runtimeLabel(status, fallback = "No runs") {
+      return String(status || fallback || "No runs")
+        .replaceAll("_", " ")
+        .trim();
+    },
+
+    renderRuntimeSummaryHtml(product, summary = {}) {
+      const latestRun = summary.last_customer_run || null;
+      const latestRunAt = latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || summary.last_customer_run_at || "";
+      const nextRunAt = summary.next_run_at || "";
+      const technicalStatus = product?.n8n_last_test_status || summary.last_technical_run?.status || "not_tested";
+      const technicalAt = product?.n8n_last_tested_at || summary.last_technical_run?.finished_at || summary.last_technical_run?.created_at || "";
+      const healthStatus = NexusUI.workflowHealthStatus?.(product, summary) || product?.health_status || summary.last_health_check?.status || "unknown";
+      const healthAt = product?.health_last_checked_at || summary.last_health_check?.checked_at || product?.n8n_last_tested_at || summary.last_technical_run?.finished_at || "";
+      const activeCount = Number(summary.active_schedules || 0);
+      const monthlyCount = Number(summary.monthly_schedules || 0);
+      const dueCount = Number(summary.due_schedules || 0);
+
+      return `
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>
+            Track this product's customer executions, monthly schedule, technical run, and 30-minute health checks.
+          </p>
+        </div>
+
+        <div class="admin-runtime-summary-grid">
+          <div class="admin-runtime-summary-card">
+            <span>Next monthly run</span>
+            <strong>${this.escapeHtml(nextRunAt ? this.formatRuntimeDate(nextRunAt) : activeCount ? "Waiting for schedule" : "No active schedule")}</strong>
+            <small>${activeCount}/${monthlyCount} active monthly schedules - ${dueCount} due now</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Latest customer run</span>
+            <strong><span class="${this.runtimePillClass(latestRun?.status)}">${this.escapeHtml(this.runtimeLabel(latestRun?.status, "No runs"))}</span></strong>
+            <small>${this.escapeHtml(latestRunAt ? this.formatRuntimeDate(latestRunAt) : "No customer runs yet")}</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Technical check</span>
+            <strong><span class="${this.runtimePillClass(technicalStatus)}">${this.escapeHtml(this.runtimeLabel(technicalStatus, "not tested"))}</span></strong>
+            <small>${this.escapeHtml(technicalAt ? this.formatRuntimeDate(technicalAt) : "Not tested")}</small>
+          </div>
+
+          <div class="admin-runtime-summary-card">
+            <span>Health checker</span>
+            <strong><span class="${this.runtimePillClass(healthStatus)}">${this.escapeHtml(NexusUI.workflowHealthLabel?.(healthStatus) || this.runtimeLabel(healthStatus, "unknown"))}</span></strong>
+            <small>${this.escapeHtml(healthAt ? this.formatRuntimeDate(healthAt) : "Not checked yet")}</small>
+          </div>
+        </div>
+      `;
+    },
+
+    async renderRuntimeSummary(productId = "", product = null) {
+      const panel = document.getElementById("adminProductRuntimePanel");
+      const id = productId || this.getCurrentProductId();
+
+      if (!panel || !id || typeof NexusDB.getAdminProductRuntimeSummary !== "function") return;
+
+      panel.hidden = false;
+      panel.innerHTML = `
+        <div>
+          <span class="eyebrow">Runtime</span>
+          <h2>Runs and schedule</h2>
+          <p>Loading this product's run history and next scheduled output...</p>
+        </div>
+      `;
+
+      const [productResult, summaryResult] = await Promise.all([
+        product ? Promise.resolve({ data: product, error: null }) : NexusDB.getAutomationById(id),
+        NexusDB.getAdminProductRuntimeSummary([id])
+      ]);
+
+      if (productResult.error || summaryResult.error) {
+        panel.innerHTML = `
+          <div>
+            <span class="eyebrow">Runtime</span>
+            <h2>Runs and schedule</h2>
+            <p>${this.escapeHtml(productResult.error?.message || summaryResult.error?.message || "Could not load runtime summary.")}</p>
+          </div>
+        `;
+        return;
+      }
+
+      this.currentSavedProduct = productResult.data || this.currentSavedProduct;
+      panel.innerHTML = this.renderRuntimeSummaryHtml(productResult.data || {}, summaryResult.data?.[id] || {});
+    },
+
+    setAccordionState(section, open) {
+      if (!section) return;
+
+      const body = section.querySelector(".admin-accordion-body");
+      const icon = section.querySelector(".accordion-icon");
+
+      section.classList.toggle("open", Boolean(open));
+
+      if (body) {
+        body.style.display = open ? "" : "none";
+      }
+
+      if (icon) {
+        icon.textContent = open ? "-" : "+";
+      }
+    },
+
+    initializeAccordions() {
+      document.querySelectorAll(".admin-accordion").forEach((section, index) => {
+        /*
+          Keep the key launch sections open by default. Everything else is collapsed but still reliably toggles.
+          This fixes sections that visually appeared open/collapsed inconsistently after loading an existing product.
+        */
+        const shouldOpen =
+          section.classList.contains("open") ||
+          index === 0;
+
+        this.setAccordionState(section, shouldOpen);
+      });
+    },
+
+    toggleSection(button) {
+      const section = button.closest(".admin-accordion");
+      if (!section) return;
+
+      const isOpen = section.classList.contains("open");
+      this.setAccordionState(section, !isOpen);
+    },
+
+    getNumberField(name) {
+      const element = document.querySelector(`[name="${name}"]`);
+      const raw = String(element?.value || "").trim();
+      const value = Number(raw || 0);
+
+      return {
+        element,
+        raw,
+        value,
+        hasPositiveValue: value > 0
+      };
+    },
+
+    hydrateSimplePricingFromHiddenFields() {
+      const pricingType = document.getElementById("simplePricingType");
+      const currency = document.getElementById("simpleCurrency");
+      const priceAmount = document.getElementById("simplePriceAmount");
+      const setupFeeToggle = document.getElementById("hasSetupFee");
+      const setupFeeAmount = document.getElementById("simpleSetupFeeAmount");
+      const summary = document.getElementById("simplePricingSummary");
+
+      if (!pricingType || !currency || !priceAmount) return false;
+
+      const priceUsd = this.getNumberField("price_usd");
+      const priceThb = this.getNumberField("price_thb");
+      const setupUsd = this.getNumberField("setup_fee_usd");
+      const setupThb = this.getNumberField("setup_fee_thb");
+      const legacyPrice = this.getNumberField("price");
+      const legacySetupFee = this.getNumberField("setup_fee");
+
+      const hasUsdPrice = priceUsd.hasPositiveValue;
+      const hasThbPrice = priceThb.hasPositiveValue;
+      const hasUsdSetup = setupUsd.hasPositiveValue;
+      const hasThbSetup = setupThb.hasPositiveValue;
+
+      const hasAnySavedPrice =
+        hasUsdPrice ||
+        hasThbPrice ||
+        hasUsdSetup ||
+        hasThbSetup ||
+        legacyPrice.hasPositiveValue ||
+        legacySetupFee.hasPositiveValue;
+
+      if (!hasAnySavedPrice) {
+        if (summary) {
+          summary.textContent = "No saved price found. Enter pricing details before saving.";
+        }
+
+        return false;
+      }
+
+      if (hasUsdPrice || hasUsdSetup) {
+        currency.value = "USD";
+      } else if (hasThbPrice || hasThbSetup) {
+        currency.value = "THB";
+      }
+
+      const selectedCurrency = String(currency.value || "USD").toUpperCase();
+
+      const savedMainPrice =
+        selectedCurrency === "THB"
+          ? priceThb.value || legacyPrice.value || ""
+          : priceUsd.value || legacyPrice.value || "";
+
+      const savedSetupFee =
+        selectedCurrency === "THB"
+          ? setupThb.value || legacySetupFee.value || ""
+          : setupUsd.value || legacySetupFee.value || "";
+
+      if (savedMainPrice) {
+        priceAmount.value = savedMainPrice;
+      }
+
+      if (setupFeeToggle) {
+        setupFeeToggle.checked = Number(savedSetupFee || 0) > 0;
+      }
+
+      if (setupFeeAmount) {
+        setupFeeAmount.value = savedSetupFee || "";
+      }
+
+      this.toggleSetupFeeFields({ preserveSetupValue: true });
+
+      if (summary) {
+        const setupText = savedSetupFee
+          ? ` Setup fee: ${selectedCurrency} ${savedSetupFee}.`
+          : "";
+
+        summary.textContent = savedMainPrice
+          ? `Saved price loaded: ${selectedCurrency} ${savedMainPrice}.${setupText}`
+          : "No saved main price found. Enter pricing details before saving.";
+      }
+
+      return Boolean(savedMainPrice || savedSetupFee);
+    },
+
+    forceHydratePricingAfterProductLoad() {
+      let attempts = 0;
+
+      const timer = setInterval(() => {
+        attempts += 1;
+
+        const hydrated = NexusAdminUI.hydrateSimplePricingFromHiddenFields();
+
+        const visiblePrice = String(document.getElementById("simplePriceAmount")?.value || "").trim();
+        const visibleSetup = String(document.getElementById("simpleSetupFeeAmount")?.value || "").trim();
+
+        if (hydrated && (visiblePrice || visibleSetup)) {
+          clearInterval(timer);
+          return;
+        }
+
+        if (attempts >= 60) {
+          clearInterval(timer);
+        }
+      }, 250);
+    },
+
+    toggleSetupFeeFields(options = {}) {
+      const toggle = document.getElementById("hasSetupFee");
+      const wrap = document.getElementById("setupFeeAmountWrap");
+      const setupAmount = document.getElementById("simpleSetupFeeAmount");
+
+      if (!toggle || !wrap) return;
+
+      wrap.style.display = toggle.checked ? "" : "none";
+
+      if (!toggle.checked && setupAmount && !options.preserveSetupValue) {
+        setupAmount.value = "";
+      }
+    },
+
+    syncSimplePricingToHiddenFields() {
+      const pricingType = document.getElementById("simplePricingType");
+      const currency = document.getElementById("simpleCurrency");
+      const priceAmount = document.getElementById("simplePriceAmount");
+      const setupFeeToggle = document.getElementById("hasSetupFee");
+      const setupFeeAmount = document.getElementById("simpleSetupFeeAmount");
+      const summary = document.getElementById("simplePricingSummary");
+
+      if (!pricingType || !currency || !priceAmount) return;
+
+      const model = String(pricingType.value || "one_time");
+      const selectedCurrency = String(currency.value || "USD").toUpperCase();
+
+      const priceRaw = String(priceAmount.value || "").trim();
+      const setupRaw = String(setupFeeAmount?.value || "").trim();
+
+      const price = Number(priceRaw || 0);
+      const setupFee = setupFeeToggle?.checked ? Number(setupRaw || 0) : 0;
+
+      const priceUsd = document.querySelector("[name='price_usd']");
+      const priceThb = document.querySelector("[name='price_thb']");
+      const setupUsd = document.querySelector("[name='setup_fee_usd']");
+      const setupThb = document.querySelector("[name='setup_fee_thb']");
+      const legacyPrice = document.querySelector("[name='price']");
+      const legacySetupFee = document.querySelector("[name='setup_fee']");
+
+      if (!priceRaw && model !== "free_demo" && model !== "custom_quote") {
+        if (summary) {
+          summary.textContent = "Existing saved price is being kept. Enter a new price only if you want to change it.";
+        }
+
+        return;
+      }
+
+      if (priceUsd) priceUsd.value = "";
+      if (priceThb) priceThb.value = "";
+      if (setupUsd) setupUsd.value = "";
+      if (setupThb) setupThb.value = "";
+      if (legacyPrice) legacyPrice.value = "";
+      if (legacySetupFee) legacySetupFee.value = "";
+
+      if (model === "free_demo" || model === "custom_quote") {
+        if (summary) {
+          summary.textContent = model === "free_demo"
+            ? "This product will show as a free demo. No Stripe price is needed."
+            : "This product will show as custom quote. Buyers will contact Nexus instead of checking out directly.";
+        }
+
+        return;
+      }
+
+      if (model === "setup_fee") {
+        if (selectedCurrency === "THB") {
+          if (setupThb) setupThb.value = price || "";
+        } else if (selectedCurrency === "USD") {
+          if (setupUsd) setupUsd.value = price || "";
+        }
+
+        if (legacySetupFee) legacySetupFee.value = price || "";
+
+        if (summary) {
+          summary.textContent = price
+            ? `Nexus will save a ${selectedCurrency} setup fee of ${price}.`
+            : "Enter the setup fee amount.";
+        }
+
+        return;
+      }
+
+      if (selectedCurrency === "THB") {
+        if (priceThb) priceThb.value = price || "";
+        if (setupThb) setupThb.value = setupFee || "";
+      } else if (selectedCurrency === "USD") {
+        if (priceUsd) priceUsd.value = price || "";
+        if (setupUsd) setupUsd.value = setupFee || "";
+      }
+
+      if (legacyPrice) legacyPrice.value = price || "";
+      if (legacySetupFee) legacySetupFee.value = setupFee || "";
+
+      if (summary) {
+        const modelLabel = model === "monthly" ? "monthly subscription" : "one-time product";
+        const setupText = setupFee > 0 ? ` Setup fee: ${selectedCurrency} ${setupFee}.` : "";
+
+        summary.textContent = price
+          ? `Nexus will save a ${selectedCurrency} ${price} ${modelLabel}.${setupText}`
+          : "Enter the main price amount.";
+      }
+    },
+
+    syncListingType() {
+      const listingType = document.getElementById("listingType");
+      const pricingType = document.getElementById("simplePricingType");
+
+      if (!listingType || !pricingType) return;
+
+      if (listingType.value === "custom_request") {
+        pricingType.value = "custom_quote";
+        this.syncSimplePricingToHiddenFields();
+      }
+    },
+
+    safeParseJson(value, fallback) {
+      const raw = String(value || "").trim();
+
+      if (!raw) return fallback;
+
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return fallback;
+      }
+    },
+
+    requireJsonField(name, fallback) {
+      const element = document.querySelector(`[name="${name}"]`);
+      const raw = String(element?.value || "").trim();
+
+      if (!raw) return fallback;
+
+      try {
+        return JSON.parse(raw);
+      } catch (error) {
+        throw new Error(`${name} must be valid JSON. ${error.message}`);
+      }
+    },
+
+    linesFromFormData(formData, name) {
+      return String(formData.get(name) || "")
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    },
+
+    collectCustomizations(formData) {
+      const customizations = [];
+
+      for (let i = 1; i <= 3; i++) {
+        const name = String(formData.get(`custom_${i}_name`) || "").trim();
+
+        if (!name) continue;
+
+        customizations.push({
+          name,
+          description: String(formData.get(`custom_${i}_description`) || ""),
+          price_note: String(formData.get(`custom_${i}_price_note`) || ""),
+          preview_mode: String(formData.get(`custom_${i}_preview_mode`) || "template"),
+          preview_code: String(formData.get(`custom_${i}_preview_code`) || ""),
+          preview_image_url: String(formData.get(`custom_${i}_preview_image_url`) || ""),
+          preview_base64: String(formData.get(`custom_${i}_preview_base64`) || "")
+        });
+      }
+
+      return customizations;
+    },
+
+    async getExistingProduct(id) {
+      if (!id || typeof NexusDB.getAutomationById !== "function") return null;
+
+      try {
+        const { data, error } = await NexusDB.getAutomationById(id);
+        if (error) {
+          console.warn("Could not load existing product for import-save preservation:", error);
+          return null;
+        }
+
+        return data || null;
+      } catch (error) {
+        console.warn("Could not load existing product:", error);
+        return null;
+      }
+    },
+
+    buildProductPayloadFromForm(options = {}) {
+      const form = document.getElementById("automationForm");
+      if (!form) throw new Error("Product form was not found.");
+
+      this.syncSimplePricingToHiddenFields();
+
+      const formData = new FormData(form);
+      const currentId = this.getCurrentProductId();
+      const existingProduct = options.existingProduct || this.currentSavedProduct || {};
+
+      const title = String(formData.get("title") || "").trim();
+      const developerId = String(formData.get("developer_id") || "").trim();
+
+      if (!title) {
+        throw new Error("Product title is required before importing.");
+      }
+
+      if (!developerId) {
+        throw new Error("Choose a developer/operator before importing.");
+      }
+
+      const setupSchema = this.requireJsonField("setup_schema", []);
+      const runtimeEventSchema = this.requireJsonField("runtime_event_schema", []);
+      const credentialSchema = this.requireJsonField("credential_schema", []);
+      const workflowPlaceholderMappings = this.requireJsonField("workflow_placeholder_mappings", []);
+      const n8nWorkflowJson = this.requireJsonField("n8n_workflow_json", null);
+      const detectedPlaceholders = this.requireJsonField("detected_placeholders", {});
+      const placeholderValidationErrors = this.requireJsonField("placeholder_validation_errors", []);
+
+      const slugValue = String(formData.get("slug") || "").trim();
+      const slug = slugValue || NexusUI.slugify(title);
+
+      const runtimeTypeElement = document.querySelector("[name='runtime_type']");
+      const workflowProvider = String(document.getElementById("workflowProvider")?.value || "n8n");
+
+      if ((workflowProvider === "n8n" || workflowProvider === "make" || workflowProvider === "zapier") && runtimeTypeElement) {
+        runtimeTypeElement.value = "n8n_managed";
+      } else if (workflowProvider === "python" && runtimeTypeElement) {
+        runtimeTypeElement.value = "python_runner";
+      }
+
+      const payload = {
+        id: currentId || undefined,
+        developer_id: developerId,
+
+        title,
+        slug,
+        listing_type: String(formData.get("listing_type") || "standard"),
+        category: String(formData.get("category") || ""),
+        badge: String(formData.get("badge") || ""),
+        icon: String(formData.get("icon") || "AI").slice(0, 3).toUpperCase(),
+        color: String(formData.get("color") || "blue"),
+        status: String(formData.get("status") || "draft"),
+        featured: formData.get("featured") === "on",
+
+        pricing_type: String(formData.get("pricing_type") || "custom_quote"),
+        currency: String(formData.get("currency") || "USD"),
+        guided_install_enabled:
+          String(formData.get("listing_type") || "standard") === "standard" &&
+          formData.get("guided_install_enabled") === "on",
+
+        price: Number(formData.get("price") || 0),
+        price_usd: Number(formData.get("price_usd") || 0),
+        price_thb: Number(formData.get("price_thb") || 0),
+        setup_fee: Number(formData.get("setup_fee") || 0),
+        setup_fee_usd: Number(formData.get("setup_fee_usd") || 0),
+        setup_fee_thb: Number(formData.get("setup_fee_thb") || 0),
+
+        delivery_time: String(formData.get("delivery_time") || ""),
+        setup_type: String(formData.get("setup_type") || ""),
+        best_for: String(formData.get("best_for") || ""),
+
+        rating: Number(formData.get("rating") || 0),
+        review_count: Number(formData.get("review_count") || 0),
+        sales_count: Number(formData.get("sales_count") || 0),
+
+        preview_type: String(formData.get("preview_type") || "custom"),
+        preview_mode: String(formData.get("preview_mode") || "template"),
+        preview_title: String(formData.get("preview_title") || ""),
+        preview_description: String(formData.get("preview_description") || ""),
+        preview_code: String(formData.get("preview_code") || ""),
+        preview_image_url: String(formData.get("preview_image_url") || ""),
+        preview_base64: String(formData.get("preview_base64") || ""),
+
+        short_description: String(formData.get("short_description") || ""),
+        long_description: String(formData.get("long_description") || ""),
+        problem: String(formData.get("problem") || ""),
+        outcome: String(formData.get("outcome") || ""),
+
+        who_it_is_for: this.linesFromFormData(formData, "who_it_is_for"),
+        outputs: this.linesFromFormData(formData, "outputs"),
+        required_inputs: this.linesFromFormData(formData, "required_inputs"),
+        required_tools: this.linesFromFormData(formData, "required_tools"),
+        setup_steps: this.linesFromFormData(formData, "setup_steps"),
+        trust_points: this.linesFromFormData(formData, "trust_points"),
+
+        customizations: this.collectCustomizations(formData),
+
+        runtime_type: String(formData.get("runtime_type") || existingProduct.runtime_type || "manual"),
+        runtime_trigger_mode: String(formData.get("runtime_trigger_mode") || existingProduct.runtime_trigger_mode || "legacy"),
+        runtime_run_frequency: String(formData.get("runtime_run_frequency") || existingProduct.runtime_run_frequency || "manual"),
+        runtime_no_change_policy: String(formData.get("runtime_no_change_policy") || existingProduct.runtime_no_change_policy || "no_output"),
+        runtime_response_mode: String(formData.get("runtime_response_mode") || existingProduct.runtime_response_mode || "dashboard_output"),
+        runtime_event_schema: runtimeEventSchema,
+        workflow_source_platform: workflowProvider,
+        python_script_code: String(formData.get("python_script_code") || ""),
+        python_requirements: String(formData.get("python_requirements") || ""),
+        python_entrypoint: String(formData.get("python_entrypoint") || "run"),
+        python_timeout_seconds: Number(formData.get("python_timeout_seconds") || 120),
+
+        runtime_webhook_url: workflowProvider === "python" && typeof NexusDB.functionsBaseUrl === "function"
+          ? `${NexusDB.functionsBaseUrl()}/run-python-automation`
+          : existingProduct.runtime_webhook_url || "",
+        runtime_webhook_path: existingProduct.runtime_webhook_path || "",
+        runtime_output_mode: existingProduct.runtime_output_mode || "standard",
+
+        setup_schema: setupSchema,
+        credential_schema: credentialSchema,
+        workflow_placeholder_mappings: workflowPlaceholderMappings,
+
+        detected_placeholders: detectedPlaceholders,
+        placeholder_validation_status: String(
+          formData.get("placeholder_validation_status") ||
+          existingProduct.placeholder_validation_status ||
+          "not_checked"
+        ),
+        placeholder_validation_errors: placeholderValidationErrors,
+
+        output_schema: existingProduct.output_schema || {},
+        output_mapping: existingProduct.output_mapping || {},
+
+        n8n_workflow_json: n8nWorkflowJson,
+        n8n_workflow_id: existingProduct.n8n_workflow_id || "",
+        n8n_workflow_name: existingProduct.n8n_workflow_name || "",
+        n8n_normalized_workflow_json: existingProduct.n8n_normalized_workflow_json || null,
+        n8n_import_status: existingProduct.n8n_import_status || "not_imported",
+        n8n_import_error: existingProduct.n8n_import_error || null,
+        n8n_last_synced_at: existingProduct.n8n_last_synced_at || null,
+        n8n_imported_at: existingProduct.n8n_imported_at || null,
+        n8n_webhook_url: existingProduct.n8n_webhook_url || "",
+        n8n_last_import_result: existingProduct.n8n_last_import_result || {},
+
+        admin_run_instructions: String(formData.get("admin_run_instructions") || ""),
+        internal_notes: String(formData.get("internal_notes") || ""),
+        updated_at: new Date().toISOString()
+      };
+
+      return payload;
+    },
+
+    async saveProductFromEditor(options = {}) {
+      const {
+        silent = false,
+        syncStripe = true,
+        statusMessage = "Saving product..."
+      } = options;
+
+      if (typeof NexusDB.upsertAutomation !== "function") {
+        throw new Error("Product save function is missing in nexus-db.js.");
+      }
+
+      const existingId = this.getCurrentProductId();
+      const existingProduct = await this.getExistingProduct(existingId);
+      const payload = this.buildProductPayloadFromForm({ existingProduct });
+
+      if (!silent) {
+        this.toast(statusMessage);
+      }
+
+      const { data: savedProduct, error } = await NexusDB.upsertAutomation(payload);
+
+      if (error) {
+        throw new Error(error.message || "Could not save product.");
+      }
+
+      if (!savedProduct?.id) {
+        throw new Error("Product saved, but no product ID was returned.");
+      }
+
+      this.currentSavedProduct = savedProduct;
+      this.setCurrentProductId(savedProduct.id);
+
+      if (syncStripe) {
+        const shouldSyncStripe =
+          savedProduct &&
+          ["one_time", "setup_fee", "monthly"].includes(savedProduct.pricing_type);
+
+        if (shouldSyncStripe && typeof NexusDB.syncStripeProduct === "function") {
+          const { error: stripeError } = await NexusDB.syncStripeProduct(savedProduct.id);
+
+          if (stripeError) {
+            throw new Error(`Product saved, but Stripe sync failed: ${stripeError.message}`);
+          }
+        }
+      }
+
+      return savedProduct;
+    },
+
+    async refreshProductWorkflowFields(productId) {
+      if (!productId || typeof NexusDB.getAutomationById !== "function") return;
+
+      const { data: product, error } = await NexusDB.getAutomationById(productId);
+
+      if (error || !product) {
+        console.warn("Could not refresh product after import:", error);
+        return;
+      }
+
+      this.currentSavedProduct = product;
+      this.renderRuntimeSummary(product.id, product);
+
+      const writeJsonField = (name, value) => {
+        const element = document.querySelector(`[name="${name}"]`);
+        if (!element) return;
+        element.value = value ? JSON.stringify(value, null, 2) : "";
+      };
+
+      writeJsonField("setup_schema", product.setup_schema || []);
+      writeJsonField("runtime_event_schema", product.runtime_event_schema || []);
+      writeJsonField("credential_schema", product.credential_schema || []);
+      writeJsonField("workflow_placeholder_mappings", product.workflow_placeholder_mappings || []);
+      writeJsonField("detected_placeholders", product.detected_placeholders || {});
+      writeJsonField("placeholder_validation_errors", product.placeholder_validation_errors || []);
+      writeJsonField("n8n_workflow_json", product.n8n_workflow_json || null);
+
+      const makeBlueprint = document.getElementById("adminMakeBlueprintJson");
+      if (makeBlueprint) {
+        makeBlueprint.value = product.make_blueprint ? JSON.stringify(product.make_blueprint, null, 2) : makeBlueprint.value;
+      }
+
+      const placeholderStatus = document.querySelector("[name='placeholder_validation_status']");
+      if (placeholderStatus) {
+        placeholderStatus.value = product.placeholder_validation_status || "not_checked";
+      }
+
+      if (product.n8n_import_status === "imported" && product.n8n_workflow_id) {
+        this.setResult("n8nImportResult", `
+          <div class="success">
+            <strong>Workflow imported.</strong><br>
+            Workflow ID: ${this.escapeHtml(product.n8n_workflow_id)}<br>
+            ${product.runtime_webhook_url || product.n8n_webhook_url ? `Webhook URL: ${this.escapeHtml(product.runtime_webhook_url || product.n8n_webhook_url)}` : "Webhook URL saved to product."}
+            <div style="margin-top:.75rem">
+              <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openWorkflowEditor('${this.escapeHtml(product.id || "")}')">
+                Edit workflow
+              </button>
+            </div>
+          </div>
+        `);
+      }
+
+      this.scanWorkflowPlaceholders();
+    },
+
+    async importWorkflowToN8n() {
+      const result = document.getElementById("n8nImportResult");
+      const importButton = document.getElementById("importN8nWorkflowButton");
+      const originalText = importButton ? importButton.textContent : "Import / update n8n workflow";
+
+      if (this.importInProgress) return;
+
+      const provider = String(document.getElementById("workflowProvider")?.value || "n8n");
+
+      if (provider !== "n8n" && provider !== "make") {
+        this.toast("This workflow platform is coming soon.");
+        if (result) {
+          result.innerHTML = `
+            <div class="error">
+              <strong>${this.escapeHtml(provider)} is coming soon.</strong><br>
+              For launch, only n8n workflows can be imported automatically.
+            </div>
+          `;
+        }
+        return;
+      }
+
+      if (typeof NexusDB.importN8nWorkflow !== "function") {
+        this.toast("Import function is missing in nexus-db.js.");
+        return;
+      }
+
+      this.importInProgress = true;
+
+      if (importButton) {
+        importButton.disabled = true;
+        importButton.textContent = "Saving product...";
+      }
+
+      try {
+        if (result) {
+          result.innerHTML = "Saving latest product data before import...";
+        }
+
+        const runtimeType = document.querySelector("[name='runtime_type']");
+        if (runtimeType) runtimeType.value = "n8n_managed";
+
+        const workflowText = String(document.querySelector("[name='n8n_workflow_json']")?.value || "").trim();
+        if (!workflowText) {
+          throw new Error("Upload or paste an n8n workflow JSON before importing.");
+        }
+
+        const savedProduct = await this.saveProductFromEditor({
+          silent: true,
+          syncStripe: true
+        });
+
+        if (result) {
+          result.innerHTML = "Product saved. Importing workflow into hosted n8n...";
+        }
+
+        if (importButton) {
+          importButton.textContent = "Importing workflow...";
+        }
+
+        const { data, error } = await NexusDB.importN8nWorkflow(savedProduct.id);
+
+        if (error) {
+          throw new Error(error.message || "n8n import failed.");
+        }
+
+        await this.refreshProductWorkflowFields(savedProduct.id);
+
+        const warnings = Array.isArray(data?.warnings)
+          ? data.warnings
+          : Array.isArray(data?.import_warnings)
+            ? data.import_warnings
+            : [];
+
+        const warningHtml = warnings.length
+          ? `
+            <div class="placeholder-errors" style="margin-top:.75rem">
+              <strong>Import warnings:</strong>
+              <ul>
+                ${warnings.map(warning => `<li>${this.escapeHtml(warning)}</li>`).join("")}
+              </ul>
+            </div>
+          `
+          : "";
+
+        if (result) {
+          const workflowId = data?.workflow_id || data?.n8n_workflow_id || "";
+          result.innerHTML = `
+            <div class="success">
+              <strong>Workflow imported.</strong><br>
+              Workflow ID: ${this.escapeHtml(workflowId || "created/updated")}<br>
+              Webhook URL: ${this.escapeHtml(data?.webhook_url || data?.runtime_webhook_url || "saved to product")}
+              ${workflowId ? `
+                <div style="margin-top:.75rem">
+                  <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.openWorkflowEditor('${this.escapeHtml(savedProduct.id || "")}')">
+                    Edit workflow
+                  </button>
+                </div>
+              ` : ""}
+            </div>
+            ${warningHtml}
+          `;
+        }
+
+        this.toast("Product saved and n8n workflow imported.");
+
+        if (importButton) {
+          importButton.textContent = "Imported";
+        }
+
+        setTimeout(() => {
+          if (importButton) {
+            importButton.disabled = false;
+            importButton.textContent = originalText;
+          }
+        }, 1200);
+      } catch (error) {
+        console.error("n8n import error:", error);
+
+        if (result) {
+          result.innerHTML = `
+            <div class="error">
+              <strong>Import failed.</strong><br>
+              ${this.escapeHtml(error.message || "Unknown error")}
+            </div>
+          `;
+        }
+
+        this.toast(error.message || "n8n import failed.");
+
+        if (importButton) {
+          importButton.disabled = false;
+          importButton.textContent = originalText;
+        }
+      } finally {
+        this.importInProgress = false;
+      }
+    },
+
+    currentSourceImportPlatform() {
+      const provider = String(document.getElementById("workflowProvider")?.value || "make").toLowerCase();
+      return provider === "zapier" ? "zapier" : "make";
+    },
+
+    sourceImportLabel(platform = this.currentSourceImportPlatform()) {
+      return platform === "zapier" ? "Zapier workflow" : "Make blueprint";
+    },
+
+    readMakeBlueprint() {
+      const label = this.sourceImportLabel();
+      const raw = String(document.getElementById("adminMakeBlueprintJson")?.value || "").trim();
+      if (!raw) throw new Error(`Paste or upload a ${label} JSON first.`);
+
+      try {
+        return JSON.parse(raw);
+      } catch {
+        throw new Error(`${label} JSON is invalid.`);
+      }
+    },
+
+    makeImportSummaryHtml(data) {
+      const summary = data?.summary || {};
+      if (!summary || !Object.keys(summary).length) return "";
+
+      return `
+        <div class="make-import-summary-grid">
+          <article><span>Modules</span><strong>${this.escapeHtml(summary.module_count || 0)}</strong></article>
+          <article><span>Groups</span><strong>${this.escapeHtml(summary.group_count || 0)}</strong></article>
+          <article><span>Resolved</span><strong>${this.escapeHtml(summary.resolved_count || 0)}</strong></article>
+          <article class="${Number(summary.unresolved_count || 0) ? "attention" : ""}"><span>Needs substitute</span><strong>${this.escapeHtml(summary.unresolved_count || 0)}</strong></article>
+          <article><span>Confidence</span><strong>${this.escapeHtml(summary.confidence_percent || 0)}%</strong></article>
+        </div>
+      `;
+    },
+
+    makeUnresolvedGroupHtml(group, sessionId) {
+      const key = this.escapeHtml(group.source_module_key || "");
+      const supportOnly = String(group.suggested_strategy || "http_request").toLowerCase() === "manual_support";
+
+      return `
+        <article class="make-module-card" data-admin-make-module-card="${key}">
+          <div class="make-module-card-head">
+            <div>
+              <strong>${this.escapeHtml(group.source_module_label || group.source_module || "Unsupported source step")}</strong>
+              <p>${this.escapeHtml(group.source_app || "Make")} ${group.source_action ? `| ${this.escapeHtml(group.source_action)}` : ""} | used ${this.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</p>
+              ${group.target_n8n_node_type ? `<p>Suggested n8n substitute: ${this.escapeHtml(group.target_n8n_node_type)} ${group.target_operation ? `(${this.escapeHtml(group.target_operation)})` : ""}</p>` : ""}
+            </div>
+            <span class="pill orange">${supportOnly ? "Nexus support needed" : "HTTP substitute needed"}</span>
+          </div>
+          <details>
+            <summary><strong>Add HTTP substitute</strong></summary>
+            <div class="make-http-grid">
+              <input type="hidden" data-admin-make-field="session_id" value="${this.escapeHtml(sessionId)}">
+              <input type="hidden" data-admin-make-field="source_module_key" value="${key}">
+              <div><label>Method</label><select class="select" data-admin-make-field="method"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select></div>
+              <div><label>Credential provider</label><input class="input" data-admin-make-field="credential_provider" value="${this.escapeHtml(group.source_app || "custom")}"></div>
+              <div class="full"><label>HTTPS URL</label><input class="input" data-admin-make-field="url" placeholder="https://api.service.com/v1/resource"></div>
+              <div><label>Auth type</label><select class="select" data-admin-make-field="auth_type"><option value="bearer">Bearer credential</option><option value="none">No credential</option></select></div>
+              <div><label>n8n credential type</label><input class="input" data-admin-make-field="n8n_credential_type" value="httpBearerAuth"></div>
+              <div class="full"><label>Headers JSON</label><textarea class="textarea code-textarea" data-admin-make-field="headers" rows="3" placeholder='{"Accept":"application/json"}'></textarea></div>
+              <div class="full"><label>Body JSON</label><textarea class="textarea code-textarea" data-admin-make-field="body_json" rows="5" placeholder='{"example":"{{NEXUS_SETUP.field_name}}"}'></textarea></div>
+              <div class="full"><label>Notes</label><textarea class="textarea" data-admin-make-field="notes" rows="2"></textarea></div>
+            </div>
+            <div class="credential-action-row">
+              <button class="btn btn-primary btn-small" type="button" onclick="NexusAdminUI.saveMakeHttpSubstitute('${key}')">Save substitute & rescan</button>
+              <button class="btn btn-secondary btn-small" type="button" onclick="NexusAdminUI.requestMakeSupport('${key}')">Request support</button>
+            </div>
+          </details>
+        </article>
+      `;
+    },
+
+    renderMakeImportResult(data) {
+      const root = document.getElementById("adminMakeImportResult");
+      if (!root) return;
+
+      if (!data) {
+        root.innerHTML = "Optional for Make products. Resolved blueprints will fill the n8n workflow JSON field below.";
+        return;
+      }
+
+      const unresolved = Array.isArray(data.unresolved) ? data.unresolved : [];
+      const resolved = Array.isArray(data.resolved) ? data.resolved : [];
+      const sessionId = data.session?.id || data.session_id || "";
+
+      root.innerHTML = `
+        <div class="${unresolved.length ? "runtime-import-result" : "success"}">
+          <strong>${data.generated_workflow_json || data.status === "converted" ? `${this.sourceImportLabel(data.source_platform || this.currentSourceImportPlatform())} converted.` : `${this.sourceImportLabel(data.source_platform || this.currentSourceImportPlatform())} scanned.`}</strong>
+          <p>${this.escapeHtml(data.message || "Review the Make conversion result below.")}</p>
+        </div>
+        ${this.makeImportSummaryHtml(data)}
+        ${resolved.length ? `
+          <details class="make-import-details">
+            <summary><strong>${resolved.length} resolved group${resolved.length === 1 ? "" : "s"}</strong></summary>
+            <div class="make-module-list compact">
+              ${resolved.map((group) => `<article><strong>${this.escapeHtml(group.source_module_label || group.source_module)}</strong><span>${this.escapeHtml(group.target_strategy || "mapped")} | ${this.escapeHtml(group.target_n8n_node_type || "n8n substitute")} ${group.target_operation ? `(${this.escapeHtml(group.target_operation)})` : ""} | used ${this.escapeHtml(group.usage_count || 1)} time${Number(group.usage_count || 1) === 1 ? "" : "s"}</span></article>`).join("")}
+            </div>
+          </details>
+        ` : ""}
+        ${unresolved.length ? `<div class="make-module-list">${unresolved.map((group) => this.makeUnresolvedGroupHtml(group, sessionId)).join("")}</div>` : ""}
+      `;
+    },
+
+    async scanMakeBlueprint(button = null) {
+      const originalText = button?.textContent || "";
+      const sourcePlatform = this.currentSourceImportPlatform();
+      const sourceLabel = this.sourceImportLabel(sourcePlatform);
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Scanning...";
+      }
+
+      try {
+        const blueprint = this.readMakeBlueprint();
+        const runtimeType = document.querySelector("[name='runtime_type']");
+        if (runtimeType) runtimeType.value = "n8n_managed";
+
+        const savedProduct = await this.saveProductFromEditor({
+          silent: true,
+          syncStripe: false,
+          statusMessage: "Saving product before Make scan..."
+        });
+
+        const { data, error } = await NexusDB.scanMakeImport({
+          automation_id: savedProduct.id,
+          blueprint,
+          source_platform: sourcePlatform
+        });
+        if (error) throw new Error(error.message || `Could not scan ${sourceLabel}.`);
+
+        this.renderMakeImportResult(data);
+        if (data?.generated_workflow_json) {
+          document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
+          this.toast(`${sourceLabel} converted. Next: import/update hosted n8n workflow.`);
+        } else {
+          this.toast(data?.message || `${sourceLabel} scanned.`);
+        }
+
+        await this.refreshProductWorkflowFields(savedProduct.id);
+      } catch (error) {
+        this.toast(error.message || `Could not scan ${sourceLabel}.`);
+        this.renderMakeImportResult({ status: "failed", message: error.message || `Could not scan ${sourceLabel}.`, summary: {}, unresolved: [] });
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || `Scan ${sourceLabel}`;
+        }
+      }
+    },
+
+    collectMakeSubstitutePayload(sourceModuleKey) {
+      const card = document.querySelector(`[data-admin-make-module-card="${CSS.escape(sourceModuleKey)}"]`);
+      if (!card) throw new Error("Source step card was not found.");
+
+      const field = (name) => card.querySelector(`[data-admin-make-field="${name}"]`)?.value || "";
+      const parseJson = (name, fallback) => {
+        const raw = String(field(name) || "").trim();
+        if (!raw) return fallback;
+        try {
+          return JSON.parse(raw);
+        } catch {
+          throw new Error(`${name.replaceAll("_", " ")} must be valid JSON.`);
+        }
+      };
+
+      return {
+        session_id: field("session_id"),
+        source_module_key: field("source_module_key"),
+        source_platform: this.currentSourceImportPlatform(),
+        http_template: {
+          method: field("method"),
+          url: field("url"),
+          auth_type: field("auth_type"),
+          credential_provider: field("credential_provider"),
+          n8n_credential_type: field("n8n_credential_type"),
+          headers: parseJson("headers", {}),
+          body_json: parseJson("body_json", {})
+        },
+        notes: field("notes")
+      };
+    },
+
+    async saveMakeHttpSubstitute(sourceModuleKey) {
+      try {
+        const { data, error } = await NexusDB.saveMakeHttpSubstitute(this.collectMakeSubstitutePayload(sourceModuleKey));
+        if (error) throw new Error(error.message || "Could not save HTTP substitute.");
+
+        this.renderMakeImportResult(data);
+        if (data?.generated_workflow_json) {
+          document.querySelector("[name='n8n_workflow_json']").value = JSON.stringify(data.generated_workflow_json, null, 2);
+        }
+        this.toast(data?.message || "HTTP substitute saved.");
+      } catch (error) {
+        this.toast(error.message || "Could not save HTTP substitute.");
+      }
+    },
+
+    async requestMakeSupport(sourceModuleKey) {
+      const card = document.querySelector(`[data-admin-make-module-card="${CSS.escape(sourceModuleKey)}"]`);
+      const sessionId = card?.querySelector(`[data-admin-make-field="session_id"]`)?.value || "";
+      const notes = card?.querySelector(`[data-admin-make-field="notes"]`)?.value || "";
+
+      try {
+        const { data, error } = await NexusDB.requestMakeImportSupport({
+          session_id: sessionId,
+          source_module_key: sourceModuleKey,
+          notes,
+          source_platform: this.currentSourceImportPlatform()
+        });
+        if (error) throw new Error(error.message || "Could not request support.");
+        this.toast(data?.message || "Support request created.");
+      } catch (error) {
+        this.toast(error.message || "Could not request support.");
+      }
+    },
+
+    handleWorkflowProviderChange() {
+      const provider = String(document.getElementById("workflowProvider")?.value || "n8n");
+      const runtimeType = document.querySelector("[name='runtime_type']");
+      const notice = document.getElementById("workflowProviderNotice");
+      const importButton = document.getElementById("importN8nWorkflowButton");
+      const upload = document.getElementById("n8nWorkflowFile");
+      const makeUpload = document.getElementById("adminMakeBlueprintFile");
+      const workflowTextarea = document.querySelector("[name='n8n_workflow_json']");
+      const pythonSections = document.querySelectorAll(".workflow-source-python");
+      const pythonScript = document.querySelector("[name='python_script_code']");
+      const pythonRequirements = document.querySelector("[name='python_requirements']");
+      const pythonEntrypoint = document.querySelector("[name='python_entrypoint']");
+      const pythonTimeout = document.querySelector("[name='python_timeout_seconds']");
+      const makeSections = document.querySelectorAll(".workflow-source-make");
+      const n8nSections = document.querySelectorAll(".workflow-source-n8n");
+      const sourcePlatform = provider === "zapier" ? "zapier" : "make";
+      const sourceLabel = sourcePlatform === "zapier" ? "Zapier workflow" : "Make blueprint";
+      const sourceTitle = sourcePlatform === "zapier" ? "Zapier import assistant" : "Make.com import assistant";
+      const sourceCopy = sourcePlatform === "zapier"
+        ? "Scan a Zapier-style workflow JSON, resolve unsupported app/action groups with HTTP substitutes, then import the generated n8n workflow."
+        : "Scan a Make blueprint, resolve unsupported module groups with HTTP substitutes, then import the generated n8n workflow.";
+      const sourceTitleNode = document.getElementById("adminSourceImportAssistantTitle");
+      const sourceCopyNode = document.getElementById("adminSourceImportAssistantCopy");
+      const sourceUploadLabel = document.getElementById("adminSourceBlueprintUploadLabel");
+      const sourceJsonLabel = document.getElementById("adminSourceBlueprintJsonLabel");
+      const sourceJson = document.getElementById("adminMakeBlueprintJson");
+      const sourceScanButton = document.getElementById("adminScanMakeBlueprintButton");
+
+      const showMake = provider === "make" || provider === "zapier";
+      const showN8n = provider === "n8n";
+      const showPython = provider === "python";
+      makeSections.forEach((section) => section.classList.toggle("hidden", !showMake));
+      n8nSections.forEach((section) => section.classList.toggle("hidden", !showN8n));
+      pythonSections.forEach((section) => section.classList.toggle("hidden", !showPython));
+      if (sourceTitleNode) sourceTitleNode.textContent = sourceTitle;
+      if (sourceCopyNode) sourceCopyNode.textContent = sourceCopy;
+      if (sourceUploadLabel) sourceUploadLabel.textContent = `Upload ${sourceLabel} JSON`;
+      if (sourceJsonLabel) sourceJsonLabel.textContent = `${sourceLabel} JSON`;
+      if (sourceJson) sourceJson.placeholder = provider === "zapier"
+        ? "Paste Zapier workflow JSON with trigger and steps here..."
+        : "Paste exported Make.com blueprint JSON here...";
+      if (sourceScanButton) sourceScanButton.textContent = `Scan ${sourceLabel}`;
+
+      if (provider === "n8n") {
+        if (runtimeType) runtimeType.value = "n8n_managed";
+        if (notice) {
+          notice.innerHTML = `
+            <div class="success">
+              <strong>n8n enabled.</strong> Upload a workflow JSON and import when ready.
+            </div>
+          `;
+        }
+        if (importButton) importButton.disabled = false;
+        if (upload) upload.disabled = false;
+        if (makeUpload) makeUpload.disabled = true;
+        if (workflowTextarea) workflowTextarea.disabled = false;
+        if (pythonScript) pythonScript.disabled = true;
+        if (pythonRequirements) pythonRequirements.disabled = true;
+        if (pythonEntrypoint) pythonEntrypoint.disabled = true;
+        if (pythonTimeout) pythonTimeout.disabled = true;
+        return;
+      }
+
+      if (provider === "make" || provider === "zapier") {
+        if (runtimeType) runtimeType.value = "n8n_managed";
+        if (notice) {
+          notice.innerHTML = `
+            <div class="runtime-import-result">
+              <strong>${this.escapeHtml(provider === "zapier" ? "Zapier assistant enabled." : "Make assistant enabled.")}</strong> Scan a ${this.escapeHtml(sourceLabel)} below. Nexus will generate n8n JSON only after every source step group is resolved.
+            </div>
+          `;
+        }
+        if (importButton) importButton.disabled = false;
+        if (upload) upload.disabled = true;
+        if (makeUpload) makeUpload.disabled = false;
+        if (workflowTextarea) workflowTextarea.disabled = false;
+        if (pythonScript) pythonScript.disabled = true;
+        if (pythonRequirements) pythonRequirements.disabled = true;
+        if (pythonEntrypoint) pythonEntrypoint.disabled = true;
+        if (pythonTimeout) pythonTimeout.disabled = true;
+        return;
+      }
+
+      if (provider === "python") {
+        if (runtimeType) runtimeType.value = "python_runner";
+        if (notice) {
+          notice.innerHTML = `
+            <div class="success">
+              <strong>Python runner enabled.</strong> Save the product with a script, setup schema, and preview. Nexus routes buyer setup and scheduled runs through the Python runner.
+            </div>
+          `;
+        }
+        if (importButton) importButton.disabled = true;
+        if (upload) upload.disabled = true;
+        if (makeUpload) makeUpload.disabled = true;
+        if (workflowTextarea) workflowTextarea.disabled = true;
+        if (pythonScript) pythonScript.disabled = false;
+        if (pythonRequirements) pythonRequirements.disabled = false;
+        if (pythonEntrypoint) pythonEntrypoint.disabled = false;
+        if (pythonTimeout) pythonTimeout.disabled = false;
+        return;
+      }
+
+      if (provider === "manual") {
+        if (runtimeType) runtimeType.value = "manual";
+        if (notice) {
+          notice.innerHTML = `
+            <div class="success">
+              <strong>Manual mode selected.</strong> No workflow import is needed for this product.
+            </div>
+          `;
+        }
+        if (importButton) importButton.disabled = true;
+        if (upload) upload.disabled = true;
+        if (makeUpload) makeUpload.disabled = true;
+        if (workflowTextarea) workflowTextarea.disabled = true;
+        if (pythonScript) pythonScript.disabled = true;
+        if (pythonRequirements) pythonRequirements.disabled = true;
+        if (pythonEntrypoint) pythonEntrypoint.disabled = true;
+        if (pythonTimeout) pythonTimeout.disabled = true;
+        return;
+      }
+
+      if (runtimeType) runtimeType.value = "manual";
+      if (notice) {
+        notice.innerHTML = `
+          <div class="error">
+            <strong>Coming soon.</strong> ${this.escapeHtml(provider)} imports are not available yet. Use n8n for launch.
+          </div>
+        `;
+      }
+      if (importButton) importButton.disabled = true;
+      if (upload) upload.disabled = true;
+      if (makeUpload) makeUpload.disabled = true;
+      if (workflowTextarea) workflowTextarea.disabled = true;
+      if (pythonScript) pythonScript.disabled = true;
+      if (pythonRequirements) pythonRequirements.disabled = true;
+      if (pythonEntrypoint) pythonEntrypoint.disabled = true;
+      if (pythonTimeout) pythonTimeout.disabled = true;
+    },
+
+    inferWorkflowProviderFromRuntime() {
+      const runtimeType = String(document.querySelector("[name='runtime_type']")?.value || "");
+      const workflowProvider = document.getElementById("workflowProvider");
+
+      if (!workflowProvider) return;
+
+      if (this.currentSavedProduct?.workflow_source_platform === "zapier") {
+        workflowProvider.value = "zapier";
+      } else if (this.currentSavedProduct?.workflow_source_platform === "python" || runtimeType === "python_runner") {
+        workflowProvider.value = "python";
+      } else if (this.currentSavedProduct?.workflow_source_platform === "make" || this.currentSavedProduct?.make_blueprint) {
+        workflowProvider.value = "make";
+      } else if (runtimeType === "n8n_managed") {
+        workflowProvider.value = "n8n";
+      } else {
+        workflowProvider.value = "manual";
+      }
+
+      this.handleWorkflowProviderChange();
+    },
+
+    insertSetupExample(type) {
+      const setupTextarea = document.querySelector("[name='setup_schema']");
+      const credentialTextarea = document.querySelector("[name='credential_schema']");
+
+      if (!setupTextarea || !credentialTextarea) return;
+
+      const examples = {
+        social_report: {
+          setup: [
+            {
+              name: "brand_name",
+              label: "Business / Brand Name",
+              type: "text",
+              required: true,
+              description: "The business or brand name used in the report."
+            },
+            {
+              name: "facebook_page_id",
+              label: "Facebook Page ID",
+              type: "text",
+              required: true,
+              description: "The Facebook Page ID used for Graph API requests."
+            },
+            {
+              name: "facebook_page_url",
+              label: "Facebook Page URL",
+              type: "url",
+              required: false
+            },
+            {
+              name: "instagram_business_account_id",
+              label: "Instagram Business Account ID",
+              type: "text",
+              required: false
+            },
+            {
+              name: "youtube_channel_id",
+              label: "YouTube Channel ID",
+              type: "text",
+              required: false
+            },
+            {
+              name: "tiktok_username",
+              label: "TikTok Username",
+              type: "text",
+              required: false
+            },
+            {
+              name: "report_frequency",
+              label: "Report Frequency",
+              type: "select",
+              options: ["Weekly", "Monthly"],
+              required: true
+            },
+            {
+              name: "recipient_email",
+              label: "Report Recipient Email",
+              type: "email",
+              required: true
+            },
+            {
+              name: "brand_notes",
+              label: "Brand Notes",
+              type: "textarea",
+              required: false
+            }
+          ],
+          credentials: [
+            {
+              name: "meta_access_token",
+              label: "Meta Access Token",
+              type: "secret",
+              required: true,
+              description: "Customer-owned Meta/Facebook token for Facebook and Instagram data access."
+            }
+          ]
+        },
+
+        chatbot: {
+          setup: [
+            {
+              name: "website_url",
+              label: "Website URL",
+              type: "url",
+              required: true
+            },
+            {
+              name: "business_hours",
+              label: "Business Hours",
+              type: "textarea",
+              required: true
+            },
+            {
+              name: "faq_content",
+              label: "FAQ / Knowledge Base",
+              type: "textarea",
+              required: true
+            },
+            {
+              name: "handoff_email",
+              label: "Escalation Email",
+              type: "email",
+              required: true
+            },
+            {
+              name: "tone_of_voice",
+              label: "Tone of Voice",
+              type: "select",
+              options: ["Professional", "Friendly", "Luxury", "Casual"],
+              required: true
+            }
+          ],
+          credentials: [
+            {
+              name: "openai_api_key",
+              label: "OpenAI API Key",
+              type: "secret",
+              required: false,
+              description: "Only required if this workflow uses the customer's own OpenAI key."
+            }
+          ]
+        },
+
+        lead_generation: {
+          setup: [
+            {
+              name: "target_industry",
+              label: "Target Industry",
+              type: "text",
+              required: true
+            },
+            {
+              name: "target_location",
+              label: "Target Location",
+              type: "text",
+              required: true
+            },
+            {
+              name: "ideal_customer_profile",
+              label: "Ideal Customer Profile",
+              type: "textarea",
+              required: true
+            },
+            {
+              name: "lead_quantity",
+              label: "Lead Quantity",
+              type: "number",
+              required: true
+            },
+            {
+              name: "delivery_email",
+              label: "Delivery Email",
+              type: "email",
+              required: true
+            }
+          ],
+          credentials: [
+            {
+              name: "apollo_api_key",
+              label: "Apollo API Key",
+              type: "secret",
+              required: false,
+              description: "Only required if this workflow uses the customer's Apollo account."
+            }
+          ]
+        }
+      };
+
+      const selected = examples[type] || { setup: [], credentials: [] };
+
+      setupTextarea.value = JSON.stringify(selected.setup, null, 2);
+      credentialTextarea.value = JSON.stringify(selected.credentials, null, 2);
+
+      setupTextarea.focus();
+
+      this.scanWorkflowPlaceholders();
+    },
+
+    normalizeSource(source) {
+      const raw = String(source || "").trim().toLowerCase();
+
+      if (raw === "secrets" || raw === "credential" || raw === "credentials") return "secret";
+      if (raw === "customer") return "customer";
+      if (raw === "system") return "system";
+      if (raw === "setup") return "setup";
+
+      return raw || "unknown";
+    },
+
+    addUnique(list, value) {
+      if (!value) return;
+      if (!list.includes(value)) list.push(value);
+    },
+
+    extractRuntimeContextFields(text) {
+      const found = {
+        setup: [],
+        secret: [],
+        customer: [],
+        system: []
+      };
+
+      const patterns = [
+        { key: "setup", regex: /json\.setup\.([a-zA-Z0-9_.-]+)/g },
+        { key: "secret", regex: /json\.secrets?\.([a-zA-Z0-9_.-]+)/g },
+        { key: "customer", regex: /json\.customer\.([a-zA-Z0-9_.-]+)/g },
+        { key: "system", regex: /json\.system\.([a-zA-Z0-9_.-]+)/g }
+      ];
+
+      for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.regex.exec(text)) !== null) {
+          this.addUnique(found[pattern.key], match[1]);
+        }
+      }
+
+      Object.keys(found).forEach(key => {
+        found[key] = found[key].sort();
+      });
+
+      return found;
+    },
+
+    extractPlaceholdersFromText(text) {
+      const found = {
+        setup: [],
+        secret: [],
+        customer: [],
+        system: [],
+        unknown: [],
+        custom: [],
+        code: [],
+        runtime_context: this.extractRuntimeContextFields(text),
+        unmapped_custom_placeholders: []
+      };
+
+      /*
+        Official placeholders:
+        {{NEXUS_SETUP.facebook_page_id}}
+        {{NEXUS_SECRET.meta_access_token}}
+        {{NEXUS_CUSTOMER.email}}
+        {{NEXUS_SYSTEM.customer_automation_id}}
+      */
+      const officialPattern = /\{\{\s*NEXUS_([A-Z]+)\.([a-zA-Z0-9_.-]+)\s*\}\}/g;
+      let officialMatch;
+
+      while ((officialMatch = officialPattern.exec(text)) !== null) {
+        const type = officialMatch[1];
+        const name = officialMatch[2];
+
+        if (type === "SETUP") this.addUnique(found.setup, name);
+        else if (type === "SECRET") this.addUnique(found.secret, name);
+        else if (type === "CUSTOMER") this.addUnique(found.customer, name);
+        else if (type === "SYSTEM") this.addUnique(found.system, name);
+        else this.addUnique(found.unknown, `NEXUS_${type}.${name}`);
+      }
+
+      /*
+        Code node helper placeholders:
+        NEXUS_CODE_SETUP("facebook_page_id")
+        NEXUS_CODE_SECRET("meta_access_token")
+      */
+      const codePattern = /NEXUS_CODE_(SETUP|SECRET|CUSTOMER|SYSTEM)\(\s*["']([^"']+)["']\s*\)/g;
+      let codeMatch;
+
+      while ((codeMatch = codePattern.exec(text)) !== null) {
+        const type = codeMatch[1];
+        const name = codeMatch[2];
+
+        this.addUnique(found.code, `NEXUS_CODE_${type}("${name}")`);
+
+        if (type === "SETUP") this.addUnique(found.setup, name);
+        else if (type === "SECRET") this.addUnique(found.secret, name);
+        else if (type === "CUSTOMER") this.addUnique(found.customer, name);
+        else if (type === "SYSTEM") this.addUnique(found.system, name);
+      }
+
+      /*
+        Legacy/custom placeholders:
+        These are validated through workflow_placeholder_mappings.
+      */
+      const rawCustomPattern = /\[\[[^\]]+\]\]/g;
+      const rawCustom = text.match(rawCustomPattern) || [];
+
+      rawCustom.forEach(placeholder => {
+        this.addUnique(found.custom, placeholder);
+      });
+
+      Object.keys(found).forEach(key => {
+        if (Array.isArray(found[key])) {
+          found[key] = [...new Set(found[key])].sort();
+        }
+      });
+
+      return found;
+    },
+
+    applyMappingPlaceholdersToDetected(detected, workflowText, mappings) {
+      const unusedMappings = [];
+
+      if (!Array.isArray(mappings)) {
+        detected.unused_mappings = [];
+        return detected;
+      }
+
+      for (const mapping of mappings) {
+        const placeholder = String(mapping?.placeholder || "").trim();
+        const source = this.normalizeSource(mapping?.source);
+        const key = String(mapping?.key || "").trim();
+
+        if (!placeholder || !key) continue;
+
+        const isUsed = workflowText.includes(placeholder);
+
+        if (!isUsed) {
+          unusedMappings.push(placeholder);
+          continue;
+        }
+
+        if (source === "setup") this.addUnique(detected.setup, key);
+        else if (source === "secret") this.addUnique(detected.secret, key);
+        else if (source === "customer") this.addUnique(detected.customer, key);
+        else if (source === "system") this.addUnique(detected.system, key);
+        else this.addUnique(detected.unknown, `${placeholder} -> ${source}.${key}`);
+
+        detected.custom = detected.custom.filter(item => item !== placeholder);
+      }
+
+      detected.unused_mappings = unusedMappings;
+
+      /*
+        Any remaining [[...]] placeholders are truly unmapped.
+      */
+      detected.unmapped_custom_placeholders = (detected.custom || []).filter(placeholder => {
+        return !mappings.some(mapping => String(mapping?.placeholder || "").trim() === placeholder);
+      });
+
+      Object.keys(detected).forEach(key => {
+        if (Array.isArray(detected[key])) {
+          detected[key] = [...new Set(detected[key])].sort();
+        }
+      });
+
+      return detected;
+    },
+
+    scanWorkflowPlaceholders() {
+      const workflowTextarea = document.querySelector("[name='n8n_workflow_json']");
+      const setupTextarea = document.querySelector("[name='setup_schema']");
+      const credentialTextarea = document.querySelector("[name='credential_schema']");
+      const mappingsTextarea = document.querySelector("[name='workflow_placeholder_mappings']");
+      const result = document.getElementById("placeholderScanResult");
+
+      const detectedInput = document.querySelector("[name='detected_placeholders']");
+      const statusInput = document.querySelector("[name='placeholder_validation_status']");
+      const errorsInput = document.querySelector("[name='placeholder_validation_errors']");
+
+      if (!workflowTextarea || !setupTextarea || !credentialTextarea || !result) return;
+
+      const workflowText = workflowTextarea.value || "";
+      const setupSchema = this.safeParseJson(setupTextarea.value, []);
+      const credentialSchema = this.safeParseJson(credentialTextarea.value, []);
+      const workflowMappings = this.safeParseJson(mappingsTextarea?.value || "[]", []);
+
+      const setupNames = Array.isArray(setupSchema) ? setupSchema.map(item => item.name).filter(Boolean) : [];
+      const credentialNames = Array.isArray(credentialSchema) ? credentialSchema.map(item => item.name).filter(Boolean) : [];
+
+      let detected = this.extractPlaceholdersFromText(workflowText);
+      detected = this.applyMappingPlaceholdersToDetected(detected, workflowText, workflowMappings);
+
+      const missingSetup = detected.setup.filter(name => !setupNames.includes(name));
+      const missingCredentials = detected.secret.filter(name => !credentialNames.includes(name));
+
+      const validationErrors = [];
+      const validationWarnings = [];
+
+      missingSetup.forEach(name => {
+        validationErrors.push(`Missing setup question for: ${name}`);
+      });
+
+      missingCredentials.forEach(name => {
+        validationErrors.push(`Missing credential field for: ${name}`);
+      });
+
+      detected.unknown.forEach(name => {
+        validationErrors.push(`Unknown placeholder type: ${name}`);
+      });
+
+      detected.unmapped_custom_placeholders.forEach(placeholder => {
+        validationErrors.push(`Unmapped custom placeholder found in workflow: ${placeholder}`);
+      });
+
+      (detected.unused_mappings || []).forEach(placeholder => {
+        validationWarnings.push(`Mapping is saved but placeholder was not found in workflow: ${placeholder}`);
+      });
+
+      const hasRuntimeContext =
+        detected.runtime_context &&
+        Object.values(detected.runtime_context).some(list => Array.isArray(list) && list.length);
+
+      const hasAnyDetected =
+        detected.setup.length ||
+        detected.secret.length ||
+        detected.customer.length ||
+        detected.system.length ||
+        detected.code.length ||
+        detected.custom.length ||
+        hasRuntimeContext;
+
+      const status = validationErrors.length
+        ? "needs_fix"
+        : "valid";
+
+      if (detectedInput) {
+        detectedInput.value = JSON.stringify({
+          ...detected,
+          warnings: validationWarnings
+        });
+      }
+
+      if (statusInput) statusInput.value = status;
+      if (errorsInput) errorsInput.value = JSON.stringify(validationErrors);
+
+      const section = (title, items, className = "") => {
+        if (!items || !items.length) {
+          return `
+            <div class="placeholder-result-group ${className}">
+              <strong>${title}</strong>
+              <span>None found</span>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="placeholder-result-group ${className}">
+            <strong>${title}</strong>
+            <ul>
+              ${items.map(item => `<li>${this.escapeHtml(item)}</li>`).join("")}
+            </ul>
+          </div>
+        `;
+      };
+
+      const runtimeItems = [];
+      if (hasRuntimeContext) {
+        Object.entries(detected.runtime_context).forEach(([source, values]) => {
+          (values || []).forEach(value => runtimeItems.push(`${source}.${value}`));
+        });
+      }
+
+      result.innerHTML = `
+        <div class="placeholder-status ${status === "valid" ? "valid" : "needs-fix"}">
+          ${
+            status === "valid"
+              ? (
+                  hasAnyDetected
+                    ? "Workflow placeholders/runtime expressions look matched."
+                    : "No placeholders detected. This is okay only if the workflow does not need buyer-specific values."
+                )
+              : "Some placeholders need matching setup or credential fields."
+          }
+        </div>
+
+        <div class="placeholder-result-grid">
+          ${section("Setup placeholders", detected.setup)}
+          ${section("Credential placeholders", detected.secret)}
+          ${section("Customer placeholders", detected.customer)}
+          ${section("System placeholders", detected.system)}
+          ${section("Code placeholders", detected.code)}
+          ${section("Runtime Context expressions", runtimeItems)}
+        </div>
+
+        ${
+          validationErrors.length
+            ? `
+              <div class="placeholder-errors">
+                <strong>Fix these before launching:</strong>
+                <ul>
+                  ${validationErrors.map(error => `<li>${this.escapeHtml(error)}</li>`).join("")}
+                </ul>
+              </div>
+            `
+            : ""
+        }
+
+        ${
+          validationWarnings.length
+            ? `
+              <div class="placeholder-errors" style="margin-top:.75rem">
+                <strong>Warnings:</strong>
+                <ul>
+                  ${validationWarnings.map(warning => `<li>${this.escapeHtml(warning)}</li>`).join("")}
+                </ul>
+              </div>
+            `
+            : ""
+        }
+      `;
+    }
+  };
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const upload = document.getElementById("n8nWorkflowFile");
+    const textarea = document.querySelector("[name='n8n_workflow_json']");
+
+    NexusAdminUI.initializeAccordions();
+    NexusAdminUI.forceHydratePricingAfterProductLoad();
+
+    const pricingType = document.getElementById("simplePricingType");
+    const simpleCurrency = document.getElementById("simpleCurrency");
+    const simplePrice = document.getElementById("simplePriceAmount");
+    const setupFeeToggle = document.getElementById("hasSetupFee");
+    const setupFeeAmount = document.getElementById("simpleSetupFeeAmount");
+
+    [pricingType, simpleCurrency, simplePrice, setupFeeToggle, setupFeeAmount].forEach((element) => {
+      if (!element) return;
+
+      element.addEventListener("change", () => {
+        NexusAdminUI.toggleSetupFeeFields({ preserveSetupValue: true });
+        NexusAdminUI.syncSimplePricingToHiddenFields();
+      });
+
+      element.addEventListener("input", () => {
+        NexusAdminUI.syncSimplePricingToHiddenFields();
+      });
+    });
+
+    const form = document.getElementById("automationForm");
+
+    if (form) {
+      form.addEventListener("submit", () => {
+        NexusAdminUI.syncSimplePricingToHiddenFields();
+      }, true);
+    }
+
+    const runtimeType = document.querySelector("[name='runtime_type']");
+    if (runtimeType) {
+      runtimeType.addEventListener("change", () => {
+        const provider = document.getElementById("workflowProvider");
+        if (!provider) return;
+        if (runtimeType.value !== "n8n_managed") {
+          provider.value = "manual";
+        } else if (!["make", "zapier"].includes(provider.value)) {
+          provider.value = "n8n";
+        }
+        NexusAdminUI.handleWorkflowProviderChange();
+      });
+    }
+
+    const makeUpload = document.getElementById("adminMakeBlueprintFile");
+    const makeTextarea = document.getElementById("adminMakeBlueprintJson");
+
+    if (makeUpload && makeTextarea) {
+      makeUpload.addEventListener("change", async function () {
+        const file = makeUpload.files && makeUpload.files[0];
+        if (!file) return;
+
+        try {
+          makeTextarea.value = JSON.stringify(JSON.parse(await file.text()), null, 2);
+          NexusAdminUI.handleWorkflowProviderChange();
+          NexusUI.toast(`${NexusAdminUI.sourceImportLabel()} loaded. Scan it next.`);
+        } catch (error) {
+          NexusUI.toast(`Invalid JSON file. Please export or prepare the ${NexusAdminUI.sourceImportLabel()} again.`);
+          makeUpload.value = "";
+        }
+      });
+    }
+
+    if (upload && textarea) {
+      upload.addEventListener("change", async function () {
+        const file = upload.files && upload.files[0];
+
+        if (!file) return;
+
+        if (!file.name.toLowerCase().endsWith(".json")) {
+          NexusUI.toast("Please upload a JSON file exported from n8n.");
+          upload.value = "";
+          return;
+        }
+
+        const text = await file.text();
+
+        try {
+          const parsed = JSON.parse(text);
+          textarea.value = JSON.stringify(parsed, null, 2);
+          NexusUI.toast("n8n workflow JSON loaded.");
+          NexusAdminUI.scanWorkflowPlaceholders();
+        } catch (error) {
+          NexusUI.toast("Invalid JSON file. Please export the workflow from n8n again.");
+          upload.value = "";
+        }
+      });
+    }
+
+    const setupTextarea = document.querySelector("[name='setup_schema']");
+    const credentialTextarea = document.querySelector("[name='credential_schema']");
+    const mappingsTextarea = document.querySelector("[name='workflow_placeholder_mappings']");
+    const workflowTextarea = document.querySelector("[name='n8n_workflow_json']");
+
+    [setupTextarea, credentialTextarea, mappingsTextarea, workflowTextarea].forEach(element => {
+      if (!element) return;
+
+      element.addEventListener("blur", function () {
+        NexusAdminUI.scanWorkflowPlaceholders();
+      });
+
+      element.addEventListener("change", function () {
+        NexusAdminUI.scanWorkflowPlaceholders();
+      });
+    });
+
+    setTimeout(() => {
+      NexusAdminUI.inferWorkflowProviderFromRuntime();
+      NexusAdminUI.scanWorkflowPlaceholders();
+      NexusAdminUI.renderRuntimeSummary();
+    }, 700);
+  });
+</script>
+</body>
+</html>

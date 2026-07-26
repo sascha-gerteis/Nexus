@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+  <title>Bundles | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+</head>
+<body data-admin="true" data-admin-page="bundles">
+  <header class="site-header">
+    <div class="container nav">
+      <a class="logo" href="/index.html"><span>Nexus&nbsp;</span></a>
+      <nav class="nav-links">
+        <a class="nav-link" href="/index.html">Home</a>
+        <a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a>
+        <a class="nav-link" href="/pages/developers/index.html">Developers</a>
+        <a class="nav-link" href="/pages/contact/index.html">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+    </aside>
+
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Marketplace bundles</span>
+        <h2>Package related automations.</h2>
+        <p>
+          Create curated product packs that appear like normal marketplace products.
+          If one included workflow is paused by health checks, Nexus removes that item from the active bundle count.
+        </p>
+      </div>
+
+      <section class="admin-bundle-layout">
+        <form class="card admin-bundle-form" id="bundleForm">
+          <input type="hidden" id="bundleId">
+
+          <div class="admin-bundle-form-head">
+            <div>
+              <h3 id="bundleFormTitle">Create bundle</h3>
+              <p>Manual admin-created bundles for beta. Algorithmic bundle suggestions can reuse this foundation later.</p>
+            </div>
+            <button class="btn btn-secondary btn-small" type="button" onclick="resetBundleForm()">New bundle</button>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Title
+              <input class="input" id="bundleTitle" required placeholder="Online Visibility Reporting Bundle">
+            </label>
+
+            <label>
+              Slug
+              <input class="input" id="bundleSlug" required placeholder="online-visibility-reporting-bundle">
+            </label>
+
+            <label>
+              Status
+              <select class="input" id="bundleStatus">
+                <option value="draft">Draft</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="archived">Archived</option>
+              </select>
+            </label>
+
+            <label>
+              Discount %
+              <input class="input" id="bundleDiscount" type="number" min="0" max="95" step="1" value="10">
+            </label>
+
+            <label>
+              Category
+              <input class="input" id="bundleCategory" value="Reporting">
+            </label>
+
+            <label>
+              Badge
+              <input class="input" id="bundleBadge" value="Bundle">
+            </label>
+
+            <label>
+              Icon letters
+              <input class="input" id="bundleIcon" maxlength="3" value="PK">
+            </label>
+
+            <label>
+              Color
+              <select class="input" id="bundleColor">
+                <option value="cyan">Cyan</option>
+                <option value="blue">Blue</option>
+                <option value="teal">Teal</option>
+                <option value="green">Green</option>
+                <option value="indigo">Indigo</option>
+                <option value="slate">Slate</option>
+              </select>
+            </label>
+
+            <label class="full">
+              Short description
+              <textarea class="input" id="bundleShort" rows="3" required></textarea>
+            </label>
+
+            <label class="full">
+              Long description
+              <textarea class="input" id="bundleLong" rows="4"></textarea>
+            </label>
+
+            <label class="full">
+              Business outcome
+              <textarea class="input" id="bundleOutcome" rows="3"></textarea>
+            </label>
+          </div>
+
+          <div class="admin-bundle-products">
+            <h3>Included live products</h3>
+            <p>Select only products that naturally belong together. Keep bundles proportional to the product catalog.</p>
+            <div id="bundleProductOptions" class="admin-bundle-product-options">Loading products...</div>
+          </div>
+
+          <button class="btn btn-primary btn-full" type="submit">Save bundle</button>
+        </form>
+
+        <section class="card">
+          <div class="admin-bundle-form-head">
+            <div>
+              <h3>Current bundles</h3>
+              <p>Active bundles appear in the marketplace above individual products.</p>
+            </div>
+            <button class="btn btn-secondary btn-small" type="button" onclick="loadBundles()">Refresh</button>
+          </div>
+
+          <div id="bundleRows" class="admin-bundle-list">Loading bundles...</div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script>
+    const state = {
+      bundles: [],
+      candidates: [],
+      selectedIds: new Set()
+    };
+
+    function escapeHtml(value) {
+      return NexusUI.escapeHtml(value || "");
+    }
+
+    function slugify(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    }
+
+    function resetBundleForm() {
+      document.getElementById("bundleForm").reset();
+      document.getElementById("bundleId").value = "";
+      document.getElementById("bundleStatus").value = "draft";
+      document.getElementById("bundleDiscount").value = "10";
+      document.getElementById("bundleCategory").value = "Reporting";
+      document.getElementById("bundleBadge").value = "Bundle";
+      document.getElementById("bundleIcon").value = "PK";
+      document.getElementById("bundleColor").value = "cyan";
+      document.getElementById("bundleFormTitle").textContent = "Create bundle";
+      state.selectedIds = new Set();
+      renderCandidateProducts();
+    }
+
+    function renderCandidateProducts() {
+      const root = document.getElementById("bundleProductOptions");
+      if (!root) return;
+
+      root.innerHTML = state.candidates.map((product) => {
+        const checked = state.selectedIds.has(product.id) ? "checked" : "";
+        return `
+          <label class="admin-bundle-product-option">
+            <input type="checkbox" value="${escapeHtml(product.id)}" ${checked}>
+            <span>
+              <strong>${escapeHtml(product.title)}</strong>
+              <small>${escapeHtml(product.category || "Automation")} / ${NexusUI.money(product)}</small>
+            </span>
+          </label>
+        `;
+      }).join("") || `<div class="empty-state">No live products available yet.</div>`;
+
+      root.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) state.selectedIds.add(checkbox.value);
+          else state.selectedIds.delete(checkbox.value);
+        });
+      });
+    }
+
+    function renderBundles() {
+      const root = document.getElementById("bundleRows");
+      if (!root) return;
+
+      root.innerHTML = state.bundles.map((bundle) => {
+        const products = bundle.bundle_products || [];
+        return `
+          <article class="admin-bundle-row">
+            <div>
+              <span class="${NexusUI.pillClass(bundle.color)}">${escapeHtml(bundle.status || "draft")}</span>
+              <h3>${escapeHtml(bundle.title)}</h3>
+              <p>${escapeHtml(bundle.short_description || "")}</p>
+              <div class="tags">
+                <span class="tag">${products.length} workflows</span>
+                <span class="tag">${Number(bundle.discount_percent || 0)}% off</span>
+                <span class="tag">${NexusUI.money(bundle)}</span>
+              </div>
+            </div>
+            <div class="admin-bundle-row-actions">
+              <a class="btn btn-secondary btn-small" href="/pages/marketplace/index.html">Marketplace</a>
+              <button class="btn btn-primary btn-small" type="button" onclick="editBundle('${escapeHtml(bundle.id)}')">Edit</button>
+            </div>
+          </article>
+        `;
+      }).join("") || `<div class="empty-state">No bundles yet.</div>`;
+    }
+
+    function editBundle(id) {
+      const bundle = state.bundles.find((item) => item.id === id);
+      if (!bundle) return;
+
+      document.getElementById("bundleId").value = bundle.id;
+      document.getElementById("bundleTitle").value = bundle.title || "";
+      document.getElementById("bundleSlug").value = bundle.slug || "";
+      document.getElementById("bundleStatus").value = bundle.status || "draft";
+      document.getElementById("bundleDiscount").value = Number(bundle.discount_percent || 0);
+      document.getElementById("bundleCategory").value = bundle.category || "";
+      document.getElementById("bundleBadge").value = bundle.badge || "";
+      document.getElementById("bundleIcon").value = bundle.icon || "PK";
+      document.getElementById("bundleColor").value = bundle.color || "cyan";
+      document.getElementById("bundleShort").value = bundle.short_description || "";
+      document.getElementById("bundleLong").value = bundle.long_description || "";
+      document.getElementById("bundleOutcome").value = bundle.outcome || "";
+      document.getElementById("bundleFormTitle").textContent = "Edit bundle";
+      state.selectedIds = new Set((bundle.automation_bundle_items || []).map((item) => item.automation_id).filter(Boolean));
+      renderCandidateProducts();
+      document.getElementById("bundleForm").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    async function loadCandidates() {
+      const { data, error } = await NexusDB.listBundleCandidateAutomations();
+      if (error) {
+        NexusUI.toast(error.message || "Could not load products.", "error");
+        return;
+      }
+      state.candidates = data || [];
+      renderCandidateProducts();
+    }
+
+    async function loadBundles() {
+      const { data, error } = typeof NexusDB.listAdminBundles === "function"
+        ? await NexusDB.listAdminBundles()
+        : await NexusDB.listAllBundles();
+      if (error) {
+        document.getElementById("bundleRows").innerHTML = `<div class="error">${escapeHtml(error.message || "Could not load bundles.")}</div>`;
+        return;
+      }
+      state.bundles = data || [];
+      renderBundles();
+    }
+
+    async function saveBundle(event) {
+      event.preventDefault();
+
+      const id = document.getElementById("bundleId").value.trim();
+      const title = document.getElementById("bundleTitle").value.trim();
+      const slug = document.getElementById("bundleSlug").value.trim() || slugify(title);
+      const selectedIds = Array.from(document.querySelectorAll("#bundleProductOptions input[type='checkbox']:checked"))
+        .map((checkbox) => checkbox.value)
+        .filter(Boolean);
+      state.selectedIds = new Set(selectedIds);
+
+      if (!selectedIds.length) {
+        NexusUI.toast("Choose at least one live product for this bundle.", "warning");
+        return;
+      }
+
+      const payload = {
+        ...(id ? { id } : {}),
+        title,
+        slug,
+        status: document.getElementById("bundleStatus").value,
+        discount_percent: Number(document.getElementById("bundleDiscount").value || 0),
+        category: document.getElementById("bundleCategory").value.trim() || "Bundle",
+        badge: document.getElementById("bundleBadge").value.trim() || "Bundle",
+        icon: document.getElementById("bundleIcon").value.trim() || "PK",
+        color: document.getElementById("bundleColor").value,
+        short_description: document.getElementById("bundleShort").value.trim(),
+        long_description: document.getElementById("bundleLong").value.trim(),
+        outcome: document.getElementById("bundleOutcome").value.trim(),
+        bundle_source: "manual",
+        bundle_strategy: "admin_curated",
+        pricing_type: "monthly",
+        guided_install_enabled: false,
+        active_item_count: selectedIds.length,
+        included_count: selectedIds.length,
+        last_recalculated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const button = event.target.querySelector("button[type='submit']");
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Saving...";
+
+      const saveResult = typeof NexusDB.saveAdminBundle === "function"
+        ? await NexusDB.saveAdminBundle(payload, selectedIds)
+        : { error: { message: "Admin bundle save function is not loaded." } };
+
+      if (saveResult.error) {
+        NexusUI.toast(saveResult.error.message || "Could not save bundle products.", "error");
+        button.disabled = false;
+        button.textContent = original;
+        return;
+      }
+
+      const savedCount = Array.isArray(saveResult.data?.items) ? saveResult.data.items.length : selectedIds.length;
+      NexusUI.toast(`Bundle saved with ${savedCount} workflow${savedCount === 1 ? "" : "s"}.`, "success");
+
+      button.disabled = false;
+      button.textContent = original;
+      resetBundleForm();
+      await loadBundles();
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      NexusUI.mountGlobalNav?.();
+      NexusUI.mountAdminSidebar?.({ force: true });
+      const admin = await NexusDB.requireAdmin();
+      if (!admin) return;
+
+      document.getElementById("bundleTitle").addEventListener("input", (event) => {
+        const slug = document.getElementById("bundleSlug");
+        if (!slug.value.trim()) slug.value = slugify(event.target.value);
+      });
+      document.getElementById("bundleForm").addEventListener("submit", saveBundle);
+
+      await Promise.all([loadCandidates(), loadBundles()]);
+    });
+  </script>
+</body>
+</html>

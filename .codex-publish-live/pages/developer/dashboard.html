@@ -1711,6 +1711,29 @@ company_url = context["inputs"].get("company_url")
           : source === "event"
             ? "On-demand event value passed to Python as context.event."
             : "Buyer setup value passed to Python as context.inputs.",
+        ...(source === "credential"
+          ? {
+            customer_owned: false,
+            developer_owned: true,
+            owner: "developer",
+            visibility: "internal",
+            schema_source: "python_inference",
+          }
+          : {}),
+      };
+    }
+
+    function markPythonCredentialFieldDeveloperOwned(field = {}) {
+      return {
+        ...field,
+        customer_owned: false,
+        buyer_owned: false,
+        customer_visible: false,
+        buyer_visible: false,
+        developer_owned: true,
+        owner: "developer",
+        visibility: "internal",
+        schema_source: String(field?.schema_source || "").trim() || "python_credential_schema",
       };
     }
 
@@ -5067,7 +5090,8 @@ company_url = context["inputs"].get("company_url")
       if (workflowProvider === "python") {
         const mergedSetupSchema = mergeSchemaFields(setupSchema, pythonInference.setup);
         const mergedRuntimeEventSchema = mergeSchemaFields(runtimeEventSchema, pythonInference.events);
-        const mergedCredentialSchema = mergeSchemaFields(credentialSchema, pythonInference.credentials);
+        const mergedCredentialSchema = mergeSchemaFields(credentialSchema, pythonInference.credentials)
+          .map(markPythonCredentialFieldDeveloperOwned);
         if (form.elements.setup_schema && JSON.stringify(setupSchema) !== JSON.stringify(mergedSetupSchema)) {
           form.elements.setup_schema.value = JSON.stringify(mergedSetupSchema, null, 2);
         }

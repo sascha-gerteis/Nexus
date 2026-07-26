@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+  <title>Workflow Editor | Nexus</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <meta name="theme-color" content="#2563ff">
+</head>
+<body data-page="workflow-editor">
+  <main class="workflow-editor-page">
+    <header class="workflow-editor-topbar">
+      <div>
+        <span class="eyebrow">Locked n8n editor</span>
+        <h1 id="workflowEditorTitle">Opening workflow...</h1>
+        <p id="workflowEditorMeta">Nexus locks this editor to one workflow only.</p>
+      </div>
+      <div class="workflow-editor-actions">
+        <button class="btn btn-secondary btn-small" type="button" id="syncWorkflowButton">Sync changes</button>
+        <button class="btn btn-secondary btn-small" type="button" id="runWorkflowCheckButton">Run check</button>
+        <button class="btn btn-primary btn-small" type="button" id="backToProductButton">Back to product</button>
+      </div>
+    </header>
+
+    <section class="workflow-editor-status" id="workflowEditorStatus">
+      Creating secure editor session...
+    </section>
+
+    <section class="workflow-editor-shell">
+      <section class="workflow-editor-frame-wrap" id="workflowEditorFrameWrap" hidden>
+        <iframe
+          id="workflowEditorFrame"
+          title="Locked n8n workflow editor"
+          referrerpolicy="no-referrer"
+        ></iframe>
+      </section>
+
+      <aside class="workflow-editor-helper" id="workflowEditorHelper" aria-label="Nexus workflow helper">
+        <div class="workflow-helper-head">
+          <div>
+            <span class="eyebrow">Nexus helper</span>
+            <h2>Workflow readiness</h2>
+          </div>
+          <button class="btn btn-secondary btn-small" type="button" id="refreshWorkflowHelperButton">Refresh</button>
+        </div>
+
+        <div class="workflow-helper-content" id="workflowHelperContent">
+          <div class="workflow-helper-empty">
+            Open the editor and Nexus will show what needs to be fixed before this workflow can be accepted.
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const automationId = params.get("automation_id") || params.get("id") || "";
+    const returnTo = params.get("return") || "";
+    const editorBuild = "20260708-editor-save-before-sync";
+    let editorSession = null;
+    let editorProduct = null;
+    let editorCredentialScan = null;
+    let latestTestResult = null;
+    let helperRefreshTimer = null;
+
+    function escapeHtml(value) {
+      if (window.NexusUI?.escapeHtml) return NexusUI.escapeHtml(value);
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttribute(value) {
+      if (window.NexusUI?.escapeAttribute) return NexusUI.escapeAttribute(value);
+      return escapeHtml(value);
+    }
+
+    function safeArray(value) {
+      return Array.isArray(value) ? value : [];
+    }
+
+    function normalizeStatus(value) {
+      return String(value || "").toLowerCase().replaceAll(" ", "_");
+    }
+
+    function isPassingStatus(value) {
+      return ["passed", "success", "completed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(normalizeStatus(value));
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "Never";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "Unknown";
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short"
+      }).format(date);
+    }
+
+    function setupSchemaFields(schema) {
+      if (Array.isArray(schema)) return schema;
+      if (Array.isArray(schema?.fields)) return schema.fields;
+      if (schema && typeof schema === "object") return Object.values(schema).filter(Boolean);
+      return [];
+    }
+
+    function workflowText(product) {
+      try {
+        return JSON.stringify(product?.n8n_normalized_workflow_json || product?.n8n_workflow_json || {});
+      } catch {
+        return "";
+      }
+    }
+
+    function workflowAppearsToNeedSetup(product) {
+      const text = workflowText(product);
+      return /NEXUS_SETUP|NEXUS_SECRET|setup_submission|customer_website|competitor|buyer setup|setup\./i.test(text);
+    }
+
+    function credentialSlotKey(value) {
+      return `${String(value?.node_name || "").trim()}:${String(value?.credential_key || value?.n8n_credential_type || "").trim()}`;
+    }
+
+    function credentialBindingMatchesSlot(binding, slot) {
+      if (!binding || !slot) return false;
+      const sameNode = String(binding.node_name || "").trim() === String(slot.node_name || "").trim();
+      const bindingKey = String(binding.credential_key || binding.n8n_credential_type || "").trim();
+      const slotKey = String(slot.credential_key || slot.n8n_credential_type || "").trim();
+      const sameKey = Boolean(bindingKey && slotKey && bindingKey === slotKey);
+      const sameN8nCredential = Boolean(
+        binding.n8n_credential_id &&
+        slot.current_id &&
+        String(binding.n8n_credential_id) === String(slot.current_id)
+      );
+      return sameNode && (sameKey || sameN8nCredential);
+    }
+
+    function credentialCoverage(slots, bindings, errors) {
+      const slotKeys = new Set(slots.map(credentialSlotKey));
+      const boundKeys = new Set(
+        bindings
+          .filter((binding) => binding?.developer_credential_id || binding?.n8n_credential_id || binding?.uses_nexus_proxy)
+          .map((binding) => {
+            const matched = slots.find((slot) => credentialBindingMatchesSlot(binding, slot));
+            return matched ? credentialSlotKey(matched) : credentialSlotKey(binding);
+          })
+      );
+      const activeErrors = errors.filter((error) => slotKeys.has(credentialSlotKey(error)) && !boundKeys.has(credentialSlotKey(error)));
+      return {
+        total: slotKeys.size,
+        bound: [...slotKeys].filter((key) => boundKeys.has(key)).length,
+        errors: activeErrors,
+        ready: !slotKeys.size || (activeErrors.length === 0 && [...slotKeys].every((key) => boundKeys.has(key)))
+      };
+    }
+
+    function helperPillClass(status) {
+      const value = normalizeStatus(status);
+      if (isPassingStatus(value) || value === "ready" || value === "good") return "workflow-helper-pill good";
+      if (value === "running" || value === "warning" || value === "review") return "workflow-helper-pill warn";
+      return "workflow-helper-pill bad";
+    }
+
+    function explainWorkflowIssue(message) {
+      const text = String(message || "").trim();
+      const lower = text.toLowerCase();
+      if (!text) {
+        return "No specific error has been recorded yet. Sync changes, then run a check to get a real result from n8n.";
+      }
+
+      if (lower.includes("credential") && lower.includes("does not exist")) {
+        return "n8n is pointing at a credential ID that is not available anymore. Go back to the product workspace, save the correct credential, apply it to this workflow, then run the check again.";
+      }
+
+      if (lower.includes("incorrect api key") || lower.includes("authorization failed") || lower.includes("unauthorized") || lower.includes("forbidden")) {
+        return "A provider rejected the saved key or token. Check that the credential belongs to the correct provider, has access to the model/API being used, then apply credentials and run the check again.";
+      }
+
+      if (lower.includes("missing authorization header")) {
+        return "A callback or API request was sent without the expected authorization header. Check any HTTP Request node that calls Nexus or an external API and make sure its auth/headers are still configured.";
+      }
+
+      if (lower.includes("not found") || lower.includes("404")) {
+        return "The workflow called a URL, route, model, or workflow resource that could not be found. Check the failing node URL, model name, or resource ID.";
+      }
+
+      if (lower.includes("not defined") || lower.includes("undefined") || lower.includes("cannot read")) {
+        return "A Code or expression node is reading a field that is missing from the test input. Check the previous node output and use Nexus setup placeholders for buyer-provided values.";
+      }
+
+      if (lower.includes("timeout") || lower.includes("timed out")) {
+        return "The workflow took too long or an external service did not respond. Check loops, waits, and API calls, then run the check again.";
+      }
+
+      if (lower.includes("unknown node") || lower.includes("node type")) {
+        return "n8n could not run one of the node types. Replace unsupported nodes with supported n8n nodes or an HTTP Request substitute.";
+      }
+
+      if (lower.includes("model") && lower.includes("access")) {
+        return "The API key works, but it does not have access to the selected model. Change the model or use a credential with access.";
+      }
+
+      return "Open the failing node in n8n, check the node parameters and input data, then sync changes and run the technical check again.";
+    }
+
+    function credentialRows(scan) {
+      const slots = safeArray(scan?.slots);
+      const errors = safeArray(scan?.errors);
+      const bindings = safeArray(scan?.bindings);
+
+      if (!slots.length) {
+        return `
+          <div class="workflow-helper-note">
+            No developer-owned credential nodes were detected. The workflow may still need buyer setup fields and a passing run check.
+          </div>
+        `;
+      }
+
+      return slots.slice(0, 8).map((slot) => {
+        const error = errors.find((item) =>
+          item.node_name === slot.node_name &&
+          (item.credential_key === slot.credential_key || item.n8n_credential_type === slot.n8n_credential_type)
+        );
+        const binding = bindings.find((item) =>
+          item.node_name === slot.node_name &&
+          (item.credential_key === slot.credential_key || item.n8n_credential_type === slot.n8n_credential_type)
+        );
+        const state = error ? "Missing" : binding ? "Bound" : "Detected";
+        return `
+          <div class="workflow-helper-credential-row">
+            <div>
+              <strong>${escapeHtml(slot.provider_label || slot.provider || slot.n8n_credential_type || "Credential")}</strong>
+              <span>${escapeHtml(slot.node_name || "Workflow node")}</span>
+            </div>
+            <span class="${helperPillClass(binding ? "good" : error ? "bad" : "warning")}">${escapeHtml(state)}</span>
+          </div>
+        `;
+      }).join("") + (slots.length > 8 ? `<p class="workflow-helper-muted">+${slots.length - 8} more credential nodes in this workflow.</p>` : "");
+    }
+
+    function checklistItem(label, detail, state) {
+      return `
+        <div class="workflow-helper-check-item">
+          <span class="${helperPillClass(state)}">${escapeHtml(state)}</span>
+          <div>
+            <strong>${escapeHtml(label)}</strong>
+            <p>${escapeHtml(detail)}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderWorkflowHelper() {
+      const root = document.getElementById("workflowHelperContent");
+      if (!root) return;
+
+      const product = {
+        ...(editorProduct || {}),
+        ...(editorCredentialScan?.product || {})
+      };
+      const scan = editorCredentialScan || {};
+      const slots = safeArray(scan.slots || product.developer_credential_requirements);
+      const errors = safeArray(scan.errors || product.credential_binding_errors);
+      const bindings = safeArray(scan.bindings || product.n8n_credential_bindings);
+      const setupFields = setupSchemaFields(product.setup_schema);
+      const coverage = credentialCoverage(slots, bindings, errors);
+      const testResult = latestTestResult || scan.test_result || {};
+      const runStatus = testResult.status || scan.run_status || product.n8n_last_test_status || "not tested";
+      const imported = Boolean(product.n8n_workflow_id || editorSession?.workflow_id) && normalizeStatus(product.n8n_import_status || "imported") === "imported";
+      const setupNeeded = workflowAppearsToNeedSetup(product);
+      const setupReady = !setupNeeded || setupFields.length > 0;
+      const credentialsLocked = imported;
+      const runPassed = isPassingStatus(runStatus);
+      const runRunning = normalizeStatus(runStatus) === "running";
+      const rawRunMessage = testResult.error_message || testResult.message || product.n8n_last_test_error || "";
+      const runError = runPassed ? "" : rawRunMessage;
+      const issueTitle = runPassed
+        ? "No current issue"
+        : runError || "No error recorded";
+      const issueDetail = runPassed
+        ? "The latest full workflow check passed. Sync again only after editing the workflow."
+        : explainWorkflowIssue(runError);
+      const finalReady = imported && setupReady && runPassed;
+      const setupState = setupReady ? (setupFields.length ? "good" : "review") : "bad";
+
+      root.innerHTML = `
+        <div class="workflow-helper-final ${finalReady ? "good" : "bad"}">
+          <span>${finalReady ? "Good for review" : "Not ready yet"}</span>
+          <strong>${finalReady ? "This workflow can be accepted after product review." : "Fix the blocked items before submitting."}</strong>
+          <p>${finalReady ? "The workflow is imported, credentials are handled, setup looks covered, and the last technical check passed." : "Nexus will not accept the product until the workflow is synced and the technical check passes."}</p>
+        </div>
+
+        <div class="workflow-helper-section">
+          <h3>Acceptance checklist</h3>
+          ${checklistItem(
+            "Hosted workflow",
+            imported ? `Imported as ${product.n8n_workflow_id || editorSession?.workflow_id || "workflow"}.` : "Import this workflow into hosted n8n before review.",
+            imported ? "good" : "bad"
+          )}
+          ${checklistItem(
+            "Buyer setup fields",
+            setupFields.length
+              ? `${setupFields.length} setup field${setupFields.length === 1 ? "" : "s"} saved on the product.`
+              : setupNeeded
+                ? "This workflow appears to use buyer setup data, but no setup schema is saved."
+                : "No setup schema detected. If the workflow needs buyer inputs, add them on the product page.",
+            setupState
+          )}
+          ${checklistItem(
+            "Credential lock",
+            !slots.length
+                ? "No developer-owned credential nodes detected."
+                : `${coverage.bound}/${coverage.total} credential node${coverage.total === 1 ? "" : "s"} mapped or detected. Nexus blocks credential editing in this editor; the full technical run validates the real keys.`,
+            credentialsLocked ? "good" : "review"
+          )}
+          ${checklistItem(
+            "Technical run",
+            runPassed
+              ? `Last check passed ${formatDateTime(testResult.finished_at || product.n8n_last_tested_at)}.`
+              : runRunning
+                ? "The latest check is still running."
+                : runError || "Run a full technical check after editing.",
+            runPassed ? "good" : runRunning ? "warning" : "bad"
+          )}
+        </div>
+
+        <div class="workflow-helper-section">
+          <h3>Current issue</h3>
+          <div class="workflow-helper-error-box ${runError ? "has-error" : ""}">
+            <strong>${escapeHtml(issueTitle)}</strong>
+            <p>${escapeHtml(issueDetail)}</p>
+          </div>
+        </div>
+
+        <div class="workflow-helper-section">
+          <h3>Credentials in this flow</h3>
+          <div class="workflow-helper-note">
+            API-key credentials should be managed in Nexus. Native account credentials such as Gmail or Google OAuth can be created or selected inside this locked editor when n8n requires it. Nexus still blocks global credential pages and deletion.
+          </div>
+          ${credentialRows(scan)}
+        </div>
+
+        <div class="workflow-helper-section">
+          <h3>How to finish</h3>
+          <ol class="workflow-helper-steps">
+            <li>Edit the failing node in n8n.</li>
+            <li>Keep Nexus trigger/context/output nodes in the flow.</li>
+            <li>Use product setup fields for buyer inputs and developer credentials for your own API keys.</li>
+            <li>Click <strong>Sync changes</strong>, then <strong>Run check</strong>.</li>
+            <li>When this panel says <strong>Good for review</strong>, return to the product and submit.</li>
+          </ol>
+          <button class="btn btn-secondary btn-small" type="button" id="workflowHelperOpenProductButton">Open product setup & credentials</button>
+        </div>
+      `;
+
+      document.getElementById("workflowHelperOpenProductButton")?.addEventListener("click", () => {
+        location.href = defaultReturnPath();
+      });
+    }
+
+    async function loadEditorProductSnapshot() {
+      let product = null;
+
+      if (typeof NexusDB.getDeveloperProduct === "function") {
+        const developerResult = await NexusDB.getDeveloperProduct(automationId).catch((error) => ({ error }));
+        if (!developerResult?.error) {
+          product = developerResult?.data?.product || developerResult?.data || null;
+        }
+      }
+
+      if (!product && typeof NexusDB.getAutomationById === "function") {
+        const adminResult = await NexusDB.getAutomationById(automationId).catch((error) => ({ error }));
+        if (!adminResult?.error) {
+          product = adminResult?.data || null;
+        }
+      }
+
+      if (product) editorProduct = product;
+      return product;
+    }
+
+    async function refreshWorkflowHelper(options = {}) {
+      const silent = Boolean(options.silent);
+      const root = document.getElementById("workflowHelperContent");
+      if (!silent && root) {
+        root.innerHTML = `<div class="workflow-helper-empty">Refreshing workflow readiness...</div>`;
+      }
+
+      try {
+        await loadEditorProductSnapshot();
+
+        if (typeof NexusDB.scanAutomationCredentials === "function") {
+          const scan = await NexusDB.scanAutomationCredentials(automationId);
+          if (!scan.error) editorCredentialScan = scan.data || null;
+        }
+
+        const runtimeProduct = editorCredentialScan?.product || editorProduct || {};
+        const status = runtimeProduct.n8n_last_test_status || "";
+        if (normalizeStatus(status) === "running" && typeof NexusDB.checkN8nWorkflowTest === "function") {
+          const checked = await NexusDB.checkN8nWorkflowTest({ automation_id: automationId });
+          if (!checked.error && checked.data) latestTestResult = checked.data;
+        } else {
+          latestTestResult = {
+            ...(runtimeProduct.n8n_last_test_result || {}),
+            status: runtimeProduct.n8n_last_test_status || "",
+            error_message: runtimeProduct.n8n_last_test_error || runtimeProduct.n8n_last_test_result?.error_message || "",
+            finished_at: runtimeProduct.n8n_last_tested_at || runtimeProduct.n8n_last_test_result?.finished_at || null
+          };
+        }
+      } catch (error) {
+        if (root) {
+          root.innerHTML = `
+            <div class="workflow-helper-error-box has-error">
+              <strong>Could not refresh helper</strong>
+              <p>${escapeHtml(error.message || "The helper could not load product status.")}</p>
+            </div>
+          `;
+        }
+        return;
+      }
+
+      renderWorkflowHelper();
+    }
+
+    async function refreshWorkflowHelperAfterWrite() {
+      await refreshWorkflowHelper({ silent: true });
+      await wait(900);
+      await refreshWorkflowHelper({ silent: true });
+    }
+
+    function wait(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function pollWorkflowCheck(startedData = {}) {
+      let result = startedData || {};
+
+      for (let index = 0; index < 40 && normalizeStatus(result.status || "running") === "running"; index += 1) {
+        await wait(3000);
+        const checked = await NexusDB.checkN8nWorkflowTest({
+          test_run_id: result.test_run_id,
+          automation_id: automationId
+        });
+        if (checked.error) throw new Error(checked.error.message || "Could not check workflow result.");
+        result = checked.data || result;
+        latestTestResult = result;
+        await refreshWorkflowHelper({ silent: true });
+      }
+
+      return result;
+    }
+
+    function setStatus(message, type = "info") {
+      const root = document.getElementById("workflowEditorStatus");
+      if (!root) return;
+      root.className = `workflow-editor-status ${type}`;
+      root.textContent = message;
+    }
+
+    function defaultReturnPath() {
+      if (returnTo) return returnTo;
+      if (document.referrer && document.referrer.includes("/pages/admin/")) {
+        return `/pages/admin/product-form.html?id=${encodeURIComponent(automationId)}`;
+      }
+      return `/pages/developer/dashboard.html?tab=products&product=${encodeURIComponent(automationId)}`;
+    }
+
+    function normalizeEditorUrl(editorUrl) {
+      const url = new URL(editorUrl);
+      const marker = "/functions/v1/n8n-editor-gateway/editor/";
+      const index = url.pathname.indexOf(marker);
+      if (index < 0) return url;
+
+      const basePath = url.pathname.slice(0, index + "/functions/v1/n8n-editor-gateway".length);
+      const after = url.pathname.slice(index + marker.length);
+      const [token, ...pathParts] = after.split("/");
+      const targetPath = `/${pathParts.join("/") || ""}`;
+      url.pathname = basePath;
+      url.searchParams.set("editor_token", decodeURIComponent(token || ""));
+      url.searchParams.set("n8n_path", targetPath || "/");
+      return url;
+    }
+
+    async function loadLockedEditorFrame(frame, editorUrl) {
+      const freshEditorUrl = normalizeEditorUrl(editorUrl);
+      freshEditorUrl.searchParams.set("client_v", `${Date.now()}`);
+
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("The embedded editor did not finish loading."));
+        }, 20000);
+
+        frame.onload = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+
+        frame.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error("The embedded editor could not be loaded."));
+        };
+
+        frame.src = freshEditorUrl.toString();
+      });
+    }
+
+    function reloadEditorFrame() {
+      const frame = document.getElementById("workflowEditorFrame");
+      if (!frame?.src) return;
+      try {
+        const url = new URL(frame.src);
+        url.searchParams.set("client_v", `${Date.now()}`);
+        frame.src = url.toString();
+      } catch {
+        frame.src = frame.src;
+      }
+    }
+
+    window.addEventListener("message", async (event) => {
+      const data = event?.data || {};
+      if (!data || data.type !== "nexus:n8n-oauth-complete") return;
+
+      if (data.ok) {
+        setStatus("Credential connected. Select it on each required node, save the workflow in n8n, then sync changes.", "success");
+        NexusUI.toast("Credential connected.");
+        await refreshWorkflowHelper({ silent: true });
+      } else {
+        const message = data.error || "Credential connection did not finish.";
+        setStatus(message, "error");
+        NexusUI.toast(message);
+      }
+    });
+
+    function requestEditorSaveBeforeSync(timeoutMs = 2800) {
+      const frame = document.getElementById("workflowEditorFrame");
+      if (!frame?.contentWindow) return Promise.resolve(false);
+
+      const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      return new Promise((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener("message", onMessage);
+          resolve(false);
+        }, timeoutMs);
+
+        function onMessage(event) {
+          const data = event?.data || {};
+          if (!data || data.type !== "nexus:n8n-save-attempted" || data.requestId !== requestId) return;
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          window.removeEventListener("message", onMessage);
+          resolve(true);
+        }
+
+        window.addEventListener("message", onMessage);
+        frame.contentWindow.postMessage({
+          source: "nexus-workflow-editor",
+          type: "nexus:save-workflow-before-sync",
+          requestId
+        }, "*");
+      });
+    }
+
+    async function openEditor() {
+      console.info(`[Nexus] Workflow editor build ${editorBuild}`);
+      if (!automationId) {
+        setStatus("Missing automation_id. Open the editor from a product after importing the workflow.", "error");
+        NexusUI.toast("Open the workflow editor from an imported product.");
+        return;
+      }
+
+      setStatus("Opening locked workflow editor...", "info");
+
+      const { data, error } = await NexusDB.createN8nEditorSession(automationId);
+      if (error) {
+        setStatus(error.message || "Could not open workflow editor.", "error");
+        NexusUI.toast(error.message || "Could not open workflow editor.");
+        return;
+      }
+
+      editorSession = data;
+      editorProduct = data.product || editorProduct;
+      document.getElementById("workflowEditorTitle").textContent = data.workflow_name || "Workflow editor";
+      document.getElementById("workflowEditorMeta").textContent = `Workflow ID: ${data.workflow_id || "locked"} - Session expires automatically.`;
+      setStatus("Editor ready. You are locked to this workflow only.", "success");
+      await refreshWorkflowHelper({ silent: true });
+
+      const frameWrap = document.getElementById("workflowEditorFrameWrap");
+      const frame = document.getElementById("workflowEditorFrame");
+      frame.removeAttribute("srcdoc");
+      frameWrap.hidden = false;
+
+      try {
+        await loadLockedEditorFrame(frame, data.editor_url);
+        document.body.classList.add("editor-loaded");
+        if (!helperRefreshTimer) {
+          helperRefreshTimer = setInterval(() => {
+            if (!document.hidden) refreshWorkflowHelper({ silent: true });
+          }, 8000);
+        }
+      } catch (error) {
+        setStatus(error.message || "Could not load the embedded workflow editor.", "error");
+        NexusUI.toast(error.message || "Could not load the embedded workflow editor.");
+      }
+    }
+
+    async function syncWorkflow() {
+      const button = document.getElementById("syncWorkflowButton");
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Syncing...";
+
+      try {
+        setStatus("Saving embedded n8n changes before syncing...", "info");
+        await requestEditorSaveBeforeSync();
+        await wait(650);
+        const { data, error } = await NexusDB.syncN8nEditorWorkflow(automationId);
+        if (error) throw new Error(error.message || "Could not sync workflow.");
+        editorProduct = data?.product || editorProduct;
+        latestTestResult = null;
+        setStatus("Workflow synced from n8n. Run a fresh technical check before submitting.", "success");
+        NexusUI.toast("Workflow synced from n8n.");
+        await refreshWorkflowHelperAfterWrite();
+        return true;
+      } catch (error) {
+        setStatus(error.message || "Could not sync workflow.", "error");
+        NexusUI.toast(error.message || "Could not sync workflow.");
+        return false;
+      } finally {
+        button.disabled = false;
+        button.textContent = original;
+      }
+    }
+
+    async function runWorkflowCheck() {
+      const button = document.getElementById("runWorkflowCheckButton");
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Starting...";
+
+      try {
+        const synced = await syncWorkflow();
+        if (!synced) {
+          throw new Error("Sync failed, so Nexus did not start a technical check. Save the workflow in n8n, then try Run check again.");
+        }
+
+        const started = await NexusDB.startN8nWorkflowTest(automationId, {
+          force_new: true,
+          skip_import: true,
+          skip_credential_binding: true,
+          preserve_hosted_workflow: true,
+          reason: "embedded_editor_check"
+        });
+        if (started.error) throw new Error(started.error.message || "Could not start workflow check.");
+        latestTestResult = started.data || { status: "running" };
+        await refreshWorkflowHelperAfterWrite();
+        setStatus("Technical check started. Nexus is waiting for n8n to finish.", "success");
+        NexusUI.toast("Technical check started.");
+        button.textContent = "Checking...";
+        const result = await pollWorkflowCheck(started.data || {});
+        latestTestResult = result;
+        await refreshWorkflowHelperAfterWrite();
+        if (isPassingStatus(result.status)) {
+          setStatus("Technical check passed. This workflow is ready for product review if the helper checklist is green.", "success");
+          NexusUI.toast("Workflow check passed.");
+        } else if (normalizeStatus(result.status) === "running") {
+          setStatus("Technical check is still running. Refresh the helper in a moment.", "info");
+          NexusUI.toast("Workflow check is still running.");
+        } else {
+          const message = result.error_message || result.message || "Workflow check failed.";
+          setStatus(message, "error");
+          NexusUI.toast(message);
+        }
+      } catch (error) {
+        setStatus(error.message || "Could not run workflow check.", "error");
+        NexusUI.toast(error.message || "Could not run workflow check.");
+      } finally {
+        button.disabled = false;
+        button.textContent = original;
+      }
+    }
+
+    document.getElementById("syncWorkflowButton").addEventListener("click", syncWorkflow);
+    document.getElementById("runWorkflowCheckButton").addEventListener("click", runWorkflowCheck);
+    document.getElementById("refreshWorkflowHelperButton").addEventListener("click", () => refreshWorkflowHelper());
+    document.getElementById("backToProductButton").addEventListener("click", async () => {
+      if (helperRefreshTimer) clearInterval(helperRefreshTimer);
+      if (editorSession?.session_id) {
+        await NexusDB.revokeN8nEditorSession(editorSession.session_id).catch(() => {});
+      }
+      location.href = defaultReturnPath();
+    });
+
+    openEditor();
+  </script>
+</body>
+</html>

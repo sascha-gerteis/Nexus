@@ -752,33 +752,39 @@
       return String(value || "").trim().toLowerCase();
     }
 
+    function credentialOwnershipText(field = {}) {
+      return [
+        field.name,
+        field.key,
+        field.credential_key,
+        field.label,
+        field.description,
+        field.provider,
+        field.service,
+        field.owner,
+        field.schema_source
+      ].map(value => String(value || "").toLowerCase()).join(" ");
+    }
+
+    function isKnownBuyerAccessCredential(field = {}) {
+      const text = credentialOwnershipText(field);
+      return /\b(meta|facebook|instagram|whatsapp)\b/.test(text) &&
+        /\b(access[\s_-]*token|token|credential|secret)\b/.test(text);
+    }
+
     function isBuyerOwnedCredentialField(field, product = {}) {
       const owner = cleanFlag(field.owner || field.credential_owner || field.credentialOwner || field.scope);
       const mode = cleanFlag(field.mode || field.credential_mode || field.credentialMode);
       const source = cleanFlag(field.source || field.source_type || field.sourceType);
       const visibility = cleanFlag(field.visibility || field.audience || field.exposed_to);
-
-      if (
-        field.customer_owned === true ||
-        field.buyer_owned === true ||
-        field.customer_visible === true ||
-        field.buyer_visible === true ||
-        field.expose_to_buyer === true ||
-        owner === "customer" ||
-        owner === "buyer" ||
-        mode === "customer_owned" ||
-        source === "customer" ||
-        source === "buyer" ||
-        visibility === "customer" ||
-        visibility === "buyer"
-      ) {
-        return true;
-      }
+      const ownershipText = credentialOwnershipText(field);
 
       if (
         field.developer_owned === true ||
         field.internal === true ||
         field.admin_only === true ||
+        ownershipText.includes("developer-owned") ||
+        ownershipText.includes("developer owned") ||
         owner === "developer" ||
         owner === "dev" ||
         owner === "admin" ||
@@ -811,16 +817,30 @@
         return fieldName && keys.some(key => key === fieldName || key.includes(fieldName) || fieldName.includes(key));
       });
 
-      if (devSlotMatches) return false;
+      // Imported n8n credential slots are developer-owned. This also repairs legacy
+      // fields that were incorrectly marked customer_owned by the old importer.
+      if (devSlotMatches && !isKnownBuyerAccessCredential(field)) return false;
 
-      /*
-        In customer setup, credential_schema means "buyer-provided access" unless the
-        product explicitly marks the field as developer/internal owned. This keeps bundle
-        setup from announcing a required Meta/Google/etc. token without rendering the input.
-      */
-      return true;
+      if (
+        field.customer_owned === true ||
+        field.buyer_owned === true ||
+        field.customer_visible === true ||
+        field.buyer_visible === true ||
+        field.expose_to_buyer === true ||
+        owner === "customer" ||
+        owner === "buyer" ||
+        mode === "customer_owned" ||
+        source === "customer" ||
+        source === "buyer" ||
+        visibility === "customer" ||
+        visibility === "buyer"
+      ) {
+        return true;
+      }
+
+      // Scanned and unknown credentials remain internal until explicitly exposed.
+      return false;
     }
-
     function fieldTextForMatching(field = {}) {
       return [
         field.name,
