@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260726-production-hardening">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260728-setup-guidance">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -64,6 +64,56 @@
       outputsByAutomation: new Map(),
       runsByAutomation: new Map()
     };
+    let setupProcessingTimer = null;
+    let setupProcessingPollTimer = null;
+    let setupProcessingPollInFlight = false;
+    let setupProcessingContext = null;
+
+    const SETUP_PROCESSING_POLL_MS = 8000;
+    const SETUP_PROCESSING_MESSAGES = Object.freeze([
+      "Collecting business information",
+      "Analyzing the data",
+      "Preparing your report",
+      "Finalizing the results"
+    ]);
+
+    const CREDENTIAL_TUTORIALS = Object.freeze({
+      instagram_account_id: {
+        label: "Instagram Account ID",
+        docs: "https://developers.facebook.com/docs/instagram-platform/",
+        video: "https://www.youtube.com/watch?v=OFm4laUrv3Y"
+      },
+      facebook_page_id: {
+        label: "Facebook Page ID",
+        docs: "https://www.facebook.com/help/1503421039731588",
+        video: "https://www.youtube.com/watch?v=zCuZXEJFLXc"
+      },
+      temporary_meta_access_token: {
+        label: "Temporary Meta Access Token",
+        docs: "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/",
+        video: "https://www.youtube.com/watch?v=IWryr_lyBRI"
+      },
+      permanent_meta_system_user_token: {
+        label: "Permanent Meta System User Token",
+        docs: "https://developers.facebook.com/documentation/business-messaging/whatsapp/access-tokens/",
+        video: "https://www.youtube.com/watch?v=NdkPxSf8Whw"
+      },
+      whatsapp_number: {
+        label: "WhatsApp Number Setup / Verification",
+        docs: "https://developers.facebook.com/docs/whatsapp/cloud-api/phone-numbers/",
+        video: "https://www.youtube.com/watch?v=q0ojEbdezFU"
+      },
+      meta_ad_account_id: {
+        label: "Meta Ad Account ID",
+        docs: "https://help.leadsie.com/article/106-find-facebook-meta-ad-account-id",
+        video: "https://www.youtube.com/watch?v=F1Rr30cgISw"
+      },
+      meta_pixel_id: {
+        label: "Meta Pixel ID",
+        docs: "https://www.facebook.com/help/952192354843755",
+        video: "https://www.youtube.com/watch?v=QmlPvwi6Us4"
+      }
+    });
 
     function getParam(name) {
       return new URLSearchParams(location.search).get(name);
@@ -372,12 +422,94 @@
       return true;
     }
 
+    function credentialTutorialForField(field = {}) {
+      const sourceNames = (field.sources || []).map(source => source?.field_name || source?.original_field_name || "");
+      const identityNames = [
+        field.name,
+        field.key,
+        field.credential_key,
+        ...(field.original_field_names || []),
+        ...sourceNames
+      ].map(canonicalBundleToken).filter(Boolean);
+      const text = [
+        fieldTextForMatching(field),
+        field.semantic,
+        ...identityNames.map(value => value.replaceAll("_", " "))
+      ].join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+      const identityMatches = pattern => identityNames.some(value => pattern.test(value));
+
+      if (
+        identityMatches(/^(?:meta_|facebook_|fb_)?pixel_id$/) ||
+        (/\b(?:meta|facebook|fb)\b/.test(text) && /\bpixel id\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.meta_pixel_id;
+
+      if (
+        identityMatches(/^(?:meta_|facebook_|fb_)?ad(?:vertising)?_account_id$/) ||
+        (/\b(?:meta|facebook|fb)\b/.test(text) && /\bad(?:vertising)? account id\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.meta_ad_account_id;
+
+      if (
+        identityMatches(/^(?:instagram|ig)_account_id$/) ||
+        (/\b(?:instagram|ig)\b/.test(text) && /\baccount id\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.instagram_account_id;
+
+      if (
+        identityMatches(/^(?:facebook|fb)_page_id$/) ||
+        (/\b(?:facebook|fb)\b/.test(text) && /\bpage id\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.facebook_page_id;
+
+      if (
+        identityMatches(/^whatsapp_(?:phone_)?number_id$/) ||
+        (/\bwhatsapp\b/.test(text) && /\b(?:phone )?number(?: id| setup| verification)?\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.whatsapp_number;
+
+      if (
+        identityMatches(/^(?:permanent_)?(?:meta_|facebook_|whatsapp_)?system_user_(?:access_)?token$/) ||
+        identityMatches(/^permanent_(?:meta_|facebook_|whatsapp_)?access_token$/) ||
+        identityMatches(/^whatsapp_access_token$/) ||
+        (/\b(?:permanent|system user)\b/.test(text) && /\b(?:access )?token\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.permanent_meta_system_user_token;
+
+      if (
+        identityMatches(/^(?:temporary_)?(?:meta|facebook|fb|instagram|ig)_access_token$/) ||
+        (/\b(?:meta|facebook|fb|instagram|ig)\b/.test(text) && /\b(?:temporary )?(?:access )?token\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.temporary_meta_access_token;
+
+      return null;
+    }
+
+    function renderCredentialTutorialLinks(field = {}) {
+      const tutorial = credentialTutorialForField(field);
+      if (!tutorial) return "";
+
+      const label = escapeHtml(tutorial.label);
+      return `
+        <span class="setup-credential-help" aria-label="${label} tutorials">
+          <a class="setup-credential-help-link" href="${escapeHtml(tutorial.docs)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${label} documentation in a new tab">
+            Docs <span aria-hidden="true">↗</span>
+          </a>
+          <a class="setup-credential-help-link is-video" href="${escapeHtml(tutorial.video)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${label} video tutorial in a new tab">
+            Video <span aria-hidden="true">▶</span>
+          </a>
+        </span>
+      `;
+    }
+
+    function renderSetupFieldLabel(field, label) {
+      return `
+        <div class="setup-field-label-row">
+          <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+          ${renderCredentialTutorialLinks(field)}
+        </div>
+      `;
+    }
     function renderField(field, existingAnswers = {}, options = {}) {
       const name = field.name || "";
       const label = field.label || name;
       const type = field.type || "text";
       const required = fieldRequired(field);
       const value = type === "secret" ? "" : answerValue(existingAnswers, name);
+      const fieldLabelHtml = renderSetupFieldLabel(field, label);
 
       if (!name) return "";
 
@@ -389,7 +521,7 @@
       if (type === "textarea") {
         return `
           <div class="full" ${skipGroup ? `data-skip-field-wrap="${escapeHtml(skipGroup)}"` : ""}>
-            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            ${fieldLabelHtml}
             <textarea
               class="textarea"
               name="${escapeHtml(name)}"
@@ -407,7 +539,7 @@
 
         return `
           <div ${skipGroup ? `data-skip-field-wrap="${escapeHtml(skipGroup)}"` : ""}>
-            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            ${fieldLabelHtml}
             <select class="select" name="${escapeHtml(name)}" ${required} ${skipAttrs}>
               <option value="">Choose...</option>
               ${optionsList.map(option => `
@@ -431,7 +563,7 @@
 
         return `
           <div ${skipGroup ? `data-skip-field-wrap="${escapeHtml(skipGroup)}"` : ""}>
-            <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+            ${fieldLabelHtml}
             <input
               class="input"
               type="password"
@@ -455,7 +587,7 @@
 
       return `
         <div ${skipGroup ? `data-skip-field-wrap="${escapeHtml(skipGroup)}"` : ""}>
-          <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+          ${fieldLabelHtml}
           <input
             class="input"
             type="${htmlType}"
@@ -1713,6 +1845,245 @@ async function resolveProductFromCustomerAutomation(automation) {
 
 
 
+    function formatProcessingElapsed(elapsedMs) {
+      const totalSeconds = Math.max(0, Math.floor(Number(elapsedMs || 0) / 1000));
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      if (hours) return `${hours}h ${minutes}m ${seconds}s`;
+      if (minutes) return `${minutes}m ${seconds}s`;
+      return `${seconds}s`;
+    }
+
+    function renderSetupProcessingPanel(context = {}) {
+      const isBundle = Boolean(context.isBundle);
+      const expectedCount = Math.max(1, Number(context.expectedCount || 1));
+      return `
+        <div class="setup-processing-panel" role="status" aria-live="polite">
+          <div class="setup-processing-visual" aria-hidden="true">
+            <span class="setup-processing-spinner"></span>
+          </div>
+          <div class="setup-processing-copy">
+            <span class="setup-processing-kicker">Report processing</span>
+            <strong>${isBundle ? "Your reports are being generated" : "Your report is being generated"}</strong>
+            <p>This usually takes a few minutes. You can leave this page and return later.</p>
+            <p>The ${isBundle ? "reports" : "report"} will appear here automatically when ${isBundle ? "they are" : "it’s"} ready.</p>
+            <div class="setup-processing-meta">
+              <span id="setupProcessingElapsed">Processing for 0s</span>
+              <span id="setupProcessingStage">${SETUP_PROCESSING_MESSAGES[0]}</span>
+              ${isBundle ? `<span id="setupProcessingCount">0/${expectedCount} reports ready</span>` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function setupProcessingSubmissionTimestamp(submission = {}) {
+      return bundleRuntimeTimestamp(
+        submission.submitted_at ||
+        submission.created_at ||
+        submission.updated_at
+      );
+    }
+
+    function storedBundleAttempt(orderId, bundleId) {
+      if (!orderId || !bundleId) return null;
+
+      try {
+        const raw = localStorage.getItem(`nexus_bundle_attempt:${orderId}:${bundleId}`);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function inferredSetupProcessingStart(bundleSetup = null) {
+      if (!bundleSetup) {
+        return setupProcessingSubmissionTimestamp(latestSubmission) || Date.now();
+      }
+
+      const marker = storedBundleAttempt(bundleSetup.order_id, bundleSetup.bundle_id);
+      const markerTime = bundleRuntimeTimestamp(marker?.submitted_at);
+      if (markerTime) return markerTime;
+
+      const submissionTimes = (bundleSetup.entries || [])
+        .map(entry => setupProcessingSubmissionTimestamp(entry.submission))
+        .filter(Boolean);
+      if (!submissionTimes.length) return Date.now();
+
+      const newest = Math.max(...submissionTimes);
+      const currentAttemptWindow = submissionTimes.filter(timestamp => newest - timestamp <= 15 * 60 * 1000);
+      return Math.min(...currentAttemptWindow);
+    }
+
+    function currentSetupProcessingContext(startedAt = 0, bundleAttemptId = "") {
+      const automation = activeCustomerAutomation || {};
+      const order = customerAutomationOrder(automation);
+      const bundleSetup = activeBundleSetup?.is_bundle_setup ? activeBundleSetup : null;
+      const orderId = String(bundleSetup?.order_id || automation.order_id || order.id || getParam("order_id") || "");
+      const bundleId = String(bundleSetup?.bundle_id || automation.bundle_id || order.bundle_id || getParam("bundle_id") || "");
+      const marker = storedBundleAttempt(orderId, bundleId);
+      const entries = bundleSetup?.entries || [];
+      const ids = bundleSetup
+        ? entries.map(entry => bundleEntryRuntimeId(entry)).filter(Boolean)
+        : [automation.id].filter(Boolean).map(String);
+      const titlesByAutomation = {};
+
+      for (const entry of entries) {
+        const id = bundleEntryRuntimeId(entry);
+        if (id) titlesByAutomation[id] = bundleEntryTitle(entry);
+      }
+
+      return {
+        targetId: "setupProcessingStatus",
+        isBundle: Boolean(bundleSetup),
+        orderId,
+        bundleId,
+        bundleAttemptId: String(bundleAttemptId || marker?.bundle_attempt_id || ""),
+        startedAt: Number(startedAt || inferredSetupProcessingStart(bundleSetup)),
+        expectedCount: bundleSetup ? entries.length : 1,
+        customerAutomationIds: [...new Set(ids.map(String))],
+        titlesByAutomation
+      };
+    }
+
+    function stopSetupProcessing(options = {}) {
+      if (setupProcessingTimer) clearInterval(setupProcessingTimer);
+      if (setupProcessingPollTimer) clearInterval(setupProcessingPollTimer);
+      setupProcessingTimer = null;
+      setupProcessingPollTimer = null;
+      setupProcessingPollInFlight = false;
+      if (!options.keepContext) setupProcessingContext = null;
+    }
+
+    function updateSetupProcessingDisplay() {
+      const context = setupProcessingContext;
+      if (!context) return;
+
+      const elapsedMs = Math.max(0, Date.now() - context.startedAt);
+      const elapsed = document.getElementById("setupProcessingElapsed");
+      const stage = document.getElementById("setupProcessingStage");
+      if (elapsed) elapsed.textContent = `Processing for ${formatProcessingElapsed(elapsedMs)}`;
+      if (stage) {
+        const index = Math.floor(elapsedMs / 6000) % SETUP_PROCESSING_MESSAGES.length;
+        stage.textContent = SETUP_PROCESSING_MESSAGES[index];
+      }
+    }
+
+    function setupOutputMatchesProcessing(output = {}, context = {}) {
+      const automationId = String(output.customer_automation_id || "");
+      if (!context.customerAutomationIds.includes(automationId)) return false;
+      if (context.orderId && output.order_id && String(output.order_id) !== context.orderId) return false;
+      if (
+        context.bundleAttemptId &&
+        output.bundle_run_attempt_id &&
+        String(output.bundle_run_attempt_id) !== context.bundleAttemptId
+      ) return false;
+
+      const outputTime = bundleRuntimeTimestamp(output.created_at || output.updated_at);
+      return Boolean(outputTime && outputTime >= context.startedAt - 10000);
+    }
+
+    function latestProcessingOutputs(rows = [], context = {}) {
+      const byAutomation = new Map();
+      const ordered = [...rows].sort((a, b) =>
+        bundleRuntimeTimestamp(b.created_at || b.updated_at) -
+        bundleRuntimeTimestamp(a.created_at || a.updated_at)
+      );
+
+      for (const output of ordered) {
+        if (!setupOutputMatchesProcessing(output, context)) continue;
+        const automationId = String(output.customer_automation_id || "");
+        if (!byAutomation.has(automationId)) byAutomation.set(automationId, output);
+      }
+
+      return [...byAutomation.values()];
+    }
+
+    function renderSetupReadyPanel(outputs = [], context = {}) {
+      const isBundle = Boolean(context.isBundle);
+      const links = outputs.map((output, index) => {
+        const automationId = String(output.customer_automation_id || "");
+        const title = context.titlesByAutomation?.[automationId] || output.title || `Report ${index + 1}`;
+        return `
+          <a class="btn btn-secondary btn-small" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
+            ${escapeHtml(isBundle ? `View ${title}` : "View report")}
+          </a>
+        `;
+      }).join("");
+
+      return `
+        <div class="setup-report-ready" role="status" aria-live="polite">
+          <span class="setup-report-ready-icon" aria-hidden="true">✓</span>
+          <div>
+            <span class="setup-processing-kicker">Processing complete</span>
+            <strong>${isBundle ? "Your reports are ready" : "Your report is ready"}</strong>
+            <p>${isBundle ? `${outputs.length} report${outputs.length === 1 ? " is" : "s are"} ready to view.` : "Your finished report is now available."}</p>
+            <div class="setup-report-ready-actions">
+              ${links}
+              <a class="btn btn-primary btn-small" href="/pages/buyer/dashboard.html">Go to dashboard</a>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function pollSetupProcessing() {
+      const context = setupProcessingContext;
+      if (!context || setupProcessingPollInFlight || !context.customerAutomationIds.length) return;
+      setupProcessingPollInFlight = true;
+
+      try {
+        const loader = typeof NexusDB.listBuyerAutomationOutputsByCustomerAutomationIds === "function"
+          ? NexusDB.listBuyerAutomationOutputsByCustomerAutomationIds(context.customerAutomationIds)
+          : NexusDB.listBuyerAutomationOutputs();
+        const { data, error } = await loader;
+        if (setupProcessingContext !== context) return;
+        if (error) throw error;
+
+        const outputs = latestProcessingOutputs(data || [], context);
+        const count = document.getElementById("setupProcessingCount");
+        if (count) count.textContent = `${outputs.length}/${context.expectedCount} reports ready`;
+
+        const isComplete = context.isBundle
+          ? outputs.length >= context.expectedCount
+          : outputs.length > 0;
+        if (!isComplete) return;
+
+        const target = document.getElementById(context.targetId);
+        stopSetupProcessing();
+        if (target) target.innerHTML = renderSetupReadyPanel(outputs, context);
+      } catch (error) {
+        console.warn("Could not refresh report completion yet:", error);
+      } finally {
+        if (setupProcessingContext === context) setupProcessingPollInFlight = false;
+      }
+    }
+
+    function startSetupProcessing(context = currentSetupProcessingContext()) {
+      stopSetupProcessing();
+      setupProcessingContext = {
+        ...context,
+        startedAt: Number(context.startedAt || Date.now())
+      };
+
+      const target = document.getElementById(setupProcessingContext.targetId);
+      if (!target) {
+        setupProcessingContext = null;
+        return;
+      }
+
+      target.innerHTML = renderSetupProcessingPanel(setupProcessingContext);
+      const result = document.getElementById("setupSubmitResult");
+      if (result) result.innerHTML = "";
+      updateSetupProcessingDisplay();
+      setupProcessingTimer = setInterval(updateSetupProcessingDisplay, 1000);
+      setupProcessingPollTimer = setInterval(pollSetupProcessing, SETUP_PROCESSING_POLL_MS);
+      void pollSetupProcessing();
+    }
     async function initSetupPage() {
       const root = document.getElementById("setupRoot");
       const customerAutomationId = getParam("id");
@@ -1836,6 +2207,10 @@ async function resolveProductFromCustomerAutomation(automation) {
       const isRunning =
         runtimeStatus === "running" ||
         status === "running";
+      const bundleHasFreshActiveRun = Boolean(
+        bundleSetup?.entries?.some(entry => bundleRunIsFreshActive(bundleEntryLatestRun(entry)))
+      );
+      const shouldShowProcessing = hasSubmitted && (isRunning || bundleHasFreshActiveRun);
 
       const needsCustomerAction =
         automation.needs_customer_action === true &&
@@ -1976,16 +2351,9 @@ async function resolveProductFromCustomerAutomation(automation) {
               }
             </p>
 
-            ${
-              isRunning
-                ? `
-                  <div class="success" style="margin:1rem 0">
-                    <strong>Automation running</strong><br>
-                    Nexus is currently processing your automation. Outputs or errors will appear in your dashboard when the run finishes.
-                  </div>
-                `
-                : ""
-            }
+            <div id="setupProcessingStatus">
+              ${shouldShowProcessing ? renderSetupProcessingPanel(currentSetupProcessingContext()) : ""}
+            </div>
 
             ${
               needsCustomerAction
@@ -2069,6 +2437,11 @@ async function resolveProductFromCustomerAutomation(automation) {
 
       document.getElementById("buyerSetupForm").onsubmit = submitSetupForm;
       mountSetupSkipControls(root);
+      if (shouldShowProcessing) {
+        startSetupProcessing(currentSetupProcessingContext());
+      } else {
+        stopSetupProcessing();
+      }
     }
 
     function buildBundleAnswersForWorkflow(entry, answers) {
@@ -2225,9 +2598,8 @@ async function resolveProductFromCustomerAutomation(automation) {
           button.disabled = false;
           button.textContent = "Update setup details";
           form.dataset.submitting = "false";
-          setTimeout(function () {
-            location.href = bundleDashboardUrl;
-          }, 1800);
+          startSetupProcessing(currentSetupProcessingContext(Date.parse(bundleAttemptStartedAt), bundleAttemptId));
+
           return;
         }
 
@@ -2261,7 +2633,8 @@ async function resolveProductFromCustomerAutomation(automation) {
       }
 
       latestSubmission = {
-        answers
+        answers,
+        created_at: bundleAttemptStartedAt
       };
 
       for (const result of results) {
@@ -2288,9 +2661,8 @@ async function resolveProductFromCustomerAutomation(automation) {
       button.textContent = "Update setup details";
       form.dataset.submitting = "false";
 
-      setTimeout(function () {
-        location.href = bundleDashboardUrl;
-      }, 1800);
+      startSetupProcessing(currentSetupProcessingContext(Date.parse(bundleAttemptStartedAt), bundleAttemptId));
+
     }
 
     async function submitSetupForm(event) {
@@ -2361,6 +2733,7 @@ async function resolveProductFromCustomerAutomation(automation) {
         return;
       }
 
+      const setupAttemptStartedAt = Date.now();
       const { data, error } = await NexusDB.submitAutomationSetup({
         customer_automation_id: automation.id,
         answers
@@ -2382,9 +2755,8 @@ async function resolveProductFromCustomerAutomation(automation) {
           button.disabled = false;
           button.textContent = "Update setup details";
           form.dataset.submitting = "false";
-          setTimeout(function () {
-            location.href = "/pages/buyer/dashboard.html";
-          }, 1800);
+          startSetupProcessing(currentSetupProcessingContext(setupAttemptStartedAt));
+
           return;
         }
 
@@ -2409,7 +2781,8 @@ async function resolveProductFromCustomerAutomation(automation) {
       }
 
       latestSubmission = data?.submission || {
-        answers
+        answers,
+        created_at: new Date(setupAttemptStartedAt).toISOString()
       };
 
       document.getElementById("setupSubmitResult").innerHTML = `
@@ -2433,11 +2806,16 @@ async function resolveProductFromCustomerAutomation(automation) {
       button.textContent = "Update setup details";
       form.dataset.submitting = "false";
 
-      setTimeout(function () {
-        location.href = "/pages/buyer/dashboard.html";
-      }, 1800);
+      startSetupProcessing(currentSetupProcessingContext(setupAttemptStartedAt));
+
     }
 
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && setupProcessingContext) {
+        void pollSetupProcessing();
+      }
+    });
+    window.addEventListener("beforeunload", () => stopSetupProcessing());
     document.addEventListener("DOMContentLoaded", initSetupPage);
   </script>
 </body>

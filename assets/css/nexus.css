@@ -6636,6 +6636,208 @@ body[data-page="checkout"] .site-header {
   margin-top: 0.35rem;
   font-size: 0.78rem;
 }
+.setup-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.setup-field-label-row > label {
+  min-width: 0;
+  margin: 0;
+}
+
+.setup-credential-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  flex: 0 0 auto;
+}
+
+.setup-credential-help-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: 27px;
+  padding: 0.28rem 0.5rem;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.setup-credential-help-link.is-video {
+  color: #475569;
+  border-color: #e2e8f0;
+  background: #fff;
+}
+
+.setup-credential-help-link:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.setup-credential-help-link:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.setup-processing-panel,
+.setup-report-ready {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.95rem;
+  margin: 1.15rem 0;
+  padding: 1.05rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.12), transparent 38%),
+    linear-gradient(145deg, #f8fbff 0%, #eff6ff 100%);
+}
+
+.setup-processing-visual {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.1);
+}
+
+.setup-processing-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #dbeafe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: setup-processing-spin 850ms linear infinite;
+}
+
+.setup-processing-copy,
+.setup-report-ready > div {
+  min-width: 0;
+}
+
+.setup-processing-kicker {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.setup-processing-copy > strong,
+.setup-report-ready strong {
+  display: block;
+  color: var(--navy);
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.buyer-setup-card .setup-processing-copy p,
+.buyer-setup-card .setup-report-ready p {
+  margin: 0.32rem 0 0;
+  color: #52657d;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.setup-processing-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+  margin-top: 0.8rem;
+}
+
+.setup-processing-meta > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(147, 197, 253, 0.72);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.setup-report-ready {
+  border-color: #a7f3d0;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.12), transparent 38%),
+    linear-gradient(145deg, #f7fffb 0%, #ecfdf5 100%);
+}
+
+.setup-report-ready-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  background: #059669;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 950;
+  box-shadow: 0 8px 22px rgba(5, 150, 105, 0.18);
+}
+
+.setup-report-ready .setup-processing-kicker {
+  color: #047857;
+}
+
+.setup-report-ready-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+@keyframes setup-processing-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 560px) {
+  .setup-field-label-row {
+    align-items: flex-start;
+  }
+
+  .setup-processing-panel,
+  .setup-report-ready {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-processing-visual,
+  .setup-report-ready-icon {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setup-processing-spinner {
+    animation-duration: 1.8s;
+  }
+
+  .setup-credential-help-link {
+    transition: none;
+  }
+}
 
 .bundle-setup-flow {
   display: grid;
