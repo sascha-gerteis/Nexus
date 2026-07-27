@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Admin Dashboard | Nexus AI</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-admin="true" data-admin-page="dashboard">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+  <div class="sidebar-title">Nexus Admin</div>
+
+  <a class="active" href="/pages/admin/dashboard.html">Overview</a>
+  <a href="/pages/admin/orders.html">Orders</a>
+  <a href="/pages/admin/analytics.html">Analytics</a>
+  <a href="/pages/admin/finance.html">Finance</a>
+  <a href="/pages/admin/health.html">System Health</a>
+  <a href="/pages/admin/automations.html">Products</a>
+  <a href="/pages/admin/product-reviews.html">Review Queue</a>
+  <a href="/pages/admin/product-form.html">Create Product</a>
+  <a href="/pages/admin/credentials.html">Credentials</a>
+      <a href="/pages/admin/make-imports.html">Import Assistant</a>
+  <a href="/pages/admin/customer-automations.html">Cancellation Requests</a>
+  <a href="/pages/admin/messages.html">Inquiries</a>
+  <a href="/pages/admin/checkout-intents.html">Checkout Prep</a>
+  <a href="/pages/admin/waitlist.html">Developer Intake</a>
+  <a href="/pages/admin/reviews.html">Reviews</a>
+  <a href="/pages/admin/developer-profile.html">Developer Profile</a>
+  <a href="/pages/marketplace/index.html">View Marketplace</a>
+  <a href="#" onclick="NexusDB.signOut()">Logout</a>
+</aside>
+
+    <main class="main">
+      <section class="admin-launch-hero">
+        <div>
+          <span class="eyebrow">Admin overview</span>
+          <h1>Marketplace control center.</h1>
+          <p>
+            Review products, orders, developer submissions, buyer automations, contact messages,
+            waitlist signups, and finance signals from one launch-ready command view.
+          </p>
+        </div>
+
+        <div class="admin-launch-actions">
+          <a class="btn btn-primary" href="/pages/admin/product-reviews.html">Review products</a>
+          <a class="btn btn-secondary" href="/pages/admin/credentials.html">Manage credentials</a>
+          <a class="btn btn-secondary" href="/pages/admin/analytics.html">Analytics</a>
+          <a class="btn btn-secondary" href="/pages/admin/health.html">System health</a>
+          <a class="btn btn-secondary" href="/pages/admin/messages.html">Open messages</a>
+          <a class="btn btn-secondary" href="/pages/marketplace/index.html">View marketplace</a>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Health</span>
+            <h2>Launch metrics</h2>
+            <p>Fast readout of marketplace content, developers, orders, and support load.</p>
+          </div>
+        </div>
+
+        <div class="admin-metric-grid">
+          <a class="admin-metric-card" href="/pages/admin/automations.html">
+            <span>Total products</span>
+            <strong id="totalProducts">0</strong>
+            <p>All marketplace listings.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/admin/automations.html">
+            <span>Live products</span>
+            <strong id="liveProducts">0</strong>
+            <p>Visible to buyers.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/admin/product-reviews.html">
+            <span>Pending reviews</span>
+            <strong id="pendingProductReviews">0</strong>
+            <p>Developer products waiting for approval.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/developers/index.html">
+            <span>Developers</span>
+            <strong id="totalDevelopers">0</strong>
+            <p>Public or onboarded builder profiles.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/admin/reviews.html">
+            <span>Reviews</span>
+            <strong id="totalReviews">0</strong>
+            <p>Marketplace trust signals.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/admin/waitlist.html">
+            <span>Developer waitlist</span>
+            <strong id="totalWaitlist">0</strong>
+            <p>New builders to review.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/admin/messages.html">
+            <span>Contact messages</span>
+            <strong id="totalMessages">0</strong>
+            <p>Contact forms and inquiries.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/admin/checkout-intents.html">
+            <span>Checkout prep</span>
+            <strong id="totalCheckout">0</strong>
+            <p>Saved buyer checkout records.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/admin/finance.html">
+            <span>Payout requests</span>
+            <strong id="totalPayoutRequests">0</strong>
+            <p>Developer payouts waiting for review or payment.</p>
+          </a>
+
+          <a class="admin-metric-card" href="/pages/admin/health.html">
+            <span>System health</span>
+            <strong>Check</strong>
+            <p>Secrets, Stripe, n8n, database, and monthly runner status.</p>
+          </a>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Operations</span>
+            <h2>What to handle next</h2>
+            <p>Use these cards for the daily admin flow during MVP launch.</p>
+          </div>
+        </div>
+
+        <div class="admin-action-grid">
+          <a class="admin-action-card priority" href="/pages/admin/orders.html">
+            <div>
+              <span class="pill blue">Orders</span>
+              <h3>All orders</h3>
+              <p>Review paid orders, guided install requests, and completed customer deliveries.</p>
+            </div>
+            <strong>01</strong>
+          </a>
+
+          <a class="admin-action-card priority" href="/pages/admin/product-reviews.html">
+            <div>
+              <span class="pill orange">Approvals</span>
+              <h3>Product review queue</h3>
+              <p>Approve or reject developer-submitted products before they go live.</p>
+            </div>
+            <strong>02</strong>
+          </a>
+
+          <a class="admin-action-card" href="/pages/admin/customer-automations.html">
+            <div>
+              <span class="pill purple">Runtime</span>
+              <h3>Customer automations</h3>
+              <p>Track setup status, runtime status, cancellation requests, and product issues.</p>
+            </div>
+            <strong>03</strong>
+          </a>
+
+          <a class="admin-action-card priority" href="/pages/admin/credentials.html">
+            <div>
+              <span class="pill red">Credentials</span>
+              <h3>Credential checks</h3>
+              <p>See which credentials each workflow uses, replace keys, and run the latest n8n check.</p>
+            </div>
+            <strong>04</strong>
+          </a>
+
+          <a class="admin-action-card" href="/pages/admin/make-imports.html">
+            <div>
+              <span class="pill blue">Imports</span>
+              <h3>Import assistant</h3>
+              <p>Review unsupported Make/Zapier steps, support requests, and reusable HTTP substitutes.</p>
+            </div>
+            <strong>05</strong>
+          </a>
+
+          <a class="admin-action-card" href="/pages/admin/messages.html">
+            <div>
+              <span class="pill green">Inbox</span>
+              <h3>Messages and inquiries</h3>
+              <p>Handle contact forms, custom requests, buyer messages, and developer conversations.</p>
+            </div>
+            <strong>06</strong>
+          </a>
+
+          <a class="admin-action-card" href="/pages/admin/health.html">
+            <div>
+              <span class="pill blue">Launch</span>
+              <h3>System health</h3>
+              <p>Run launch checks for environment secrets, Stripe, n8n, database tables, and monthly schedules.</p>
+            </div>
+            <strong>07</strong>
+          </a>
+        </div>
+      </section>
+
+      <section class="admin-dashboard-section">
+        <div class="admin-dashboard-section-head">
+          <div>
+            <span class="eyebrow">Controls</span>
+            <h2>Marketplace management</h2>
+            <p>Create content, tune trust signals, review finance, and manage onboarding.</p>
+          </div>
+        </div>
+
+        <div class="admin-control-grid">
+          <a class="admin-control-card" href="/pages/admin/automations.html">
+            <span class="pill green">Products</span>
+            <h3>Product management</h3>
+            <p>Create, edit, pause, delete, sync, and preview automation products.</p>
+            <div class="admin-control-stats"><span>Status</span><strong>Active</strong></div>
+          </a>
+
+          <a class="admin-control-card" href="/pages/admin/finance.html">
+            <span class="pill blue">Finance</span>
+            <h3>Revenue overview</h3>
+            <p>Review Nexus revenue, developer earnings, and transfer status when payments are enabled.</p>
+            <div class="admin-control-stats"><span>Mode</span><strong>MVP</strong></div>
+          </a>
+
+          <a class="admin-control-card" href="/pages/admin/credentials.html">
+            <span class="pill orange">Runtime keys</span>
+            <h3>Credential vault</h3>
+            <p>Manage Nexus and developer-owned keys used by hosted workflow runs.</p>
+            <div class="admin-control-stats"><span>Gate</span><strong>Required</strong></div>
+          </a>
+
+          <a class="admin-control-card" href="/pages/admin/waitlist.html">
+            <span class="pill purple">Developers</span>
+            <h3>Developer waitlist</h3>
+            <p>See new developer interest before opening the platform broadly.</p>
+            <div class="admin-control-stats"><span>Access</span><strong>Controlled</strong></div>
+          </a>
+
+          <div class="admin-control-card" id="demoMarketplaceCard">
+            <span class="pill orange" id="demoModePill">Demo mode</span>
+            <h3>Demo marketplace</h3>
+            <p>Turn synthetic demo developers and products on for sales demos, then hide them again before launch.</p>
+            <div class="admin-control-stats"><span>Status</span><strong id="demoModeStatus">Loading...</strong></div>
+            <p id="demoModeCounts" style="font-size:.86rem;color:var(--muted);margin-top:.65rem">Checking demo content...</p>
+            <div class="hero-actions" style="justify-content:flex-start;margin-top:.8rem;gap:.5rem">
+              <button class="btn btn-primary btn-small" id="demoModeEnable" type="button" onclick="NexusApp.enableDemoMarketplace()">
+                Turn on demo marketplace
+              </button>
+              <button class="btn btn-secondary btn-small" id="demoModeDisable" type="button" onclick="NexusApp.disableDemoMarketplace()">
+                Turn off demo marketplace
+              </button>
+              <button class="btn btn-secondary btn-small" id="demoModeReset" type="button" onclick="NexusApp.resetDemoMarketplace()">
+                Reset demo content
+              </button>
+            </div>
+          </div>
+
+          <div class="admin-control-card" id="paymentModeCard">
+            <span class="pill orange" id="paymentModePill">Payments</span>
+            <h3>Payment test mode</h3>
+            <p>Switch Checkout to Stripe test mode so you can buy products with a test card without charging real money.</p>
+            <div class="admin-control-stats"><span>Status</span><strong id="paymentModeStatus">Loading...</strong></div>
+            <p id="paymentModeDetails" style="font-size:.86rem;color:var(--muted);margin-top:.65rem">Checking payment environment...</p>
+            <div class="hero-actions" style="justify-content:flex-start;margin-top:.8rem;gap:.5rem">
+              <button class="btn btn-primary btn-small" id="paymentModeEnableTest" type="button" onclick="NexusApp.enablePaymentTestMode()">
+                Turn on test payments
+              </button>
+              <button class="btn btn-secondary btn-small" id="paymentModeDisableTest" type="button" onclick="NexusApp.disablePaymentTestMode()">
+                Return to live payments
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="productModal">
+    <div class="modal">
+      <div class="modal-side" id="modalSide"></div>
+      <div class="modal-main" id="modalMain"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
+</body>
+</html>

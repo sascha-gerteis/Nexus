@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260719-bundle-runtime-source">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260726-production-hardening">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -350,10 +350,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260726-production-hardening"></script>
 <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
-<script src="/assets/js/nexus-db.js?v=20260722-order-id-isolation"></script>
-<script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
+<script src="/assets/js/nexus-db.js?v=20260726-production-hardening"></script>
+<script src="/assets/js/nexus-app.js?v=20260726-production-hardening"></script>
 
   <script>
     let dashboardData = {
@@ -658,6 +658,23 @@ function humanizeSetupStatus(item) {
       return status.includes("running") || status.includes("processing") || status.includes("started") || status.includes("queued") || status.includes("output_received") || status.includes("waiting_for_output");
     }
 
+    function runIsImpossibleActiveTerminal(run) {
+      return Boolean(run?.finished_at && runIsActiveStatus(run));
+    }
+
+    function preferConsistentLegacyRuns(runs = []) {
+      const consistentAutomationIds = new Set(
+        (runs || [])
+          .filter(run => !runIsImpossibleActiveTerminal(run))
+          .map(run => String(run?.customer_automation_id || ""))
+          .filter(Boolean)
+      );
+
+      return (runs || []).filter(run => {
+        if (!runIsImpossibleActiveTerminal(run)) return true;
+        return !consistentAutomationIds.has(String(run?.customer_automation_id || ""));
+      });
+    }
     function runIsSuccessful(run) {
       if (!run) return false;
       const status = runStatusText(run).replace(/[\s-]+/g, "_");
@@ -1129,12 +1146,10 @@ function automationNeedsFreshRun(item, output, run) {
 
 function bundleActivityTime(order = {}, included = []) {
   return latestTimestampMs(
-    order?.updated_at,
     order?.created_at,
     ...(included || []).flatMap(item => [
       item?.last_run_requested_at,
       item?.last_run_at,
-      item?.updated_at,
       item?.created_at
     ])
   );
@@ -1496,12 +1511,13 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
           }
         });
       } else {
-        (runs || [])
-          .filter(run => {
-            const item = itemById.get(String(run?.customer_automation_id || ""));
-            if (!item) return false;
-            return runBelongsToOrder(run, orderId, item) && runtimeRowFitsOrderWindow(run, order, nextNewerOrderTime);
-          })
+        const orderScopedLegacyRuns = (runs || []).filter(run => {
+          const item = itemById.get(String(run?.customer_automation_id || ""));
+          if (!item) return false;
+          return runBelongsToOrder(run, orderId, item) && runtimeRowFitsOrderWindow(run, order, nextNewerOrderTime);
+        });
+
+        preferConsistentLegacyRuns(orderScopedLegacyRuns)
           .sort((a, b) => new Date(b.finished_at || b.started_at || b.created_at || 0) - new Date(a.finished_at || a.started_at || a.created_at || 0))
           .forEach(run => {
             if (!latestRunsByAutomation.has(String(run.customer_automation_id))) {
@@ -1534,19 +1550,14 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
             const exactRun = latestRunsByAutomation.get(customerAutomationId) || null;
             return Boolean(attemptItem && bundleRunStatusIsSuccess(bundleItemEffectiveStatus(attemptItem, exactRun)));
           })
-        : rawBundleOutputs.filter(output => {
-            const item = itemById.get(String(output.customer_automation_id || "")) || {};
-            const latestRun = latestRunsByAutomation.get(String(output.customer_automation_id || "")) || null;
-
-            if (latestRun && outputMatchesRun(output, latestRun)) return true;
-            if (latestRun) {
-              const outputTime = timestampMs(output.created_at || output.updated_at);
-              const runTime = latestTimestampMs(latestRun.started_at, latestRun.created_at);
-              if (runTime && (!outputTime || outputTime + 1000 < runTime)) return false;
-            }
-
-            return outputIsFreshForAutomation(output, item, latestRun);
-          });
+        : rawBundleOutputs;
+      /*
+        Bundles created before bundle_run_attempts still have exact, immutable
+        purchase ownership through order_id + customer_automation_id. Preserve
+        those published outputs as history even if a later run failed or started
+        after them. New/tracked attempts remain fail-closed above and cannot use
+        a legacy output to satisfy a newer bundle run.
+      */
       const latestBundleOutputsByAutomation = latestOutputByCustomerAutomation(bundleOutputs);
       const latestBundleOutputs = Array.from(latestBundleOutputsByAutomation.values())
         .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
@@ -2112,9 +2123,9 @@ function openAutomationDetail(customerAutomationId) {
 
         exactItems.forEach(item => {
           const customerAutomationId = String(item.id || "");
-          const itemRuns = exactRuns
-            .filter(run => String(run.customer_automation_id || "") === customerAutomationId)
-            .sort((a, b) => latestTimestampMs(b?.finished_at, b?.started_at, b?.created_at, b?.updated_at) - latestTimestampMs(a?.finished_at, a?.started_at, a?.created_at, a?.updated_at));
+          const itemRuns = preferConsistentLegacyRuns(
+            exactRuns.filter(run => String(run.customer_automation_id || "") === customerAutomationId)
+          ).sort((a, b) => latestTimestampMs(b?.finished_at, b?.started_at, b?.created_at, b?.updated_at) - latestTimestampMs(a?.finished_at, a?.started_at, a?.created_at, a?.updated_at));
           const latestRun = itemRuns[0] || null;
           const hasOutput = exactOutputs.some(output => String(output.customer_automation_id || "") === customerAutomationId);
           const recoveryKey = "legacy:" + orderId + ":" + customerAutomationId;

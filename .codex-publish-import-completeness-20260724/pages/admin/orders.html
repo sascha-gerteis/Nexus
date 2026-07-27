@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260726-production-hardening">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -72,6 +72,39 @@
           <p>Completed</p>
         </div>
       </div>
+
+      <section class="admin-orders-panel admin-grant-panel">
+        <div class="admin-orders-toolbar">
+          <div>
+            <span class="eyebrow">Complimentary access</span>
+            <h2>Grant a product to a buyer</h2>
+            <p>Add a published product directly to a buyer dashboard. No Stripe checkout or developer earning is created.</p>
+          </div>
+        </div>
+
+        <form id="complimentaryGrantForm" class="admin-grant-form">
+          <div>
+            <label for="grantBuyer">Buyer</label>
+            <select class="input" id="grantBuyer" required disabled>
+              <option value="">Loading buyers...</option>
+            </select>
+          </div>
+          <div>
+            <label for="grantProduct">Product</label>
+            <select class="input" id="grantProduct" required disabled>
+              <option value="">Loading products...</option>
+            </select>
+          </div>
+          <div class="admin-grant-note">
+            <label for="grantNote">Internal note <span class="muted">(optional)</span></label>
+            <input class="input" id="grantNote" maxlength="500" placeholder="Example: First agency onboarding">
+          </div>
+          <div class="admin-grant-submit">
+            <button class="btn btn-primary" id="grantProductButton" type="submit" disabled>Grant product</button>
+          </div>
+        </form>
+        <div id="complimentaryGrantResult" class="admin-grant-result" role="status" aria-live="polite"></div>
+      </section>
 
       <section class="admin-orders-panel">
         <div class="admin-orders-toolbar">
@@ -149,13 +182,15 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260726-production-hardening"></script>
+  <script src="/assets/js/nexus-db.js?v=20260726-production-hardening"></script>
   <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
 
   <script>
     let allOrderRows = [];
     let currentOrderRow = null;
+    let complimentaryGrantBuyers = [];
+    let complimentaryGrantProducts = [];
 
     function escapeHtml(value) {
       return String(value || "")
@@ -330,6 +365,111 @@
 
       if (!profile) return;
 
+      await Promise.all([
+        loadOrders(),
+        loadComplimentaryGrantOptions()
+      ]);
+    }
+
+    async function loadComplimentaryGrantOptions() {
+      const buyerSelect = document.getElementById("grantBuyer");
+      const productSelect = document.getElementById("grantProduct");
+      const submitButton = document.getElementById("grantProductButton");
+      const resultBox = document.getElementById("complimentaryGrantResult");
+
+      buyerSelect.disabled = true;
+      productSelect.disabled = true;
+      submitButton.disabled = true;
+
+      const { data, error } = await NexusDB.getComplimentaryGrantOptions();
+
+      if (error) {
+        resultBox.className = "admin-grant-result error";
+        resultBox.textContent = error.message || "Could not load buyers and products.";
+        return;
+      }
+
+      complimentaryGrantBuyers = data?.buyers || [];
+      complimentaryGrantProducts = data?.products || [];
+
+      buyerSelect.innerHTML = `
+        <option value="">Select a buyer...</option>
+        ${complimentaryGrantBuyers.map((buyer) => {
+          const label = [buyer.name, buyer.email, buyer.company].filter(Boolean).join(" · ");
+          return `<option value="${escapeHtml(buyer.id)}">${escapeHtml(label || "Buyer")}</option>`;
+        }).join("")}
+      `;
+
+      productSelect.innerHTML = `
+        <option value="">Select a published product...</option>
+        ${complimentaryGrantProducts.map((product) => {
+          const label = [product.title, product.category].filter(Boolean).join(" · ");
+          return `<option value="${escapeHtml(product.id)}">${escapeHtml(label || "Product")}</option>`;
+        }).join("")}
+      `;
+
+      buyerSelect.disabled = !complimentaryGrantBuyers.length;
+      productSelect.disabled = !complimentaryGrantProducts.length;
+      submitButton.disabled = !complimentaryGrantBuyers.length || !complimentaryGrantProducts.length;
+
+      if (!complimentaryGrantBuyers.length || !complimentaryGrantProducts.length) {
+        resultBox.className = "admin-grant-result error";
+        resultBox.textContent = "A buyer account and at least one published runnable product are required.";
+      }
+    }
+
+    async function submitComplimentaryGrant(event) {
+      event.preventDefault();
+
+      const buyerSelect = document.getElementById("grantBuyer");
+      const productSelect = document.getElementById("grantProduct");
+      const noteInput = document.getElementById("grantNote");
+      const submitButton = document.getElementById("grantProductButton");
+      const resultBox = document.getElementById("complimentaryGrantResult");
+      const buyer = complimentaryGrantBuyers.find((item) => item.id === buyerSelect.value);
+      const product = complimentaryGrantProducts.find((item) => item.id === productSelect.value);
+
+      if (!buyer || !product) {
+        resultBox.className = "admin-grant-result error";
+        resultBox.textContent = "Select both a buyer and a product.";
+        return;
+      }
+
+      const buyerLabel = buyer.email || buyer.name || "this buyer";
+      const confirmed = window.confirm(
+        `Grant ${product.title || "this product"} to ${buyerLabel}? This creates complimentary buyer access without charging Stripe.`
+      );
+
+      if (!confirmed) return;
+
+      submitButton.disabled = true;
+      submitButton.textContent = "Granting...";
+      resultBox.className = "admin-grant-result";
+      resultBox.textContent = "Creating buyer access...";
+
+      const { data, error } = await NexusDB.grantComplimentaryProduct({
+        buyer_id: buyer.id,
+        automation_id: product.id,
+        admin_note: noteInput.value.trim()
+      });
+
+      submitButton.disabled = false;
+      submitButton.textContent = "Grant product";
+
+      if (error) {
+        resultBox.className = "admin-grant-result error";
+        resultBox.textContent = error.message || "Could not grant the product.";
+        return;
+      }
+
+      resultBox.className = "admin-grant-result success";
+      resultBox.innerHTML = `
+        <strong>Access ready.</strong>
+        ${escapeHtml(data?.message || "The product is now in the buyer dashboard.")}
+        The buyer can sign in, complete the setup form, and receive the normal workflow output.
+      `;
+
+      noteInput.value = "";
       await loadOrders();
     }
 
@@ -1000,6 +1140,7 @@ async function updateInstallStatus(status) {
   closeOrderModal();
   await loadOrders();
 }
+    document.getElementById("complimentaryGrantForm")?.addEventListener("submit", submitComplimentaryGrant);
     document.addEventListener("DOMContentLoaded", initOrdersPage);
   </script>
 </body>

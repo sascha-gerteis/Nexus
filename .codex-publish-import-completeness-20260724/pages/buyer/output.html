@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260726-production-hardening">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -52,8 +52,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260726-production-hardening"></script>
+  <script src="/assets/js/nexus-db.js?v=20260726-production-hardening"></script>
 
   <script>
     function getParam(name) {
@@ -133,6 +133,34 @@
           </div>
         </a>
       `).join("");
+    }
+
+    function socialReportBundleUpsell(product, customerAutomation) {
+      const slug = String(product?.slug || "").toLowerCase();
+      const name = [product?.title, customerAutomation?.name].filter(Boolean).join(" ").toLowerCase();
+      const isSocialReport = slug === "ai-social-media-reports" || name.includes("social media report");
+
+      if (!isSocialReport || customerAutomation?.bundle_id) return "";
+
+      return `
+        <section class="buyer-output-upgrade" aria-labelledby="socialReportUpgradeTitle">
+          <div>
+            <span class="eyebrow">Turn this report into an intelligence system</span>
+            <h2 id="socialReportUpgradeTitle">Add social listening, competitor signals, and repeat reporting.</h2>
+            <p>Your report shows what happened. The Social Media Report Bundle adds the surrounding signals so your team can compare performance, watch competitors, spot audience changes, and make the next report faster.</p>
+            <ul>
+              <li>Social performance reporting</li>
+              <li>Listening and sentiment signals</li>
+              <li>Competitor intelligence</li>
+              <li>One repeatable setup for ongoing insight</li>
+            </ul>
+          </div>
+          <div class="buyer-output-upgrade-actions">
+            <a class="btn btn-primary" href="/pages/checkout/index.html?bundle=social-media-report-bundle&step=setup">Upgrade to the bundle</a>
+            <a class="btn btn-secondary" href="/pages/marketplace/index.html?bundle=social-media-report-bundle">See what is included</a>
+          </div>
+        </section>
+      `;
     }
 
     async function initOutputPage() {
@@ -261,6 +289,8 @@
               ${renderOutputBody(output)}
             </section>
           </div>
+
+          ${socialReportBundleUpsell(product, customerAutomation)}
         </div>
       `;
 

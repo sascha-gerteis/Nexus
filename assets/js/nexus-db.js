@@ -127,6 +127,50 @@ const NexusDB = (() => {
     return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
   }
 
+  function authSessionIsInvalid(error) {
+    const status = Number(error?.status || error?.statusCode || 0);
+    const message = [
+      error?.message,
+      error?.error_description,
+      error?.code,
+      error?.name
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    return (
+      (status === 400 || status === 401 || status === 403) &&
+      /refresh token|invalid.*token|token.*invalid|jwt|session.*expired|session.*missing|not authenticated/.test(message)
+    );
+  }
+
+  async function clearInvalidLocalSession() {
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (error) {
+      console.warn("Could not clear the expired local session:", error);
+    }
+
+    clearAuthCaches();
+  }
+
+  async function refreshCurrentSession() {
+    const result = await withTimeout(
+      supabase.auth.refreshSession(),
+      AUTH_REQUEST_TIMEOUT_MS,
+      "Auth session refresh"
+    );
+
+    if (result?.data?.session) return result;
+
+    if (authSessionIsInvalid(result?.error)) {
+      await clearInvalidLocalSession();
+    }
+
+    return {
+      data: { session: null },
+      error: result?.error || { message: "Your session has expired.", status: 401 }
+    };
+  }
+
   async function getUser() {
     const { data, error } = await getSession();
 
@@ -154,11 +198,7 @@ const NexusDB = (() => {
     }
 
     const sessionRequest = forceRefresh
-      ? withTimeout(supabase.auth.refreshSession(), AUTH_REQUEST_TIMEOUT_MS, "Auth session refresh").then((result) => (
-          result?.data?.session
-            ? result
-            : withTimeout(supabase.auth.getSession(), AUTH_REQUEST_TIMEOUT_MS, "Auth session")
-        ))
+      ? refreshCurrentSession()
       : withTimeout(supabase.auth.getSession(), AUTH_REQUEST_TIMEOUT_MS, "Auth session");
 
     sessionCache.promise = sessionRequest
@@ -401,9 +441,41 @@ const NexusDB = (() => {
   }
 
   async function requireBuyer(nextUrl = "") {
-    const { data: user, error } = await getUser();
+    let sessionResult;
+
+    try {
+      sessionResult = await getSession();
+    } catch (sessionError) {
+      sessionResult = { data: { session: null }, error: sessionError };
+    }
+
+    const session = sessionResult?.data?.session || null;
+    let user = null;
+    let error = sessionResult?.error || null;
+
+    if (!error && session?.access_token) {
+      try {
+        const verification = await withTimeout(
+          supabase.auth.getUser(session.access_token),
+          AUTH_REQUEST_TIMEOUT_MS,
+          "Buyer session verification"
+        );
+        user = verification?.data?.user || null;
+        error = verification?.error || null;
+      } catch (verificationError) {
+        error = verificationError;
+      }
+    }
 
     if (error || !user) {
+      if (session && (authSessionIsInvalid(error) || (!error && !user))) {
+        await clearInvalidLocalSession();
+      }
+
+      if (window.NexusUI?.toast) {
+        window.NexusUI.toast("Your session expired. Please log in again to continue.");
+      }
+
       const next = nextUrl || location.pathname + location.search;
       location.href = `/pages/buyer/login.html?next=${encodeURIComponent(next)}`;
       return null;
@@ -1854,13 +1926,25 @@ async function callNexusFunction(functionName, payload = {}) {
     let lastData = null;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const { data: sessionData } = await getSession({ forceRefresh: attempt > 0 });
+      const sessionResult = await getSession({ forceRefresh: attempt > 0 });
+      const sessionData = sessionResult?.data || null;
       const session = sessionData?.session || null;
       const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : 0;
       const shouldRefreshBeforeCall = attempt === 0 && session?.access_token && expiresAtMs && expiresAtMs < Date.now() + 60 * 1000;
       const token = shouldRefreshBeforeCall
         ? (await getSession({ forceRefresh: true }))?.data?.session?.access_token
         : session?.access_token;
+
+      if (attempt > 0 && !token) {
+        return {
+          data: null,
+          error: {
+            message: "Your session expired. Please log in again to continue.",
+            code: "AUTH_SESSION_EXPIRED",
+            details: sessionResult?.error || null,
+          },
+        };
+      }
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), FUNCTION_REQUEST_TIMEOUT_MS);
@@ -1890,9 +1974,21 @@ async function callNexusFunction(functionName, payload = {}) {
         const authFailed = (response.status === 401 || response.status === 403 || response.status === 500) &&
           /auth token|jwt|login required|authentication|required|expired|invalid|admin access required/.test(message);
 
-        if (authFailed && attempt === 0) {
-          clearAuthCaches();
-          continue;
+        if (authFailed) {
+          if (attempt === 0) {
+            clearAuthCaches();
+            continue;
+          }
+
+          await clearInvalidLocalSession();
+          return {
+            data: null,
+            error: {
+              message: "Your session expired. Please log in again to continue.",
+              code: "AUTH_SESSION_EXPIRED",
+              details: data,
+            },
+          };
         }
 
         const rawErrorMessage = data.error || data.message || `Function ${functionName} failed.`;
@@ -1954,7 +2050,14 @@ async function syncStripeProduct(automationId) {
 }
 
 async function createStripeCheckoutSession(payload) {
-  return callNexusFunction("create-checkout-session", payload);
+  const result = await callNexusFunction("create-checkout-session", payload);
+
+  if (result?.error?.code === "AUTH_SESSION_EXPIRED") {
+    const next = `${location.pathname}${location.search}${location.hash}`;
+    location.href = accountLoginPath("buyer", next, "session_expired");
+  }
+
+  return result;
 }
 
 async function getBuyerAccount(payload = {}) {

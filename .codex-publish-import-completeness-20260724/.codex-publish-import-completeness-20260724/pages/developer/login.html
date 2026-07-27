@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+  <title>Developer Login | Nexus AI</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+<body data-page="developer-login">
+  <main class="buyer-auth-page">
+    <div class="buyer-auth-card">
+      <a class="logo" href="/index.html"><span>Nexus&nbsp;</span></a>
+      <h1>Developer login.</h1>
+      <p>Access your hidden developer dashboard and manage your public marketplace profile.</p>
+
+      <form id="developerLoginForm">
+        <div class="form-grid">
+          <div class="full"><label>Email</label><input class="input" name="email" type="email" required></div>
+          <div class="full"><label>Password</label><input class="input" name="password" type="password" required></div>
+        </div>
+        <button class="btn btn-primary btn-full" style="margin-top:1rem">Login</button>
+      </form>
+
+      <div class="buyer-auth-links">
+        <span>Forgot your password?</span>
+        <a href="#" id="forgotPasswordLink">Send reset link</a>
+      </div>
+    </div>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const params = new URLSearchParams(location.search);
+      const next = params.get("next") || "/pages/developer/dashboard.html";
+
+      document.getElementById("forgotPasswordLink").addEventListener("click", async function (event) {
+        event.preventDefault();
+        const email = String(document.querySelector("[name='email']")?.value || "").trim();
+        if (!email) {
+          NexusUI.toast("Enter your email first.");
+          return;
+        }
+        const { error } = await NexusDB.sendPasswordResetEmail(email, "developer", next);
+        NexusUI.toast(error ? NexusDB.friendlyAuthMessage(error) : "Password reset link sent.");
+      });
+
+      document.getElementById("developerLoginForm").addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const { data, error } = await NexusDB.developerSignIn(
+          String(formData.get("email") || "").trim(),
+          String(formData.get("password") || "")
+        );
+
+        if (error) {
+          NexusUI.toast(NexusDB.friendlyAuthMessage(error));
+          return;
+        }
+
+        if (data?.user && typeof NexusDB.ensureDeveloperProfile === "function") {
+          const ensured = await NexusDB.ensureDeveloperProfile({
+            developer_login: true
+          });
+          if (ensured.error) {
+            NexusUI.toast(ensured.error.message || "Could not prepare developer profile.");
+            return;
+          }
+        }
+
+        location.href = NexusDB.safeNextPath(next, "/pages/developer/dashboard.html");
+      });
+    });
+  </script>
+</body>
+</html>

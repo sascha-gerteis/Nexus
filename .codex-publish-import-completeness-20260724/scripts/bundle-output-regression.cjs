@@ -127,7 +127,39 @@ const legacyCrossPurchase = context.buildBuyerBundleRows([order], automations, a
   title: `Old purchase output ${index + 1}`,
   created_at: iso("2026-07-20T10:00:00Z")
 })), [], [])[0];
-const freshPurchase = context.buildBuyerBundleRows(
+const legacyHistoryOutputs = automations.map((item, index) => ({
+  id: `legacy-history-output-${index + 1}`,
+  customer_automation_id: item.id,
+  order_id: "order-1",
+  title: `Historical output ${index + 1}`,
+  created_at: iso("2026-07-21T10:10:00Z")
+}));
+const legacySuccessfulRuns = automations.map((item, index) => ({
+  id: `legacy-success-run-${index + 1}`,
+  customer_automation_id: item.id,
+  order_id: "order-1",
+  status: "success",
+  created_at: iso("2026-07-21T10:05:00Z"),
+  started_at: iso("2026-07-21T10:05:00Z"),
+  finished_at: iso("2026-07-21T10:06:00Z")
+}));
+const impossibleLaterRuns = automations.slice(0, 3).map((item, index) => ({
+  id: `impossible-running-finished-${index + 1}`,
+  customer_automation_id: item.id,
+  order_id: "order-1",
+  status: "running",
+  created_at: iso("2026-07-21T11:00:00Z"),
+  started_at: iso("2026-07-21T11:00:00Z"),
+  finished_at: iso("2026-07-21T11:00:00Z"),
+  updated_at: iso("2026-07-27T18:04:00Z")
+}));
+const legacyHistoryPreserved = context.buildBuyerBundleRows(
+  [order],
+  automations.map(item => ({ ...item, updated_at: iso("2026-07-27T18:04:00Z") })),
+  legacyHistoryOutputs,
+  [...legacySuccessfulRuns, ...impossibleLaterRuns],
+  []
+)[0];const freshPurchase = context.buildBuyerBundleRows(
   [order],
   automations.map(item => ({
     ...item,
@@ -188,6 +220,8 @@ const result = {
   staleLinkedOutput: staleLinked.outputCount,
   wrongOrderOutput: wrongOrder.outputCount,
   legacyCrossPurchaseOutput: legacyCrossPurchase.outputCount,
+  legacyHistoryPreserved: legacyHistoryPreserved.outputCount,
+  legacyHistoryState: legacyHistoryPreserved.state.label,
   newestAttempt: newestAttempt?.id || null,
   cancelledState: cancelled.state.label,
   partialState: partial.state.label,
@@ -208,6 +242,8 @@ const expected = {
   staleLinkedOutput: 0,
   wrongOrderOutput: 0,
   legacyCrossPurchaseOutput: 0,
+  legacyHistoryPreserved: 4,
+  legacyHistoryState: "Ready",
   newestAttempt: "attempt-current",
   cancelledState: "Needs attention",
   partialState: "Needs attention",

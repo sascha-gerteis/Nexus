@@ -272,6 +272,71 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     }
   }
 
+  function hasUsefulValue(value) {
+    if (Array.isArray(value)) return value.some((item) => String(item || "").trim());
+    return Boolean(String(value || "").trim());
+  }
+
+  function publicProductPresentation(product) {
+    if (!product || typeof product !== "object") return product;
+
+    const listingType = String(product.listing_type || "").toLowerCase();
+    const pricingType = String(product.pricing_type || "").toLowerCase();
+    const slug = String(product.slug || "").toLowerCase();
+    const title = String(product.title || "").trim();
+    const isBareCustomRequest =
+      (listingType === "custom_request" || pricingType === "custom_quote" || slug === "custom") &&
+      (!title || title.toLowerCase() === "custom");
+
+    if (!isBareCustomRequest) return product;
+
+    return {
+      ...product,
+      title: "Custom Business Automation",
+      category: product.category || "Custom Automation",
+      badge: product.badge || "Built around your process",
+      short_description: product.short_description ||
+        "Turn a manual, disconnected process into a scoped automation designed around your team, tools, approvals, and desired result.",
+      long_description: product.long_description ||
+        "Share the process that slows your team down. Nexus will map the current steps, identify the right integrations and controls, define the output, and return a clear scope before any build begins.",
+      problem: product.problem ||
+        "Your workflow crosses tools, people, or approval steps and does not fit a ready-made marketplace product.",
+      outcome: product.outcome ||
+        "A reviewed automation plan with clear inputs, integrations, safeguards, delivery stages, and an agreed business result.",
+      who_it_is_for: hasUsefulValue(product.who_it_is_for)
+        ? product.who_it_is_for
+        : ["Agencies with repeat client delivery work", "Operations teams with manual handoffs", "Businesses that need several tools connected"],
+      outputs: hasUsefulValue(product.outputs)
+        ? product.outputs
+        : ["Process and requirements map", "Proposed workflow and integrations", "Delivery scope, milestones, and quote", "Testing and handover plan"],
+      required_inputs: hasUsefulValue(product.required_inputs)
+        ? product.required_inputs
+        : ["Current process and pain point", "Tools and accounts involved", "People, approvals, and exceptions", "The result your team needs"],
+      required_tools: hasUsefulValue(product.required_tools)
+        ? product.required_tools
+        : ["Confirmed during the discovery review"],
+      best_for: product.best_for || "Processes that need a tailored, production-ready workflow",
+      delivery_time: product.delivery_time || "Scoped after review",
+      setup_type: product.setup_type || "Nexus guided discovery",
+      icon: product.icon || "NX",
+      color: product.color || "purple",
+      preview_title: product.preview_title || "From manual process to a clear automation scope",
+      preview_description: product.preview_description ||
+        "Nexus reviews the current workflow, defines the target result, and confirms tools, safeguards, milestones, and ownership before implementation."
+    };
+  }
+
+  function publicProductsUnavailableMarkup() {
+    return `
+      <div class="card marketplace-load-failure" role="alert">
+        <span class="eyebrow">Marketplace temporarily unavailable</span>
+        <h3>Products could not be verified right now.</h3>
+        <p>Purchasing is paused on this page until Nexus can reload the live catalog safely.</p>
+        <button class="btn btn-secondary btn-small" type="button" onclick="location.reload()">Retry</button>
+      </div>
+    `;
+  }
+
   function isRequestOnlyProduct(product) {
     return Boolean(
       product?.is_demo ||
@@ -488,12 +553,17 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (!grid) return;
 
     if (error) {
-      if (grid.querySelector(".product-card")) return;
-      grid.innerHTML = `<div class="error">${error.message}</div>`;
+      console.error("Home catalog error:", error);
+      liveAutomations = [];
+      window.NexusHomeProducts = [];
+      grid.innerHTML = publicProductsUnavailableMarkup();
+
+      const visual = document.getElementById("homeProductVisual");
+      if (visual) visual.innerHTML = publicProductsUnavailableMarkup();
       return;
     }
 
-    liveAutomations = data || [];
+    liveAutomations = (data || []).map(publicProductPresentation);
     window.NexusHomeProducts = liveAutomations;
 
     const currency = document.getElementById("homeCurrency");
@@ -577,12 +647,17 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (!grid) return;
 
     if (error) {
-      if (grid.querySelector(".product-card")) return;
-      grid.innerHTML = `<div class="error">${error.message}</div>`;
+      console.error("Marketplace catalog error:", error);
+      liveAutomations = [];
+      liveBundles = [];
+      window.NexusMarketplaceProducts = [];
+      compareSlugs.clear();
+      renderCompareTray();
+      grid.innerHTML = publicProductsUnavailableMarkup();
       return;
     }
 
-    liveAutomations = data || [];
+    liveAutomations = (data || []).map(publicProductPresentation);
     liveBundles = bundleResult?.data || [];
     savedAutomationIds.clear();
     (savedResult?.data || []).forEach((id) => savedAutomationIds.add(String(id)));
@@ -1014,10 +1089,10 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       return null;
     }
 
-    activeProduct = data;
+    activeProduct = publicProductPresentation(data);
     selectedCustomizationName = "";
 
-    return data;
+    return activeProduct;
   }
 
   async function openProduct(slug) {

@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260718-python-editor-fix">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260726-production-hardening">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
   <title>Developer Dashboard | Nexus AI</title>
@@ -68,7 +68,7 @@
         </div>
 
         <div class="developer-console-hero-actions">
-          <a class="btn btn-primary" id="developerPublicProfileLink" href="/pages/developers/index.html" target="_blank">View public profile</a>
+          <a class="btn btn-primary" id="developerPublicProfileLink" href="/pages/developers/index.html" target="_blank" rel="noopener">View public profile</a>
           <button class="btn btn-secondary" type="button" onclick="activeTab('products')">Manage products</button>
           <button class="btn btn-secondary" type="button" onclick="openProductEditor()">Add product</button>
         </div>
@@ -1180,8 +1180,8 @@ company_url = context["inputs"].get("company_url")
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-<script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+  <script src="/assets/js/nexus-ui.js?v=20260726-production-hardening"></script>
+<script src="/assets/js/nexus-db.js?v=20260726-production-hardening"></script>
   <script>
     const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, pendingCredentialSlot: null, testProfile: null, revealedCredentials: {}, workflowPollers: {} };
 

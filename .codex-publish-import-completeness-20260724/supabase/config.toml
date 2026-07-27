@@ -55,3 +55,6 @@ verify_jwt = false
 
 [functions.process-runtime-dispatch-backlog]
 verify_jwt = false
+
+[functions.repair-n8n-output-contract]
+verify_jwt = false

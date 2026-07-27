@@ -438,6 +438,339 @@ async function listAdminOrders(adminClient: any) {
   return rows;
 }
 
+function isInactiveCustomerAutomation(row: any) {
+  const values = [
+    row?.status,
+    row?.setup_status,
+    row?.runtime_status,
+    row?.health_status,
+  ].map((value) => cleanString(value).toLowerCase());
+
+  return values.some((value) =>
+    value.includes("archived") ||
+    value.includes("cancelled") ||
+    value.includes("deleted") ||
+    value.includes("removed")
+  );
+}
+
+function isCustomRequestProduct(product: any) {
+  const listingType = cleanString(product?.listing_type).toLowerCase();
+  const pricingType = cleanString(product?.pricing_type).toLowerCase();
+
+  return listingType === "custom_request" ||
+    pricingType === "custom_quote" ||
+    pricingType === "custom_request";
+}
+
+async function listComplimentaryGrantOptions(adminClient: any) {
+  const { data: profiles, error: profilesError } = await adminClient
+    .from("profiles")
+    .select("id, email, full_name, role")
+    .eq("role", "buyer")
+    .order("email", { ascending: true })
+    .limit(500);
+
+  if (profilesError) throw new Error(profilesError.message);
+
+  const buyerIds = (profiles || []).map((profile: any) => profile.id).filter(Boolean);
+  const { data: buyerProfiles, error: buyerProfilesError } = await adminClient
+    .from("buyer_profiles")
+    .select("user_id, name, email, company, website")
+    .in("user_id", buyerIds.length ? buyerIds : ["00000000-0000-0000-0000-000000000000"]);
+
+  if (buyerProfilesError) throw new Error(buyerProfilesError.message);
+
+  const buyerProfileById = new Map(
+    (buyerProfiles || []).map((profile: any) => [profile.user_id, profile]),
+  );
+
+  const buyers = (profiles || []).map((profile: any) => {
+    const buyerProfile = buyerProfileById.get(profile.id) || {};
+
+    return {
+      id: profile.id,
+      email: buyerProfile.email || profile.email || "",
+      name: buyerProfile.name || profile.full_name || "",
+      company: buyerProfile.company || "",
+      website: buyerProfile.website || "",
+    };
+  });
+
+  const { data: products, error: productsError } = await adminClient
+    .from("automations")
+    .select("id, title, slug, category, status, listing_type, pricing_type, developer_id")
+    .eq("status", "live")
+    .order("title", { ascending: true })
+    .limit(500);
+
+  if (productsError) throw new Error(productsError.message);
+
+  return {
+    buyers,
+    products: (products || [])
+      .filter((product: any) => !isCustomRequestProduct(product))
+      .map((product: any) => ({
+        id: product.id,
+        title: product.title || "Automation",
+        slug: product.slug || "",
+        category: product.category || "",
+      })),
+  };
+}
+
+async function createGrantedCustomerAutomation(adminClient: any, order: any, product: any) {
+  const { data: existing, error: existingError } = await adminClient
+    .from("customer_automations")
+    .select("*")
+    .eq("order_id", order.id)
+    .maybeSingle();
+
+  const now = nowIso();
+  const payload: Record<string, unknown> = {
+    order_id: order.id,
+    buyer_id: order.buyer_id,
+    automation_id: product.id,
+    developer_id: product.developer_id || null,
+    name: product.title || order.automation_title || "Automation",
+    status: "pending_setup",
+    install_type: "self_serve",
+    setup_status: "setup_required",
+    runtime_status: "not_started",
+    health_status: "not_configured",
+    run_frequency: "manual",
+    schedule_status: "inactive",
+    created_at: now,
+    updated_at: now,
+  };
+
+  if (existingError) throw new Error(existingError.message);
+
+  if (existing?.id) {
+    const restorePayload = { ...payload };
+    delete restorePayload.created_at;
+
+    let restored = await adminClient
+      .from("customer_automations")
+      .update(restorePayload)
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (restored.error) {
+      const fallbackPayload = { ...restorePayload };
+      delete fallbackPayload.run_frequency;
+      delete fallbackPayload.schedule_status;
+
+      restored = await adminClient
+        .from("customer_automations")
+        .update(fallbackPayload)
+        .eq("id", existing.id)
+        .select()
+        .single();
+    }
+
+    if (restored.error) throw new Error(restored.error.message);
+    return restored.data;
+  }
+
+  let result = await adminClient
+    .from("customer_automations")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (result.error) {
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.run_frequency;
+    delete fallbackPayload.schedule_status;
+
+    result = await adminClient
+      .from("customer_automations")
+      .insert(fallbackPayload)
+      .select()
+      .single();
+  }
+
+  if (result.error) throw new Error(result.error.message);
+  return result.data;
+}
+
+async function grantComplimentaryProduct(adminClient: any, adminProfile: any, body: any) {
+  const buyerId = cleanString(body.buyer_id);
+  const automationId = cleanString(body.automation_id);
+  const adminNote = cleanString(body.admin_note);
+
+  if (!buyerId || !automationId) {
+    return errorResponse("buyer_id and automation_id are required.", 400);
+  }
+
+  const { data: buyerProfile, error: buyerError } = await adminClient
+    .from("profiles")
+    .select("id, email, full_name, role")
+    .eq("id", buyerId)
+    .maybeSingle();
+
+  if (buyerError) return errorResponse(buyerError.message, 500);
+  if (!buyerProfile || cleanString(buyerProfile.role).toLowerCase() !== "buyer") {
+    return errorResponse("The selected buyer account was not found.", 404);
+  }
+
+  const { data: buyerDetails, error: buyerDetailsError } = await adminClient
+    .from("buyer_profiles")
+    .select("user_id, name, email, company, website")
+    .eq("user_id", buyerId)
+    .maybeSingle();
+
+  if (buyerDetailsError) return errorResponse(buyerDetailsError.message, 500);
+
+  const { data: product, error: productError } = await adminClient
+    .from("automations")
+    .select("id, title, slug, status, listing_type, pricing_type, developer_id")
+    .eq("id", automationId)
+    .maybeSingle();
+
+  if (productError) return errorResponse(productError.message, 500);
+  if (!product || cleanString(product.status).toLowerCase() !== "live") {
+    return errorResponse("Only a published product can be granted.", 400);
+  }
+  if (isCustomRequestProduct(product)) {
+    return errorResponse("Custom-request listings cannot be granted as runnable products.", 400);
+  }
+
+  const { data: currentAccessRows, error: currentAccessError } = await adminClient
+    .from("customer_automations")
+    .select("id, order_id, status, setup_status, runtime_status, health_status, created_at")
+    .eq("buyer_id", buyerId)
+    .eq("automation_id", automationId)
+    .order("created_at", { ascending: false });
+
+  if (currentAccessError) return errorResponse(currentAccessError.message, 500);
+
+  const currentAccess = (currentAccessRows || []).find(
+    (row: any) => !isInactiveCustomerAutomation(row),
+  );
+
+  if (currentAccess) {
+    return errorResponse(
+      "This buyer already has active access to the selected product.",
+      409,
+      {
+        customer_automation_id: currentAccess.id,
+        order_id: currentAccess.order_id,
+      },
+    );
+  }
+
+  const { data: paidOrders, error: paidOrdersError } = await adminClient
+    .from("orders")
+    .select("*")
+    .eq("buyer_id", buyerId)
+    .eq("automation_id", automationId)
+    .eq("payment_status", "paid")
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (paidOrdersError) return errorResponse(paidOrdersError.message, 500);
+
+  const reusableOrder = (paidOrders || []).find((order: any) => {
+    const status = cleanString(order.order_status).toLowerCase();
+    return !status.includes("cancel") &&
+      !status.includes("expired") &&
+      !status.includes("failed");
+  });
+
+  const now = nowIso();
+  const buyerName = buyerDetails?.name || buyerProfile.full_name || "";
+  const buyerEmail = buyerDetails?.email || buyerProfile.email || "";
+  let order = reusableOrder || null;
+  let createdOrder = false;
+
+  if (!order) {
+    const grantLabel = cleanString(adminProfile?.email || adminProfile?.full_name || "admin");
+    const setupNotes = [
+      `[Complimentary grant] Granted by ${grantLabel || "admin"}.`,
+      adminNote,
+    ].filter(Boolean).join(" ");
+
+    const { data: insertedOrder, error: orderError } = await adminClient
+      .from("orders")
+      .insert({
+        buyer_id: buyerId,
+        automation_id: product.id,
+        developer_id: product.developer_id || null,
+        order_type: "automation",
+        automation_title: product.title || "Automation",
+        install_type: "self_serve",
+        selected_customization: "",
+        currency: "USD",
+        price_display: "Complimentary",
+        payment_status: "paid",
+        order_status: "setup_requested",
+        buyer_name: buyerName,
+        buyer_email: buyerEmail,
+        buyer_company: buyerDetails?.company || "",
+        buyer_website: buyerDetails?.website || "",
+        setup_notes: setupNotes,
+        stripe_mode: "payment",
+        stripe_currency: "usd",
+        stripe_amount_total: 0,
+        stripe_unit_amount: 0,
+        paid_at: now,
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
+
+    if (orderError || !insertedOrder) {
+      return errorResponse(orderError?.message || "Could not create the complimentary order.", 500);
+    }
+
+    order = insertedOrder;
+    createdOrder = true;
+  }
+
+  let customerAutomation: any = null;
+
+  try {
+    customerAutomation = await createGrantedCustomerAutomation(adminClient, order, product);
+  } catch (error) {
+    return errorResponse(
+      error instanceof Error ? error.message : "Could not create buyer product access.",
+      500,
+      { order_id: order.id, recoverable: true },
+    );
+  }
+
+  await adminClient.from("automation_events").insert({
+    customer_automation_id: customerAutomation.id,
+    buyer_id: buyerId,
+    automation_id: product.id,
+    order_id: order.id,
+    event_type: createdOrder
+      ? "complimentary_product_granted"
+      : "customer_automation_access_recovered",
+    title: createdOrder
+      ? "Complimentary product access granted"
+      : "Product access restored",
+    message: createdOrder
+      ? `${product.title || "This product"} was added to your account. Complete the setup form to receive your output.`
+      : `${product.title || "This product"} access was restored from an existing paid order.`,
+    created_by: "admin",
+    created_at: now,
+  });
+
+  return jsonResponse({
+    ok: true,
+    order,
+    customer_automation: customerAutomation,
+    created_order: createdOrder,
+    message: createdOrder
+      ? `${product.title || "Product"} was added to ${buyerEmail || buyerName || "the buyer"}'s dashboard.`
+      : `${product.title || "Product"} access was restored from the buyer's existing paid order.`,
+  });
+}
 async function listDeveloperOrders(adminClient: any, developer: any) {
   const rows = await listAdminOrders(adminClient);
   const developerId = cleanString(developer?.id);
@@ -850,6 +1183,30 @@ Deno.serve(async (req) => {
       return await updateAdminInstallRequest(adminClient, user.id, body);
     }
 
+    if (action === "admin_grant_options") {
+      const { user, profile, error } = await requireAdmin(req);
+
+      if (error || !user || !profile) {
+        return errorResponse(error || "Admin access required.", 401);
+      }
+
+      const options = await listComplimentaryGrantOptions(adminClient);
+
+      return jsonResponse({
+        ok: true,
+        ...options,
+      });
+    }
+
+    if (action === "admin_grant_product") {
+      const { user, profile, error } = await requireAdmin(req);
+
+      if (error || !user || !profile) {
+        return errorResponse(error || "Admin access required.", 401);
+      }
+
+      return await grantComplimentaryProduct(adminClient, profile, body);
+    }
     if (action === "developer_list") {
       const { user, developer, error } = await requireDeveloper(req, adminClient);
 

@@ -1,0 +1,3469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260719-bundle-runtime-source">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Buyer Dashboard | Nexus</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicons/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+</head>
+
+<body data-page="buyer-dashboard">
+  <header class="site-header" id="globalNav" data-active="dashboard"></header>
+
+  <main class="buyer-dashboard-tabs-page">
+    <section class="buyer-dashboard-tabs-hero">
+      <div class="container">
+        <span class="eyebrow">Buyer dashboard</span>
+        <h1 id="buyerWelcome">Your automation dashboard.</h1>
+        <p>
+          Track your automations, view outputs, complete setup, and monitor important activity from one clean dashboard.
+        </p>
+
+        <div class="buyer-dashboard-quick-status">
+          <div>
+            <span>Account status</span>
+            <strong id="buyerMainStatus">Loading...</strong>
+            <p id="buyerMainStatusText">Checking your automation status...</p>
+          </div>
+
+          <div class="buyer-dashboard-hero-actions">
+            <a class="btn btn-primary" href="/pages/marketplace/index.html">Browse automations</a>
+            <a class="btn btn-secondary" href="/pages/buyer/settings.html">Settings</a>
+            <a class="btn btn-secondary" href="/pages/contact/index.html">Get support</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="buyer-dashboard-tabs-content">
+      <div class="container">
+        <div class="buyer-overview-strip">
+          <article>
+            <span>Automations</span>
+            <strong id="buyerAutomationCount">0</strong>
+          </article>
+
+          <article>
+            <span>Ready</span>
+            <strong id="buyerReadyCount">0</strong>
+          </article>
+
+          <article>
+            <span>Outputs</span>
+            <strong id="buyerOutputCount">0</strong>
+          </article>
+
+          <article>
+            <span>Issues</span>
+            <strong id="buyerIssueCount">0</strong>
+          </article>
+        </div>
+
+        <div class="buyer-tabs-shell">
+          <div class="buyer-tabs">
+            <button class="buyer-tab active" type="button" data-tab="overview">Overview</button>
+            <button class="buyer-tab" type="button" data-tab="automations">My Automations</button>
+            <button class="buyer-tab buyer-tab-contextual" type="button" data-tab="automation-detail" id="buyerAutomationDetailTab" hidden>Automation detail</button>
+            <button class="buyer-tab" type="button" data-tab="outputs">Outputs</button>
+            <button class="buyer-tab" type="button" data-tab="messages">Messages</button>
+            <button class="buyer-tab" type="button" data-tab="orders">Orders</button>
+            <button class="buyer-tab" type="button" data-tab="saved">Saved products</button>
+            <button class="buyer-tab" type="button" data-tab="tutorials">Tutorials</button>
+          </div>
+
+          <section class="buyer-tab-panel active" data-tab-panel="overview">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Overview</span>
+                <h2>What needs your attention?</h2>
+                <p>Your most important automation updates in one place.</p>
+              </div>
+            </div>
+
+            <div id="overviewRoot" class="buyer-overview-dashboard">
+              Loading overview...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="saved">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Saved</span>
+                <h2>Saved products</h2>
+                <p>Products you want to compare, revisit, or buy later.</p>
+              </div>
+              <a class="btn btn-secondary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+            </div>
+
+            <div id="buyerSavedProductsList" class="buyer-saved-products-grid">
+              Loading saved products...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="automations">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">My automations</span>
+                <h2>Purchased automations</h2>
+                <p>Manage setup, status, and latest results for each automation.</p>
+              </div>
+            </div>
+
+            <div id="buyerAutomationsList" class="buyer-clean-list">
+              Loading automations...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="automation-detail">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Automation detail</span>
+                <h2 id="buyerAutomationDetailHeading">Automation history</h2>
+                <p>See the next output date, latest result, and previous outputs for this automation.</p>
+              </div>
+            </div>
+
+            <div id="buyerAutomationDetail" class="buyer-clean-list">
+              Select an automation to view its history.
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="outputs">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Outputs</span>
+                <h2>Automation outputs</h2>
+                <p>Reports, generated files, and workflow results from your automations.</p>
+              </div>
+            </div>
+
+            <div id="buyerOutputsList" class="buyer-clean-list">
+              Loading outputs...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="messages">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Messages</span>
+                <h2>Conversations</h2>
+                <p>Messages with Nexus and developers.</p>
+              </div>
+            </div>
+
+            <div id="buyerMessagesList" class="buyer-clean-list">
+              Loading messages...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="orders">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Orders</span>
+                <h2>Orders and billing</h2>
+                <p>Your purchased automations and payment status.</p>
+              </div>
+            </div>
+
+            <div id="buyerOrdersList" class="buyer-clean-list">
+              Loading orders...
+            </div>
+          </section>
+
+          <section class="buyer-tab-panel" data-tab-panel="tutorials">
+            <div class="buyer-tab-header">
+              <div>
+                <span class="eyebrow">Tutorials</span>
+                <h2>Buyer help videos</h2>
+                <p>Short walkthroughs for buying automations and using your Nexus dashboard.</p>
+              </div>
+            </div>
+
+            <div class="dashboard-tutorial-grid">
+              <article class="dashboard-tutorial-card dashboard-tutorial-card-featured">
+                <div class="dashboard-tutorial-copy">
+                  <span class="eyebrow">Buyer walkthrough</span>
+                  <h3>How to purchase an automation</h3>
+                  <p>Watch the buyer flow from marketplace preview to checkout, then see where your automation appears after purchase.</p>
+                </div>
+
+                <video class="dashboard-tutorial-video" controls preload="metadata" playsinline>
+                  <source src="/assets/videos/buyer-how-to-purchase.mp4" type="video/mp4">
+                  Your browser does not support the video tag.
+                </video>
+              </article>
+
+              <div class="dashboard-tutorial-up-next">
+                <article>
+                  <span>Coming next</span>
+                  <strong>Using the buyer dashboard</strong>
+                  <p>Setup, outputs, order history, messages, and scheduled or on-demand automation runs.</p>
+                </article>
+
+                <article>
+                  <span>Coming next</span>
+                  <strong>Developer product upload</strong>
+                  <p>Workflow import, setup fields, credentials, technical checks, and review submission.</p>
+                </article>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="nexus-modal-lite" id="cancelAutomationModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeCancellationModal()"></div>
+
+    <div class="nexus-modal-lite-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeCancellationModal()">&times;</button>
+
+      <span class="eyebrow">Cancellation request</span>
+
+      <h2>Request cancellation</h2>
+
+      <p id="cancelAutomationModalText">
+        Tell Nexus why you want to cancel this automation. Your request will be reviewed before anything is cancelled.
+      </p>
+
+      <form id="cancelAutomationForm">
+        <input type="hidden" id="cancelCustomerAutomationId">
+
+        <label>Reason for cancellation</label>
+        <textarea
+          class="textarea"
+          id="cancelReason"
+          required
+          minlength="10"
+          placeholder="Example: We no longer need this automation, or we want to switch to another setup."
+        ></textarea>
+
+        <div class="modal-lite-actions">
+          <button class="btn btn-secondary" type="button" onclick="closeCancellationModal()">
+            Keep automation
+          </button>
+
+          <button class="btn btn-primary" type="submit">
+            Submit request
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="nexus-modal-lite" id="buyerNoticeModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeBuyerNoticeModal()"></div>
+
+    <div class="nexus-modal-lite-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeBuyerNoticeModal()">&times;</button>
+
+      <span class="eyebrow" id="buyerNoticeEyebrow">Update</span>
+
+      <h2 id="buyerNoticeTitle">Request submitted</h2>
+
+      <p id="buyerNoticeMessage">
+        Your request was submitted successfully.
+      </p>
+
+      <div class="modal-lite-actions">
+        <button class="btn btn-primary" type="button" onclick="closeBuyerNoticeModal()">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="nexus-modal-lite" id="productReviewModal" aria-hidden="true">
+    <div class="nexus-modal-lite-backdrop" onclick="closeProductReviewModal()"></div>
+
+    <div class="nexus-modal-lite-card">
+      <button class="nexus-modal-lite-close" type="button" onclick="closeProductReviewModal()">&times;</button>
+
+      <span class="eyebrow">Product review</span>
+
+      <h2 id="productReviewTitle">Review product</h2>
+
+      <p>
+        Share what the automation did well, what changed for your business, and anything Nexus should improve.
+      </p>
+
+      <form id="productReviewForm">
+        <input type="hidden" id="reviewAutomationId">
+
+        <div class="form-grid">
+          <div>
+            <label>Rating</label>
+            <select class="select" id="reviewRating" required>
+              <option value="5">5 - Excellent</option>
+              <option value="4">4 - Good</option>
+              <option value="3">3 - Okay</option>
+              <option value="2">2 - Needs work</option>
+              <option value="1">1 - Poor</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Your role</label>
+            <input class="input" id="reviewRole" placeholder="Operations Manager">
+          </div>
+
+          <div class="full">
+            <label>Review</label>
+            <textarea
+              class="textarea"
+              id="reviewText"
+              required
+              minlength="10"
+              placeholder="What outcome did this automation help with?"
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="modal-lite-actions">
+          <button class="btn btn-secondary" type="button" onclick="closeProductReviewModal()">
+            Cancel
+          </button>
+
+          <button class="btn btn-primary" type="submit">
+            Submit review
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+<script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+<script src="/assets/js/nexus-db.js?v=20260722-execution-finalize"></script>
+<script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
+
+  <script>
+    let dashboardData = {
+      profile: null,
+      orders: [],
+      automations: [],
+      events: [],
+      outputs: [],
+      runs: [],
+      bundleAttempts: []
+    };
+    let buyerMessagesLoaded = false;
+    let dashboardEnsureInFlight = null;
+    let selectedAutomationId = null;
+    let bundleStatusRefreshTimer = null;
+    let bundleStatusRefreshInFlight = false;
+    let bundleStatusRefreshCycles = 0;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeJsString(value) {
+      return String(value || "")
+        .replaceAll("\\", "\\\\")
+        .replaceAll("'", "\\'")
+        .replaceAll('"', "&quot;")
+        .replaceAll("\n", " ")
+        .replaceAll("\r", " ")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function dateLabel(value) {
+      if (!value) return "";
+      return new Date(value).toLocaleString();
+    }
+
+    function humanizeStatus(value) {
+  const raw = String(value || "").trim().toLowerCase();
+
+  const labels = {
+    "": "Not started",
+
+    not_started: "Not started",
+    not_configured: "Not configured",
+    configured: "Configured",
+    healthy: "Healthy",
+    attention_required: "Needs attention",
+
+    requested: "Setup requested",
+    submitted: "Submitted",
+    complete: "Complete",
+    completed: "Complete",
+
+    pending_setup: "Setup needed",
+    setup_requested: "Setup requested",
+    setting_up: "Setting up",
+
+    guided_install_needed: "Install request needed",
+    guided_install_requested: "Install requested",
+    guided_install_contacted: "Nexus contacted you",
+    guided_install_in_progress: "Install in progress",
+    waiting_for_nexus_install: "Waiting for Nexus install",
+
+    running: "Running",
+    queued: "Queued",
+    success: "Success",
+    error: "Error",
+    failed: "Failed",
+    blocked: "Blocked",
+    cancelled: "Cancelled",
+
+    paid: "Paid",
+    pending: "Pending",
+    expired: "Expired",
+    payment_failed: "Payment failed",
+    checkout_started: "Checkout started",
+
+    self_serve: "Self-serve",
+    self_server: "Self-serve",
+    nexus_install: "Nexus Guided Install",
+    nexus_guided: "Nexus Guided Install",
+    guided_install: "Nexus Guided Install"
+  };
+
+  if (labels[raw]) return labels[raw];
+
+  return raw
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function humanizeInstallType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+
+  if (
+    raw.includes("nexus") ||
+    raw.includes("guided")
+  ) {
+    return "Nexus Guided Install";
+  }
+
+  if (
+    raw.includes("self") ||
+    raw === "setup"
+  ) {
+    return "Self-serve";
+  }
+
+  return humanizeStatus(raw || "self_serve");
+}
+
+function humanizeSetupStatus(item) {
+  const setupStatus = String(item?.setup_status || "not_started").toLowerCase();
+
+  if (isGuidedInstall(item)) {
+    if (setupStatus === "guided_install_requested") return "Install requested";
+    if (setupStatus === "guided_install_contacted") return "Nexus contacted you";
+    if (setupStatus === "guided_install_in_progress") return "Install in progress";
+    if (setupStatus === "completed" || setupStatus === "complete") return "Install complete";
+    if (setupStatus === "blocked") return "Blocked";
+    if (setupStatus === "cancelled") return "Cancelled";
+
+    return "Install request needed";
+  }
+
+  return humanizeStatus(setupStatus);
+}
+
+    function orderIdFromCustomerAutomation(item) {
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+      return String(item?.order_id || order?.id || "");
+    }
+
+    function getLatestOutputForAutomation(outputs, customerAutomationId, orderId = "", latestRun = null, item = {}) {
+      return (outputs || []).find(output => {
+        if (output.customer_automation_id !== customerAutomationId) return false;
+        if (orderId && !outputBelongsToOrder(output, orderId, item)) return false;
+        return outputIsFreshForAutomation(output, item, latestRun);
+      }) || null;
+    }
+
+    function isGuidedInstall(item) {
+      const installType = String(item?.install_type || "").toLowerCase();
+      const setupStatus = String(item?.setup_status || "").toLowerCase();
+
+      return (
+        installType.includes("guided") ||
+        installType.includes("nexus") ||
+        setupStatus.includes("guided_install")
+      );
+    }
+
+    function getBuyerSetupUrl(item) {
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+      const bundleId = item?.bundle_id || order.bundle_id;
+      const orderId = item?.order_id || order.id;
+
+      if (bundleId && orderId) {
+        return `/pages/buyer/setup.html?order_id=${encodeURIComponent(orderId)}&bundle_id=${encodeURIComponent(bundleId)}`;
+      }
+
+      if (isGuidedInstall(item)) {
+        return `/pages/buyer/install-request.html?id=${encodeURIComponent(item.id)}`;
+      }
+
+      return `/pages/buyer/setup.html?id=${encodeURIComponent(item.id)}`;
+    }
+
+    function getBuyerSetupActionLabel(item) {
+      const setupStatus = String(item?.setup_status || "").toLowerCase();
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+
+      if (item?.bundle_id || order.bundle_id) {
+        if (setupStatus === "submitted" || setupStatus === "completed" || setupStatus === "complete") {
+          return "View bundle setup";
+        }
+
+        return "Complete bundle setup";
+      }
+
+      if (isGuidedInstall(item)) {
+        if (setupStatus === "completed") return "View install request";
+        if (setupStatus === "guided_install_requested") return "View install request";
+        if (setupStatus === "guided_install_contacted") return "View install request";
+        if (setupStatus === "guided_install_in_progress") return "View install request";
+        return "Complete install request";
+      }
+
+      if (setupStatus === "submitted" || setupStatus === "completed" || setupStatus === "complete") {
+        return "View setup";
+      }
+
+      return "Complete setup";
+    }
+
+    function getSetupDisplayLabel(item) {
+      return humanizeSetupStatus(item);
+    }
+    function getAutomationActionButton(item, latestOutput, state) {
+      const setupUrl = getBuyerSetupUrl(item);
+      const setupLabel = getBuyerSetupActionLabel(item);
+      const supportLink = "/pages/contact/index.html";
+      const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+      const actionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
+
+      if (actionKind === "output") {
+        return `<a class="btn btn-primary btn-small" href="${outputLink}">View latest output</a>`;
+      }
+
+      if (actionKind === "support") {
+        return `<a class="btn btn-primary btn-small" href="${supportLink}">Contact support</a>`;
+      }
+
+      return `<a class="btn btn-primary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>`;
+    }
+
+    function getAutomationPrimaryActionKind(item, latestOutput, state) {
+      if (state?.label === "Ready" && latestOutput) return "output";
+      if (state?.label === "Issue detected") return "support";
+      return "setup";
+    }
+
+    function openBuyerNoticeModal(type, title, message) {
+      const modal = document.getElementById("buyerNoticeModal");
+      const eyebrow = document.getElementById("buyerNoticeEyebrow");
+      const titleEl = document.getElementById("buyerNoticeTitle");
+      const messageEl = document.getElementById("buyerNoticeMessage");
+
+      if (!modal) {
+        NexusUI.toast(message || title || "Update");
+        return;
+      }
+
+      if (eyebrow) {
+        eyebrow.textContent = type === "error" ? "Error" : "Success";
+      }
+
+      if (titleEl) {
+        titleEl.textContent = title || (type === "error" ? "Something went wrong" : "Request submitted");
+      }
+
+      if (messageEl) {
+        messageEl.textContent = message || "";
+      }
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeBuyerNoticeModal() {
+      const modal = document.getElementById("buyerNoticeModal");
+
+      if (!modal) return;
+
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    function pillClassFromTone(tone) {
+      if (tone === "green") return "pill green";
+      if (tone === "red") return "pill red";
+      if (tone === "orange") return "pill orange";
+      if (tone === "purple") return "pill purple";
+      return "pill blue";
+    }
+
+    const ACTIVE_RUN_WINDOW_MS = 30 * 60 * 1000;
+    const BUNDLE_OUTPUT_GRACE_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+    function timestampMs(value) {
+      if (!value) return 0;
+      const time = new Date(value).getTime();
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function latestTimestampMs(...values) {
+      return values.map(timestampMs).filter(Boolean).sort((a, b) => b - a)[0] || 0;
+    }
+
+    function runStatusText(run) {
+      return String(run?.status || "").toLowerCase();
+    }
+
+    function runIsIssue(run) {
+      const status = runStatusText(run);
+      return status.includes("error") || status.includes("failed") || status.includes("timeout") || status.includes("cancel") || status.includes("abort");
+    }
+
+    function runIsActiveStatus(run) {
+      const status = runStatusText(run);
+      return status.includes("running") || status.includes("processing") || status.includes("started") || status.includes("queued") || status.includes("output_received") || status.includes("waiting_for_output");
+    }
+
+    function runIsSuccessful(run) {
+      if (!run) return false;
+      const status = runStatusText(run);
+      if (status.includes("success") || status.includes("completed") || status.includes("complete") || status.includes("finished")) return true;
+      return Boolean(run.finished_at && !runIsIssue(run) && !runIsActiveStatus(run));
+    }
+
+    function runActivityMs(run) {
+      return latestTimestampMs(run?.updated_at, run?.started_at, run?.created_at);
+    }
+
+    function runIsFreshActive(run) {
+      if (!run || !runIsActiveStatus(run) || run.finished_at) return false;
+      const activity = runActivityMs(run);
+      return Boolean(activity && Date.now() - activity <= ACTIVE_RUN_WINDOW_MS);
+    }
+
+    function runIsStaleActive(run) {
+      if (!run || !runIsActiveStatus(run) || run.finished_at) return false;
+      const activity = runActivityMs(run);
+      return Boolean(activity && Date.now() - activity > ACTIVE_RUN_WINDOW_MS);
+    }
+
+    function automationRuntimeLooksFresh(item) {
+      const activity = latestTimestampMs(item?.last_run_requested_at, item?.last_run_at, item?.updated_at);
+      return Boolean(activity && Date.now() - activity <= ACTIVE_RUN_WINDOW_MS);
+    }
+
+    function automationState(item, latestOutput, latestRun = null) {
+      const setupStatus = String(item.setup_status || "not_started").toLowerCase();
+      const runtimeStatus = String(item.runtime_status || "not_started").toLowerCase();
+      const healthStatus = String(item.health_status || "not_configured").toLowerCase();
+      const status = String(item.status || "").toLowerCase();
+
+      if (
+        item.last_error_message ||
+        runtimeStatus === "error" ||
+        runtimeStatus === "failed" ||
+        healthStatus === "error" ||
+        healthStatus === "unhealthy" ||
+        status === "error"
+      ) {
+        return {
+          label: "Issue detected",
+          tone: "red",
+          description: item.last_error_message || "This automation needs attention. Nexus is reviewing the issue.",
+          primaryAction: "Contact support"
+        };
+      }
+
+      if (runIsIssue(latestRun)) {
+        return {
+          label: "Issue detected",
+          tone: "red",
+          description: latestRun.error_message || "The latest automation run failed. Check setup details or message Nexus.",
+          primaryAction: "Review issue"
+        };
+      }
+
+      if (runIsStaleActive(latestRun)) {
+        return {
+          label: "Needs attention",
+          tone: "red",
+          description: "The latest automation run did not finish cleanly. Nexus should review this run before the bundle is considered complete.",
+          primaryAction: "Review issue"
+        };
+      }
+
+      if (isGuidedInstall(item)) {
+        if (setupStatus === "completed" || setupStatus === "complete") {
+          return {
+            label: "Install complete",
+            tone: "green",
+            description: "Nexus Guided Install has been completed for this automation.",
+            primaryAction: "View install request"
+          };
+        }
+
+        if (setupStatus === "guided_install_requested") {
+          return {
+            label: "Install requested",
+            tone: "orange",
+            description: "Your Nexus Guided Install request was submitted. Nexus will contact you soon.",
+            primaryAction: "View install request"
+          };
+        }
+
+        if (setupStatus === "guided_install_contacted") {
+          return {
+            label: "Contacted",
+            tone: "blue",
+            description: "Nexus has contacted you or your technical contact for installation.",
+            primaryAction: "View install request"
+          };
+        }
+
+        if (setupStatus === "guided_install_in_progress") {
+          return {
+            label: "Install in progress",
+            tone: "blue",
+            description: "Nexus is currently preparing this automation with your team.",
+            primaryAction: "View install request"
+          };
+        }
+
+        if (setupStatus === "blocked") {
+          return {
+            label: "Blocked",
+            tone: "red",
+            description: item.last_error_message || "Nexus needs more information to complete installation.",
+            primaryAction: "View install request"
+          };
+        }
+
+        return {
+          label: "Install request needed",
+          tone: "orange",
+          description: "Complete the Nexus Guided Install request so Nexus can coordinate setup.",
+          primaryAction: "Complete install request"
+        };
+      }
+
+      if (
+        runIsFreshActive(latestRun) ||
+        ((runtimeStatus === "running" || healthStatus === "running" || status === "running") && automationRuntimeLooksFresh(item))
+      ) {
+        return {
+          label: "Running",
+          tone: "orange",
+          description: "Your automation is currently running. Outputs will appear when it finishes.",
+          primaryAction: "View status"
+        };
+      }
+
+      if (latestOutput || runtimeStatus === "success" || setupStatus === "complete" || setupStatus === "completed" || status === "active") {
+        return {
+          label: "Ready",
+          tone: "green",
+          description: "This automation is configured and has produced an output.",
+          primaryAction: "View output"
+        };
+      }
+
+      if (status === "waiting_for_nexus" || setupStatus === "submitted") {
+        return {
+          label: "Setting up",
+          tone: "orange",
+          description: "Your setup was submitted. Nexus is preparing the automation.",
+          primaryAction: "View setup"
+        };
+      }
+
+      return {
+        label: "Needs setup",
+        tone: "orange",
+        description: "Complete the setup form to start this automation.",
+        primaryAction: "Complete setup"
+      };
+    }
+
+function orderStatusLabel(order) {
+  const payment = String(order.payment_status || "").toLowerCase();
+  const status = String(order.order_status || "").toLowerCase();
+
+  if (payment === "paid") return "Paid";
+  if (payment === "expired") return "Expired";
+  if (payment === "payment_failed") return "Payment failed";
+  if (status === "checkout_started") return "Checkout started";
+  if (status === "guided_install_needed") return "Install request needed";
+  if (status === "guided_install_requested") return "Install requested";
+  if (status === "guided_install_contacted") return "Nexus contacted you";
+  if (status === "guided_install_in_progress") return "Install in progress";
+  if (status === "completed") return "Complete";
+  if (status === "cancelled") return "Cancelled";
+
+  return humanizeStatus(order.order_status || order.payment_status || "pending");
+}
+
+function developerDisplayName(record) {
+  const developer = record?.developers || record?.automations?.developers || {};
+  return developer.display_name || record?.developer_name || record?.automations?.developer_name || "Nexus";
+}
+
+function developerDisplayNameOptional(record) {
+  const developer = record?.developers || record?.automations?.developers || {};
+  return developer.display_name || record?.developer_name || record?.automations?.developer_name || "";
+}
+
+function developerAvatar(record) {
+  const developer = record?.developers || {};
+  const fallback = developerDisplayName(record).slice(0, 2) || "NX";
+  return String(developer.avatar_letter || fallback).slice(0, 2).toUpperCase();
+}
+
+function orderPriceLabel(order) {
+  return order?.price_display || [
+    order?.currency,
+    order?.amount_total || order?.price || ""
+  ].filter(Boolean).join(" ") || "Payment recorded";
+}
+
+function productTitleFromAutomation(item) {
+  return item?.name || item?.automations?.title || item?.orders?.automation_title || "Automation";
+}
+
+function parseBundleSnapshot(order) {
+  const snapshot = order?.bundle_snapshot;
+
+  if (!snapshot) return {};
+  if (typeof snapshot === "object") return snapshot;
+
+  try {
+    return JSON.parse(snapshot);
+  } catch (_error) {
+    return {};
+  }
+}
+
+function isBundleOrder(order) {
+  const type = String(order?.order_type || "").toLowerCase();
+  return type === "bundle" || Boolean(order?.bundle_id || parseBundleSnapshot(order).bundle_id);
+}
+
+function orderIdFromAutomation(item) {
+  const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+  return item?.order_id || order.id || "";
+}
+
+function bundleIdFromAutomation(item) {
+  const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+  return item?.bundle_id || order.bundle_id || "";
+}
+
+function isBundleCustomerAutomation(item) {
+  const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+  return Boolean(bundleIdFromAutomation(item) || isBundleOrder(order));
+}
+
+function automationOrderTime(item) {
+  const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+  return latestTimestampMs(order?.created_at, item?.created_at, item?.updated_at);
+}
+
+
+
+
+function automationProductKey(item) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return String(
+    item?.automation_id ||
+    product?.id ||
+    product?.slug ||
+    product?.title ||
+    item?.name ||
+    item?.id ||
+    ""
+  );
+}
+
+function automationUpdatedTime(item = {}) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return latestTimestampMs(
+    item?.last_run_requested_at,
+    item?.last_run_at,
+    item?.updated_at,
+    item?.created_at,
+    product?.updated_at,
+    product?.created_at
+  );
+}
+
+function automationSourceUpdatedTime(item = {}) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return latestTimestampMs(
+    product?.updated_at,
+    product?.workflow_updated_at,
+    product?.n8n_last_imported_at,
+    product?.last_tested_at,
+    item?.source_updated_at,
+    item?.workflow_updated_at
+  );
+}
+
+function latestAutomationActivityTime(output = null, run = null) {
+  return latestTimestampMs(
+    output?.created_at,
+    output?.updated_at,
+    run?.finished_at,
+    run?.started_at,
+    run?.created_at,
+    run?.updated_at
+  );
+}function currentStandaloneAutomations(items = []) {
+  return (items || [])
+    .filter(item => item?.id && !isArchivedAutomationRow(item) && !isBundleCustomerAutomation(item))
+    .sort((a, b) => automationOrderTime(b) - automationOrderTime(a));
+}
+
+function visibleDashboardAutomations(standaloneAutomations = [], bundleRows = []) {
+  const bundleChildIds = new Set(
+    (bundleRows || [])
+      .flatMap(row => row?.included || [])
+      .map(item => String(item?.id || ""))
+      .filter(Boolean)
+  );
+
+  return (standaloneAutomations || [])
+    .filter(item => item?.id && !isArchivedAutomationRow(item))
+    .filter(item => !bundleChildIds.has(String(item.id || "")) && !isBundleCustomerAutomation(item));
+}
+
+function outputRuntimeMeta(output = {}) {
+  const content = output?.content_json && typeof output.content_json === "object" ? output.content_json : {};
+  const runtime = content.nexus_runtime && typeof content.nexus_runtime === "object" ? content.nexus_runtime : {};
+  return {
+    runId: String(output?.automation_run_id || output?.run_id || runtime.run_id || ""),
+    runKey: String(output?.run_key || runtime.run_key || ""),
+    bundleAttemptId: String(output?.bundle_run_attempt_id || runtime.bundle_run_attempt_id || runtime.bundle_attempt_id || ""),
+    bundleRunItemId: String(output?.bundle_run_item_id || runtime.bundle_run_item_id || ""),
+    bundleOrderId: String(output?.bundle_order_id || runtime.bundle_order_id || runtime.order_id || "")
+  };
+}
+
+function outputMatchesRun(output = {}, run = {}) {
+  if (!run) return false;
+  const meta = outputRuntimeMeta(output);
+  return Boolean(
+    (meta.runId && run.id && meta.runId === String(run.id)) ||
+    (meta.runKey && run.run_key && meta.runKey === String(run.run_key))
+  );
+}
+
+function outputIsFreshForAutomation(output = {}, item = {}, latestRun = null) {
+  if (!output) return false;
+  if (outputMatchesRun(output, latestRun)) return true;
+
+  const outputTime = timestampMs(output.created_at || output.updated_at);
+  if (!outputTime) return true;
+
+  const latestRequestTime = latestTimestampMs(
+    latestRun?.started_at,
+    latestRun?.created_at,
+    item?.last_run_requested_at
+  );
+
+  if (!latestRequestTime) return true;
+  return outputTime + 1000 >= latestRequestTime;
+}
+
+function webhookPathFromUrl(url = "") {
+  const value = String(url || "").trim();
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    const match = parsed.pathname.match(/\/webhook\/([^/?#]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : "";
+  } catch (_error) {
+    const match = value.match(/\/webhook\/([^/?#]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : "";
+  }
+}
+
+function automationHasProductRuntimeSource(item) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  return Boolean(
+    String(product.n8n_workflow_id || product.runtime_webhook_url || product.n8n_webhook_url || product.runtime_webhook_path || product.n8n_webhook_path || "").trim()
+  );
+}
+
+function automationHasOwnRuntime(item) {
+  const product = Array.isArray(item?.automations) ? item.automations[0] || {} : item?.automations || {};
+  const customerWorkflowId = String(item?.n8n_workflow_id || "").trim();
+  const productWorkflowId = String(product?.n8n_workflow_id || "").trim();
+
+  if (customerWorkflowId && (!productWorkflowId || customerWorkflowId !== productWorkflowId)) return true;
+
+  const customerPath =
+    String(item?.runtime_webhook_path || item?.n8n_webhook_path || "").trim() ||
+    webhookPathFromUrl(item?.runtime_webhook_url || item?.n8n_webhook_url || "");
+  const productPath =
+    String(product?.runtime_webhook_path || product?.n8n_webhook_path || "").trim() ||
+    webhookPathFromUrl(product?.runtime_webhook_url || product?.n8n_webhook_url || "");
+
+  return Boolean(customerPath && customerPath !== productPath && customerPath.startsWith("nexus-customer-"));
+}
+
+function automationNeedsFreshRun(item, output, run) {
+  const sourceTime = automationSourceUpdatedTime(item);
+  const activityTime = latestAutomationActivityTime(output, run);
+  return Boolean(sourceTime && (!activityTime || sourceTime > activityTime + 1000));
+}
+
+function bundleActivityTime(order = {}, included = []) {
+  return latestTimestampMs(
+    order?.updated_at,
+    order?.created_at,
+    ...(included || []).flatMap(item => [
+      item?.last_run_requested_at,
+      item?.last_run_at,
+      item?.updated_at,
+      item?.created_at
+    ])
+  );
+}
+
+function bundleWithinOutputGrace(order = {}, included = []) {
+  const activity = bundleActivityTime(order, included);
+  return Boolean(activity && Date.now() - activity <= BUNDLE_OUTPUT_GRACE_WINDOW_MS);
+}
+
+function isArchivedAutomationRow(item) {
+  const values = [
+    item?.status,
+    item?.setup_status,
+    item?.runtime_status,
+    item?.health_status
+  ].map(value => String(value || "").toLowerCase());
+
+  return values.some(value =>
+    value.includes("archived") ||
+    value.includes("deleted") ||
+    value.includes("removed") ||
+    value.includes("cancelled")
+  );
+}
+
+function scoreBundleAutomationRow(item, orderId) {
+  let score = automationUpdatedTime(item);
+  if (orderId && orderIdFromAutomation(item) === orderId) score += 10_000_000_000_000;
+  if (item?.last_error_message || String(item?.runtime_status || "").toLowerCase().includes("error")) score -= 500_000;
+  if (isArchivedAutomationRow(item)) score -= 10_000_000_000_000;
+  return score;
+}
+
+function dedupeBundleAutomations(items = [], orderId = "") {
+  const byProduct = new Map();
+
+  for (const item of items || []) {
+    if (!item?.id || isArchivedAutomationRow(item)) continue;
+    const key = automationProductKey(item);
+    const current = byProduct.get(key);
+
+    if (!current || scoreBundleAutomationRow(item, orderId) > scoreBundleAutomationRow(current, orderId)) {
+      byProduct.set(key, item);
+    }
+  }
+
+  return Array.from(byProduct.values())
+    .sort((a, b) => automationUpdatedTime(a) - automationUpdatedTime(b));
+}
+
+function latestOutputByCustomerAutomation(outputs = []) {
+  const latestByAutomation = new Map();
+
+  (outputs || []).forEach(output => {
+    const id = output?.customer_automation_id;
+    if (!id) return;
+
+    const current = latestByAutomation.get(id);
+    if (!current || timestampMs(output.created_at || output.updated_at) > timestampMs(current.created_at || current.updated_at)) {
+      latestByAutomation.set(id, output);
+    }
+  });
+
+  return latestByAutomation;
+}
+
+function rowExplicitOrderId(row = {}) {
+  const payload = row?.request_payload && typeof row.request_payload === "object" ? row.request_payload : {};
+  const meta = outputRuntimeMeta(row);
+  return String(
+    row?.order_id ||
+    row?.bundle_order_id ||
+    payload.order_id ||
+    payload.orderId ||
+    payload.bundle_order_id ||
+    payload.bundleOrderId ||
+    meta.bundleOrderId ||
+    ""
+  );
+}
+
+function runtimeRowExplicitlyBelongsToOrder(row = {}, orderId = "") {
+  if (!orderId) return true;
+  const explicitOrderId = rowExplicitOrderId(row);
+  return Boolean(explicitOrderId && explicitOrderId === String(orderId));
+}
+
+function outputBelongsToOrder(output, orderId = "", item = null) {
+  if (!orderId) return true;
+
+  const outputOrderId = String(output?.order_id || "");
+  if (outputOrderId) return outputOrderId === String(orderId);
+
+  /*
+    Older output rows do not always carry order_id. In that case the
+    customer_automation row is still the ownership source of truth.
+  */
+  const itemOrderId = item ? String(orderIdFromAutomation(item) || "") : "";
+  if (itemOrderId) return itemOrderId === String(orderId);
+
+  return true;
+}
+
+function runBelongsToOrder(run, orderId = "", item = null) {
+  if (!orderId) return true;
+
+  const runOrderId = String(run?.order_id || "");
+  if (runOrderId) return runOrderId === String(orderId);
+
+  const itemOrderId = item ? String(orderIdFromAutomation(item) || "") : "";
+  if (itemOrderId) return itemOrderId === String(orderId);
+
+  return true;
+}
+
+function runtimeRowFitsOrderWindow(row = {}, order = {}, nextNewerOrderTime = 0) {
+  if (String(row?.order_id || "")) return true;
+
+  const rowTime = timestampMs(row?.created_at || row?.updated_at || row?.started_at || row?.finished_at);
+  const orderTime = timestampMs(order?.created_at || order?.updated_at);
+
+  if (!rowTime || !orderTime) return true;
+  if (rowTime + 1000 < orderTime) return false;
+  if (nextNewerOrderTime && rowTime >= nextNewerOrderTime - 1000) return false;
+
+  return true;
+}
+function bundleRunStatus(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function bundleRunStatusIsSuccess(value = "") {
+  return ["success", "succeeded", "completed", "complete"].includes(bundleRunStatus(value));
+}
+
+function bundleRunStatusIsActive(value = "") {
+  return ["queued", "running", "processing", "pending", "in_progress", "waiting", "new"].includes(bundleRunStatus(value));
+}
+
+function bundleRunStatusIsFailure(value = "") {
+  return ["failed", "failure", "error", "cancelled", "canceled", "timed_out", "timeout", "aborted", "crashed", "skipped"].includes(bundleRunStatus(value));
+}
+
+function latestBundleAttemptForOrder(bundleAttempts = [], orderId = "", bundleId = "") {
+  return (bundleAttempts || [])
+    .filter(attempt => {
+      if (!attempt?.id || String(attempt.order_id || "") !== String(orderId || "")) return false;
+      return !bundleId || !attempt.bundle_id || String(attempt.bundle_id) === String(bundleId);
+    })
+    .sort((a, b) => latestTimestampMs(b?.created_at, b?.started_at, b?.updated_at) - latestTimestampMs(a?.created_at, a?.started_at, a?.updated_at))[0] || null;
+}
+
+function bundleAttemptItems(attempt = null) {
+  return Array.isArray(attempt?.bundle_run_items) ? attempt.bundle_run_items.filter(Boolean) : [];
+}
+
+function exactBundleRunForItem(runs = [], attempt = null, attemptItem = null) {
+  if (!attempt?.id || !attemptItem?.customer_automation_id) return null;
+
+  return (runs || [])
+    .filter(run => {
+      if (!run?.id || String(run.customer_automation_id || "") !== String(attemptItem.customer_automation_id)) return false;
+      return (
+        (attemptItem.automation_run_id && String(run.id) === String(attemptItem.automation_run_id)) ||
+        (run.bundle_run_item_id && String(run.bundle_run_item_id) === String(attemptItem.id || "")) ||
+        (run.bundle_run_attempt_id && String(run.bundle_run_attempt_id) === String(attempt.id))
+      );
+    })
+    .sort((a, b) => latestTimestampMs(b?.finished_at, b?.started_at, b?.created_at, b?.updated_at) - latestTimestampMs(a?.finished_at, a?.started_at, a?.created_at, a?.updated_at))[0] || null;
+}
+
+function bundleItemEffectiveStatus(attemptItem = null, run = null) {
+  const runStatus = bundleRunStatus(run?.status);
+  if (bundleRunStatusIsSuccess(runStatus) || bundleRunStatusIsFailure(runStatus)) return runStatus;
+  return bundleRunStatus(attemptItem?.status || runStatus);
+}
+
+function outputMatchesBundleAttemptItem(output = {}, attempt = null, attemptItem = null, run = null) {
+  if (!output?.id || !attempt?.id || !attemptItem?.id) return false;
+  if (String(output.customer_automation_id || "") !== String(attemptItem.customer_automation_id || "")) return false;
+
+  const meta = outputRuntimeMeta(output);
+  return Boolean(
+    (attemptItem.output_id && String(output.id) === String(attemptItem.output_id)) ||
+    (meta.bundleRunItemId && meta.bundleRunItemId === String(attemptItem.id)) ||
+    (meta.bundleAttemptId && meta.bundleAttemptId === String(attempt.id)) ||
+    (attemptItem.automation_run_id && String(output.automation_run_id || meta.runId || "") === String(attemptItem.automation_run_id)) ||
+    (run?.id && outputMatchesRun(output, run))
+  );
+}
+
+function trackedBundleWorkflowState(item = {}, attempt = null, attemptItem = null, run = null, output = null) {
+  const attemptActive = bundleRunStatusIsActive(attempt?.status);
+  const effectiveStatus = bundleItemEffectiveStatus(attemptItem, run);
+
+  if (!attemptItem) {
+    return attemptActive
+      ? { label: "Processing", tone: "blue", description: "This workflow is waiting to start for this bundle run.", active: true, issue: false }
+      : { label: "Not started", tone: "red", description: "This workflow did not start during this bundle run.", active: false, issue: true };
+  }
+
+  if (bundleRunStatusIsSuccess(effectiveStatus)) {
+    return output
+      ? { label: "Ready", tone: "green", description: "This workflow completed and returned its output.", active: false, issue: false }
+      : { label: "Needs attention", tone: "red", description: "This workflow finished but did not return an output for this bundle run.", active: false, issue: true };
+  }
+
+  if (bundleRunStatusIsFailure(effectiveStatus)) {
+    const cancelled = ["cancelled", "canceled", "aborted"].includes(effectiveStatus);
+    return {
+      label: cancelled ? "Cancelled" : effectiveStatus === "timed_out" || effectiveStatus === "timeout" ? "Timed out" : "Failed",
+      tone: "red",
+      description: String(attemptItem.error_message || run?.error_message || (cancelled ? "This workflow run was cancelled." : "This workflow did not complete successfully.")),
+      active: false,
+      issue: true
+    };
+  }
+
+  return { label: "Processing", tone: "blue", description: "This workflow is still running for this bundle purchase.", active: true, issue: false };
+}
+
+function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs = [], bundleAttempts = []) {
+  const bundleOrders = (orders || [])
+    .filter(isBundleOrder)
+    .sort((a, b) => latestTimestampMs(b?.created_at, b?.updated_at) - latestTimestampMs(a?.created_at, a?.updated_at));
+  const ordersByBundle = new Map();
+
+  bundleOrders.forEach(order => {
+    const snapshot = parseBundleSnapshot(order);
+    const bundleId = String(order.bundle_id || snapshot.bundle_id || "");
+    if (!bundleId) return;
+    if (!ordersByBundle.has(bundleId)) ordersByBundle.set(bundleId, []);
+    ordersByBundle.get(bundleId).push(order);
+  });
+
+  const legacyItemsByOrder = new Map();
+
+  (automations || []).forEach(item => {
+    if (!item?.id || isArchivedAutomationRow(item)) return;
+    if (orderIdFromAutomation(item)) return;
+
+    const itemBundleId = String(bundleIdFromAutomation(item) || "");
+    if (!itemBundleId) return;
+
+    const candidateOrders = ordersByBundle.get(itemBundleId) || [];
+    if (!candidateOrders.length) return;
+
+    const itemTime = automationOrderTime(item) || timestampMs(item?.created_at || item?.updated_at);
+    let selectedOrder = null;
+    let selectedTime = -1;
+
+    candidateOrders.forEach(order => {
+      const orderTime = timestampMs(order?.created_at || order?.updated_at);
+      if (!orderTime) return;
+      if (itemTime && orderTime > itemTime + 15 * 60 * 1000) return;
+      if (orderTime > selectedTime) {
+        selectedTime = orderTime;
+        selectedOrder = order;
+      }
+    });
+
+    if (!selectedOrder && candidateOrders.length === 1) {
+      selectedOrder = candidateOrders[0];
+    }
+
+    const selectedOrderId = selectedOrder?.id || "";
+    if (!selectedOrderId) return;
+    if (!legacyItemsByOrder.has(selectedOrderId)) legacyItemsByOrder.set(selectedOrderId, []);
+    legacyItemsByOrder.get(selectedOrderId).push(item);
+  });
+
+  return bundleOrders.map(order => {
+      const snapshot = parseBundleSnapshot(order);
+      const orderId = order.id || "";
+      const bundleId = order.bundle_id || snapshot.bundle_id || "";
+      const exactOrderItems = [];
+
+      (automations || []).forEach(item => {
+        if (isArchivedAutomationRow(item)) return;
+        const itemOrderId = orderIdFromAutomation(item);
+        const belongsToOrder = orderId && itemOrderId === orderId;
+
+        if (belongsToOrder && item?.id) exactOrderItems.push(item);
+      });
+
+      const legacyOrderItems = legacyItemsByOrder.get(orderId) || [];
+      const includedSource = exactOrderItems.length ? exactOrderItems : legacyOrderItems;
+      const included = dedupeBundleAutomations(includedSource, orderId);
+      const includedIds = new Set(included.map(item => item.id).filter(Boolean));
+      const itemById = new Map(included.map(item => [String(item.id || ""), item]));
+      const sameBundleOrders = (ordersByBundle.get(String(bundleId || "")) || [])
+        .filter(candidate => String(candidate?.id || "") !== String(orderId || ""));
+      const orderTime = timestampMs(order?.created_at || order?.updated_at);
+      const nextNewerOrderTime = sameBundleOrders
+        .map(candidate => timestampMs(candidate?.created_at || candidate?.updated_at))
+        .filter(time => orderTime && time > orderTime)
+        .sort((a, b) => a - b)[0] || 0;
+      const currentAttempt = latestBundleAttemptForOrder(bundleAttempts, orderId, bundleId);
+      const currentAttemptItems = bundleAttemptItems(currentAttempt);
+      const currentAttemptItemByAutomation = new Map(
+        currentAttemptItems.map(attemptItem => [String(attemptItem.customer_automation_id || ""), attemptItem])
+      );
+      const hasTrackedBundleAttempt = Boolean(currentAttempt?.id);
+      const latestRunsByAutomation = new Map();
+
+      if (hasTrackedBundleAttempt) {
+        currentAttemptItems.forEach(attemptItem => {
+          const exactRun = exactBundleRunForItem(runs, currentAttempt, attemptItem);
+          if (exactRun?.customer_automation_id) {
+            latestRunsByAutomation.set(String(exactRun.customer_automation_id), exactRun);
+          }
+        });
+      } else {
+        (runs || [])
+          .filter(run => {
+            const item = itemById.get(String(run?.customer_automation_id || ""));
+            if (!item) return false;
+            return runBelongsToOrder(run, orderId, item) && runtimeRowFitsOrderWindow(run, order, nextNewerOrderTime);
+          })
+          .sort((a, b) => new Date(b.finished_at || b.started_at || b.created_at || 0) - new Date(a.finished_at || a.started_at || a.created_at || 0))
+          .forEach(run => {
+            if (!latestRunsByAutomation.has(String(run.customer_automation_id))) {
+              latestRunsByAutomation.set(String(run.customer_automation_id), run);
+            }
+          });
+      }
+
+      const rawBundleOutputs = hasTrackedBundleAttempt
+        ? (outputs || [])
+            .filter(output => {
+              const attemptItem = currentAttemptItemByAutomation.get(String(output?.customer_automation_id || ""));
+              if (!attemptItem) return false;
+              const exactRun = latestRunsByAutomation.get(String(output.customer_automation_id || "")) || null;
+              return outputMatchesBundleAttemptItem(output, currentAttempt, attemptItem, exactRun);
+            })
+            .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        : (outputs || [])
+            .filter(output => {
+              const item = itemById.get(String(output?.customer_automation_id || ""));
+              if (!item) return false;
+              return outputBelongsToOrder(output, orderId, item) && runtimeRowFitsOrderWindow(output, order, nextNewerOrderTime);
+            })
+            .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+      const bundleOutputs = hasTrackedBundleAttempt
+        ? rawBundleOutputs.filter(output => {
+            const customerAutomationId = String(output.customer_automation_id || "");
+            const attemptItem = currentAttemptItemByAutomation.get(customerAutomationId);
+            const exactRun = latestRunsByAutomation.get(customerAutomationId) || null;
+            return Boolean(attemptItem && bundleRunStatusIsSuccess(bundleItemEffectiveStatus(attemptItem, exactRun)));
+          })
+        : rawBundleOutputs.filter(output => {
+            const item = itemById.get(String(output.customer_automation_id || "")) || {};
+            const latestRun = latestRunsByAutomation.get(String(output.customer_automation_id || "")) || null;
+
+            if (latestRun && outputMatchesRun(output, latestRun)) return true;
+            if (latestRun) {
+              const outputTime = timestampMs(output.created_at || output.updated_at);
+              const runTime = latestTimestampMs(latestRun.started_at, latestRun.created_at);
+              if (runTime && (!outputTime || outputTime + 1000 < runTime)) return false;
+            }
+
+            return outputIsFreshForAutomation(output, item, latestRun);
+          });
+      const latestBundleOutputsByAutomation = latestOutputByCustomerAutomation(bundleOutputs);
+      const latestBundleOutputs = Array.from(latestBundleOutputsByAutomation.values())
+        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
+      const outputAutomationIds = new Set(bundleOutputs.map(output => output.customer_automation_id).filter(Boolean));
+      const bundleHasRuntimeActivity = Boolean(bundleOutputs.length || latestRunsByAutomation.size);
+      const childStates = hasTrackedBundleAttempt
+        ? included.map(item => {
+            const customerAutomationId = String(item.id || "");
+            const attemptItem = currentAttemptItemByAutomation.get(customerAutomationId) || null;
+            const exactRun = latestRunsByAutomation.get(customerAutomationId) || null;
+            const exactOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
+            return trackedBundleWorkflowState(item, currentAttempt, attemptItem, exactRun, exactOutput);
+          })
+        : included.map(item =>
+            automationState(item, getLatestOutputForAutomation(bundleOutputs, item.id), latestRunsByAutomation.get(String(item.id)) || null)
+          );      const outputGraceActive = bundleWithinOutputGrace(order, included);
+      const issueIds = new Set();
+      const issueDetails = [];
+      const workflowSummaries = included.map((item, index) => {
+        const latestRun = latestRunsByAutomation.get(String(item.id)) || null;
+        const childState = childStates[index] || {};
+        return {
+          id: item.id,
+          title: productTitleFromAutomation(item),
+          label: childState.label || "Ready",
+          tone: childState.tone || "green",
+          runAt: latestRun?.finished_at || latestRun?.started_at || latestRun?.created_at || item.last_run_at || ""
+        };
+      });
+      if (hasTrackedBundleAttempt) {
+        included.forEach((item, index) => {
+          const childState = childStates[index] || {};
+          if (!childState.issue) return;
+          issueIds.add(item.id);
+          issueDetails.push({
+            id: item.id,
+            title: productTitleFromAutomation(item),
+            status: childState.label || "Needs attention",
+            message: String(childState.description || "This workflow needs attention.")
+          });
+        });
+      } else {
+        included.forEach((item, index) => {
+        const latestRun = latestRunsByAutomation.get(item.id);
+        const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
+        const missingAfterActivity = bundleHasRuntimeActivity && !latestRun && !outputAutomationIds.has(item.id);
+        const waitingForOutput = !latestOutput && !runIsIssue(latestRun) && (
+          runIsFreshActive(latestRun) ||
+          (bundleHasRuntimeActivity && outputGraceActive)
+        );
+        const staleAfterChange = automationNeedsFreshRun(item, latestOutput, latestRun);
+
+        if (staleAfterChange) {
+          issueIds.add(item.id);
+          issueDetails.push({
+            id: item.id,
+            title: productTitleFromAutomation(item),
+            status: "Needs run",
+            message: "This workflow changed after its latest output. Open setup to run the current workflow version."
+          });
+          return;
+        }
+
+        if (waitingForOutput) {
+          return;
+        }
+
+        if (missingAfterActivity) {
+          issueIds.add(item.id);
+          issueDetails.push({
+            id: item.id,
+            title: productTitleFromAutomation(item),
+            status: "Not started",
+            message: "This workflow did not start during the bundle run. Open setup to run only the missing or failed workflow."
+          });
+          return;
+        }
+
+        if (childStates[index]?.tone === "red" || runIsIssue(latestRun) || runIsStaleActive(latestRun)) {
+          issueIds.add(item.id);
+          const rawMessage = String(
+            item.last_error_message ||
+            latestRun?.error_message ||
+            latestRun?.response_payload?.error ||
+            latestRun?.response_payload?.message ||
+            childStates[index]?.description ||
+            "This workflow needs attention."
+          ).replace(/\s+/g, " ").trim();
+          const message = rawMessage.length > 220 ? `${rawMessage.slice(0, 217)}...` : rawMessage;
+
+          issueDetails.push({
+            id: item.id,
+            title: productTitleFromAutomation(item),
+            status: childStates[index]?.label || latestRun?.status || item.runtime_status || "Issue detected",
+            message
+          });
+        }
+      });
+      }
+      const issueCount = issueIds.size;
+      const setupCount = hasTrackedBundleAttempt
+        ? 0
+        : childStates.filter(state => String(state.label || "").toLowerCase().includes("setup") || String(state.label || "").toLowerCase().includes("request needed")).length;
+      const progressCount = hasTrackedBundleAttempt
+        ? childStates.filter(state => state?.active).length
+        : included.filter((item, index) => {
+            const latestRun = latestRunsByAutomation.get(String(item.id));
+            const latestOutput = getLatestOutputForAutomation(bundleOutputs, item.id);
+            if (runIsFreshActive(latestRun)) return true;
+            if (!latestOutput && !runIsIssue(latestRun) && bundleHasRuntimeActivity && outputGraceActive) return true;
+            if (latestRun) return false;
+            if (bundleHasRuntimeActivity && !outputAutomationIds.has(item.id)) return false;
+            return automationLane(childStates[index]) === "progress";
+          }).length;
+      const incompleteAfterOutputCount = bundleOutputs.length
+        ? included.filter(item => !outputAutomationIds.has(item.id)).length
+        : 0;
+      const partialBundleIssue = hasTrackedBundleAttempt
+        ? false
+        : Boolean(bundleOutputs.length && incompleteAfterOutputCount && !progressCount && !outputGraceActive);
+      if (partialBundleIssue) {
+        included
+          .filter(item => !outputAutomationIds.has(item.id) && !issueIds.has(item.id))
+          .forEach(item => {
+            issueDetails.push({
+              id: item.id,
+              title: productTitleFromAutomation(item),
+              status: "No output yet",
+              message: "This workflow has not returned an output for the bundle run yet."
+            });
+          });
+      }
+
+      let state = {
+        label: "Ready",
+        tone: "green",
+        description: "Your bundle workflows are available in this dashboard.",
+        primaryAction: "View bundle setup"
+      };
+
+      if (!included.length) {
+        state = {
+          label: "Preparing",
+          tone: "orange",
+          description: "Nexus is still attaching the included workflows to this bundle order.",
+          primaryAction: "View bundle setup"
+        };
+      } else if (issueCount || partialBundleIssue) {
+        const count = issueCount || incompleteAfterOutputCount;
+        const firstIssue = issueDetails[0];
+        state = {
+          label: "Needs attention",
+          tone: "red",
+          description: firstIssue
+            ? `${firstIssue.title}: ${firstIssue.message}`
+            : `${count} included workflow${count === 1 ? "" : "s"} did not complete cleanly.`,
+          primaryAction: "View bundle setup"
+        };
+      } else if (progressCount) {
+        state = {
+          label: "In progress",
+          tone: "blue",
+          description: "One or more included workflows are being prepared or running.",
+          primaryAction: "View bundle setup"
+        };
+      } else if (setupCount) {
+        state = {
+          label: "Needs setup",
+          tone: "orange",
+          description: "Complete the bundle setup form to start every included workflow.",
+          primaryAction: "Complete bundle setup"
+        };
+      }
+
+      return {
+        order,
+        snapshot,
+        orderId,
+        bundleId,
+        included,
+        workflowSummaries,
+        issueDetails,
+        latestOutput: latestBundleOutputs[0] || null,
+        outputCount: latestBundleOutputs.length,
+        totalOutputCount: bundleOutputs.length,
+        latestOutputs: latestBundleOutputs,
+        state
+      };
+    });
+}
+
+function bundleChildAutomationIds(bundleRows = []) {
+  return new Set(
+    (bundleRows || [])
+      .flatMap(row => row.included || [])
+      .map(item => item?.id)
+      .filter(Boolean)
+  );
+}
+
+function isMonthlyAutomation(item) {
+  return String(item?.run_frequency || "").toLowerCase() === "monthly" || isSubscriptionAutomation(item);
+}
+
+function isSubscriptionAutomation(item) {
+  const order = item?.orders || {};
+
+  return (
+    String(order?.stripe_mode || "").toLowerCase() === "subscription" ||
+    Boolean(order?.stripe_subscription_id) ||
+    String(order?.price_display || "").toLowerCase().includes("/mo") ||
+    String(order?.price_display || "").toLowerCase().includes("month")
+  );
+}
+
+function runtimeFrequency(item) {
+  const frequency = String(item?.run_frequency || "").toLowerCase();
+
+  if ([
+    "every_30_minutes",
+    "hourly",
+    "daily",
+    "weekly",
+    "monthly",
+    "on_demand"
+  ].includes(frequency)) {
+    return frequency;
+  }
+
+  return isSubscriptionAutomation(item) ? "monthly" : "manual";
+}
+
+function isRecurringAutomation(item) {
+  return [
+    "every_30_minutes",
+    "hourly",
+    "daily",
+    "weekly",
+    "monthly"
+  ].includes(runtimeFrequency(item));
+}
+
+function cadenceLabel(item) {
+  const frequency = runtimeFrequency(item);
+
+  if (frequency === "every_30_minutes") return "Every 30 min";
+  if (frequency === "hourly") return "Hourly";
+  if (frequency === "daily") return "Daily";
+  if (frequency === "weekly") return "Weekly";
+  if (frequency === "monthly") return "Monthly";
+  if (frequency === "on_demand") return "On demand";
+
+  return "One-time";
+}
+
+function isSetupReadyForScheduling(item) {
+  const setupStatus = String(item?.setup_status || "").toLowerCase();
+
+  return [
+    "submitted",
+    "complete",
+    "completed"
+  ].includes(setupStatus);
+}
+
+function formatOutputDueDate(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function nextOutputInfo(item) {
+  const frequency = runtimeFrequency(item);
+  const cadence = cadenceLabel(item).toLowerCase();
+
+  if (frequency === "on_demand") {
+    return {
+      label: "Runs when requested",
+      help: "This automation responds when you send a request or trigger the workflow."
+    };
+  }
+
+  if (!isRecurringAutomation(item)) {
+    return {
+      label: "One-time output",
+      help: "This purchase is delivered once after setup or guided install is complete."
+    };
+  }
+
+  const status = String(item?.schedule_status || "").toLowerCase();
+  const order = item?.orders || {};
+  const setupReady = isSetupReadyForScheduling(item);
+
+  if (status === "paused" || String(order?.stripe_subscription_status || "").toLowerCase() === "past_due") {
+    return {
+      label: "Paused",
+      help: `${cadenceLabel(item)} outputs pause until the payment or schedule is active again.`
+    };
+  }
+
+  if (status === "error") {
+    return {
+      label: "Needs attention",
+      help: `Nexus needs to fix the workflow before the next ${cadence} output can run.`
+    };
+  }
+
+  if (!setupReady && status !== "active") {
+    return {
+      label: isGuidedInstall(item) ? "After guided install" : "After setup is complete",
+      help: isGuidedInstall(item)
+        ? `${cadenceLabel(item)} outputs start once Nexus completes the guided install.`
+        : `${cadenceLabel(item)} outputs start after the setup form is submitted and the workflow is ready.`
+    };
+  }
+
+  if (item?.next_run_at) {
+    const next = new Date(item.next_run_at);
+    if (!Number.isNaN(next.getTime())) {
+      return {
+        label: next <= new Date() ? "Due now" : formatOutputDueDate(item.next_run_at),
+        help: `Estimated from the ${cadence} automation schedule.`
+      };
+    }
+  }
+
+  const billingPeriodEnd = order?.stripe_current_period_end;
+  const formattedBillingDate = formatOutputDueDate(billingPeriodEnd);
+
+  if (formattedBillingDate && status === "active") {
+    return {
+      label: formattedBillingDate,
+      help: "Estimated from the current paid billing period."
+    };
+  }
+
+  return {
+    label: status === "active" ? "Waiting for schedule" : humanizeStatus(status || "not scheduled"),
+    help: "Nexus will show a date here once the schedule is ready."
+  };
+}
+
+function nextOutputLabel(item) {
+  return nextOutputInfo(item).label;
+}
+
+function nextOutputHelpText(item) {
+  return nextOutputInfo(item).help;
+}
+
+function nextRunLabel(item) {
+  return nextOutputLabel(item);
+}
+
+function lastRunLabel(item) {
+  return item?.last_run_at ? dateLabel(item.last_run_at) : "Not yet";
+}
+
+function scheduleStatusLabel(item) {
+  if (runtimeFrequency(item) === "on_demand") return "On demand";
+  if (!isRecurringAutomation(item)) return "Manual";
+  return humanizeStatus(item?.schedule_status || "inactive");
+}
+
+function runStatusTone(status) {
+  const value = String(status || "").toLowerCase();
+  if (value.includes("success")) return "green";
+  if (value.includes("error") || value.includes("failed")) return "red";
+  if (value.includes("running") || value.includes("queued")) return "orange";
+  return "blue";
+}
+
+function outputsForAutomation(customerAutomationId, orderId = "", item = null) {
+  return (dashboardData.outputs || [])
+    .filter(output => output.customer_automation_id === customerAutomationId)
+    .filter(output => outputBelongsToOrder(output, orderId, item))
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+}
+
+function runsForAutomation(customerAutomationId, orderId = "", item = null) {
+  return (dashboardData.runs || [])
+    .filter(run => run.customer_automation_id === customerAutomationId)
+    .filter(run => runBelongsToOrder(run, orderId, item))
+    .sort((a, b) =>
+      new Date(b.updated_at || b.finished_at || b.created_at || b.started_at || 0) -
+      new Date(a.updated_at || a.finished_at || a.created_at || a.started_at || 0)
+    );
+}
+
+function latestRunForAutomation(customerAutomationId, orderId = "", item = null) {
+  return runsForAutomation(customerAutomationId, orderId, item)[0] || null;
+}
+
+function openAutomationDetail(customerAutomationId) {
+  selectedAutomationId = customerAutomationId;
+  renderAutomationDetail();
+  activateTab("automation-detail");
+}
+
+    function activateTab(tabName) {
+      document.querySelectorAll(".buyer-tab").forEach(button => {
+        button.classList.toggle("active", button.dataset.tab === tabName);
+      });
+
+      document.querySelectorAll(".buyer-tab-panel").forEach(panel => {
+        panel.classList.toggle("active", panel.dataset.tabPanel === tabName);
+      });
+
+      if (tabName !== "automation-detail") {
+        localStorage.setItem("nexus_buyer_dashboard_tab", tabName);
+      }
+
+      if (tabName === "messages") {
+        loadBuyerMessages();
+      }
+    }
+
+    function wireTabs() {
+      document.querySelectorAll(".buyer-tab").forEach(button => {
+        button.addEventListener("click", () => {
+          activateTab(button.dataset.tab);
+        });
+      });
+
+      const urlTab = new URLSearchParams(location.search).get("tab");
+      const savedTab = urlTab || localStorage.getItem("nexus_buyer_dashboard_tab") || "overview";
+      activateTab(savedTab);
+    }
+
+    async function loadBuyerMessages(options = {}) {
+      const root = document.getElementById("buyerMessagesList");
+      if (!root || typeof NexusUI.mountMessageCenter !== "function") return;
+      if (buyerMessagesLoaded && !options.force) return;
+
+      await NexusUI.mountMessageCenter(root, {
+        title: "Buyer conversations",
+        viewerRole: "buyer"
+      });
+
+      buyerMessagesLoaded = true;
+    }
+
+    async function refreshBuyerMessagesIfOpen() {
+      const active = document.querySelector(".buyer-tab.active")?.dataset.tab;
+      if (active !== "messages") {
+        return;
+      }
+      await loadBuyerMessages({ force: true });
+    }
+
+    function activeTrackedBundleRuns() {
+      const attempts = dashboardData.bundleAttempts || [];
+      const orders = dashboardData.orders || [];
+      const runs = dashboardData.runs || [];
+      const latestRunByAutomation = new Map();
+
+      runs
+        .slice()
+        .sort((a, b) => latestTimestampMs(b?.created_at, b?.started_at, b?.updated_at) - latestTimestampMs(a?.created_at, a?.started_at, a?.updated_at))
+        .forEach(run => {
+          const key = String(run?.customer_automation_id || "");
+          if (key && !latestRunByAutomation.has(key)) latestRunByAutomation.set(key, run);
+        });
+
+      const checks = new Map();
+      orders.filter(isBundleOrder).forEach(order => {
+        const snapshot = parseBundleSnapshot(order);
+        const attempt = latestBundleAttemptForOrder(
+          attempts,
+          String(order?.id || ""),
+          String(order?.bundle_id || snapshot?.bundle_id || "")
+        );
+        if (!attempt?.id) return;
+
+        bundleAttemptItems(attempt).forEach(attemptItem => {
+          const customerAutomationId = String(attemptItem?.customer_automation_id || "");
+          if (!customerAutomationId) return;
+          const exactRun = exactBundleRunForItem(runs, attempt, attemptItem);
+          if (!exactRun?.id || !bundleRunStatusIsActive(bundleItemEffectiveStatus(attemptItem, exactRun))) return;
+
+          const globallyLatestRun = latestRunByAutomation.get(customerAutomationId);
+          if (!globallyLatestRun?.id || String(globallyLatestRun.id) !== String(exactRun.id)) return;
+
+          checks.set(customerAutomationId, {
+            customer_automation_id: customerAutomationId,
+            execution_id: exactRun.n8n_execution_id || undefined
+          });
+        });
+      });
+
+      return Array.from(checks.values());
+    }
+
+    function scheduleTrackedBundleStatusRefresh(user) {
+      if (bundleStatusRefreshTimer) clearTimeout(bundleStatusRefreshTimer);
+      bundleStatusRefreshTimer = null;
+      if (!user?.id || bundleStatusRefreshInFlight || bundleStatusRefreshCycles >= 20) return;
+      if (typeof NexusDB.checkN8nExecution !== "function") return;
+
+      const checks = activeTrackedBundleRuns();
+      if (!checks.length) return;
+
+      bundleStatusRefreshTimer = setTimeout(async () => {
+        if (bundleStatusRefreshInFlight) return;
+        bundleStatusRefreshInFlight = true;
+        bundleStatusRefreshCycles += 1;
+
+        try {
+          await Promise.all(checks.map(payload =>
+            NexusDB.checkN8nExecution(payload).catch(error => ({ error }))
+          ));
+          await loadBuyerDashboardRecords(user);
+        } catch (error) {
+          console.warn("Bundle execution status refresh failed:", error);
+        } finally {
+          bundleStatusRefreshInFlight = false;
+        }
+      }, 6000);
+    }
+
+    async function loadBuyerDashboardRecords(user) {
+      const [
+        { data: profile },
+        { data: orders },
+        { data: automations },
+        { data: events },
+        { data: outputs },
+        { data: runs },
+        { data: bundleAttempts },
+        { data: savedProducts }
+      ] = await Promise.all([
+        NexusDB.getBuyerProfile(user.id),
+        NexusDB.listBuyerOrders(user.id),
+        NexusDB.listBuyerCustomerAutomations(user.id),
+        NexusDB.listBuyerAutomationEvents(user.id),
+        NexusDB.listBuyerAutomationOutputs
+          ? NexusDB.listBuyerAutomationOutputs()
+          : Promise.resolve({ data: [] }),
+        NexusDB.listBuyerAutomationRuns
+          ? NexusDB.listBuyerAutomationRuns(user.id)
+          : Promise.resolve({ data: [] }),
+        NexusDB.listBuyerBundleRunAttempts
+          ? NexusDB.listBuyerBundleRunAttempts(user.id)
+          : Promise.resolve({ data: [] }),
+        NexusDB.listSavedProducts
+          ? NexusDB.listSavedProducts()
+          : Promise.resolve({ data: [] })
+      ]);
+
+      dashboardData = {
+        profile: profile || null,
+        orders: orders || [],
+        automations: automations || [],
+        events: events || [],
+        outputs: outputs || [],
+        runs: runs || [],
+        bundleAttempts: bundleAttempts || [],
+        savedProducts: savedProducts || []
+      };
+
+      renderDashboard();
+      scheduleTrackedBundleStatusRefresh(user);
+    }
+
+    function runCustomerAutomationEnsure() {
+      if (dashboardEnsureInFlight || typeof NexusDB.ensureCustomerAutomations !== "function") {
+        return;
+      }
+
+      dashboardEnsureInFlight = NexusDB.ensureCustomerAutomations()
+        .then(async ({ error }) => {
+          if (error) {
+            console.error("ensureCustomerAutomations error:", error);
+            return;
+          }
+
+          const { data: sessionData } = await NexusDB.getSession();
+          const user = sessionData?.session?.user;
+          if (user) {
+            await loadBuyerDashboardRecords(user);
+          }
+        })
+        .finally(() => {
+          dashboardEnsureInFlight = null;
+        });
+    }
+
+    function renderDashboardLoadError(error) {
+      const message = error?.message || String(error || "Could not load the buyer dashboard.");
+      console.error("Buyer dashboard load error:", error);
+
+      const roots = [
+        "overviewRoot",
+        "buyerAutomationBoard",
+        "buyerOutputsPanel",
+        "buyerOrdersList"
+      ];
+
+      roots.forEach(id => {
+        const root = document.getElementById(id);
+        if (!root) return;
+        root.innerHTML = `
+          <div class="buyer-empty-clean error">
+            <h3>Dashboard could not load</h3>
+            <p>${escapeHtml(message)}</p>
+            <button class="btn btn-primary" type="button" onclick="location.reload()">Reload dashboard</button>
+          </div>
+        `;
+      });
+
+      const status = document.getElementById("buyerMainStatus");
+      const statusText = document.getElementById("buyerMainStatusText");
+      if (status) status.textContent = "Could not load";
+      if (statusText) statusText.textContent = message;
+
+      if (typeof NexusNotice !== "undefined") {
+        NexusNotice.error("Could not load buyer dashboard", message);
+      }
+    }
+
+    async function loadBuyerDashboard() {
+      try {
+        if (typeof NexusDB === "undefined") {
+          throw new Error("NexusDB did not load. Hard refresh the page or check the latest deployment assets.");
+        }
+
+        const user = await NexusDB.requireBuyer("/pages/buyer/dashboard.html");
+        if (!user) return;
+
+        await loadBuyerDashboardRecords(user);
+        runCustomerAutomationEnsure();
+      } catch (error) {
+        renderDashboardLoadError(error);
+      }
+    }
+
+    function renderDashboard() {
+      const { profile, orders, automations, events, outputs } = dashboardData;
+      const bundleRows = buildBuyerBundleRows(orders, dashboardData.automations || automations, outputs, dashboardData.runs || [], dashboardData.bundleAttempts || []);
+      const standaloneAutomations = currentStandaloneAutomations(automations);
+      const visibleAutomations = visibleDashboardAutomations(standaloneAutomations, bundleRows);
+
+      const states = standaloneAutomations.map(item => {
+        const orderId = orderIdFromCustomerAutomation(item);
+        const latestRun = latestRunForAutomation(item.id, orderId);
+        return automationState(item, getLatestOutputForAutomation(outputs, item.id, orderId, latestRun, item), latestRun);
+      });
+      const bundleStates = bundleRows.map(row => row.state);
+      const allStates = states.concat(bundleStates);
+      const visibleOutputCount = countDisplayOutputs(outputs, visibleAutomations, bundleRows);
+
+      const readyCount = allStates.filter(state => state.label === "Ready" || state.label === "Install complete").length;
+      const issueCount = allStates.filter(state => state.label === "Issue detected" || state.label === "Blocked" || state.label === "Needs attention").length;
+      const runningCount = allStates.filter(state => state.label === "Running" || state.label === "Install in progress" || state.label === "In progress" || state.label === "Preparing").length;
+      const setupNeededCount = allStates.filter(state => state.label === "Needs setup" || state.label === "Install request needed").length;
+
+      document.getElementById("buyerWelcome").textContent =
+        profile?.name ? `Welcome back, ${profile.name}.` : "Your automation dashboard.";
+
+      document.getElementById("buyerAutomationCount").textContent = standaloneAutomations.length + bundleRows.length;
+      document.getElementById("buyerReadyCount").textContent = readyCount;
+      document.getElementById("buyerOutputCount").textContent = visibleOutputCount;
+      document.getElementById("buyerIssueCount").textContent = issueCount;
+
+      const mainStatus = document.getElementById("buyerMainStatus");
+      const mainStatusText = document.getElementById("buyerMainStatusText");
+
+      if (!standaloneAutomations.length && !bundleRows.length) {
+        mainStatus.textContent = "No automations yet";
+        mainStatusText.textContent = "Browse the marketplace to purchase your first automation.";
+      } else if (issueCount > 0) {
+        mainStatus.textContent = "Needs attention";
+        mainStatusText.textContent = `${issueCount} automation${issueCount === 1 ? "" : "s"} need attention.`;
+      } else if (runningCount > 0) {
+        mainStatus.textContent = "Running";
+        mainStatusText.textContent = `${runningCount} automation${runningCount === 1 ? " is" : "s are"} currently running.`;
+      } else if (setupNeededCount > 0) {
+        mainStatus.textContent = "Action required";
+        mainStatusText.textContent = `${setupNeededCount} automation${setupNeededCount === 1 ? "" : "s"} need your next step.`;
+      } else {
+        mainStatus.textContent = "All good";
+        mainStatusText.textContent = "Your automations are configured and healthy.";
+      }
+
+      renderOverview(standaloneAutomations, outputs, events, orders);
+      renderSavedProducts(dashboardData.savedProducts || []);
+      renderAutomations(standaloneAutomations, outputs);
+      renderAutomationDetail();
+      renderOutputs(outputs, visibleAutomations);
+      renderEvents(events);
+      renderOrders(orders);
+    }
+
+    async function refreshSavedProducts() {
+      if (typeof NexusDB.listSavedProducts !== "function") return;
+      const { data, error } = await NexusDB.listSavedProducts();
+      if (error) {
+        NexusUI.toast(error.message || "Could not refresh saved products.");
+        return;
+      }
+      dashboardData.savedProducts = data || [];
+      renderSavedProducts(dashboardData.savedProducts);
+    }
+
+    window.NexusBuyerRenderSavedProducts = refreshSavedProducts;
+
+    function renderSavedProducts(products) {
+      const root = document.getElementById("buyerSavedProductsList");
+      if (!root) return;
+
+      if (!products.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No saved products yet</h3>
+            <p>Use the Save button on marketplace cards to keep products here for later.</p>
+            <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse products</a>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = products.map(product => NexusUI.productCard(product, {
+        showSave: true,
+        savedSelected: true,
+        showCompare: false
+      })).join("");
+    }
+
+    function renderOverview(automations, outputs, events, orders) {
+      const root = document.getElementById("overviewRoot");
+
+      if (!root) return;
+
+      const bundleRows = buildBuyerBundleRows(orders, dashboardData.automations || automations, outputs, dashboardData.runs || [], dashboardData.bundleAttempts || []);
+      const visibleAutomations = visibleDashboardAutomations(automations, bundleRows);
+      const visibleOutputGroups = groupOutputsByAutomation(outputs, visibleAutomations, bundleRows);
+      const latestOutput = Object.values(visibleOutputGroups)
+        .flatMap(group => group.items || [])
+        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at))[0] || null;
+
+      const priorityAutomation = automations.find(item => {
+        const orderId = orderIdFromCustomerAutomation(item);
+        const latestRun = latestRunForAutomation(item.id, orderId);
+        const state = automationState(item, getLatestOutputForAutomation(outputs, item.id, orderId, latestRun, item), latestRun);
+        return (
+          state.label === "Issue detected" ||
+          state.label === "Blocked" ||
+          state.label === "Needs setup" ||
+          state.label === "Install request needed" ||
+          state.label === "Running" ||
+          state.label === "Install in progress"
+        );
+      }) || automations[0] || null;
+      const priorityBundle = bundleRows.find(row => row.state.tone !== "green") || bundleRows[0] || null;
+
+      const priorityOrderId = priorityAutomation ? orderIdFromCustomerAutomation(priorityAutomation) : "";
+      const priorityLatestRun = priorityAutomation ? latestRunForAutomation(priorityAutomation.id, priorityOrderId) : null;
+      const priorityLatestOutput = priorityAutomation
+        ? getLatestOutputForAutomation(outputs, priorityAutomation.id, priorityOrderId, priorityLatestRun, priorityAutomation)
+        : null;
+
+      const priorityState = priorityAutomation
+        ? automationState(priorityAutomation, priorityLatestOutput, priorityLatestRun)
+        : null;
+
+      const priorityProduct = priorityAutomation?.automations || {};
+      const priorityBundleSetupUrl = priorityBundle?.orderId && priorityBundle?.bundleId
+        ? `/pages/buyer/setup.html?order_id=${encodeURIComponent(priorityBundle.orderId)}&bundle_id=${encodeURIComponent(priorityBundle.bundleId)}`
+        : "/pages/buyer/dashboard.html#automations";
+      const priorityBundleTitle = priorityBundle?.order?.automation_title || priorityBundle?.snapshot?.bundle_title || "Automation bundle";
+
+      root.innerHTML = `
+        <div class="buyer-overview-two-col">
+          <article class="buyer-focus-card">
+            <span class="eyebrow">Next action</span>
+
+            ${
+              priorityAutomation
+                ? `
+                  <div class="buyer-focus-title-row">
+                    <div class="automation-icon ${escapeHtml(priorityProduct.color || "")}">
+                      ${escapeHtml(priorityProduct.icon || "AI")}
+                    </div>
+
+                    <div>
+                      <span class="${pillClassFromTone(priorityState.tone)}">${escapeHtml(priorityState.label)}</span>
+                      <h3>${escapeHtml(priorityAutomation.name || priorityProduct.title || "Automation")}</h3>
+                    </div>
+                  </div>
+
+                  <p>${escapeHtml(priorityState.description)}</p>
+
+                  <div class="buyer-focus-actions">
+                    ${getAutomationActionButton(priorityAutomation, priorityLatestOutput, priorityState)}
+
+                    <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('automations')">
+                      View all automations
+                    </button>
+                  </div>
+                `
+                : priorityBundle
+                  ? `
+                    <div class="buyer-focus-title-row">
+                      <div class="automation-icon cyan">PK</div>
+
+                      <div>
+                        <span class="${pillClassFromTone(priorityBundle.state.tone)}">${escapeHtml(priorityBundle.state.label)}</span>
+                        <h3>${escapeHtml(priorityBundleTitle)}</h3>
+                      </div>
+                    </div>
+
+                    <p>${escapeHtml(priorityBundle.state.description)}</p>
+
+                    <div class="buyer-focus-actions">
+                      <a class="btn btn-primary btn-small" href="${priorityBundleSetupUrl}">
+                        ${escapeHtml(priorityBundle.state.primaryAction || "View bundle setup")}
+                      </a>
+
+                      <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('automations')">
+                        View bundle
+                      </button>
+                    </div>
+                  `
+                : `
+                  <h3>No automations yet</h3>
+                  <p>Buy your first automation from the marketplace to start using Nexus.</p>
+                  <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+                `
+            }
+          </article>
+
+          <article class="buyer-focus-card">
+            <span class="eyebrow">Latest output</span>
+
+            ${
+              latestOutput
+                ? `
+                  <h3>${escapeHtml(latestOutput.title || "Automation output")}</h3>
+                  <p>${escapeHtml(latestOutput.summary || "Your latest automation result is ready.")}</p>
+
+                  <div class="buyer-output-mini-meta">
+                    <span>${escapeHtml(latestOutput.automations?.title || "Automation")}</span>
+                    <span>${escapeHtml(dateLabel(latestOutput.created_at))}</span>
+                  </div>
+
+                  <div class="buyer-focus-actions">
+                    <a class="btn btn-primary btn-small" href="/pages/buyer/output.html?id=${latestOutput.id}">
+                      View output
+                    </a>
+
+                    <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('outputs')">
+                      View all outputs
+                    </button>
+                  </div>
+                `
+                : `
+                  <h3>No outputs yet</h3>
+                  <p>Outputs will appear here once your automations finish running.</p>
+                  <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('automations')">
+                    View automations
+                  </button>
+                `
+            }
+          </article>
+        </div>
+
+        <div class="buyer-overview-three-col">
+          <article>
+            <span>Latest activity</span>
+            <strong>${escapeHtml(events[0]?.title || "No activity yet")}</strong>
+            <p>${escapeHtml(events[0]?.message || "Setup, payment, and runtime events will appear here.")}</p>
+          </article>
+
+          <article>
+            <span>Latest order</span>
+            <strong>${escapeHtml(orders[0]?.automation_title || "No orders yet")}</strong>
+            <p>${escapeHtml(orders[0]?.price_display || "Purchases will appear here.")}</p>
+          </article>
+
+          <article>
+            <span>Support</span>
+            <strong>Need help?</strong>
+            <p>Contact Nexus if an automation has an issue or setup question.</p>
+          </article>
+        </div>
+      `;
+    }
+
+    function renderAutomations(automations, outputs) {
+      const root = document.getElementById("buyerAutomationsList");
+      const bundleRows = buildBuyerBundleRows(dashboardData.orders || [], dashboardData.automations || automations, outputs, dashboardData.runs || [], dashboardData.bundleAttempts || []);
+
+      if (!root) return;
+
+      if (!automations.length && !bundleRows.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No automations yet</h3>
+            <p>After purchasing an automation, it will appear here.</p>
+            <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+          </div>
+        `;
+        return;
+      }
+
+      const enriched = automations.map(item => {
+        const product = item.automations || {};
+        const order = item.orders || {};
+        const orderId = orderIdFromCustomerAutomation(item);
+        const developerName = developerDisplayName(item);
+        const latestRun = latestRunForAutomation(item.id, orderId);
+        const latestOutput = getLatestOutputForAutomation(outputs, item.id, orderId, latestRun, item);
+        const state = automationState(item, latestOutput, latestRun);
+        const lane = automationLane(state);
+        return { item, product, order, orderId, developerName, latestRun, latestOutput, state, lane };
+      });
+
+      const bundleLaneCounts = {
+        action: bundleRows.filter(row => automationLane(row.state) === "action").length,
+        progress: bundleRows.filter(row => automationLane(row.state) === "progress").length,
+        ready: bundleRows.filter(row => automationLane(row.state) === "ready").length
+      };
+
+      const laneCounts = {
+        action: enriched.filter(row => row.lane === "action").length + bundleLaneCounts.action,
+        progress: enriched.filter(row => row.lane === "progress").length + bundleLaneCounts.progress,
+        ready: enriched.filter(row => row.lane === "ready").length + bundleLaneCounts.ready
+      };
+
+      const sections = [
+        {
+          id: "action",
+          title: "Needs your action",
+          description: "Setup, install requests, or issues to handle first.",
+          empty: "Nothing needs your action right now."
+        },
+        {
+          id: "progress",
+          title: "In setup or running",
+          description: "Nexus or the workflow is working on these automations.",
+          empty: "No automations are currently in progress."
+        },
+        {
+          id: "ready",
+          title: "Ready and producing outputs",
+          description: "Configured automations and completed installs.",
+          empty: "No ready automations yet."
+        }
+      ];
+
+      root.innerHTML = `
+        <div class="buyer-automation-command">
+          <div class="buyer-automation-summary-grid">
+            <article>
+              <span>Total items</span>
+              <strong>${automations.length + bundleRows.length}</strong>
+              <p>Bundles and purchased workflows appear below.</p>
+            </article>
+            <article class="${laneCounts.action ? "attention" : ""}">
+              <span>Needs action</span>
+              <strong>${laneCounts.action}</strong>
+              <p>${laneCounts.action ? "Handle these first." : "Nothing urgent."}</p>
+            </article>
+            <article>
+              <span>In progress</span>
+              <strong>${laneCounts.progress}</strong>
+              <p>Setup, install, or runtime activity.</p>
+            </article>
+            <article>
+              <span>Ready</span>
+              <strong>${laneCounts.ready}</strong>
+              <p>Producing or ready to produce output.</p>
+            </article>
+          </div>
+
+          ${
+            bundleRows.length
+              ? `
+                <section class="buyer-bundle-board-section">
+                  <div class="buyer-automation-lane-head">
+                    <div>
+                      <h3>Bundles</h3>
+                      <p>Your purchased packages. Open a bundle to manage the included workflows together.</p>
+                    </div>
+                    <strong>${bundleRows.length}</strong>
+                  </div>
+                  <div class="buyer-bundle-board-list">
+                    ${bundleRows.map(renderBundleBoardCard).join("")}
+                  </div>
+                </section>
+              `
+              : ""
+          }
+
+          <div class="buyer-automation-lanes">
+            ${
+              sections.map(section => {
+                const rows = enriched.filter(row => row.lane === section.id);
+                return `
+                  <section class="buyer-automation-lane ${section.id}">
+                    <div class="buyer-automation-lane-head">
+                      <div>
+                        <h3>${escapeHtml(section.title)}</h3>
+                        <p>${escapeHtml(section.description)}</p>
+                      </div>
+                      <strong>${rows.length}</strong>
+                    </div>
+                    <div class="buyer-automation-lane-list">
+                      ${
+                        rows.length
+                          ? rows.map(renderAutomationBoardCard).join("")
+                          : `<div class="buyer-lane-empty">${escapeHtml(section.empty)}</div>`
+                      }
+                    </div>
+                  </section>
+                `;
+              }).join("")
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    function renderBundleBoardCard(row) {
+      const { order, snapshot, included, workflowSummaries = [], issueDetails = [], latestOutput, outputCount, state } = row;
+      const title = order.automation_title || snapshot.bundle_title || "Automation bundle";
+      const setupUrl = row.orderId && row.bundleId
+        ? `/pages/buyer/setup.html?order_id=${encodeURIComponent(row.orderId)}&bundle_id=${encodeURIComponent(row.bundleId)}`
+        : "/pages/buyer/dashboard.html#automations";
+      const workflowNames = included
+        .slice(0, 5)
+        .map(item => productTitleFromAutomation(item))
+        .filter(Boolean);
+      const latestOutputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+      const completedOutputCount = Math.min(Number(outputCount) || 0, included.length || Number(outputCount) || 0);
+      const outputProgressLabel = included.length
+        ? `${completedOutputCount}/${included.length}`
+        : `${Number(outputCount) || 0}`;
+
+      return `
+        <article class="buyer-automation-board-card buyer-bundle-board-card">
+          <div class="buyer-automation-board-main">
+            <div class="automation-icon cyan">PK</div>
+            <div>
+              <div class="buyer-automation-title-row">
+                <span class="pill purple">Bundle</span>
+                <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
+                <span class="buyer-builder-inline">Curated by Nexus</span>
+              </div>
+              <h3>${escapeHtml(title)}</h3>
+              <p>${escapeHtml(state.description)}</p>
+            </div>
+          </div>
+
+          <div class="buyer-automation-board-meta">
+            <div>
+              <span>Included workflows</span>
+              <strong>${included.length || "Preparing"}</strong>
+            </div>
+            <div>
+              <span>Completed</span>
+              <strong>${outputProgressLabel}</strong>
+            </div>
+            <div>
+              <span>Bundle price</span>
+              <strong>${escapeHtml(orderPriceLabel(order))}</strong>
+            </div>
+            <div>
+              <span>Latest output</span>
+              <strong>${escapeHtml(latestOutput ? dateLabel(latestOutput.created_at) : "Not yet")}</strong>
+            </div>
+          </div>
+
+          ${
+            (workflowSummaries.length || workflowNames.length)
+              ? `
+                <div class="buyer-bundle-workflow-list">
+                  ${
+                    (workflowSummaries.length ? workflowSummaries : workflowNames.map(name => ({ title: name, label: "" })))
+                      .slice(0, 6)
+                      .map(summary => `
+                        <span class="${summary.tone === "red" ? "has-issue" : ""}">
+                          ${escapeHtml(summary.title || "Workflow")}
+                          ${summary.label ? `<small>${escapeHtml(summary.label)}</small>` : ""}
+                        </span>
+                      `).join("")
+                  }
+                </div>
+              `
+              : ""
+          }
+
+          ${
+            issueDetails.length
+              ? `
+                <div class="buyer-bundle-issue-list" aria-label="Bundle workflow issues">
+                  <strong>Needs attention</strong>
+                  ${issueDetails.slice(0, 4).map(issue => `
+                    <div class="buyer-bundle-issue-item">
+                      <span>${escapeHtml(issue.title || "Workflow")}</span>
+                      <small>${escapeHtml(issue.message || issue.status || "This workflow needs attention.")}</small>
+                    </div>
+                  `).join("")}
+                </div>
+              `
+              : ""
+          }
+
+          <div class="buyer-automation-history-strip">
+            <span>${included.length ? `${completedOutputCount}/${included.length} outputs ready` : `${outputCount} output${outputCount === 1 ? "" : "s"}`}</span>
+            <span>${escapeHtml(orderStatusLabel(order))}</span>
+            <span>${escapeHtml(dateLabel(order.created_at))}</span>
+          </div>
+
+          <div class="buyer-automation-card-actions">
+            <a class="btn btn-primary btn-small" href="${setupUrl}">${escapeHtml(state.primaryAction || "View bundle setup")}</a>
+            ${
+              latestOutputLink
+                ? `<a class="btn btn-secondary btn-small" href="${latestOutputLink}">View latest output</a>`
+                : ""
+            }
+            <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('orders')">View order</button>
+          </div>
+        </article>
+      `;
+    }
+
+    function automationLane(state) {
+      const label = String(state?.label || "").toLowerCase();
+
+      if (
+        label.includes("issue") ||
+        label.includes("blocked") ||
+        label.includes("needs setup") ||
+        label.includes("request needed")
+      ) {
+        return "action";
+      }
+
+      if (
+        label.includes("running") ||
+        label.includes("setting up") ||
+        label.includes("in progress") ||
+        label.includes("requested") ||
+        label.includes("contacted")
+      ) {
+        return "progress";
+      }
+
+      return "ready";
+    }
+
+    function renderAutomationBoardCard(row) {
+      const { item, product, developerName, latestRun, latestOutput, state, orderId } = row;
+      const productTitle = productTitleFromAutomation(item);
+      const setupUrl = getBuyerSetupUrl(item);
+      const setupLabel = getBuyerSetupActionLabel(item);
+      const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+      const primaryButton = getAutomationActionButton(item, latestOutput, state);
+      const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
+      const automationOutputs = outputsForAutomation(item.id, orderId, item);
+      const currentAutomationOutputs = automationOutputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
+      const automationRuns = runsForAutomation(item.id, orderId);
+      const recurring = isRecurringAutomation(item);
+
+      return `
+        <article class="buyer-automation-board-card">
+          <div class="buyer-automation-board-main">
+            <div class="automation-icon ${escapeHtml(product.color || "")}">
+              ${escapeHtml(product.icon || "AI")}
+            </div>
+            <div>
+              <div class="buyer-automation-title-row">
+                <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
+                <span class="buyer-builder-inline">Built by ${escapeHtml(developerName)}</span>
+              </div>
+              <h3>${escapeHtml(productTitle)}</h3>
+              <p>${escapeHtml(product.short_description || state.description)}</p>
+            </div>
+          </div>
+
+          <div class="buyer-automation-board-meta">
+            <div class="${recurring ? "monthly" : ""}">
+              <span>Cadence</span>
+              <strong>${escapeHtml(cadenceLabel(item))}</strong>
+            </div>
+            <div>
+              <span>Next output</span>
+              <strong>${escapeHtml(nextOutputLabel(item))}</strong>
+            </div>
+            <div>
+              <span>Next step</span>
+              <strong>${escapeHtml(state.primaryAction || setupLabel)}</strong>
+            </div>
+            <div>
+              <span>Setup</span>
+              <strong>${escapeHtml(getSetupDisplayLabel(item))}</strong>
+            </div>
+            <div>
+              <span>Latest output</span>
+              <strong>${escapeHtml(latestOutput ? dateLabel(latestOutput.created_at) : "Not yet")}</strong>
+            </div>
+          </div>
+
+          <div class="buyer-automation-history-strip">
+            <span>${currentAutomationOutputs.length} output${currentAutomationOutputs.length === 1 ? "" : "s"}</span>
+            <span>${automationRuns.length} run${automationRuns.length === 1 ? "" : "s"} recorded</span>
+            <span>${escapeHtml(scheduleStatusLabel(item))}</span>
+          </div>
+
+          ${
+            latestOutput
+              ? `
+                <div class="buyer-automation-output-strip">
+                  <span>Latest result</span>
+                  <strong>${escapeHtml(latestOutput.title || "Automation output")}</strong>
+                  <p>${escapeHtml(latestOutput.summary || "Open the output to view details.")}</p>
+                </div>
+              `
+              : ""
+          }
+
+          ${
+            item.last_error_message
+              ? `
+                <div class="buyer-error-box">
+                  <strong>Automation error</strong>
+                  <p>${escapeHtml(item.last_error_message)}</p>
+                </div>
+              `
+              : ""
+          }
+
+          <div class="buyer-automation-card-actions">
+            ${primaryButton}
+            <button class="btn btn-secondary btn-small" type="button" onclick="openAutomationDetail('${escapeJsString(item.id)}')">
+              Schedule & history
+            </button>
+            ${primaryActionKind !== "setup" ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
+            ${latestOutput && primaryActionKind !== "output" ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View latest output</a>` : ""}
+            ${
+              product.id
+                ? `
+                  <button
+                    class="btn btn-secondary btn-small"
+                    type="button"
+                    onclick="openProductReviewModal('${escapeJsString(product.id)}', '${escapeJsString(productTitle)}')"
+                  >
+                    Review product
+                  </button>
+                `
+                : ""
+            }
+            <button
+              class="buyer-cancel-link inline"
+              type="button"
+              data-cancel-automation-id="${item.id}"
+              data-cancel-automation-name="${escapeHtml(productTitle)}"
+            >
+              Request cancellation
+            </button>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderAutomationDetail() {
+      const root = document.getElementById("buyerAutomationDetail");
+      const tab = document.getElementById("buyerAutomationDetailTab");
+      const heading = document.getElementById("buyerAutomationDetailHeading");
+
+      if (!root) return;
+
+      const automations = dashboardData.automations || [];
+      const item = automations.find(row => row.id === selectedAutomationId);
+
+      if (!item) {
+        if (tab) {
+          tab.hidden = true;
+          tab.textContent = "Automation detail";
+        }
+
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>Select an automation</h3>
+            <p>Open one automation from the My Automations tab to see its schedule and output history.</p>
+            <button class="btn btn-primary btn-small" type="button" onclick="activateTab('automations')">View automations</button>
+          </div>
+        `;
+        return;
+      }
+
+      const product = item.automations || {};
+      const productTitle = productTitleFromAutomation(item);
+      const developerName = developerDisplayName(item);
+      const orderId = orderIdFromCustomerAutomation(item);
+      const runs = runsForAutomation(item.id, orderId);
+      const latestRun = runs[0] || null;
+      const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id, orderId, latestRun, item);
+      const outputs = outputsForAutomation(item.id, orderId, item);
+      const currentOutputs = outputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
+      const state = automationState(item, latestOutput, latestRun);
+      const setupUrl = getBuyerSetupUrl(item);
+      const setupLabel = getBuyerSetupActionLabel(item);
+      const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
+      const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
+
+      if (tab) {
+        tab.hidden = false;
+        tab.textContent = productTitle.length > 18 ? `${productTitle.slice(0, 18)}...` : productTitle;
+      }
+
+      if (heading) {
+        heading.textContent = productTitle;
+      }
+
+      root.innerHTML = `
+        <div class="buyer-automation-detail-shell">
+          <article class="buyer-automation-detail-hero">
+            <div class="buyer-automation-board-main">
+              <div class="automation-icon ${escapeHtml(product.color || "")}">
+                ${escapeHtml(product.icon || "AI")}
+              </div>
+              <div>
+                <div class="buyer-automation-title-row">
+                  <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
+                  <span class="${isRecurringAutomation(item) || runtimeFrequency(item) === "on_demand" ? "pill blue" : "pill"}">${escapeHtml(cadenceLabel(item))}</span>
+                  <span class="buyer-builder-inline">Built by ${escapeHtml(developerName)}</span>
+                </div>
+                <h3>${escapeHtml(productTitle)}</h3>
+                <p>${escapeHtml(product.short_description || state.description)}</p>
+              </div>
+            </div>
+
+            <div class="buyer-automation-card-actions">
+              ${getAutomationActionButton(item, latestOutput, state)}
+              ${primaryActionKind !== "setup" ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
+              ${latestOutput && primaryActionKind !== "output" ? `<a class="btn btn-secondary btn-small" href="${outputLink}">Open latest output</a>` : ""}
+            </div>
+          </article>
+
+          <div class="buyer-automation-detail-grid">
+            <article>
+              <span>Next output</span>
+              <strong>${escapeHtml(nextOutputLabel(item))}</strong>
+              <p>${escapeHtml(nextOutputHelpText(item))}</p>
+            </article>
+            <article>
+              <span>Schedule status</span>
+              <strong>${escapeHtml(scheduleStatusLabel(item))}</strong>
+              <p>Last run: ${escapeHtml(lastRunLabel(item))}</p>
+            </article>
+            <article>
+              <span>Outputs</span>
+              <strong>${currentOutputs.length}</strong>
+              <p>${currentOutputs.length ? "Current results are listed below." : "No current output has been published for this setup yet."}</p>
+            </article>
+            <article>
+              <span>Runtime history</span>
+              <strong>${runs.length}</strong>
+              <p>${runs[0]?.status ? `Latest run: ${humanizeStatus(runs[0].status)}` : "No run records yet."}</p>
+            </article>
+          </div>
+
+          <div class="buyer-automation-history-grid">
+            <section class="buyer-automation-history-panel">
+              <div class="buyer-output-group-head">
+                <div>
+                  <span>Output history</span>
+                  <h3>Past results</h3>
+                  <p>Every published output for ${escapeHtml(productTitle)}.</p>
+                </div>
+              </div>
+
+              <div class="buyer-output-row-list">
+                ${
+                  currentOutputs.length
+                    ? currentOutputs.map(output => `
+                      <a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
+                        <div>
+                          <strong>${escapeHtml(output.title || "Automation output")}</strong>
+                          <small>${escapeHtml(output.output_type || product.category || "Output")} by ${escapeHtml(developerName)}</small>
+                          <p>${escapeHtml(output.summary || "Open the output to view details.")}</p>
+                        </div>
+                        <span>${escapeHtml(dateLabel(output.created_at))}</span>
+                      </a>
+                    `).join("")
+                    : `<div class="buyer-lane-empty">No current output for this setup yet. Older outputs stay in history once this run finishes.</div>`
+                }
+              </div>
+            </section>
+
+            <section class="buyer-automation-history-panel">
+              <div class="buyer-output-group-head">
+                <div>
+                  <span>Runtime</span>
+                  <h3>Run history</h3>
+                  <p>Scheduled and manual runtime attempts for this automation.</p>
+                </div>
+              </div>
+
+              <div class="buyer-run-history-list">
+                ${
+                  runs.length
+                    ? runs.map(run => `
+                      <article class="buyer-run-history-row ${escapeHtml(runStatusTone(run.status))}">
+                        <div>
+                          <span class="${pillClassFromTone(runStatusTone(run.status))}">${escapeHtml(humanizeStatus(run.status || "recorded"))}</span>
+                          <strong>${escapeHtml(humanizeStatus(run.trigger_type || "automation run"))}</strong>
+                          <p>${escapeHtml(run.error_message || `Scheduled for ${run.scheduled_for ? dateLabel(run.scheduled_for) : dateLabel(run.created_at)}`)}</p>
+                        </div>
+                        <small>${escapeHtml(run.finished_at ? dateLabel(run.finished_at) : dateLabel(run.started_at || run.created_at))}</small>
+                      </article>
+                    `).join("")
+                    : `<div class="buyer-lane-empty">No run records for this automation yet.</div>`
+                }
+              </div>
+            </section>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderOutputs(outputs, automations = []) {
+      const root = document.getElementById("buyerOutputsList");
+
+      if (!root) return;
+
+      const allCustomerAutomations = dashboardData.automations || [];
+      const bundleRows = buildBuyerBundleRows(dashboardData.orders || [], allCustomerAutomations, outputs, dashboardData.runs || [], dashboardData.bundleAttempts || []);
+      const bundledIds = bundleChildAutomationIds(bundleRows);
+      const standaloneAutomations = (automations || allCustomerAutomations || []).filter(item => !bundledIds.has(item.id));
+
+      if (!outputs.length || !countDisplayOutputs(outputs, automations, bundleRows)) {
+        const waitingItems = [
+          ...bundleRows.map(row => ({
+            title: row.order?.automation_title || row.snapshot?.bundle_title || "Automation bundle",
+            status: row.state?.label || "Preparing"
+          })),
+          ...standaloneAutomations.map(item => ({
+            title: productTitleFromAutomation(item),
+            status: isRecurringAutomation(item) || runtimeFrequency(item) === "on_demand"
+              ? `Next output: ${nextOutputLabel(item)}`
+              : getSetupDisplayLabel(item)
+          }))
+        ].slice(0, 4);
+        root.innerHTML = `
+          <div class="buyer-output-command">
+            <div class="buyer-empty-clean">
+              <h3>No outputs yet</h3>
+              <p>Automation results will appear here once your workflows run.</p>
+            </div>
+            ${
+              waitingItems.length
+                ? `
+                  <div class="buyer-output-awaiting">
+                    <h3>Waiting on first output</h3>
+                    ${waitingItems.map(item => `
+                      <article>
+                        <strong>${escapeHtml(item.title)}</strong>
+                        <span>${escapeHtml(item.status)}</span>
+                      </article>
+                    `).join("")}
+                  </div>
+                `
+                : ""
+            }
+          </div>
+        `;
+        return;
+      }
+
+      const grouped = groupOutputsByAutomation(outputs, automations, bundleRows);
+      const displayedOutputs = Object.values(grouped)
+        .flatMap(group => group.items || [])
+        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
+      const latest = displayedOutputs[0] || outputs[0];
+      const latestContext = outputAutomationContext(latest, automations, bundleRows);
+      const displayOutputCount = displayedOutputs.length;
+      const outputAutomations = Object.keys(grouped).length;
+      const awaitingCount =
+        standaloneAutomations.filter(item => {
+          const orderId = orderIdFromCustomerAutomation(item);
+          const latestRun = latestRunForAutomation(item.id, orderId);
+          return !getLatestOutputForAutomation(outputs, item.id, orderId, latestRun, item);
+        }).length +
+        bundleRows.filter(row => !row.outputCount).length;
+
+      root.innerHTML = `
+        <div class="buyer-output-command">
+          <div class="buyer-output-hero-card">
+            <div>
+              <span class="${NexusUI.pillClass(latest.automations?.color || "blue")}">
+                Newest output
+              </span>
+              <h3>${escapeHtml(latest.title || "Automation output")}</h3>
+              <p>${escapeHtml(latest.summary || "Open the latest output to view the result.")}</p>
+              <div class="buyer-output-mini-meta">
+                <span>${escapeHtml(latestContext.title)}</span>
+                <span>Built by ${escapeHtml(latestContext.developerName)}</span>
+                <span>${escapeHtml(dateLabel(latest.created_at))}</span>
+              </div>
+            </div>
+            <a class="btn btn-primary btn-small" href="/pages/buyer/output.html?id=${encodeURIComponent(latest.id)}">
+              Open newest output
+            </a>
+          </div>
+
+          <div class="buyer-output-stats">
+            <article><span>Total outputs</span><strong>${displayOutputCount}</strong></article>
+            <article><span>Automations with results</span><strong>${outputAutomations}</strong></article>
+            <article><span>Awaiting first result</span><strong>${awaitingCount}</strong></article>
+          </div>
+
+          <div class="buyer-output-library">
+            ${
+              Object.values(grouped).map(group => `
+                <section class="buyer-output-group-card">
+                  <div class="buyer-output-group-head">
+                    <div>
+                      <span>${escapeHtml(group.category || "Output")}</span>
+                      <h3>${escapeHtml(group.title)}</h3>
+                      <p>${escapeHtml(group.description || `${group.items.length} ${group.category || "output"}${group.items.length === 1 ? "" : "s"} from ${group.title} by ${group.developerName}.`)}</p>
+                    </div>
+                    <a class="btn btn-secondary btn-small" href="/pages/buyer/output.html?id=${encodeURIComponent(group.items[0].id)}">
+                      View latest
+                    </a>
+                  </div>
+                  <div class="buyer-output-row-list">
+                    ${group.items.map(output => `
+                      <a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
+                        <div>
+                          <strong>${escapeHtml(output.title || "Automation output")}</strong>
+                          <small>${escapeHtml(output.__context?.childTitle ? `${output.__context.childTitle} inside ${group.title}` : `${group.category || "Output"} from ${group.title} by ${group.developerName}`)}</small>
+                          <p>${escapeHtml(output.summary || `From ${group.title} by ${group.developerName}.`)}</p>
+                        </div>
+                        <span>${escapeHtml(dateLabel(output.created_at))}</span>
+                      </a>
+                    `).join("")}
+                  </div>
+                </section>
+              `).join("")
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    function bundleRowForOutput(output, bundleRows = []) {
+      const customerAutomationId = output?.customer_automation_id;
+      if (!customerAutomationId) return null;
+
+      return (bundleRows || []).find(row => {
+        const child = (row.included || []).find(item => item.id === customerAutomationId);
+        if (!child) return false;
+
+        /*
+          Bundle rows already compute latestOutputs with order/run/setup freshness.
+          Do not re-attach older historical outputs here, or a newly submitted
+          bundle can appear complete before the new run finishes.
+        */
+        return (row.latestOutputs || []).some(item => item.id === output?.id);
+      }) || null;
+    }
+
+    function outputAutomationContext(output, automations = [], bundleRows = []) {
+      const bundleRow = bundleRowForOutput(output, bundleRows);
+      if (bundleRow) {
+        const child = (bundleRow.included || []).find(item => item.id === output?.customer_automation_id) || {};
+        const title = bundleRow.order?.automation_title || bundleRow.snapshot?.bundle_title || "Automation bundle";
+        const childTitle = productTitleFromAutomation(child);
+
+        return {
+          title,
+          childTitle,
+          category: "Bundle output",
+          developerName: "Nexus",
+          groupKey: `bundle:${bundleRow.orderId || bundleRow.bundleId || title}`,
+          description: `${bundleRow.outputCount || 0} latest output${bundleRow.outputCount === 1 ? "" : "s"} from ${bundleRow.included.length} included workflow${bundleRow.included.length === 1 ? "" : "s"}.`
+        };
+      }
+
+      const product = output?.automations || {};
+      const outputOrderId = String(output?.order_id || "");
+      const customerAutomation =
+        (automations || []).find(item =>
+          item.id === output?.customer_automation_id &&
+          (!outputOrderId || orderIdFromCustomerAutomation(item) === outputOrderId)
+        ) ||
+        {};
+      const customerAutomationOrderId = outputOrderId || orderIdFromCustomerAutomation(customerAutomation);
+      const title =
+        product.title ||
+        customerAutomation.name ||
+        customerAutomation.automations?.title ||
+        output?.customer_automations?.name ||
+        "Automation";
+
+      return {
+        title,
+        category: output?.output_type || product.category || customerAutomation.automations?.category || "Output",
+        developerName: developerDisplayNameOptional(customerAutomation) || developerDisplayNameOptional(output) || "Nexus",
+        groupKey: customerAutomationOrderId
+          ? `automation:${output.customer_automation_id || output.automation_id || product.id || title}:${customerAutomationOrderId}`
+          : output.customer_automation_id || output.automation_id || product.id || title || "output"
+      };
+    }
+
+    function outputIsCurrentForDashboard(output = {}, automations = [], bundleRows = []) {
+      const bundleRow = bundleRowForOutput(output, bundleRows);
+
+      if (bundleRow) {
+        return true;
+      }
+
+      const outputOrderId = String(output?.order_id || "");
+      const customerAutomation = (automations || []).find(item => item.id === output?.customer_automation_id) || {};
+
+      if (!customerAutomation?.id) return false;
+      if (isBundleCustomerAutomation(customerAutomation)) return false;
+
+      const expectedOrderId = String(orderIdFromCustomerAutomation(customerAutomation) || "");
+      if (expectedOrderId && outputOrderId && outputOrderId !== expectedOrderId) return false;
+      if (!expectedOrderId && outputOrderId) return false;
+
+      const latestRun = latestRunForAutomation(output.customer_automation_id, expectedOrderId, customerAutomation);
+      return outputIsFreshForAutomation(output, customerAutomation, latestRun);
+    }
+    function groupOutputsByAutomation(outputs, automations = [], bundleRows = []) {
+      return (outputs || []).reduce((groups, output) => {
+        if (!outputIsCurrentForDashboard(output, automations, bundleRows)) return groups;
+        const context = outputAutomationContext(output, automations, bundleRows);
+        const product = output.automations || {};
+        const key = context.groupKey || output.customer_automation_id || output.automation_id || product.id || context.title || "output";
+        if (!groups[key]) {
+          groups[key] = {
+            title: context.title,
+            category: context.category,
+            developerName: context.developerName,
+            description: context.description,
+            items: []
+          };
+        }
+        const preparedOutput = { ...output, __context: context };
+
+        if (context.category === "Bundle output" && output.customer_automation_id) {
+          const existingIndex = groups[key].items.findIndex(item => item.customer_automation_id === output.customer_automation_id);
+
+          if (existingIndex >= 0) {
+            const existing = groups[key].items[existingIndex];
+            if (timestampMs(output.created_at || output.updated_at) > timestampMs(existing.created_at || existing.updated_at)) {
+              groups[key].items[existingIndex] = preparedOutput;
+            }
+          } else {
+            groups[key].items.push(preparedOutput);
+          }
+
+          groups[key].items.sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
+          return groups;
+        }
+
+        groups[key].items.push(preparedOutput);
+        return groups;
+      }, {});
+    }
+
+    function countDisplayOutputs(outputs = [], automations = [], bundleRows = []) {
+      const groups = groupOutputsByAutomation(outputs, automations, bundleRows);
+      return Object.values(groups).reduce((count, group) => count + ((group.items || []).length), 0);
+    }
+    function renderEvents(events) {
+      const root = document.getElementById("buyerEventsList");
+
+      if (!root) return;
+
+      if (!events.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No activity yet</h3>
+            <p>Setup, payment, and runtime logs will appear here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = events.slice(0, 30).map(event => {
+        const isError =
+          String(event.event_type || "").includes("failed") ||
+          String(event.title || "").toLowerCase().includes("failed") ||
+          String(event.title || "").toLowerCase().includes("error");
+
+        return `
+          <article class="buyer-activity-row ${isError ? "error" : ""}">
+            <div class="buyer-activity-dot"></div>
+
+            <div>
+              <strong>${escapeHtml(event.title || "Update")}</strong>
+              <p>${escapeHtml(event.message || "")}</p>
+              <span>${escapeHtml(dateLabel(event.created_at))}</span>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderOrders(orders) {
+      const root = document.getElementById("buyerOrdersList");
+
+      if (!root) return;
+
+      if (!orders.length) {
+        root.innerHTML = `
+          <div class="buyer-empty-clean">
+            <h3>No orders yet</h3>
+            <p>Your purchases will appear here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = orders.slice(0, 20).map(order => {
+        const label = orderStatusLabel(order);
+        const paid = String(order.payment_status || "").toLowerCase() === "paid";
+        const productTitle = order.automation_title || order.automations?.title || "Automation";
+        const developerName = developerDisplayName(order);
+
+        return `
+          <article class="buyer-clean-card order buyer-order-card">
+            <div>
+              <span class="${paid ? "pill green" : "pill orange"}">${escapeHtml(label)}</span>
+              <h3>${escapeHtml(productTitle)}</h3>
+              <p>${escapeHtml(orderPriceLabel(order))}</p>
+
+              <div class="buyer-output-mini-meta">
+                <span>Built by ${escapeHtml(developerName)}</span>
+                <span>${escapeHtml(humanizeInstallType(order.install_type || "self_serve"))}</span>
+                <span>${escapeHtml(dateLabel(order.created_at))}</span>
+              </div>
+            </div>
+
+            <div class="buyer-order-status-side">
+              <div class="buyer-builder-chip compact" title="Builder">
+                <span>${escapeHtml(developerAvatar(order))}</span>
+                <div>
+                  <small>Builder</small>
+                  <strong>${escapeHtml(developerName)}</strong>
+                </div>
+              </div>
+              <strong>${escapeHtml(order.currency || "")}</strong>
+              <span>${escapeHtml(humanizeStatus(order.payment_status || "pending"))}</span>
+
+              ${
+                paid && order.automation_id
+                  ? `
+                    <button
+                      class="btn btn-secondary btn-small"
+                      type="button"
+                      onclick="openProductReviewModal('${escapeJsString(order.automation_id)}', '${escapeJsString(productTitle)}')"
+                    >
+                      Review product
+                    </button>
+                  `
+                  : ""
+              }
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function openCancellationModal(customerAutomationId, automationName) {
+      const modal = document.getElementById("cancelAutomationModal");
+      const input = document.getElementById("cancelCustomerAutomationId");
+      const reason = document.getElementById("cancelReason");
+      const text = document.getElementById("cancelAutomationModalText");
+
+      if (!modal || !input || !reason) {
+        console.error("Cancellation modal elements are missing.");
+        NexusUI.toast("Cancellation modal is missing on this page.");
+        return;
+      }
+
+      input.value = customerAutomationId;
+      reason.value = "";
+
+      if (text) {
+        text.textContent = `Tell Nexus why you want to cancel "${automationName}". Your request will be reviewed before anything is cancelled.`;
+      }
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+
+      setTimeout(() => {
+        reason.focus();
+      }, 100);
+    }
+
+    function closeCancellationModal() {
+      const modal = document.getElementById("cancelAutomationModal");
+
+      if (!modal) return;
+
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    function openProductReviewModal(automationId, automationName) {
+      const modal = document.getElementById("productReviewModal");
+      const input = document.getElementById("reviewAutomationId");
+      const title = document.getElementById("productReviewTitle");
+      const form = document.getElementById("productReviewForm");
+      const role = document.getElementById("reviewRole");
+
+      if (!modal || !input || !form) {
+        NexusUI.toast("Review form is missing on this page.");
+        return;
+      }
+
+      input.value = automationId;
+
+      if (title) {
+        title.textContent = automationName || "Review product";
+      }
+
+      if (role && dashboardData.profile?.company) {
+        role.placeholder = `Role at ${dashboardData.profile.company}`;
+      }
+
+      form.reset();
+      input.value = automationId;
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+
+      setTimeout(() => {
+        document.getElementById("reviewText")?.focus();
+      }, 100);
+    }
+
+    function closeProductReviewModal() {
+      const modal = document.getElementById("productReviewModal");
+
+      if (!modal) return;
+
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    async function submitProductReviewForm(event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const button = form.querySelector("button[type='submit']");
+      const originalText = button ? button.textContent : "";
+
+      const automationId = document.getElementById("reviewAutomationId")?.value || "";
+      const rating = Number(document.getElementById("reviewRating")?.value || 5);
+      const reviewerRole = document.getElementById("reviewRole")?.value.trim() || "";
+      const reviewText = document.getElementById("reviewText")?.value.trim() || "";
+
+      if (!automationId) {
+        NexusNotice.error("Product missing", "Could not identify which product this review belongs to.");
+        return;
+      }
+
+      if (!rating || rating < 1 || rating > 5) {
+        NexusNotice.warning("Rating required", "Choose a rating from 1 to 5.");
+        return;
+      }
+
+      if (reviewText.length < 10) {
+        NexusNotice.warning("Review too short", "Please write at least 10 characters.");
+        return;
+      }
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Submitting...";
+      }
+
+      const { data, error } = await NexusDB.submitProductReview({
+        automation_id: automationId,
+        rating,
+        reviewer_role: reviewerRole,
+        review_text: reviewText
+      });
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+
+      if (error) {
+        NexusNotice.error("Could not submit review", error.message || "Please try again.");
+        console.error("Product review error:", error);
+        return;
+      }
+
+      closeProductReviewModal();
+
+      NexusNotice.success(
+        "Review submitted",
+        data?.message || "Your review was submitted and will appear after Nexus approves it."
+      );
+    }
+
+    async function submitCancellationRequest(event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const button = form.querySelector("button[type='submit']");
+      const originalText = button ? button.textContent : "";
+
+      const customerAutomationId = document.getElementById("cancelCustomerAutomationId")?.value || "";
+      const reason = document.getElementById("cancelReason")?.value.trim() || "";
+
+      if (!customerAutomationId) {
+        NexusNotice.error("Automation missing", "Automation ID is missing.");
+        return;
+      }
+
+      if (reason.length < 10) {
+        NexusNotice.warning("Reason required", "Please provide a reason with at least 10 characters.");
+        return;
+      }
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Submitting...";
+      }
+
+      const { data, error } = await NexusDB.requestAutomationCancellation({
+        customer_automation_id: customerAutomationId,
+        reason
+      });
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+
+      if (error) {
+        NexusNotice.error(
+  "Could not submit request",
+  error.message || "Could not submit cancellation request."
+);
+
+        console.error("Cancellation request error:", error);
+        return;
+      }
+
+      closeCancellationModal();
+
+      NexusNotice.success(
+  "Cancellation request submitted",
+  data?.message || "Nexus will review your cancellation request."
+);
+
+      await loadBuyerDashboard();
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      wireTabs();
+
+      const cancelForm = document.getElementById("cancelAutomationForm");
+      const reviewForm = document.getElementById("productReviewForm");
+
+      if (cancelForm) {
+        cancelForm.addEventListener("submit", submitCancellationRequest);
+      }
+
+      if (reviewForm) {
+        reviewForm.addEventListener("submit", submitProductReviewForm);
+      }
+
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-cancel-automation-id]");
+
+        if (!button) return;
+
+        const customerAutomationId = button.dataset.cancelAutomationId;
+        const automationName = button.dataset.cancelAutomationName || "Automation";
+
+        openCancellationModal(customerAutomationId, automationName);
+      });
+
+      await loadBuyerDashboard();
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
