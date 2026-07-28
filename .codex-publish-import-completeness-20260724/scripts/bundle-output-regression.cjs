@@ -120,6 +120,56 @@ const complete = scenario(["success", "success", "success", "success"]);
 const running = scenario(["running", "running", "running", "running"]);
 const staleLinked = scenario(["success", "cancelled", "cancelled", "cancelled"], true, true);
 const wrongOrder = scenario(["success", "success", "success", "success"], true, false, "order-old");
+const originalOutputOwner = { ...automations[0], id: "ca-1-original", automation_id: "product-1", status: "archived", updated_at: iso("2026-07-21T10:00:00Z") };
+const replacementOutputOwner = { ...automations[0], id: "ca-1", automation_id: "product-1", status: "active", updated_at: iso("2026-07-21T11:00:00Z") };
+const ownerAutomations = [
+  replacementOutputOwner,
+  originalOutputOwner,
+  ...automations.slice(1).map((item, index) => ({ ...item, automation_id: `product-${index + 2}` }))
+];
+const ownerIds = ["ca-1-original", "ca-2", "ca-3", "ca-4"];
+const ownerAttempt = {
+  id: "attempt-owner",
+  order_id: "order-1",
+  bundle_id: "bundle-1",
+  buyer_id: "buyer-1",
+  status: "success",
+  created_at: iso("2026-07-21T10:05:00Z"),
+  bundle_run_items: ownerIds.map((customerAutomationId, index) => ({
+    id: `owner-item-${index + 1}`,
+    bundle_run_attempt_id: "attempt-owner",
+    order_id: "order-1",
+    bundle_id: "bundle-1",
+    customer_automation_id: customerAutomationId,
+    automation_id: `product-${index + 1}`,
+    automation_run_id: `owner-run-${index + 1}`,
+    output_id: `owner-output-${index + 1}`,
+    status: "success",
+    created_at: iso("2026-07-21T10:05:00Z")
+  }))
+};
+const ownerRuns = ownerIds.map((customerAutomationId, index) => ({
+  id: `owner-run-${index + 1}`,
+  customer_automation_id: customerAutomationId,
+  order_id: "order-1",
+  bundle_run_attempt_id: "attempt-owner",
+  bundle_run_item_id: `owner-item-${index + 1}`,
+  status: "success",
+  created_at: iso("2026-07-21T10:05:00Z"),
+  finished_at: iso("2026-07-21T10:06:00Z")
+}));
+const ownerOutputs = ownerIds.map((customerAutomationId, index) => ({
+  id: `owner-output-${index + 1}`,
+  customer_automation_id: customerAutomationId,
+  order_id: "order-1",
+  automation_run_id: `owner-run-${index + 1}`,
+  bundle_run_attempt_id: "attempt-owner",
+  bundle_run_item_id: `owner-item-${index + 1}`,
+  title: `Owner output ${index + 1}`,
+  created_at: iso("2026-07-21T10:05:30Z")
+}));
+const archivedAttemptOwner = context.buildBuyerBundleRows([order], ownerAutomations, ownerOutputs, ownerRuns, [ownerAttempt])[0];
+const archivedOutputOwner = context.buildBuyerBundleRows([order], ownerAutomations, ownerOutputs, ownerRuns, [])[0];
 const legacyCrossPurchase = context.buildBuyerBundleRows([order], automations, automations.map((item, index) => ({
   id: `legacy-output-${index + 1}`,
   customer_automation_id: item.id,
@@ -158,6 +208,21 @@ const legacyHistoryPreserved = context.buildBuyerBundleRows(
   automations.map(item => ({ ...item, updated_at: iso("2026-07-27T18:04:00Z") })),
   legacyHistoryOutputs,
   [...legacySuccessfulRuns, ...impossibleLaterRuns],
+  []
+)[0];
+const legacyPublishedWithRunningRows = context.buildBuyerBundleRows(
+  [order],
+  automations,
+  legacyHistoryOutputs,
+  automations.map((item, index) => ({
+    id: `legacy-running-output-run-${index + 1}`,
+    customer_automation_id: item.id,
+    order_id: "order-1",
+    status: "running",
+    created_at: iso("2026-07-21T10:05:00Z"),
+    started_at: iso("2026-07-21T10:05:00Z"),
+    finished_at: iso("2026-07-21T10:10:00Z")
+  })),
   []
 )[0];const freshPurchase = context.buildBuyerBundleRows(
   [order],
@@ -217,11 +282,19 @@ const result = {
   oneSuccess: partial.outputCount,
   allSuccess: complete.outputCount,
   runningEarlyOutput: running.outputCount,
+  runningEarlyState: running.state.label,
+  runningOutputsTab: Object.values(context.groupOutputsByAutomation(running.latestOutputs, automations, [running]))
+    .reduce((count, group) => count + ((group.items || []).length), 0),
   staleLinkedOutput: staleLinked.outputCount,
   wrongOrderOutput: wrongOrder.outputCount,
   legacyCrossPurchaseOutput: legacyCrossPurchase.outputCount,
+  archivedAttemptOwner: `${archivedAttemptOwner.included[0]?.id || ""}:${archivedAttemptOwner.outputCount}:${archivedAttemptOwner.state.label}`,
+  archivedOutputOwner: `${archivedOutputOwner.included[0]?.id || ""}:${archivedOutputOwner.outputCount}:${archivedOutputOwner.state.label}`,
   legacyHistoryPreserved: legacyHistoryPreserved.outputCount,
+  legacyHistoryOutputsTab: Object.values(context.groupOutputsByAutomation(legacyHistoryPreserved.latestOutputs, automations, [legacyHistoryPreserved]))
+    .reduce((count, group) => count + ((group.items || []).length), 0),
   legacyHistoryState: legacyHistoryPreserved.state.label,
+  legacyPublishedRunning: `${legacyPublishedWithRunningRows.outputCount}:${legacyPublishedWithRunningRows.state.label}:${legacyPublishedWithRunningRows.workflowSummaries.map(item => item.label).join(",")}`,
   newestAttempt: newestAttempt?.id || null,
   cancelledState: cancelled.state.label,
   partialState: partial.state.label,
@@ -238,12 +311,18 @@ const expected = {
   allCancelled: 0,
   oneSuccess: 1,
   allSuccess: 4,
-  runningEarlyOutput: 0,
+  runningEarlyOutput: 4,
+  runningEarlyState: "Ready",
+  runningOutputsTab: 4,
   staleLinkedOutput: 0,
   wrongOrderOutput: 0,
   legacyCrossPurchaseOutput: 0,
+  archivedAttemptOwner: "ca-1-original:4:Ready",
+  archivedOutputOwner: "ca-1-original:4:Ready",
   legacyHistoryPreserved: 4,
+  legacyHistoryOutputsTab: 4,
   legacyHistoryState: "Ready",
+  legacyPublishedRunning: "4:Ready:Ready,Ready,Ready,Ready",
   newestAttempt: "attempt-current",
   cancelledState: "Needs attention",
   partialState: "Needs attention",

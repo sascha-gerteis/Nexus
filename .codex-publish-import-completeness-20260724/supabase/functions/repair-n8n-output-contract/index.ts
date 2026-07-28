@@ -10,6 +10,9 @@ const NEXUS_RUNTIME_SECRET = Deno.env.get("NEXUS_RUNTIME_SECRET") || "";
 const REPAIR_TOKEN = Deno.env.get("NEXUS_OUTPUT_CONTRACT_REPAIR_TOKEN") || "";
 const CONFIRMATION = "UPGRADE_BUNDLE_OUTPUT_CONTRACT_V1";
 const JSON_CONTRACT_MARKER = "NEXUS_BUNDLE_IDENTITY_V1";
+const NODE_RESTORE_CONFIRMATION = "RESTORE_AI_SOCIAL_CONNECTED_OUTPUT_V1";
+const INCIDENT_TECHNICAL_TEST_AUTOMATION_ID = "fdacfdea-6a8f-4406-ab7e-2c54cc4c06d0";
+const INCIDENT_TECHNICAL_TEST_RECONCILIATION = "RECONCILE_AI_SOCIAL_TECHNICAL_TEST_V1";
 
 const clean = (value: unknown) => String(value ?? "").trim();
 const lower = (value: unknown) => clean(value).toLowerCase();
@@ -17,6 +20,12 @@ const object = (value: unknown): Record<string, any> => value && typeof value ==
 const array = (value: unknown): any[] => Array.isArray(value) ? value : [];
 const unique = (value: unknown) => [...new Set(array(value).map(clean).filter(Boolean))];
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+function stableValue(value: any): any {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+  return value;
+}
+const stableJson = (value: any) => JSON.stringify(stableValue(value));
 
 function secretMatches(received: string, expected: string) {
   if (!received || !expected || received.length !== expected.length) return false;
@@ -50,6 +59,26 @@ async function n8n(path: string, options: RequestInit = {}) {
   return object(data?.data || data);
 }
 
+async function listN8nWorkflows() {
+  const workflows: any[] = [];
+  let cursor = "";
+  for (let page = 0; page < 20; page += 1) {
+    const query = new URLSearchParams({ limit: "250" });
+    if (cursor) query.set("cursor", cursor);
+    const response = await fetch(`${N8N_BASE_URL}/api/v1/workflows?${query.toString()}`, {
+      headers: { accept: "application/json", "X-N8N-API-KEY": N8N_API_KEY },
+    });
+    const text = await response.text();
+    let payload: any = {};
+    try { payload = text ? JSON.parse(text) : {}; } catch { payload = { raw: text }; }
+    if (!response.ok) throw new Error(`n8n API failed (${response.status}): ${clean(payload?.message || payload?.error || payload?.raw).slice(0, 400)}`);
+    workflows.push(...array(payload?.data || payload?.workflows || payload));
+    cursor = clean(payload?.nextCursor || payload?.next_cursor);
+    if (!cursor) break;
+  }
+  return workflows;
+}
+
 const getWorkflow = (id: string) => n8n(`/api/v1/workflows/${encodeURIComponent(id)}`);
 const workflowPayload = (workflow: any) => ({
   name: clean(workflow?.name || "Nexus Workflow"),
@@ -58,7 +87,16 @@ const workflowPayload = (workflow: any) => ({
   settings: object(workflow?.settings),
   staticData: object(workflow?.staticData),
 });
-const putWorkflow = (id: string, workflow: any) => n8n(`/api/v1/workflows/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(workflowPayload(workflow)) });
+function workflowWritePayload(workflow: any) {
+  const payload = clone(workflowPayload(workflow));
+  const settings = object(payload.settings);
+  const binaryMode = clean(settings.binaryMode);
+  if (binaryMode && !["default", "separate", "combined"].includes(binaryMode)) throw new Error(`n8n public API cannot preserve unsupported binaryMode ${binaryMode}; write refused.`);
+  delete settings.binaryMode;
+  payload.settings = settings;
+  return payload;
+}
+const putWorkflow = (id: string, workflow: any) => n8n(`/api/v1/workflows/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(workflowWritePayload(workflow)) });
 const activateWorkflow = (id: string) => n8n(`/api/v1/workflows/${encodeURIComponent(id)}/activate`, { method: "POST", body: "{}" });
 const deactivateWorkflow = (id: string) => n8n(`/api/v1/workflows/${encodeURIComponent(id)}/deactivate`, { method: "POST", body: "{}" });
 
@@ -140,6 +178,29 @@ function contract(workflow: any) {
   };
 }
 
+function workflowStructure(workflow: any) {
+  const nodes = array(workflow?.nodes);
+  const connections = object(workflow?.connections);
+  const serialized = JSON.stringify(workflowPayload(workflow));
+  const webhookPaths = nodes
+    .filter((node: any) => lower(node?.type).includes("webhook"))
+    .map((node: any) => clean(node?.parameters?.path))
+    .filter(Boolean);
+
+  return {
+    node_count: nodes.length,
+    connection_source_count: Object.keys(connections).length,
+    settings_keys: Object.keys(object(workflow?.settings)).sort(),
+    webhook_paths: [...new Set(webhookPaths)],
+    runtime_context_reference_count: (serialized.match(/Nexus Runtime Context/g) || []).length,
+    node_signatures: nodes.map((node: any) => ({
+      name: clean(node?.name),
+      type: clean(node?.type),
+      type_version: node?.typeVersion ?? null,
+    })),
+  };
+}
+
 function withoutIdentity(workflow: any) {
   const copy = clone(workflowPayload(workflow));
   const submit = submitNode(copy);
@@ -173,6 +234,32 @@ function addIdentity(workflow: any) {
   if (JSON.stringify(withoutIdentity(workflow)) !== JSON.stringify(withoutIdentity(copy))) throw new Error("Repair changed data outside run_id/run_key.");
   return copy;
 }
+function workflowOutsideNodeImplementation(workflow: any, nodeName: string) {
+  const copy = clone(workflowPayload(workflow));
+  if (["default", "separate", "combined"].includes(clean(copy?.settings?.binaryMode))) delete copy.settings.binaryMode;
+  copy.nodes = array(copy.nodes).map((node: any) => clean(node?.name) === nodeName
+    ? { id: node?.id || null, name: clean(node?.name), position: clone(node?.position || []), webhookId: node?.webhookId || null }
+    : node);
+  return copy;
+}
+
+function patchSingleNodeFromSource(targetWorkflow: any, sourceWorkflow: any, nodeName: string) {
+  const sourceMatches = array(sourceWorkflow?.nodes).filter((node: any) => clean(node?.name) === nodeName);
+  const targetMatches = array(targetWorkflow?.nodes).filter((node: any) => clean(node?.name) === nodeName);
+  if (sourceMatches.length !== 1 || targetMatches.length !== 1) throw new Error(`Node ${nodeName} must exist exactly once in source and target workflows.`);
+  const targetNode = targetMatches[0];
+  const replacement = clone(sourceMatches[0]);
+  replacement.id = targetNode?.id;
+  replacement.position = clone(targetNode?.position || replacement?.position || []);
+  if (targetNode?.webhookId) replacement.webhookId = targetNode.webhookId;
+  const patched = clone(workflowPayload(targetWorkflow));
+  patched.nodes = array(patched.nodes).map((node: any) => clean(node?.name) === nodeName ? replacement : node);
+  if (JSON.stringify(workflowOutsideNodeImplementation(targetWorkflow, nodeName)) !== JSON.stringify(workflowOutsideNodeImplementation(patched, nodeName))) {
+    throw new Error("Node restore changed data outside the selected node implementation.");
+  }
+  return patched;
+}
+
 async function fingerprint(workflow: any) {
   const bytes = new TextEncoder().encode(JSON.stringify(workflowPayload(workflow)));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -182,11 +269,27 @@ async function fingerprint(workflow: any) {
 async function loadReferences(adminClient: any, body: any) {
   const requestedAutomationIds = unique(body.automation_ids);
   const requestedCustomerIds = unique(body.customer_automation_ids);
+  const requestedCustomerPrefixes = unique(body.customer_automation_prefixes)
+    .map((value) => lower(value))
+    .filter((value) => /^[0-9a-f]{8,32}$/.test(value));
   let requestedCustomers: any[] = [];
   if (requestedCustomerIds.length) {
     const result = await adminClient.from("customer_automations").select("id,automation_id,order_id,bundle_id,n8n_workflow_id").in("id", requestedCustomerIds);
     if (result.error) throw new Error(result.error.message);
     requestedCustomers = result.data || [];
+  }
+  if (requestedCustomerPrefixes.length) {
+    const result = await adminClient
+      .from("customer_automations")
+      .select("id,automation_id,order_id,bundle_id,n8n_workflow_id")
+      .limit(5000);
+    if (result.error) throw new Error(result.error.message);
+    for (const prefix of requestedCustomerPrefixes) {
+      const matches = (result.data || []).filter((row: any) => lower(row?.id).startsWith(prefix));
+      if (matches.length !== 1) throw new Error(`Customer automation prefix ${prefix} matched ${matches.length} rows; exact one-row match required.`);
+      requestedCustomers.push(matches[0]);
+    }
+    requestedCustomers = [...new Map(requestedCustomers.map((row: any) => [clean(row.id), row])).values()];
   }
   const bundlesResult = await adminClient.from("automation_bundles").select("id,status").in("status", ["active", "live", "published"]).limit(200);
   if (bundlesResult.error) throw new Error(bundlesResult.error.message);
@@ -230,6 +333,205 @@ async function loadReferences(adminClient: any, body: any) {
   return [...refs.values()].map((ref: any) => ({ workflow_id: ref.workflow_id, kinds: [...ref.kinds], product_ids: [...ref.product_ids], product_titles: [...ref.product_titles], customer_automation_ids: [...ref.customer_automation_ids], order_ids: [...ref.order_ids] }));
 }
 
+function stringLeaves(value: any, prefix = "", rows: any[] = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => stringLeaves(item, `${prefix}[${index}]`, rows));
+    return rows;
+  }
+  if (value && typeof value === "object") {
+    Object.entries(value).forEach(([key, inner]) => stringLeaves(inner, prefix ? `${prefix}.${key}` : key, rows));
+    return rows;
+  }
+  const text = typeof value === "string" || typeof value === "number" ? clean(value) : "";
+  if (text.length >= 4 && !["true", "false", "null", "undefined"].includes(lower(text))) rows.push({ path: prefix, value: text });
+  return rows;
+}
+
+async function auditCustomerBoundValues(adminClient: any, workflow: any, customerAutomationIds: string[]) {
+  const serialized = JSON.stringify(workflowPayload(workflow));
+  const audits = [];
+  for (const customerAutomationId of customerAutomationIds) {
+    const setupResult = await adminClient
+      .from("automation_setup_submissions")
+      .select("answers")
+      .eq("customer_automation_id", customerAutomationId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (setupResult.error) throw new Error(setupResult.error.message);
+    const credentialResult = await adminClient
+      .from("customer_automation_credentials")
+      .select("key,credential_key,value,credential_value,secret_value")
+      .eq("customer_automation_id", customerAutomationId);
+    if (credentialResult.error) throw new Error(credentialResult.error.message);
+
+    const setupMatches = stringLeaves(object(setupResult.data?.answers))
+      .filter((row: any) => serialized.includes(JSON.stringify(row.value).slice(1, -1)))
+      .map((row: any) => row.path);
+    const credentialMatches = (credentialResult.data || [])
+      .map((row: any) => ({ key: clean(row?.key || row?.credential_key), value: clean(row?.value || row?.credential_value || row?.secret_value) }))
+      .filter((row: any) => row.key && row.value.length >= 4 && serialized.includes(JSON.stringify(row.value).slice(1, -1)))
+      .map((row: any) => row.key);
+
+    audits.push({
+      customer_automation_id: customerAutomationId,
+      setup_paths_found: [...new Set(setupMatches)],
+      credential_keys_found: [...new Set(credentialMatches)],
+      embedded_value_count: new Set([...setupMatches.map((key: string) => `setup:${key}`), ...credentialMatches.map((key: string) => `credential:${key}`)]).size,
+    });
+  }
+  return audits;
+}
+
+async function inspectWorkflowsByIdentifier(adminClient: any, body: any) {
+  const identifiers = unique(body.identifiers)
+    .map((value) => lower(value))
+    .filter((value) => value.length >= 6);
+  if (!identifiers.length || identifiers.length > 10) throw new Error("One to ten workflow identifiers of at least six characters are required.");
+
+  const listed = await listN8nWorkflows();
+  const matches = listed.filter((workflow: any) => {
+    const name = lower(workflow?.name);
+    const paths = array(workflow?.nodes)
+      .filter((node: any) => lower(node?.type).includes("webhook"))
+      .map((node: any) => lower(node?.parameters?.path));
+    return identifiers.some((identifier) => name.includes(identifier) || paths.some((path) => path.includes(identifier)));
+  });
+  if (!matches.length) return { ok: true, dry_run: true, identifiers, match_count: 0, workflows: [] };
+  if (matches.length > 20) throw new Error(`Workflow identifiers matched ${matches.length} rows; narrow the identifiers before continuing.`);
+
+  const workflowIds = matches.map((workflow: any) => clean(workflow?.id)).filter(Boolean);
+  const productResult = await adminClient
+    .from("automations")
+    .select("id,title,status,n8n_workflow_id,runtime_webhook_path")
+    .in("n8n_workflow_id", workflowIds);
+  if (productResult.error) throw new Error(productResult.error.message);
+  const customerResult = await adminClient
+    .from("customer_automations")
+    .select("id,automation_id,order_id,bundle_id,n8n_workflow_id,runtime_webhook_path")
+    .in("n8n_workflow_id", workflowIds)
+    .limit(5000);
+  if (customerResult.error) throw new Error(customerResult.error.message);
+  const auditCustomerIds = unique((customerResult.data || []).map((row: any) => row.id));
+
+  const workflows = [];
+  for (const listedWorkflow of matches) {
+    const workflow = await getWorkflow(clean(listedWorkflow.id));
+    const id = clean(workflow?.id || listedWorkflow?.id);
+    workflows.push({
+      workflow_id: id,
+      workflow_name: clean(workflow?.name),
+      active: Boolean(workflow?.active),
+      fingerprint: await fingerprint(workflow),
+      product_references: (productResult.data || []).filter((row: any) => clean(row?.n8n_workflow_id) === id),
+      customer_references: (customerResult.data || []).filter((row: any) => clean(row?.n8n_workflow_id) === id),
+      customer_bound_value_audit: await auditCustomerBoundValues(adminClient, workflow, auditCustomerIds),
+      ...workflowStructure(workflow),
+      ...contract(workflow),
+    });
+  }
+
+  return { ok: true, dry_run: true, identifiers, match_count: workflows.length, workflows };
+}
+
+function redactedDifferencePaths(left: any, right: any, prefix = "", rows: string[] = []) {
+  if (rows.length >= 500 || JSON.stringify(left) === JSON.stringify(right)) return rows;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    const leftRows = array(left);
+    const rightRows = array(right);
+    const length = Math.max(leftRows.length, rightRows.length);
+    for (let index = 0; index < length; index += 1) {
+      redactedDifferencePaths(leftRows[index], rightRows[index], `${prefix}[${index}]`, rows);
+    }
+    return rows;
+  }
+  if ((left && typeof left === "object") || (right && typeof right === "object")) {
+    const keys = [...new Set([...Object.keys(object(left)), ...Object.keys(object(right))])].sort();
+    for (const key of keys) redactedDifferencePaths(object(left)[key], object(right)[key], prefix ? `${prefix}.${key}` : key, rows);
+    return rows;
+  }
+  rows.push(prefix || "(root)");
+  return rows;
+}
+
+function nodeForRedactedComparison(node: any) {
+  const copy = clone(object(node));
+  delete copy.id;
+  delete copy.position;
+  delete copy.webhookId;
+  return copy;
+}
+
+function safeNodeDiagnostics(node: any, workflow: any) {
+  if (!node) return null;
+  const parameters = object(node?.parameters);
+  const serializedParameters = JSON.stringify(parameters);
+  const url = clean(parameters.url);
+  let target = url.startsWith("=") ? "dynamic" : "";
+  if (url && !target) {
+    try { target = new URL(url).hostname; } catch { target = "non-url"; }
+  }
+  const incomingSources = [];
+  for (const [sourceName, sourceConnections] of Object.entries(object(workflow?.connections)) as any[]) {
+    const groups = array(sourceConnections?.main);
+    if (groups.some((group: any) => array(group).some((connection: any) => clean(connection?.node) === clean(node?.name)))) incomingSources.push(sourceName);
+  }
+  const outgoingTargets = array(object(workflow?.connections)?.[clean(node?.name)]?.main)
+    .flatMap((group: any) => array(group).map((connection: any) => clean(connection?.node)).filter(Boolean));
+  return {
+    type: clean(node?.type),
+    type_version: node?.typeVersion ?? null,
+    retry_on_fail: Boolean(node?.retryOnFail),
+    max_tries: node?.maxTries ?? null,
+    wait_between_tries: node?.waitBetweenTries ?? null,
+    authentication: clean(parameters.authentication),
+    generic_auth_type: clean(parameters.genericAuthType),
+    credential_types: Object.keys(object(node?.credentials)).sort(),
+    target,
+    header_names: array(parameters?.headerParameters?.parameters).map((row: any) => clean(row?.name)).filter(Boolean),
+    body_field_names: array(parameters?.bodyParameters?.parameters).map((row: any) => clean(row?.name)).filter(Boolean),
+    uses_json_body: Boolean(clean(parameters.jsonBody) || parameters.jsonParameters),
+    mentions_customer_automation_id: serializedParameters.includes("customer_automation_id"),
+    mentions_runtime_secret: serializedParameters.includes("runtime_secret"),
+    mentions_run_id: serializedParameters.includes("run_id"),
+    mentions_run_key: serializedParameters.includes("run_key"),
+    incoming_sources: [...new Set(incomingSources)].sort(),
+    outgoing_targets: [...new Set(outgoingTargets)].sort(),
+  };
+}
+
+async function compareWorkflowsById(body: any) {
+  const sourceWorkflowId = clean(body.source_workflow_id);
+  const targetWorkflowId = clean(body.target_workflow_id);
+  if (!sourceWorkflowId || !targetWorkflowId || sourceWorkflowId === targetWorkflowId) throw new Error("Distinct source_workflow_id and target_workflow_id are required.");
+  const [source, target] = await Promise.all([getWorkflow(sourceWorkflowId), getWorkflow(targetWorkflowId)]);
+  const sourceNodes = new Map(array(source?.nodes).map((node: any) => [clean(node?.name), node]));
+  const targetNodes = new Map(array(target?.nodes).map((node: any) => [clean(node?.name), node]));
+  const names = [...new Set([...sourceNodes.keys(), ...targetNodes.keys()])].filter(Boolean).sort();
+  const nodeDifferences = names.flatMap((name) => {
+    const sourceNode = sourceNodes.get(name);
+    const targetNode = targetNodes.get(name);
+    if (!sourceNode) return [{ node_name: name, state: "target_only", changed_paths: [], source: null, target: safeNodeDiagnostics(targetNode, target) }];
+    if (!targetNode) return [{ node_name: name, state: "source_only", changed_paths: [], source: safeNodeDiagnostics(sourceNode, source), target: null }];
+    const paths = redactedDifferencePaths(nodeForRedactedComparison(sourceNode), nodeForRedactedComparison(targetNode));
+    return paths.length ? [{ node_name: name, state: "changed", changed_paths: paths, source: safeNodeDiagnostics(sourceNode, source), target: safeNodeDiagnostics(targetNode, target) }] : [];
+  });
+  const connectionDifferences = [...new Set([
+    ...Object.keys(object(source?.connections)),
+    ...Object.keys(object(target?.connections)),
+  ])].sort().filter((name) => JSON.stringify(object(source?.connections)[name]) !== JSON.stringify(object(target?.connections)[name]));
+  return {
+    ok: true,
+    dry_run: true,
+    source: { workflow_id: sourceWorkflowId, workflow_name: clean(source?.name), active: Boolean(source?.active), fingerprint: await fingerprint(source), ...workflowStructure(source), ...contract(source) },
+    target: { workflow_id: targetWorkflowId, workflow_name: clean(target?.name), active: Boolean(target?.active), fingerprint: await fingerprint(target), ...workflowStructure(target), ...contract(target) },
+    node_difference_count: nodeDifferences.length,
+    node_differences: nodeDifferences,
+    connection_difference_count: connectionDifferences.length,
+    connection_sources_changed: connectionDifferences,
+  };
+}
+
 async function audit(adminClient: any, body: any) {
   let refs = await loadReferences(adminClient, body);
   const requestedWorkflowIds = new Set(unique(body.workflow_ids));
@@ -238,7 +540,7 @@ async function audit(adminClient: any, body: any) {
   for (const ref of refs) {
     try {
       const workflow = await getWorkflow(ref.workflow_id);
-      workflows.push({ ...ref, workflow_name: clean(workflow.name), active: Boolean(workflow.active), fingerprint: await fingerprint(workflow), ...contract(workflow), error: null });
+      workflows.push({ ...ref, workflow_name: clean(workflow.name), active: Boolean(workflow.active), fingerprint: await fingerprint(workflow), ...workflowStructure(workflow), ...contract(workflow), error: null });
     } catch (error) {
       workflows.push({ ...ref, workflow_name: "", active: null, fingerprint: "", contract_current: false, repair_eligible: false, error: error instanceof Error ? error.message : String(error) });
     }
@@ -454,6 +756,316 @@ async function restore(id: string, original: any, originallyActive: boolean) {
   return restored;
 }
 
+async function loadWorkflowNodeRestorePlan(adminClient: any, body: any) {
+  const specification = {
+    automation_id: "fdacfdea-6a8f-4406-ab7e-2c54cc4c06d0",
+    source_workflow_id: "WwEeQ6NKzqwOgEti",
+    target_workflow_id: "hRRUzwbyHdKzphNG",
+    node_name: "Nexus Submit Output3",
+  };
+  for (const [key, value] of Object.entries(specification)) {
+    if (clean(body?.[key]) !== value) throw new Error(`Exact ${key} is required for this limited restore.`);
+  }
+  const expectedSourceFingerprint = clean(body.source_fingerprint);
+  const expectedTargetFingerprint = clean(body.target_fingerprint);
+  if (!expectedSourceFingerprint || !expectedTargetFingerprint) throw new Error("Exact source_fingerprint and target_fingerprint are required.");
+
+  const productResult = await adminClient
+    .from("automations")
+    .select("id,title,status,n8n_workflow_id,runtime_webhook_path")
+    .eq("id", specification.automation_id)
+    .maybeSingle();
+  if (productResult.error) throw new Error(productResult.error.message);
+  const product = productResult.data;
+  if (!product || clean(product.n8n_workflow_id) !== specification.target_workflow_id) throw new Error("Product no longer references the expected shared workflow.");
+
+  const [source, target] = await Promise.all([
+    getWorkflow(specification.source_workflow_id),
+    getWorkflow(specification.target_workflow_id),
+  ]);
+  workflowWritePayload(target);
+  const [sourceFingerprint, targetFingerprint] = await Promise.all([fingerprint(source), fingerprint(target)]);
+  if (sourceFingerprint !== expectedSourceFingerprint || targetFingerprint !== expectedTargetFingerprint) throw new Error("Source or target workflow changed after the read-only audit; restore refused.");
+  if (Boolean(source?.active)) throw new Error("Historical source workflow unexpectedly became active; restore refused.");
+  if (!Boolean(target?.active)) throw new Error("Shared target workflow is not active; restore refused.");
+  if (!contract(target).contract_current) throw new Error("Shared target workflow lost the exact bundle run identity contract; restore refused.");
+  if (stableJson(object(source?.connections)) !== stableJson(object(target?.connections))) throw new Error("Source and target connections differ; one-node restore refused.");
+
+  const sourceMatches = array(source?.nodes).filter((node: any) => clean(node?.name) === specification.node_name);
+  const targetMatches = array(target?.nodes).filter((node: any) => clean(node?.name) === specification.node_name);
+  if (sourceMatches.length !== 1 || targetMatches.length !== 1) throw new Error("Connected output node is not unique in source and target workflows.");
+  const sourceNode = sourceMatches[0];
+  const targetNode = targetMatches[0];
+  const sourceDiagnostics = safeNodeDiagnostics(sourceNode, source);
+  const targetDiagnostics = safeNodeDiagnostics(targetNode, target);
+  const requiredSourceFields = [
+    sourceDiagnostics?.mentions_customer_automation_id,
+    sourceDiagnostics?.mentions_runtime_secret,
+    sourceDiagnostics?.mentions_run_id,
+    sourceDiagnostics?.mentions_run_key,
+  ];
+  if (requiredSourceFields.some((value) => !value)) throw new Error("Historical connected output node is missing dynamic customer or bundle run identity fields.");
+  if (array(sourceDiagnostics?.credential_types).length) throw new Error("Historical connected output node contains an n8n credential binding; restore refused.");
+  const expectedHost = new URL(SUPABASE_URL).hostname;
+  if (clean(sourceDiagnostics?.target) !== expectedHost || clean(targetDiagnostics?.target) !== expectedHost) throw new Error("Connected output node target is not the expected Supabase host.");
+  if (JSON.stringify(sourceDiagnostics?.incoming_sources) !== JSON.stringify(["NEXUS_FINAL_OUTPUT"]) || JSON.stringify(targetDiagnostics?.incoming_sources) !== JSON.stringify(["NEXUS_FINAL_OUTPUT"])) {
+    throw new Error("Connected output node is not fed exclusively by NEXUS_FINAL_OUTPUT.");
+  }
+  const sourceSerialized = JSON.stringify(sourceNode);
+  if (sourceSerialized.includes("39ebfa1b-3ff0-49b7-905f-45788ffdc18f") || sourceSerialized.includes("39ebfa1b")) throw new Error("Historical connected output node contains a customer-specific identifier; restore refused.");
+
+  const webhookPath = clean(product.runtime_webhook_path);
+  const sourcePaths = workflowStructure(source).webhook_paths;
+  const targetPaths = workflowStructure(target).webhook_paths;
+  if (!webhookPath || !sourcePaths.includes(webhookPath) || !targetPaths.includes(webhookPath)) throw new Error("Product webhook identity does not match both audited workflows.");
+
+  return {
+    specification,
+    product,
+    source,
+    target,
+    sourceNode,
+    targetNode,
+    originallyActive: Boolean(target.active),
+    sourceFingerprint,
+    targetFingerprint,
+    safe: {
+      ok: true,
+      dry_run: true,
+      product: { id: clean(product.id), title: clean(product.title), status: clean(product.status), n8n_workflow_id: clean(product.n8n_workflow_id), runtime_webhook_path: webhookPath },
+      source: { workflow_id: specification.source_workflow_id, workflow_name: clean(source.name), active: Boolean(source.active), fingerprint: sourceFingerprint },
+      target: { workflow_id: specification.target_workflow_id, workflow_name: clean(target.name), active: Boolean(target.active), fingerprint: targetFingerprint },
+      node_name: specification.node_name,
+      source_node: sourceDiagnostics,
+      target_node: targetDiagnostics,
+      guards: {
+        product_reference_locked: true,
+        webhook_identity_locked: true,
+        connections_identical: true,
+        non_selected_nodes_locked: true,
+        current_bundle_contract_locked: true,
+        derived_binary_mode_merge_locked: ["default", "separate", "combined"].includes(clean(target?.settings?.binaryMode)),
+        automatic_rollback: true,
+      },
+    },
+  };
+}
+
+async function planWorkflowNodeRestore(adminClient: any, body: any) {
+  const plan = await loadWorkflowNodeRestorePlan(adminClient, body);
+  return plan.safe;
+}
+
+async function applyWorkflowNodeRestore(adminClient: any, body: any) {
+  if (clean(body.confirm) !== NODE_RESTORE_CONFIRMATION) return errorResponse("Exact one-node restore confirmation is required.", 400);
+  const plan = await loadWorkflowNodeRestorePlan(adminClient, body);
+  const patched = patchSingleNodeFromSource(plan.target, plan.source, plan.specification.node_name);
+  let updateStarted = false;
+  try {
+    if (await fingerprint(await getWorkflow(plan.specification.target_workflow_id)) !== plan.targetFingerprint) throw new Error("Target workflow changed immediately before update.");
+    await putWorkflow(plan.specification.target_workflow_id, patched);
+    updateStarted = true;
+    let verified = await getWorkflow(plan.specification.target_workflow_id);
+    if (plan.originallyActive && !verified.active) {
+      await activateWorkflow(plan.specification.target_workflow_id);
+      verified = await getWorkflow(plan.specification.target_workflow_id);
+    }
+    if (Boolean(verified.active) !== plan.originallyActive) throw new Error("Activation state changed during one-node restore.");
+    if (clean(verified?.settings?.binaryMode) !== clean(plan.target?.settings?.binaryMode)) throw new Error("Derived binaryMode changed during one-node restore.");
+    if (!contract(verified).contract_current) throw new Error("Exact bundle run identity contract was not retained.");
+    if (stableJson(workflowOutsideNodeImplementation(plan.target, plan.specification.node_name)) !== stableJson(workflowOutsideNodeImplementation(verified, plan.specification.node_name))) {
+      throw new Error("Post-update workflow differs outside the selected connected output node.");
+    }
+    const verifiedNode = array(verified?.nodes).find((node: any) => clean(node?.name) === plan.specification.node_name);
+    if (!verifiedNode || JSON.stringify(nodeForRedactedComparison(verifiedNode)) !== JSON.stringify(nodeForRedactedComparison(plan.sourceNode))) {
+      throw new Error("Restored connected output node does not exactly match the audited working implementation.");
+    }
+    const verifiedDiagnostics = safeNodeDiagnostics(verifiedNode, verified);
+    if (array(verifiedDiagnostics?.credential_types).length || !verifiedDiagnostics?.mentions_customer_automation_id || !verifiedDiagnostics?.mentions_runtime_secret || !verifiedDiagnostics?.mentions_run_id || !verifiedDiagnostics?.mentions_run_key) {
+      throw new Error("Restored connected output node failed the dynamic identity safety check.");
+    }
+    const productCheck = await adminClient
+      .from("automations")
+      .select("id,n8n_workflow_id,runtime_webhook_path")
+      .eq("id", plan.specification.automation_id)
+      .maybeSingle();
+    if (productCheck.error) throw new Error(productCheck.error.message);
+    if (clean(productCheck.data?.n8n_workflow_id) !== plan.specification.target_workflow_id || clean(productCheck.data?.runtime_webhook_path) !== clean(plan.product.runtime_webhook_path)) {
+      throw new Error("Product reference changed during restore.");
+    }
+    return jsonResponse({
+      ok: true,
+      dry_run: false,
+      restored_node_count: 1,
+      workflow_id: plan.specification.target_workflow_id,
+      workflow_name: clean(verified.name),
+      product_id: plan.specification.automation_id,
+      product_status: clean(plan.product.status),
+      node_name: plan.specification.node_name,
+      active: Boolean(verified.active),
+      fingerprint_before: plan.targetFingerprint,
+      fingerprint_after: await fingerprint(verified),
+      bundle_contract_current: contract(verified).contract_current,
+      dynamic_identity_verified: true,
+      product_reference_unchanged: true,
+      webhook_identity_unchanged: true,
+      connections_unchanged: true,
+      binary_mode_unchanged: true,
+      rollback_performed: false,
+    });
+  } catch (error) {
+    let rollbackError = "";
+    if (updateStarted) {
+      try { await restore(plan.specification.target_workflow_id, plan.target, plan.originallyActive); }
+      catch (restoreError) { rollbackError = restoreError instanceof Error ? restoreError.message : String(restoreError); }
+    }
+    return errorResponse(`Connected output restore failed.${updateStarted && !rollbackError ? " Original workflow restored." : ""}`, 500, {
+      restore_error: error instanceof Error ? error.message : String(error),
+      rollback_performed: updateStarted && !rollbackError,
+      rollback_error: rollbackError || null,
+    });
+  }
+}
+
+async function auditTechnicalTestState(adminClient: any, body: any) {
+  const automationId = clean(body.automation_id || INCIDENT_TECHNICAL_TEST_AUTOMATION_ID);
+  if (automationId !== INCIDENT_TECHNICAL_TEST_AUTOMATION_ID) throw new Error("This incident audit is locked to the AI Social Media Reports product.");
+
+  const [productResult, runsResult, profilesResult] = await Promise.all([
+    adminClient
+      .from("automations")
+      .select("id,title,status,n8n_workflow_id,runtime_webhook_path,n8n_last_test_status,n8n_last_test_error,n8n_last_test_result,n8n_last_tested_at,health_status")
+      .eq("id", automationId)
+      .maybeSingle(),
+    adminClient
+      .from("automation_test_runs")
+      .select("*")
+      .eq("automation_id", automationId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    adminClient
+      .from("automation_test_profiles")
+      .select("*")
+      .eq("automation_id", automationId)
+      .eq("is_default", true)
+      .order("updated_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  if (productResult.error) throw new Error(productResult.error.message);
+  if (!productResult.data) throw new Error("Incident product was not found.");
+  if (runsResult.error) throw new Error(runsResult.error.message);
+  if (profilesResult.error) throw new Error(profilesResult.error.message);
+
+  const product = productResult.data;
+  const latestResult = object(product.n8n_last_test_result);
+  const latestWebhook = object(latestResult.webhook_response);
+  const profile = array(profilesResult.data)[0] || null;
+  const rawTestRuns = array(runsResult.data);
+  const testRuns = rawTestRuns.map((run: any) => {
+    const webhook = object(run.webhook_response);
+    return {
+      id: clean(run.id),
+      status: clean(run.status),
+      test_id: clean(run.test_id),
+      n8n_workflow_id: clean(run.n8n_workflow_id),
+      n8n_execution_id: clean(run.n8n_execution_id) || null,
+      started_at: run.started_at || null,
+      finished_at: run.finished_at || null,
+      last_checked_at: run.last_checked_at || null,
+      created_at: run.created_at || null,
+      updated_at: run.updated_at || null,
+      elapsed_seconds: Number(run.elapsed_seconds || 0),
+      error_node: clean(run.error_node) || null,
+      error_message: clean(run.error_message) || null,
+      used_test_profile: Boolean(webhook.used_test_profile || webhook.test_profile_id || run.test_profile_id),
+      test_profile_id: clean(webhook.test_profile_id || run.test_profile_id) || null,
+      test_profile_name: clean(webhook.test_profile_name || run.test_profile_name) || null,
+    };
+  });
+
+  const query = new URLSearchParams({ workflowId: clean(product.n8n_workflow_id), limit: "5", includeData: "false" });
+  const executionResponse = await fetch(`${N8N_BASE_URL}/api/v1/executions?${query.toString()}`, {
+    headers: { accept: "application/json", "X-N8N-API-KEY": N8N_API_KEY },
+  });
+  const executionText = await executionResponse.text();
+  let executionPayload: any = {};
+  try { executionPayload = executionText ? JSON.parse(executionText) : {}; } catch { executionPayload = {}; }
+  if (!executionResponse.ok) throw new Error(`Could not audit recent n8n executions (${executionResponse.status}).`);
+  const recentExecutions = array(executionPayload?.data || executionPayload?.executions || executionPayload).map((execution: any) => ({
+    id: clean(execution.id),
+    status: clean(execution.status),
+    workflow_id: clean(execution.workflowId || execution.workflow_id),
+    started_at: execution.startedAt || execution.started_at || null,
+    stopped_at: execution.stoppedAt || execution.stopped_at || null,
+    finished: Boolean(execution.finished),
+  }));
+
+  return {
+    ok: true,
+    read_only: true,
+    automation: {
+      id: clean(product.id),
+      title: clean(product.title),
+      status: clean(product.status),
+      workflow_id: clean(product.n8n_workflow_id),
+      runtime_webhook_path: clean(product.runtime_webhook_path),
+      last_test_status: clean(product.n8n_last_test_status),
+      last_test_error: clean(product.n8n_last_test_error) || null,
+      last_tested_at: product.n8n_last_tested_at || null,
+      health_status: clean(product.health_status) || null,
+      last_result_status: clean(latestResult.status) || null,
+      last_result_used_test_profile: Boolean(latestResult.used_test_profile || latestResult.test_profile_id || latestWebhook.used_test_profile || latestWebhook.test_profile_id),
+      last_result_test_profile_id: clean(latestResult.test_profile_id || latestWebhook.test_profile_id) || null,
+    },
+    default_test_profile: profile ? {
+      id: clean(profile.id),
+      name: clean(profile.name),
+      is_default: Boolean(profile.is_default),
+      setup_value_count: Object.keys(object(profile.setup_values)).length,
+      secret_value_count: Object.keys(object(profile.secret_values)).length,
+      created_at: profile.created_at || null,
+      updated_at: profile.updated_at || null,
+    } : null,
+    test_run_columns: Object.keys(rawTestRuns[0] || {}).sort(),
+    test_runs: testRuns,
+    recent_n8n_executions: recentExecutions,
+  };
+}
+async function reconcileTechnicalTestState(body: any) {
+  const automationId = clean(body.automation_id || INCIDENT_TECHNICAL_TEST_AUTOMATION_ID);
+  if (automationId !== INCIDENT_TECHNICAL_TEST_AUTOMATION_ID) throw new Error("This incident reconciliation is locked to the AI Social Media Reports product.");
+  if (clean(body.confirm) !== INCIDENT_TECHNICAL_TEST_RECONCILIATION) throw new Error("Exact technical-test reconciliation confirmation is required.");
+  if (!NEXUS_RUNTIME_SECRET) throw new Error("NEXUS_RUNTIME_SECRET is not configured for technical-test reconciliation.");
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/test-n8n-workflow`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nexus-runtime-secret": NEXUS_RUNTIME_SECRET,
+    },
+    body: JSON.stringify({ mode: "latest", automation_id: automationId }),
+  });
+  const text = await response.text();
+  let payload: any = {};
+  try { payload = text ? JSON.parse(text) : {}; } catch { payload = {}; }
+  if (!response.ok || payload?.error) throw new Error(clean(payload?.error || payload?.message || `Technical-test reconciliation failed (${response.status}).`));
+
+  const webhook = object(payload.webhook_response);
+  return {
+    ok: true,
+    reconciled_via_test_function: true,
+    automation_id: clean(payload.automation_id || automationId),
+    test_run_id: clean(payload.test_run_id) || null,
+    execution_id: clean(payload.execution_id) || null,
+    status: clean(payload.status),
+    used_test_profile: Boolean(payload.used_test_profile || payload.test_profile_id || webhook.used_test_profile || webhook.test_profile_id),
+    test_profile_id: clean(payload.test_profile_id || webhook.test_profile_id) || null,
+    finished_at: payload.finished_at || null,
+    last_checked_at: payload.last_checked_at || null,
+    message: clean(payload.message) || null,
+  };
+}
 async function apply(adminClient: any, body: any) {
   if (clean(body.confirm) !== CONFIRMATION) return errorResponse("Exact repair confirmation is required.", 400);
   const expected = array(body.expected_workflows);
@@ -504,9 +1116,32 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   try {
     if (lower(body.action || "audit") === "audit") return jsonResponse(await audit(adminClient, body));
+    if (lower(body.action) === "inspect_workflows_by_identifier") {
+      if (!secretMatches(clean(req.headers.get("x-nexus-repair-token")), REPAIR_TOKEN)) return errorResponse("One-time repair token is missing or invalid.", 403);
+      return jsonResponse(await inspectWorkflowsByIdentifier(adminClient, body));
+    }
+    if (lower(body.action) === "compare_workflows_by_id") {
+      if (!secretMatches(clean(req.headers.get("x-nexus-repair-token")), REPAIR_TOKEN)) return errorResponse("One-time repair token is missing or invalid.", 403);
+      return jsonResponse(await compareWorkflowsById(body));
+    }
+    if (lower(body.action) === "plan_workflow_node_restore") {
+      if (!secretMatches(clean(req.headers.get("x-nexus-repair-token")), REPAIR_TOKEN)) return errorResponse("One-time repair token is missing or invalid.", 403);
+      return jsonResponse(await planWorkflowNodeRestore(adminClient, body));
+    }
+    if (lower(body.action) === "apply_workflow_node_restore") {
+      if (!secretMatches(clean(req.headers.get("x-nexus-repair-token")), REPAIR_TOKEN)) return errorResponse("One-time repair token is missing or invalid.", 403);
+      return await applyWorkflowNodeRestore(adminClient, body);
+    }
     if (lower(body.action) === "audit_historical_bundle_outputs") {
       if (!secretMatches(clean(req.headers.get("x-nexus-repair-token")), REPAIR_TOKEN)) return errorResponse("One-time repair token is missing or invalid.", 403);
       return jsonResponse(await auditHistoricalBundleOutputs(adminClient, body));
+    }
+    if (lower(body.action) === "audit_technical_test_state") {
+      if (!secretMatches(clean(req.headers.get("x-nexus-repair-token")), REPAIR_TOKEN)) return errorResponse("One-time repair token is missing or invalid.", 403);
+      return jsonResponse(await auditTechnicalTestState(adminClient, body));
+    }    if (lower(body.action) === "reconcile_technical_test_state") {
+      if (!secretMatches(clean(req.headers.get("x-nexus-repair-token")), REPAIR_TOKEN)) return errorResponse("One-time repair token is missing or invalid.", 403);
+      return jsonResponse(await reconcileTechnicalTestState(body));
     }
     if (lower(body.action) === "apply") {
       if (!secretMatches(clean(req.headers.get("x-nexus-repair-token")), REPAIR_TOKEN)) return errorResponse("One-time repair token is missing or invalid.", 403);

@@ -461,6 +461,34 @@ scenario("Technical test data is explicit for external sheets/files/ranges", () 
   assert(testWorkflow.includes("Google Sheets rejected the saved credential"), "Technical test must explain Google Sheets permission failures.");
 });
 
+scenario("Long n8n technical tests recover from frontend timeouts without weakening readiness", () => {
+  const nexusDb = read("assets/js/nexus-db.js");
+  const devDashboard = read("pages/developer/dashboard.html");
+  const adminProductForm = read("pages/admin/product-form.html");
+  const testWorkflow = read("supabase/functions/test-n8n-workflow/index.ts");
+
+  assert(nexusDb.includes('code: timedOut ? "FUNCTION_TIMEOUT"'), "Function calls must expose a structured timeout code.");
+  assert(nexusDb.includes("start_request_timed_out: true"), "Technical-test starts must recover after the browser request times out.");
+  assert(nexusDb.includes("timeout_recovered_latest: true"), "Technical-test starts must read the latest persisted run after a timeout.");
+  assert(nexusDb.includes('{ timeoutMs: 60000 }'), "Technical-test status checks must have a dedicated longer timeout.");
+  assert(devDashboard.includes("!result.start_request_timed_out && !testResultUsedSavedProfile(result)"), "Developer UI may defer only the immediate profile assertion during explicit timeout recovery.");
+  assert(adminProductForm.includes("!result.start_request_timed_out && !this.testResultUsesSavedProfile(result)"), "Admin UI may defer only the immediate profile assertion during explicit timeout recovery.");
+
+  const startFunctionIndex = testWorkflow.indexOf("async function startTestRun");
+  const profileIndex = testWorkflow.indexOf("const testProfile = await loadDefaultTestProfile", startFunctionIndex);
+  const testRunInsertIndex = testWorkflow.indexOf(".insert({", profileIndex);
+  const triggerIndex = testWorkflow.indexOf("triggerWorkflow(webhookUrl, automation, testRun, testProfile)", startFunctionIndex);
+  const profileMetadataIndex = testWorkflow.indexOf("trigger_status: \"starting\"", startFunctionIndex);
+  assert(startFunctionIndex >= 0 && profileIndex > startFunctionIndex, "n8n start path must load the saved test profile.");
+  assert(profileIndex < testRunInsertIndex, "Saved test profile identity must be known before the test row is created.");
+  assert(testRunInsertIndex < profileMetadataIndex && profileMetadataIndex < triggerIndex, "Saved profile proof must be persisted before the long n8n webhook request.");
+  assert(testWorkflow.slice(triggerIndex - 120, triggerIndex).indexOf("loadDefaultTestProfile") === -1, "Saved test profile must not be loaded only after the test row is created.");
+  assert(testWorkflow.includes('_stored_status_compatibility: "success"'), "Legacy test tables must persist successful terminal state instead of leaving a stale running row.");
+  const compatibilityStart = testWorkflow.indexOf("if (existing && isPassingWorkflowTestStatus(requestedStatus))");
+  const compatibilityEnd = testWorkflow.indexOf("if (!compatibilityError && compatible)", compatibilityStart);
+  assert(compatibilityStart >= 0 && compatibilityEnd > compatibilityStart && !testWorkflow.slice(compatibilityStart, compatibilityEnd).includes("...updates"), "Legacy persistence fallback must use only confirmed core columns, not the full raw execution payload.");
+  assert(testWorkflow.includes('const publicStatus = ["success", "completed"].includes(storedStatus) ? "passed" : testRun.status'), "Legacy success status must normalize back to the strict public passed state.");
+});
 scenario("Customer-owned HTTP credentials require real technical-test values", () => {
   const devDashboard = read("pages/developer/dashboard.html");
   const adminProductForm = read("pages/admin/product-form.html");

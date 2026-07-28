@@ -2357,7 +2357,7 @@
         const started = await NexusDB.startN8nWorkflowTest(automationId, { force_new: true, skip_credential_binding: true, preserve_hosted_workflow: true, reason: "real_test_profile" });
         if (started.error) throw new Error(started.error.message || "Real workflow test failed to start.");
         let result = started.data || {};
-        if (!this.testResultUsesSavedProfile(result)) throw new Error("Nexus did not start with saved Technical test data. Save the profile again and retry.");
+        if (!result.start_request_timed_out && !this.testResultUsesSavedProfile(result)) throw new Error("Nexus did not start with saved Technical test data. Save the profile again and retry.");
         result = await this.pollAdminWorkflowTest(automationId, result, "Running real workflow check");
         if (!this.isPassingTestStatus(result.status) || !this.testResultUsesSavedProfile(result)) throw new Error(this.workflowTestFailureMessage(result, "Real technical test failed."));
         await this.refreshProductWorkflowFields(automationId);

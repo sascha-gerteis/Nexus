@@ -74,7 +74,7 @@ const result = {
 };
 const expected = {
   exactSuccess: true,
-  exactRunning: false,
+  exactRunning: true,
   exactCancelled: false,
   exactFailed: false,
   unknownFinished: false,

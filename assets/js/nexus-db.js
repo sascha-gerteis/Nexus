@@ -1920,7 +1920,12 @@ const NexusDB = (() => {
   return `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1`;
 }
 
-async function callNexusFunction(functionName, payload = {}) {
+async function callNexusFunction(functionName, payload = {}, options = {}) {
+  const configuredTimeoutMs = Number(options?.timeoutMs || options?.timeout_ms || FUNCTION_REQUEST_TIMEOUT_MS);
+  const requestTimeoutMs = Number.isFinite(configuredTimeoutMs)
+    ? Math.min(10 * 60 * 1000, Math.max(5000, configuredTimeoutMs))
+    : FUNCTION_REQUEST_TIMEOUT_MS;
+
   try {
     let lastResponse = null;
     let lastData = null;
@@ -1947,7 +1952,7 @@ async function callNexusFunction(functionName, payload = {}) {
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), FUNCTION_REQUEST_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
       let response;
 
       try {
@@ -2017,14 +2022,19 @@ async function callNexusFunction(functionName, payload = {}) {
       },
     };
   } catch (error) {
-    const message = error?.name === "AbortError"
-      ? `${functionName} timed out. Check your connection and try again.`
+    const timedOut = error?.name === "AbortError";
+    const message = timedOut
+      ? `${functionName} is taking longer than expected. Nexus will keep checking it.`
       : error.message || `Could not call ${functionName}.`;
 
     return {
       data: null,
       error: {
         message,
+        code: timedOut ? "FUNCTION_TIMEOUT" : "FUNCTION_REQUEST_FAILED",
+        timed_out: timedOut,
+        function_name: functionName,
+        timeout_ms: requestTimeoutMs,
         details: error,
       },
     };
@@ -2876,18 +2886,63 @@ async function startN8nWorkflowTest(automationId, options = {}) {
     repair_before_test: _repairBeforeTest,
     ...testOptions
   } = options || {};
-  return callNexusFunction("test-n8n-workflow", {
+  const started = await callNexusFunction("test-n8n-workflow", {
     mode: "start",
     automation_id: automationId,
     ...testOptions
-  });
+  }, { timeoutMs: 25000 });
+
+  if (started?.error?.code !== "FUNCTION_TIMEOUT") return started;
+
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const recovered = await callNexusFunction("test-n8n-workflow", {
+    mode: "latest",
+    automation_id: automationId
+  }, { timeoutMs: 60000 });
+
+  if (!recovered?.error && recovered?.data) {
+    return {
+      data: {
+        ...recovered.data,
+        start_request_timed_out: true,
+        timeout_recovered_latest: true,
+        message: recovered.data.message || "The workflow started and Nexus recovered its live test status."
+      },
+      error: null
+    };
+  }
+
+  return {
+    data: {
+      ok: true,
+      status: "running",
+      automation_id: automationId,
+      start_request_timed_out: true,
+      timeout_recovery_pending: true,
+      message: "The workflow started and Nexus is checking the execution in the background."
+    },
+    error: null
+  };
 }
 
 async function checkN8nWorkflowTest(payload = {}) {
-  return callNexusFunction("test-n8n-workflow", {
+  const checked = await callNexusFunction("test-n8n-workflow", {
     mode: payload.test_run_id || payload.testRunId ? "check" : "latest",
     ...payload
-  });
+  }, { timeoutMs: 60000 });
+
+  if (checked?.error?.code !== "FUNCTION_TIMEOUT") return checked;
+
+  return {
+    data: {
+      ...payload,
+      ok: true,
+      status: "running",
+      check_request_timed_out: true,
+      message: "Nexus is still checking the n8n execution."
+    },
+    error: null
+  };
 }
 
 async function getAutomationTestProfile(automationId) {

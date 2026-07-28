@@ -2944,7 +2944,7 @@ company_url = context["inputs"].get("company_url")
         if (started.error) throw new Error(started.error.message || "Real workflow test failed to start.");
 
         let result = started.data || {};
-        if (!testResultUsedSavedProfile(result)) {
+        if (!result.start_request_timed_out && !testResultUsedSavedProfile(result)) {
           throw new Error("Nexus did not start this run with saved Technical test data. Save the test data again, then run the real check.");
         }
 

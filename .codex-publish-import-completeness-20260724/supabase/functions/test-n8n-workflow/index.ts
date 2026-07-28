@@ -286,6 +286,8 @@ function isTerminalStatus(status: string) {
   const safe = cleanString(status).toLowerCase();
   return [
     "passed",
+    "success",
+    "completed",
     "failed",
     "execution_not_found_after_timeout",
     "passed_with_expected_test_callback_error",
@@ -1390,7 +1392,7 @@ async function findExecutionForTestRun(testRun: any) {
 }
 
 function isPassingWorkflowTestStatus(status: unknown) {
-  return ["passed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(lower(status));
+  return ["passed", "success", "completed", "passed_with_expected_test_callback_error", "passed_with_expected_test_input_error"].includes(lower(status));
 }
 
 async function validateReusableImportMappings(adminClient: any, automationId: string, result: any) {
@@ -1580,6 +1582,34 @@ async function updateTestRun(adminClient: any, testRunId: string, updates: Recor
       .eq("id", testRunId)
       .maybeSingle();
 
+    const requestedStatus = cleanString(updates.status);
+    if (existing && isPassingWorkflowTestStatus(requestedStatus)) {
+      const { data: compatible, error: compatibilityError } = await adminClient
+        .from("automation_test_runs")
+        .update({
+          status: "success",
+          n8n_execution_id: updates.n8n_execution_id ?? existing.n8n_execution_id ?? null,
+          finished_at: updates.finished_at ?? existing.finished_at ?? null,
+          last_checked_at: updates.last_checked_at ?? existing.last_checked_at ?? new Date().toISOString(),
+          elapsed_seconds: updates.elapsed_seconds ?? existing.elapsed_seconds ?? 0,
+          error_node: updates.error_node ?? null,
+          error_message: updates.error_message ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", testRunId)
+        .select()
+        .single();
+
+      if (!compatibilityError && compatible) {
+        return {
+          ...compatible,
+          _stored_status_compatibility: "success",
+        };
+      }
+
+      if (compatibilityError) console.warn("Legacy automation test status fallback failed:", compatibilityError.message);
+    }
+
     return {
       ...(existing || { id: testRunId }),
       ...updates,
@@ -1635,6 +1665,8 @@ function publicRunPayload(testRun: any, extra: Record<string, unknown> = {}) {
     ? Math.max(0, Math.round((Date.now() - new Date(testRun.started_at).getTime()) / 1000))
     : Number(testRun.elapsed_seconds || 0);
   const webhookResponse = asObject(testRun.webhook_response);
+  const storedStatus = cleanString(testRun.status).toLowerCase();
+  const publicStatus = ["success", "completed"].includes(storedStatus) ? "passed" : testRun.status;
   const usedTestProfile = Boolean(
     webhookResponse.used_test_profile ||
       webhookResponse.test_profile_id ||
@@ -1642,8 +1674,8 @@ function publicRunPayload(testRun: any, extra: Record<string, unknown> = {}) {
   );
 
   return {
-    ok: !["failed", "execution_not_found_after_timeout", "timeout"].includes(cleanString(testRun.status)),
-    status: testRun.status,
+    ok: !["failed", "execution_not_found_after_timeout", "timeout"].includes(cleanString(publicStatus)),
+    status: publicStatus,
     test_run_id: testRun.id,
     test_id: testRun.test_id,
     automation_id: testRun.automation_id,
@@ -1660,9 +1692,9 @@ function publicRunPayload(testRun: any, extra: Record<string, unknown> = {}) {
     test_profile_name: webhookResponse.test_profile_name || testRun.test_profile_name || null,
     message:
       testRun.error_message ||
-      (testRun.status === "running"
+      (publicStatus === "running"
         ? "Technical test is still running."
-        : `Technical test status: ${testRun.status}`),
+        : `Technical test status: ${publicStatus}`),
     raw_execution: testRun.raw_execution || {},
     webhook_response: testRun.webhook_response || {},
     ...extra,
@@ -1988,6 +2020,7 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
     }
   }
 
+  const testProfile = await loadDefaultTestProfile(adminClient, automation.id);
   const now = new Date().toISOString();
   const testId = crypto.randomUUID();
 
@@ -2002,6 +2035,14 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
       started_at: now,
       last_checked_at: now,
       elapsed_seconds: 0,
+      webhook_response: {
+        used_test_profile: Boolean(testProfile?.id),
+        test_profile_id: testProfile?.id || null,
+        test_profile_name: testProfile?.name || null,
+        preserved_hosted_workflow: preserveHostedWorkflow,
+        credential_binding_skipped: preserveHostedWorkflow,
+        trigger_status: "starting",
+      },
       created_by: userId || null,
       created_at: now,
       updated_at: now,
@@ -2022,7 +2063,6 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
       activationResult = await activateWorkflow(workflowId);
     }
 
-    const testProfile = await loadDefaultTestProfile(adminClient, automation.id);
     const trigger = await triggerWorkflow(webhookUrl, automation, testRun, testProfile);
 
     if (deactivateAfterTest) {
