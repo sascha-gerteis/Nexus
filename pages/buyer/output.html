@@ -95,6 +95,34 @@
       return "Structured data";
     }
 
+    function outputHtmlForDisplay(value) {
+      const source = String(value || "");
+      if (!source) return "";
+
+      const parsed = new DOMParser().parseFromString(source, "text/html");
+
+      parsed.querySelectorAll("a[href]").forEach(link => {
+        const href = String(link.getAttribute("href") || "").trim();
+        if (!href || href.startsWith("#")) return;
+
+        if (/^(?:javascript|data|vbscript):/i.test(href)) {
+          link.removeAttribute("href");
+          link.removeAttribute("target");
+          return;
+        }
+
+        link.setAttribute("target", "_blank");
+        const relValues = new Set(
+          String(link.getAttribute("rel") || "").split(/\s+/).filter(Boolean)
+        );
+        relValues.add("noopener");
+        relValues.add("noreferrer");
+        link.setAttribute("rel", [...relValues].join(" "));
+      });
+
+      return `<!DOCTYPE html>\n${parsed.documentElement.outerHTML}`;
+    }
+
     function renderOutputBody(output) {
       if (output.content_html) {
         return `
@@ -103,7 +131,7 @@
               id="outputHtmlFrame"
               class="output-html-frame"
               title="Automation output report"
-              sandbox=""
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
             ></iframe>
           </div>
         `;
@@ -266,7 +294,7 @@
 
       const frame = document.getElementById("outputHtmlFrame");
       if (frame && output.content_html) {
-        frame.srcdoc = output.content_html;
+        frame.srcdoc = outputHtmlForDisplay(output.content_html);
       }
     }
 
