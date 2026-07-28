@@ -85,6 +85,10 @@ for (const field of [
 
 assert.equal(evaluate("formatProcessingElapsed(102000)"), "1m 42s");
 assert.equal(evaluate("formatProcessingElapsed(3723000)"), "1h 2m 3s");
+assert.equal(evaluate('setupSubmissionIsPending({ code: "FUNCTION_TIMEOUT" })'), true);
+assert.equal(evaluate('setupSubmissionIsPending({ timed_out: true })'), true);
+assert.equal(evaluate('setupSubmissionIsPending({ message: "submit-automation-setup is taking longer than expected. Nexus will keep checking it." })'), true);
+assert.equal(evaluate('setupSubmissionIsPending({ code: "FUNCTION_REQUEST_FAILED", message: "Invalid setup" })'), false);
 
 const processingPanel = evaluate("renderSetupProcessingPanel({ isBundle: false, expectedCount: 1 })");
 assert.match(processingPanel, /Your report is being generated/);
@@ -157,6 +161,15 @@ assert.equal(outputMatchResult.current, true, "Current output should complete pr
 assert.equal(outputMatchResult.old, false, "Old output must not complete a new submission");
 assert.equal(outputMatchResult.wrongOrder, false, "Another order must not complete processing");
 assert.equal(outputMatchResult.wrongAttempt, false, "Another bundle attempt must not complete processing");
+
+const bundleSubmitStart = source.indexOf("async function submitBundleSetupForm");
+const immediateBundleTimer = source.indexOf("const processingContext = currentSetupProcessingContext(", bundleSubmitStart);
+const firstBundleDispatch = source.indexOf("for (const [index, entry] of targetEntries.entries())", bundleSubmitStart);
+assert.ok(bundleSubmitStart >= 0 && immediateBundleTimer > bundleSubmitStart, "Bundle timer must start inside bundle submission");
+assert.ok(immediateBundleTimer < firstBundleDispatch, "Bundle timer must appear before waiting for workflow requests");
+assert.ok(source.includes("still confirming ${pendingConfirmations.length}"), "Pending workflow starts must not be reported as failed");
+const pendingBranch = source.slice(source.indexOf("if (onlyRuntimeWaits)", bundleSubmitStart), source.indexOf("const failureDetails", bundleSubmitStart));
+assert.ok(!pendingBranch.includes("Started ${submittedCount}/${attemptedCount || entries.length}"), "Timeouts must not display the misleading Started 0/N message");
 
 assert.ok(source.includes("listBuyerAutomationOutputsByCustomerAutomationIds"), "Expected buyer-scoped read-only output polling");
 assert.ok(!source.includes("checkN8nExecution("), "Processing UI must not mutate n8n execution state");

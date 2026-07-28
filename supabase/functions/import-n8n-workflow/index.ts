@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { bindAutomationCredentials, normalizeWorkflowResourceLocators } from "../_shared/nexus-credentials.ts";
-import { buildBuyerOutputBodyParameters, selectBuyerOutputNode } from "../_shared/nexus-output-selection.ts";
+import { buildBuyerOutputBodyParameters, nexusRuntimeValueExpression, selectBuyerOutputNode } from "../_shared/nexus-output-selection.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -1976,7 +1976,7 @@ function buildNexusSubmitOutputBodyParameters() {
     parameters: [
       {
         name: "customer_automation_id",
-        value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}',
+        value: nexusRuntimeValueExpression("customer_automation_id"),
       },
       {
         name: "run_id",
@@ -2040,11 +2040,11 @@ function buildNexusOutputNode(callbackUrl: string, position = [1100, 0], existin
         parameters: [
           {
             name: "x-nexus-runtime-secret",
-            value: '={{ $("Nexus Runtime Context").first().json.system.runtime_secret }}',
+            value: nexusRuntimeValueExpression("runtime_secret"),
           },
           {
             name: "x-nexus-customer-automation-id",
-            value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}',
+            value: nexusRuntimeValueExpression("customer_automation_id"),
           },
           {
             name: "Content-Type",

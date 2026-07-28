@@ -1574,6 +1574,41 @@ function runtimeStatusIsActive(value: unknown) {
   return ["running", "processing", "queued", "started", "pending", "in_progress"].includes(status);
 }
 
+function runtimeStatusIsFailure(value: unknown) {
+  const status = cleanString(value).toLowerCase().replace(/[\s-]+/g, "_");
+  return ["failed", "error", "timed_out", "timeout", "cancelled", "canceled", "rejected"].includes(status);
+}
+
+function runtimeStatusIsSuccessful(value: unknown) {
+  const status = cleanString(value).toLowerCase().replace(/[\s-]+/g, "_");
+  return ["success", "succeeded", "complete", "completed", "done", "finished"].includes(status);
+}
+
+function runtimeRowIsFreshActive(row: any) {
+  if (!runtimeStatusIsActive(row?.status)) return false;
+
+  const timestamp = runtimeFreshTimestamp(
+    row?.updated_at ||
+      row?.started_at ||
+      row?.created_at,
+  );
+
+  return !timestamp || Date.now() - timestamp <= RUNTIME_DUPLICATE_WINDOW_MS;
+}
+
+function runtimeRunIsWaitingForOutput(run: any) {
+  const responsePayload = normalizeJsonObject(run?.response_payload);
+  const responseStatus = cleanString(responsePayload.status).toLowerCase().replace(/[\s-]+/g, "_");
+  const responseMessage = cleanString(responsePayload.message).toLowerCase();
+  const errorMessage = cleanString(run?.error_message).toLowerCase();
+
+  return (
+    responseStatus === "waiting_for_output" ||
+    responseMessage.includes("finished but nexus has not received") ||
+    errorMessage.includes("finished but nexus has not received")
+  );
+}
+
 function customerAutomationHasFreshRuntimeRequest(customerAutomation: any) {
   const requestedAt = runtimeFreshTimestamp(
     customerAutomation?.last_run_requested_at ||
@@ -1590,12 +1625,16 @@ function customerAutomationHasFreshRuntimeRequest(customerAutomation: any) {
   );
 }
 
-async function findRecentActiveAutomationRun(adminClient: any, customerAutomationId: string) {
+async function findRecentActiveAutomationRun(
+  adminClient: any,
+  customerAutomationId: string,
+  ignoredRunId = "",
+) {
   const since = new Date(Date.now() - RUNTIME_DUPLICATE_WINDOW_MS).toISOString();
 
   const { data, error } = await adminClient
     .from("automation_runs")
-    .select("id, status, trigger_type, trigger_source, n8n_execution_id, started_at, created_at, updated_at")
+    .select("id, status, trigger_type, trigger_source, n8n_execution_id, response_payload, started_at, created_at, updated_at")
     .eq("customer_automation_id", customerAutomationId)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
@@ -1606,7 +1645,213 @@ async function findRecentActiveAutomationRun(adminClient: any, customerAutomatio
     return null;
   }
 
-  return (data || []).find((run: any) => runtimeStatusIsActive(run?.status)) || null;
+  return (data || []).find((run: any) => (
+    runtimeStatusIsActive(run?.status) &&
+    cleanString(run?.id) !== cleanString(ignoredRunId)
+  )) || null;
+}
+
+async function authorizeBundleSetupAttemptStart(
+  adminClient: any,
+  params: {
+    bundleAttemptId: string;
+    bundleOrderId: string;
+    bundleId: string;
+    customerAutomation: any;
+    requesterId: string;
+  },
+) {
+  const rejected = (message: string, status = 409) => ({ ok: false, message, status });
+  const expectedBuyerId = cleanString(params.customerAutomation?.buyer_id) || cleanString(params.requesterId);
+  const expectedOrderId = cleanString(params.customerAutomation?.order_id);
+
+  const { data: exactAttempt, error: exactAttemptError } = await adminClient
+    .from("bundle_run_attempts")
+    .select("id, order_id, bundle_id, buyer_id")
+    .eq("id", params.bundleAttemptId)
+    .maybeSingle();
+
+  if (exactAttemptError) {
+    return rejected(`Nexus could not verify this bundle attempt: ${exactAttemptError.message}`, 500);
+  }
+
+  if (exactAttempt?.id) {
+    if (
+      cleanString(exactAttempt.buyer_id) !== expectedBuyerId ||
+      cleanString(exactAttempt.order_id) !== expectedOrderId ||
+      cleanString(exactAttempt.order_id) !== cleanString(params.bundleOrderId) ||
+      cleanString(exactAttempt.bundle_id) !== cleanString(params.bundleId)
+    ) {
+      return rejected("This bundle attempt does not match the exact buyer, order, and bundle.");
+    }
+
+    return { ok: true, message: "", status: 200 };
+  }
+
+  const { data: previousAttempt, error: previousAttemptError } = await adminClient
+    .from("bundle_run_attempts")
+    .select("id")
+    .eq("buyer_id", expectedBuyerId)
+    .eq("order_id", expectedOrderId)
+    .eq("bundle_id", params.bundleId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (previousAttemptError) {
+    return rejected(`Nexus could not verify previous bundle attempts: ${previousAttemptError.message}`, 500);
+  }
+  if (previousAttempt?.id) {
+    return rejected("This bundle purchase already has a tracked run. Reload the setup page so Nexus can retry only failed workflows and preserve completed outputs.");
+  }
+
+  return { ok: true, message: "", status: 200 };
+}
+async function authorizeFailedBundleWorkflowRetry(
+  adminClient: any,
+  params: {
+    bundleAttemptId: string;
+    bundleOrderId: string;
+    bundleId: string;
+    customerAutomation: any;
+    requesterId: string;
+  },
+) {
+  const rejected = (message: string, status = 409) => ({
+    ok: false,
+    message,
+    status,
+    retryRunId: "",
+  });
+
+  const { data: attempt, error: attemptError } = await adminClient
+    .from("bundle_run_attempts")
+    .select("id, order_id, bundle_id, buyer_id, status, expected_count, completed_count, failed_count, started_at, finished_at, created_at, updated_at")
+    .eq("id", params.bundleAttemptId)
+    .maybeSingle();
+
+  if (attemptError) {
+    return rejected(`Nexus could not verify this bundle retry: ${attemptError.message}`, 500);
+  }
+  if (!attempt?.id) {
+    return rejected("This exact bundle attempt no longer exists. Reload the bundle setup page before retrying.");
+  }
+
+  const expectedBuyerId = cleanString(params.customerAutomation?.buyer_id) || cleanString(params.requesterId);
+  const expectedOrderId = cleanString(params.customerAutomation?.order_id);
+  const expectedBundleId = cleanString(params.customerAutomation?.bundle_id) || cleanString(params.bundleId);
+
+  if (
+    cleanString(attempt.buyer_id) !== expectedBuyerId ||
+    cleanString(attempt.order_id) !== expectedOrderId ||
+    cleanString(attempt.order_id) !== cleanString(params.bundleOrderId) ||
+    cleanString(attempt.bundle_id) !== expectedBundleId ||
+    cleanString(attempt.bundle_id) !== cleanString(params.bundleId)
+  ) {
+    return rejected("This bundle retry does not match the exact buyer, order, and bundle attempt.");
+  }
+
+  const { data: item, error: itemError } = await adminClient
+    .from("bundle_run_items")
+    .select("id, bundle_run_attempt_id, order_id, bundle_id, buyer_id, customer_automation_id, automation_id, automation_run_id, output_id, status, error_message, started_at, finished_at, created_at, updated_at")
+    .eq("bundle_run_attempt_id", attempt.id)
+    .eq("customer_automation_id", params.customerAutomation.id)
+    .maybeSingle();
+
+  if (itemError) {
+    return rejected(`Nexus could not verify this bundle workflow item: ${itemError.message}`, 500);
+  }
+
+  if (item && (
+    cleanString(item.order_id) !== cleanString(attempt.order_id) ||
+    cleanString(item.bundle_id) !== cleanString(attempt.bundle_id) ||
+    cleanString(item.buyer_id) !== cleanString(attempt.buyer_id)
+  )) {
+    return rejected("This workflow item does not belong to the exact bundle attempt.");
+  }
+
+  const { data: existingOutput, error: outputError } = await adminClient
+    .from("automation_outputs")
+    .select("id")
+    .eq("bundle_run_attempt_id", attempt.id)
+    .eq("customer_automation_id", params.customerAutomation.id)
+    .eq("order_id", attempt.order_id)
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (outputError) {
+    return rejected(`Nexus could not verify this workflow's completed output: ${outputError.message}`, 500);
+  }
+  if (cleanString(item?.output_id) || cleanString(existingOutput?.id)) {
+    return rejected("This workflow already has a completed output and was not restarted.");
+  }
+
+  let runQuery = adminClient
+    .from("automation_runs")
+    .select("id, customer_automation_id, order_id, bundle_run_attempt_id, bundle_run_item_id, status, response_payload, error_message, started_at, finished_at, created_at, updated_at")
+    .eq("customer_automation_id", params.customerAutomation.id)
+    .eq("order_id", attempt.order_id)
+    .eq("bundle_run_attempt_id", attempt.id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (cleanString(item?.automation_run_id)) {
+    runQuery = runQuery.eq("id", item.automation_run_id);
+  }
+
+  const runResult = await runQuery.maybeSingle();
+  if (runResult.error) {
+    return rejected(`Nexus could not verify this workflow's latest run: ${runResult.error.message}`, 500);
+  }
+  const run = runResult.data || null;
+
+  if (cleanString(item?.status).toLowerCase() === "skipped") {
+    return rejected("This workflow was intentionally skipped and cannot be retried from this bundle attempt.");
+  }
+
+  const terminalWithoutOutput = Boolean(
+    runtimeRunIsWaitingForOutput(run) ||
+      runtimeRunIsWaitingForOutput(item) ||
+      runtimeStatusIsFailure(run?.status) ||
+      runtimeStatusIsSuccessful(run?.status) ||
+      cleanString(run?.finished_at) ||
+      runtimeStatusIsFailure(item?.status) ||
+      runtimeStatusIsSuccessful(item?.status) ||
+      cleanString(item?.finished_at)
+  );
+
+  if (terminalWithoutOutput) {
+    return {
+      ok: true,
+      message: "",
+      status: 200,
+      retryRunId: cleanString(run?.id),
+    };
+  }
+
+  if (runtimeRowIsFreshActive(run) || runtimeRowIsFreshActive(item)) {
+    return rejected("This workflow is still running. Nexus did not restart it.");
+  }
+
+  const attemptStatus = cleanString(attempt.status).toLowerCase();
+  const attemptIsTerminalFailure = ["partial_failed", "failed", "cancelled", "timed_out"].includes(attemptStatus);
+  const staleActiveWithoutOutput = Boolean(
+    runtimeStatusIsActive(run?.status) ||
+      runtimeStatusIsActive(item?.status)
+  );
+
+  if (!item || attemptIsTerminalFailure || staleActiveWithoutOutput) {
+    return {
+      ok: true,
+      message: "",
+      status: 200,
+      retryRunId: cleanString(run?.id),
+    };
+  }
+
+  return rejected("This workflow is not in a failed or finished-without-output state, so Nexus did not restart it.");
 }
 
 async function saveSetupSubmission(
@@ -2721,6 +2966,8 @@ Deno.serve(async (req) => {
     }
 
     const action = lowerString(body.action);
+    const retryFailedBundleWorkflow = action === "retry_failed_bundle_workflow";
+    let bundleRetryAuthorization: any = null;
     const setupSchema = normalizeJsonArray(automation.setup_schema);
     const credentialSchema = buyerCredentialSchema(
       normalizeJsonArray(automation.credential_schema),
@@ -2749,6 +2996,36 @@ Deno.serve(async (req) => {
           credential: credentialSchema.length,
         },
       });
+    }
+
+    if (retryFailedBundleWorkflow) {
+      if (!orderIsBundle || skipRuntimeTrigger) {
+        return errorResponse("Failed-workflow retry is available only for a tracked buyer bundle run.", 409);
+      }
+
+      bundleRetryAuthorization = await authorizeFailedBundleWorkflowRetry(adminClient, {
+        bundleAttemptId,
+        bundleOrderId,
+        bundleId: submittedBundleId,
+        customerAutomation,
+        requesterId: user.id,
+      });
+
+      if (!bundleRetryAuthorization.ok) {
+        return errorResponse(bundleRetryAuthorization.message, bundleRetryAuthorization.status);
+      }
+    } else if (orderIsBundle && !skipRuntimeTrigger) {
+      const bundleAttemptAuthorization = await authorizeBundleSetupAttemptStart(adminClient, {
+        bundleAttemptId,
+        bundleOrderId,
+        bundleId: submittedBundleId,
+        customerAutomation,
+        requesterId: user.id,
+      });
+
+      if (!bundleAttemptAuthorization.ok) {
+        return errorResponse(bundleAttemptAuthorization.message, bundleAttemptAuthorization.status);
+      }
     }
 
     const privateSheetProvision = await provisionPrivateCustomerSheetIfNeeded(
@@ -2819,11 +3096,23 @@ Deno.serve(async (req) => {
 
     const submission = submissionResult.data;
     const now = new Date().toISOString();
+    const runtimeTriggerSource = retryFailedBundleWorkflow
+      ? "buyer_bundle_retry"
+      : isAdmin
+      ? "admin_setup_submit"
+      : isDeveloper
+      ? "developer_setup_submit"
+      : "buyer_setup_submit";
 
     const recentActiveRun = !skipRuntimeTrigger
-      ? await findRecentActiveAutomationRun(adminClient, customerAutomation.id)
+      ? await findRecentActiveAutomationRun(
+        adminClient,
+        customerAutomation.id,
+        retryFailedBundleWorkflow ? cleanString(bundleRetryAuthorization?.retryRunId) : "",
+      )
       : null;
     const freshRuntimeRequest = !skipRuntimeTrigger &&
+      !retryFailedBundleWorkflow &&
       customerAutomationHasFreshRuntimeRequest(customerAutomation);
 
     if (recentActiveRun || freshRuntimeRequest) {
@@ -3042,11 +3331,7 @@ Deno.serve(async (req) => {
             order_id: customerAutomation.order_id,
             runtime_type: runtimeType || "n8n_managed",
             trigger_type: "buyer_setup_submit",
-            trigger_source: isAdmin
-              ? "admin_setup_submit"
-              : isDeveloper
-              ? "developer_setup_submit"
-              : "buyer_setup_submit",
+            trigger_source: runtimeTriggerSource,
             status: "queued",
             run_key: queuedRunKey,
             bundle_run_attempt_id: queuedBundleAttemptId || null,
@@ -3226,7 +3511,7 @@ Deno.serve(async (req) => {
       order_id: customerAutomation.order_id,
       runtime_type: runtimeType || "n8n_managed",
       trigger_type: "buyer_setup_submit",
-      trigger_source: isAdmin ? "admin_setup_submit" : isDeveloper ? "developer_setup_submit" : "buyer_setup_submit",
+      trigger_source: runtimeTriggerSource,
       status: "queued",
       run_key: runKey,
       bundle_run_attempt_id: runtimeBundleAttemptId || null,

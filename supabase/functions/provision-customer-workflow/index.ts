@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
-import { buildBuyerOutputBodyParameters, selectBuyerOutputNode } from "../_shared/nexus-output-selection.ts";
+import { buildBuyerOutputBodyParameters, nexusRuntimeValueExpression, selectBuyerOutputNode } from "../_shared/nexus-output-selection.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -1097,12 +1097,11 @@ function ensureSubmitOutputUsesRuntimePayload(workflow: any, callbackUrl: string
       parameters: [
         {
           name: "x-nexus-runtime-secret",
-          value:
-            '={{ $("Nexus Runtime Context").first().json.system.runtime_secret || $json.body?.system?.runtime_secret || $json.system?.runtime_secret }}',
+          value: nexusRuntimeValueExpression("runtime_secret"),
         },
         {
           name: "x-nexus-customer-automation-id",
-          value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}',
+          value: nexusRuntimeValueExpression("customer_automation_id"),
         },
         {
           name: "Content-Type",
@@ -1154,6 +1153,9 @@ function validateCopiedWorkflow(workflow: any) {
     "customer_automation_id",
     "run_id",
     "run_key",
+    "order_id",
+    "bundle_run_attempt_id",
+    "bundle_run_item_id",
   ].filter((field) => !submitOutputContract.includes(field));
 
   if (missingSubmitOutputFields.length) {

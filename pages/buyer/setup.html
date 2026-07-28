@@ -62,7 +62,11 @@
     let activeBundleSetup = null;
     let activeBundleRuntime = {
       outputsByAutomation: new Map(),
-      runsByAutomation: new Map()
+      runsByAutomation: new Map(),
+      attempts: [],
+      latestAttempt: null,
+      attemptsLoaded: false,
+      attemptsError: null
     };
     let setupProcessingTimer = null;
     let setupProcessingPollTimer = null;
@@ -1413,6 +1417,41 @@
       return bundleEntryRuns(entry)[0] || null;
     }
 
+    function bundleEntryAttemptItem(entry = {}, attempt = activeBundleRuntime.latestAttempt) {
+      const automationId = bundleEntryRuntimeId(entry);
+      const items = Array.isArray(attempt?.bundle_run_items) ? attempt.bundle_run_items : [];
+      return items.find(item => String(item?.customer_automation_id || "") === automationId) || null;
+    }
+
+    function bundleEntryAttemptRun(entry = {}, attempt = activeBundleRuntime.latestAttempt, attemptItem = null) {
+      const item = attemptItem || bundleEntryAttemptItem(entry, attempt);
+      if (!item) return null;
+      const itemRunId = String(item.automation_run_id || "");
+      const itemId = String(item.id || "");
+      const attemptId = String(attempt?.id || "");
+      return bundleEntryRuns(entry).find(run =>
+        (itemRunId && String(run?.id || "") === itemRunId) ||
+        (itemId && String(run?.bundle_run_item_id || "") === itemId) ||
+        (attemptId && String(run?.bundle_run_attempt_id || "") === attemptId)
+      ) || null;
+    }
+
+    function bundleEntryAttemptOutput(entry = {}, attempt = activeBundleRuntime.latestAttempt, attemptItem = null) {
+      const item = attemptItem || bundleEntryAttemptItem(entry, attempt);
+      if (!item) return null;
+      const outputId = String(item.output_id || "");
+      const itemId = String(item.id || "");
+      const attemptId = String(attempt?.id || "");
+      return bundleEntryOutputs(entry).find(output =>
+        (outputId && String(output?.id || "") === outputId) ||
+        (
+          itemId && attemptId &&
+          String(output?.bundle_run_item_id || "") === itemId &&
+          String(output?.bundle_run_attempt_id || "") === attemptId
+        )
+      ) || null;
+    }
+
     function bundleRunIsFreshActive(run = {}) {
       const status = String(run?.status || "").toLowerCase();
       const active = ["queued", "pending", "running", "processing", "in_progress", "started"].some(item => status.includes(item));
@@ -1424,12 +1463,13 @@
       return Date.now() - timestamp < 45 * 60 * 1000;
     }
 
-    function bundleRunIsFailure(run = {}) {
+    function bundleRunStatusIsFailure(run = {}) {
       const status = String(run?.status || "").toLowerCase();
-      return Boolean(
-        run?.error_message ||
-          ["fail", "error", "timeout", "cancel", "rejected"].some(item => status.includes(item))
-      );
+      return ["fail", "error", "timeout", "cancel", "rejected"].some(item => status.includes(item));
+    }
+
+    function bundleRunIsFailure(run = {}) {
+      return Boolean(run?.error_message || bundleRunStatusIsFailure(run));
     }
 
     function bundleRunIsFinished(run = {}) {
@@ -1438,6 +1478,22 @@
         run?.finished_at ||
           ["success", "succeeded", "complete", "completed", "done", "finished"].some(item => status.includes(item))
       );
+    }
+
+    function bundleRunIsWaitingForOutput(run = {}) {
+      const responseStatus = String(run?.response_payload?.status || "").toLowerCase().replace(/[\s-]+/g, "_");
+      const responseMessage = String(run?.response_payload?.message || "").toLowerCase();
+      const errorMessage = String(run?.error_message || "").toLowerCase();
+
+      return Boolean(
+        responseStatus === "waiting_for_output" ||
+          responseMessage.includes("finished but nexus has not received") ||
+          errorMessage.includes("finished but nexus has not received")
+      );
+    }
+
+    function bundleRunIsSkipped(run = {}) {
+      return String(run?.status || "").toLowerCase() === "skipped";
     }
 
     function bundleEntryLatestRuntimeTime(entry = {}) {
@@ -1495,17 +1551,50 @@
       const id = bundleEntryRuntimeId(entry);
       if (!id) return false;
 
-      const outputs = bundleEntryOutputs(entry);
-      const latestRun = bundleEntryLatestRun(entry);
+      const attempt = activeBundleRuntime.latestAttempt;
+      if (attempt?.id) {
+        const attemptItem = bundleEntryAttemptItem(entry, attempt);
+        if (!attemptItem) return true;
 
+        const exactOutput = bundleEntryAttemptOutput(entry, attempt, attemptItem);
+        if (exactOutput) return false;
+
+        const exactRun = bundleEntryAttemptRun(entry, attempt, attemptItem);
+        if (bundleRunIsSkipped(attemptItem)) return false;
+        if (
+          bundleRunIsWaitingForOutput(exactRun) ||
+          bundleRunIsWaitingForOutput(attemptItem) ||
+          bundleRunStatusIsFailure(exactRun) ||
+          bundleRunStatusIsFailure(attemptItem) ||
+          bundleRunIsFinished(exactRun) ||
+          bundleRunIsFinished(attemptItem)
+        ) return true;
+        if (bundleRunIsFreshActive(exactRun) || bundleRunIsFreshActive(attemptItem)) return false;
+
+        const exactRunIsStaleActive = exactRun && !bundleRunIsFreshActive(exactRun) &&
+          ["queued", "pending", "running", "processing", "in_progress", "started"].some(value =>
+            String(exactRun?.status || "").toLowerCase().includes(value)
+          );
+        const attemptItemIsStaleActive = !bundleRunIsFreshActive(attemptItem) &&
+          ["queued", "pending", "running", "processing", "in_progress", "started"].some(value =>
+            String(attemptItem?.status || "").toLowerCase().includes(value)
+          );
+        if (exactRunIsStaleActive || attemptItemIsStaleActive) return true;
+
+        const attemptStatus = String(attempt.status || "").toLowerCase();
+        return ["fail", "error", "partial", "timeout", "cancel"].some(value => attemptStatus.includes(value));
+      }
+
+      const outputs = bundleEntryOutputs(entry);
+      if (outputs.length) return false;
+
+      const latestRun = bundleEntryLatestRun(entry);
       if (bundleRunIsFreshActive(latestRun)) return false;
-      if (bundleEntryRuntimeIsStale(entry)) return true;
       if (bundleRunIsFailure(latestRun)) return true;
       if (bundleAutomationHasStoredIssue(entry.automation || {})) return true;
       if (bundleEntryLatestRunNeedsOutput(entry)) return true;
-      if (!outputs.length) return true;
 
-      return false;
+      return !outputs.length;
     }
 
     function groupBundleRuntimeRows(rows = [], key = "customer_automation_id") {
@@ -1533,7 +1622,11 @@
       const expectedOrderId = String(orderId || "");
       activeBundleRuntime = {
         outputsByAutomation: new Map(),
-        runsByAutomation: new Map()
+        runsByAutomation: new Map(),
+        attempts: [],
+        latestAttempt: null,
+        attemptsLoaded: false,
+        attemptsError: null
       };
 
       if (!ids.length) return;
@@ -1545,8 +1638,15 @@
         const runLoader = typeof NexusDB.listBuyerAutomationRunsByCustomerAutomationIds === "function"
           ? NexusDB.listBuyerAutomationRunsByCustomerAutomationIds(ids)
           : NexusDB.listBuyerAutomationRuns();
+        const attemptLoader = typeof NexusDB.listBuyerBundleRunAttempts === "function"
+          ? NexusDB.listBuyerBundleRunAttempts()
+          : Promise.resolve({ data: [], error: null });
 
-        const [outputsResult, runsResult] = await Promise.all([outputLoader, runLoader]);
+        const [outputsResult, runsResult, attemptsResult] = await Promise.all([
+          outputLoader,
+          runLoader,
+          attemptLoader
+        ]);
 
         if (outputsResult?.error) {
           console.warn("Could not load bundle output history:", outputsResult.error);
@@ -1565,7 +1665,32 @@
             .filter(row => !expectedOrderId || String(row.order_id || "") === expectedOrderId);
           activeBundleRuntime.runsByAutomation = groupBundleRuntimeRows(runs);
         }
+
+        if (attemptsResult?.error) {
+          activeBundleRuntime.attemptsLoaded = false;
+          activeBundleRuntime.attemptsError = attemptsResult.error;
+          console.warn("Could not load exact bundle attempts:", attemptsResult.error);
+        } else {
+          activeBundleRuntime.attemptsLoaded = true;
+          activeBundleRuntime.attemptsError = null;
+          const expectedBundleId = String(
+            entries[0]?.automation?.bundle_id ||
+            customerAutomationOrder(entries[0]?.automation || {}).bundle_id ||
+            ""
+          );
+          const attempts = (attemptsResult?.data || [])
+            .filter(attempt => !expectedOrderId || String(attempt.order_id || "") === expectedOrderId)
+            .filter(attempt => !expectedBundleId || String(attempt.bundle_id || "") === expectedBundleId)
+            .sort((a, b) =>
+              bundleRuntimeTimestamp(b.created_at || b.started_at || b.updated_at) -
+              bundleRuntimeTimestamp(a.created_at || a.started_at || a.updated_at)
+            );
+          activeBundleRuntime.attempts = attempts;
+          activeBundleRuntime.latestAttempt = attempts[0] || null;
+        }
       } catch (error) {
+        activeBundleRuntime.attemptsLoaded = false;
+        activeBundleRuntime.attemptsError = error;
         console.warn("Could not hydrate bundle runtime state:", error);
       }
     }
@@ -1856,6 +1981,16 @@ async function resolveProductFromCustomerAutomation(automation) {
       return `${seconds}s`;
     }
 
+    function setupSubmissionIsPending(error = {}) {
+      const code = String(error?.code || "").trim().toUpperCase();
+      const message = String(error?.message || "");
+      return Boolean(
+        error?.timed_out === true ||
+        code === "FUNCTION_TIMEOUT" ||
+        /taking longer than expected|timed out/i.test(message)
+      );
+    }
+
     function renderSetupProcessingPanel(context = {}) {
       const isBundle = Boolean(context.isBundle);
       const expectedCount = Math.max(1, Number(context.expectedCount || 1));
@@ -1951,11 +2086,16 @@ async function resolveProductFromCustomerAutomation(automation) {
     }
 
     function stopSetupProcessing(options = {}) {
+      const targetId = setupProcessingContext?.targetId || "setupProcessingStatus";
       if (setupProcessingTimer) clearInterval(setupProcessingTimer);
       if (setupProcessingPollTimer) clearInterval(setupProcessingPollTimer);
       setupProcessingTimer = null;
       setupProcessingPollTimer = null;
       setupProcessingPollInFlight = false;
+      if (options.clear) {
+        const target = document.getElementById(targetId);
+        if (target) target.innerHTML = "";
+      }
       if (!options.keepContext) setupProcessingContext = null;
     }
 
@@ -2199,6 +2339,32 @@ async function resolveProductFromCustomerAutomation(automation) {
       const hasSubmitted = bundleSetup
         ? bundleSetup.entries.every(entry => entry.submission)
         : !!latestSubmission;
+      const bundleHasTrackedAttempt = Boolean(bundleSetup && activeBundleRuntime.latestAttempt?.id);
+      const bundleHasRuntimeHistory = Boolean(
+        bundleSetup && (
+          hasSubmitted ||
+          bundleSetup.entries.some(entry => bundleEntryOutputs(entry).length || bundleEntryRuns(entry).length)
+        )
+      );
+      const bundleTrackingUnavailable = Boolean(
+        bundleSetup && bundleHasRuntimeHistory && !activeBundleRuntime.attemptsLoaded
+      );
+      const bundleRetryEntries = bundleHasTrackedAttempt
+        ? bundleSetup.entries.filter(entry => bundleEntryNeedsRuntimeSubmit(entry))
+        : [];
+      const bundleSubmitDisabled = Boolean(
+        bundleTrackingUnavailable ||
+        (bundleHasTrackedAttempt && !bundleRetryEntries.length)
+      );
+      const bundleSubmitLabel = bundleTrackingUnavailable
+        ? "Reload to verify workflow status"
+        : bundleHasTrackedAttempt
+        ? bundleRetryEntries.length
+          ? `Retry ${bundleRetryEntries.length} failed workflow${bundleRetryEntries.length === 1 ? "" : "s"}`
+          : "No failed workflows to retry"
+        : hasSubmitted
+          ? "Update bundle setup"
+          : "Submit bundle setup and start workflows";
       const isGuided = installType === "nexus_guided";
 
       const runtimeStatus = String(automation.runtime_status || "").toLowerCase();
@@ -2421,10 +2587,10 @@ async function resolveProductFromCustomerAutomation(automation) {
                 }
               </div>
 
-              <button type="submit" class="btn btn-primary" style="margin-top:1rem">
+              <button type="submit" class="btn btn-primary" style="margin-top:1rem" ${bundleSetup && bundleSubmitDisabled ? "disabled" : ""}>
                 ${
                   bundleSetup
-                    ? hasSubmitted ? "Update bundle setup" : "Submit bundle setup and start workflows"
+                    ? bundleSubmitLabel
                     : hasSubmitted ? "Update setup details" : "Submit setup details"
                 }
               </button>
@@ -2480,18 +2646,63 @@ async function resolveProductFromCustomerAutomation(automation) {
         return;
       }
 
+      const hasBundleRuntimeHistory = entries.some(entry =>
+        entry?.submission || bundleEntryOutputs(entry).length || bundleEntryRuns(entry).length
+      );
+      if (hasBundleRuntimeHistory && !activeBundleRuntime.attemptsLoaded) {
+        if (resultEl) {
+          resultEl.innerHTML = `
+            <div class="error" style="margin-top:1rem">
+              <strong>Workflow status could not be verified.</strong><br>
+              Reload this page before retrying. Nexus did not restart any automation.
+            </div>
+          `;
+        }
+        NexusUI.toast("Reload before retrying. No workflow was restarted.");
+        button.disabled = true;
+        button.textContent = "Reload to verify workflow status";
+        form.dataset.submitting = "false";
+        return;
+      }
+
+      const latestAttempt = activeBundleRuntime.latestAttempt?.id
+        ? activeBundleRuntime.latestAttempt
+        : null;
+      const isSelectiveRetry = Boolean(latestAttempt?.id);
+      const targetEntries = isSelectiveRetry
+        ? entries.filter(entry => bundleEntryNeedsRuntimeSubmit(entry))
+        : entries;
+      const preservedCount = Math.max(0, entries.length - targetEntries.length);
+
+      if (isSelectiveRetry && !targetEntries.length) {
+        if (resultEl) {
+          resultEl.innerHTML = `
+            <div class="success" style="margin-top:1rem">
+              <strong>No failed workflows need retrying.</strong><br>
+              Every completed output was preserved and no automation was restarted.
+            </div>
+          `;
+        }
+        NexusUI.toast("No failed workflows need retrying.");
+        button.disabled = true;
+        button.textContent = "No failed workflows to retry";
+        form.dataset.submitting = "false";
+        return;
+      }
+
       const bundleAttemptStartedAt = new Date().toISOString();
       const firstAutomation = entries[0]?.automation || {};
       const firstOrder = customerAutomationOrder(firstAutomation);
       const bundleAttemptOrderId = activeBundleSetup?.order_id || getParam("order_id") || firstAutomation.order_id || firstOrder.id || "";
       const bundleAttemptBundleId = activeBundleSetup?.bundle_id || getParam("bundle_id") || firstAutomation.bundle_id || firstOrder.bundle_id || "";
-      const bundleAttemptId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      const generatedAttemptId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
         : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, marker => {
           const random = Math.random() * 16 | 0;
           const value = marker === "x" ? random : (random & 0x3) | 0x8;
           return value.toString(16);
         });
+      const bundleAttemptId = String(latestAttempt?.id || generatedAttemptId);
 
       if (bundleAttemptOrderId && bundleAttemptBundleId) {
         try {
@@ -2502,7 +2713,7 @@ async function resolveProductFromCustomerAutomation(automation) {
               submitted_at: bundleAttemptStartedAt,
               order_id: bundleAttemptOrderId,
               bundle_id: bundleAttemptBundleId,
-              customer_automation_ids: entries
+              customer_automation_ids: targetEntries
                 .map(entry => entry?.automation?.id)
                 .filter(Boolean)
             })
@@ -2512,14 +2723,62 @@ async function resolveProductFromCustomerAutomation(automation) {
         }
       }
 
-      const bundleDashboardUrl = (() => {
-        const params = new URLSearchParams();
-        if (bundleAttemptOrderId) params.set("order_id", bundleAttemptOrderId);
-        if (bundleAttemptBundleId) params.set("bundle_id", bundleAttemptBundleId);
-        params.set("bundle_attempt_id", bundleAttemptId);
-        params.set("bundle_attempt_started_at", bundleAttemptStartedAt);
-        return `/pages/buyer/dashboard.html?${params.toString()}`;
-      })();
+      const trackedAttempt = latestAttempt || {
+        id: bundleAttemptId,
+        order_id: bundleAttemptOrderId,
+        bundle_id: bundleAttemptBundleId,
+        status: "running",
+        expected_count: entries.length,
+        bundle_run_items: []
+      };
+      trackedAttempt.status = "running";
+      trackedAttempt.expected_count = entries.length;
+      trackedAttempt.updated_at = bundleAttemptStartedAt;
+      trackedAttempt.bundle_run_items = Array.isArray(trackedAttempt.bundle_run_items)
+        ? trackedAttempt.bundle_run_items
+        : [];
+
+      for (const entry of targetEntries) {
+        const customerAutomationId = bundleEntryRuntimeId(entry);
+        let attemptItem = trackedAttempt.bundle_run_items.find(item =>
+          String(item?.customer_automation_id || "") === customerAutomationId
+        );
+        if (!attemptItem) {
+          attemptItem = {
+            bundle_run_attempt_id: bundleAttemptId,
+            order_id: bundleAttemptOrderId,
+            bundle_id: bundleAttemptBundleId,
+            customer_automation_id: customerAutomationId,
+            automation_id: entry?.automation?.automation_id || null
+          };
+          trackedAttempt.bundle_run_items.push(attemptItem);
+        }
+        attemptItem.status = "queued";
+        attemptItem.error_message = null;
+        attemptItem.finished_at = null;
+        attemptItem.updated_at = bundleAttemptStartedAt;
+      }
+
+      activeBundleRuntime.latestAttempt = trackedAttempt;
+      activeBundleRuntime.attempts = [
+        trackedAttempt,
+        ...(activeBundleRuntime.attempts || []).filter(attempt => String(attempt?.id || "") !== bundleAttemptId)
+      ];
+
+      const processingContext = currentSetupProcessingContext(
+        Date.parse(bundleAttemptStartedAt),
+        bundleAttemptId
+      );
+      processingContext.expectedCount = targetEntries.length;
+      processingContext.customerAutomationIds = targetEntries
+        .map(entry => bundleEntryRuntimeId(entry))
+        .filter(Boolean);
+      processingContext.titlesByAutomation = Object.fromEntries(
+        targetEntries
+          .map(entry => [bundleEntryRuntimeId(entry), bundleEntryTitle(entry)])
+          .filter(([id]) => Boolean(id))
+      );
+      startSetupProcessing(processingContext);
 
       const submitOneBundleWorkflow = async entry => {
         const customerAutomationId = entry?.automation?.id;
@@ -2534,6 +2793,7 @@ async function resolveProductFromCustomerAutomation(automation) {
 
         const mappedAnswers = buildBundleAnswersForWorkflow(entry, answers);
         const { data, error } = await NexusDB.submitAutomationSetup({
+          action: isSelectiveRetry ? "retry_failed_bundle_workflow" : "submit_bundle_setup",
           customer_automation_id: customerAutomationId,
           answers: mappedAnswers,
           bundle_attempt_id: bundleAttemptId,
@@ -2552,10 +2812,9 @@ async function resolveProductFromCustomerAutomation(automation) {
 
       const results = [];
 
-      for (const [index, entry] of entries.entries()) {
+      for (const [index, entry] of targetEntries.entries()) {
         const title = bundleEntryTitle(entry);
-
-        button.textContent = `Starting ${index + 1}/${entries.length}: ${title}`;
+        button.textContent = `${isSelectiveRetry ? "Retrying" : "Starting"} ${index + 1}/${targetEntries.length}: ${title}`;
 
         try {
           results.push(await submitOneBundleWorkflow(entry));
@@ -2574,49 +2833,68 @@ async function resolveProductFromCustomerAutomation(automation) {
       const failures = results.filter(item => item.error);
       const attemptedCount = results.length;
       const submittedCount = results.filter(item => !item.error).length;
-      const workflowWord = attemptedCount === 1 ? "workflow" : "workflows";
+
+      for (const result of results) {
+        const customerAutomationId = bundleEntryRuntimeId(result.entry);
+        const attemptItem = trackedAttempt.bundle_run_items.find(item =>
+          String(item?.customer_automation_id || "") === customerAutomationId
+        );
+        if (!attemptItem) continue;
+        if (result.data?.bundle_run_item_id) attemptItem.id = result.data.bundle_run_item_id;
+        if (result.data?.run_id) attemptItem.automation_run_id = result.data.run_id;
+        attemptItem.status = result.error ? "failed" : "running";
+        attemptItem.error_message = result.error?.message || null;
+        attemptItem.updated_at = new Date().toISOString();
+      }
 
       if (failures.length) {
-        const onlyRuntimeWaits = failures.every(item =>
-          /submit-automation-setup timed out|timed out/i.test(String(item.error?.message || ""))
+        const pendingConfirmations = failures.filter(item =>
+          setupSubmissionIsPending(item.error)
         );
+        const hardFailures = failures.filter(item =>
+          !setupSubmissionIsPending(item.error)
+        );
+        const onlyRuntimeWaits = pendingConfirmations.length > 0 && hardFailures.length === 0;
 
         if (onlyRuntimeWaits) {
-          const waitMessage = `Your bundle setup was saved. The included workflow${entries.length === 1 ? "" : "s"} may still be running, so outputs will appear in your dashboard when they finish.`;
+          const pendingWord = pendingConfirmations.length === 1 ? "workflow" : "workflows";
+          const waitMessage = `Nexus is still confirming ${pendingConfirmations.length}/${attemptedCount} ${pendingWord} in the background. They may already be running, and outputs will appear here automatically when ready. Please do not resubmit while Nexus is checking.`;
 
           if (resultEl) {
             resultEl.innerHTML = `
               <div class="success" style="margin-top:1rem">
-                <strong>Bundle setup submitted.</strong><br>
+                <strong>${isSelectiveRetry ? "Failed workflow retry started." : "Bundle workflows are being started."}</strong><br>
                 ${escapeHtml(waitMessage)}<br>
-                Started ${submittedCount}/${attemptedCount || entries.length} included ${workflowWord}.
+                Confirmed ${submittedCount}/${attemptedCount}; still confirming ${pendingConfirmations.length}.
+                ${isSelectiveRetry && preservedCount ? `<br>${preservedCount} completed workflow${preservedCount === 1 ? " was" : "s were"} not restarted.` : ""}
               </div>
             `;
           }
 
-          NexusUI.toast("Bundle setup submitted. Check your dashboard for outputs.");
-          button.disabled = false;
-          button.textContent = "Update setup details";
+          NexusUI.toast(isSelectiveRetry ? "Failed workflow retry started." : "Bundle processing started.");
+          button.disabled = true;
+          button.textContent = isSelectiveRetry ? "Retry in progress" : "Workflows in progress";
           form.dataset.submitting = "false";
-          startSetupProcessing(currentSetupProcessingContext(Date.parse(bundleAttemptStartedAt), bundleAttemptId));
-
           return;
         }
 
-        const failureDetails = failures.map(item => {
+        stopSetupProcessing({ clear: true });
+        const failureDetails = hardFailures.map(item => {
           const title = bundleEntryTitle(item.entry);
           const message = item.error?.message || "This workflow could not start.";
           return `${title}: ${message}`;
         });
-        const safeMessage = "Your bundle setup was saved, but at least one included workflow needs review before the bundle is complete.";
+        const safeMessage = isSelectiveRetry
+          ? "The failed workflow retry could not be started. Completed workflow outputs were left untouched."
+          : "Your bundle setup was saved, but at least one included workflow needs review before the bundle is complete.";
         NexusUI.toast(safeMessage);
 
         if (resultEl) {
           resultEl.innerHTML = `
             <div class="error" style="margin-top:1rem">
-              <strong>Bundle setup needs review.</strong><br>
+              <strong>${isSelectiveRetry ? "Workflow retry needs review." : "Bundle setup needs review."}</strong><br>
               ${escapeHtml(safeMessage)}
-              <br>Started ${submittedCount}/${attemptedCount || entries.length} workflow${(attemptedCount || entries.length) === 1 ? "" : "s"} from this bundle attempt.
+              <br>Started ${submittedCount}/${attemptedCount} targeted workflow${attemptedCount === 1 ? "" : "s"}.
               ${
                 failureDetails.length
                   ? `<ul style="margin:0.75rem 0 0 1.2rem">${failureDetails.map(detail => `<li>${escapeHtml(detail)}</li>`).join("")}</ul>`
@@ -2649,20 +2927,22 @@ async function resolveProductFromCustomerAutomation(automation) {
       if (resultEl) {
         resultEl.innerHTML = `
           <div class="success" style="margin-top:1rem">
-            <strong>Bundle setup submitted.</strong><br>
-            Nexus started ${submittedCount}/${attemptedCount} workflow${attemptedCount === 1 ? "" : "s"} for this bundle attempt.
+            <strong>${isSelectiveRetry ? "Failed workflow retry started." : "Bundle setup submitted."}</strong><br>
+            Nexus started ${submittedCount}/${attemptedCount} targeted workflow${attemptedCount === 1 ? "" : "s"}.
+            ${isSelectiveRetry && preservedCount ? `<br>${preservedCount} completed workflow${preservedCount === 1 ? " was" : "s were"} preserved and not restarted.` : ""}
           </div>
         `;
       }
 
-      NexusUI.toast("Bundle setup submitted. Nexus is preparing every included workflow.");
+      NexusUI.toast(
+        isSelectiveRetry
+          ? "Only the failed workflow was restarted. Completed outputs were preserved."
+          : "Bundle setup submitted. Nexus is preparing every included workflow."
+      );
 
-      button.disabled = false;
-      button.textContent = "Update setup details";
+      button.disabled = true;
+      button.textContent = isSelectiveRetry ? "Retry in progress" : "Workflows in progress";
       form.dataset.submitting = "false";
-
-      startSetupProcessing(currentSetupProcessingContext(Date.parse(bundleAttemptStartedAt), bundleAttemptId));
-
     }
 
     async function submitSetupForm(event) {
@@ -2734,6 +3014,7 @@ async function resolveProductFromCustomerAutomation(automation) {
       }
 
       const setupAttemptStartedAt = Date.now();
+      startSetupProcessing(currentSetupProcessingContext(setupAttemptStartedAt));
       const { data, error } = await NexusDB.submitAutomationSetup({
         customer_automation_id: automation.id,
         answers
@@ -2741,7 +3022,7 @@ async function resolveProductFromCustomerAutomation(automation) {
 
       if (error) {
         const rawMessage = String(error.message || "");
-        if (/submit-automation-setup timed out|timed out/i.test(rawMessage)) {
+        if (setupSubmissionIsPending(error)) {
           const waitMessage = "Your setup was saved. The automation may still be running, so outputs will appear in your dashboard when it finishes.";
 
           NexusUI.toast("Setup submitted. Check your dashboard for outputs.");
@@ -2755,11 +3036,11 @@ async function resolveProductFromCustomerAutomation(automation) {
           button.disabled = false;
           button.textContent = "Update setup details";
           form.dataset.submitting = "false";
-          startSetupProcessing(currentSetupProcessingContext(setupAttemptStartedAt));
 
           return;
         }
 
+        stopSetupProcessing({ clear: true });
         const safeMessage =
           /n8n|webhook|runtime|supabase|authorization header|requested webhook|function/i.test(rawMessage)
             ? "Your setup could not be fully started yet. Nexus has received the issue and will review the automation."
@@ -2805,8 +3086,6 @@ async function resolveProductFromCustomerAutomation(automation) {
       button.disabled = false;
       button.textContent = "Update setup details";
       form.dataset.submitting = "false";
-
-      startSetupProcessing(currentSetupProcessingContext(setupAttemptStartedAt));
 
     }
 

@@ -425,6 +425,9 @@ scenario("Buyer output selection prefers HTML/files over plain text", () => {
   assert(bodyText.includes("$json.output?.html"), "Submit body must inspect nested output HTML.");
   assert(bodyText.includes("$json.result?.content_html"), "Submit body must inspect nested result HTML.");
   assert(bodyText.includes("$json.report?.file_url"), "Submit body must inspect nested report files.");
+  assert(bodyText.includes('"order_id"'), "Submit body must include the exact Nexus order identity.");
+  assert(bodyText.includes('"bundle_run_attempt_id"'), "Submit body must include the exact bundle attempt identity.");
+  assert(bodyText.includes('"bundle_run_item_id"'), "Submit body must include the exact bundle item identity.");
 });
 
 scenario("All supported import platforms use the rich-output contract", () => {

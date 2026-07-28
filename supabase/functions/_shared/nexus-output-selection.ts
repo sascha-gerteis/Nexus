@@ -207,12 +207,22 @@ export function selectBuyerOutputNode(workflow: any) {
   };
 }
 
+export function nexusRuntimeValueExpression(key: string, fallback = "") {
+  const safeKey = cleanString(key).replace(/[^a-zA-Z0-9_]/g, "");
+  if (!safeKey) throw new Error("A Nexus runtime field name is required.");
+
+  return `={{ $("Nexus Runtime Context").first().json.system?.${safeKey} || $("Nexus Runtime Context").first().json.body?.system?.${safeKey} || $("Nexus Runtime Context").first().json.${safeKey} || $("Nexus Runtime Context").first().json.body?.${safeKey} || $("Nexus Webhook Trigger").first().json.body?.system?.${safeKey} || $("Nexus Webhook Trigger").first().json.body?.${safeKey} || $("Nexus Webhook Trigger").first().json.system?.${safeKey} || $("Nexus Webhook Trigger").first().json.${safeKey} || ${JSON.stringify(fallback)} }}`;
+}
+
 export function buildBuyerOutputBodyParameters() {
   return {
     parameters: [
-      { name: "customer_automation_id", value: '={{ $("Nexus Runtime Context").first().json.system.customer_automation_id }}' },
-      { name: "run_id", value: '={{ $("Nexus Runtime Context").first().json.system.run_id || "" }}' },
-      { name: "run_key", value: '={{ $("Nexus Runtime Context").first().json.system.run_key || "" }}' },
+      { name: "customer_automation_id", value: nexusRuntimeValueExpression("customer_automation_id") },
+      { name: "run_id", value: nexusRuntimeValueExpression("run_id") },
+      { name: "run_key", value: nexusRuntimeValueExpression("run_key") },
+      { name: "order_id", value: nexusRuntimeValueExpression("order_id") },
+      { name: "bundle_run_attempt_id", value: nexusRuntimeValueExpression("bundle_run_attempt_id") },
+      { name: "bundle_run_item_id", value: nexusRuntimeValueExpression("bundle_run_item_id") },
       { name: "status", value: '={{ $json.status || $json.output?.status || $json.result?.status || "success" }}' },
       { name: "output_type", value: '={{ $json.output_type || $json.outputType || $json.output?.output_type || $json.result?.output_type || $json.report?.output_type || "report" }}' },
       { name: "title", value: '={{ $json.title || $json.report_title || $json.reportTitle || $json.output?.title || $json.result?.title || $json.report?.title || $json.data?.title || $json.name || "Automation output" }}' },
