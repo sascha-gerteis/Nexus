@@ -268,6 +268,45 @@ async function checkAutomatedOutageMonitor(adminClient: any) {
   return check("Automated outage alerts", "ok", "Five-minute monitor is active, current, and healthy.", { state, cron });
 }
 
+async function checkEmailQueueWorker(adminClient: any) {
+  const { data, error } = await adminClient.rpc("email_queue_worker_status");
+  if (error) return check("Transactional email delivery", "error", error.message);
+
+  const state = data?.state || null;
+  const cron = data?.cron || null;
+  if (!cron?.active) {
+    return check("Transactional email delivery", "error", "The one-minute email queue worker is missing or inactive.", { cron });
+  }
+
+  if (!state?.last_checked_at) {
+    return check("Transactional email delivery", "warning", "Email worker is active and waiting for its first successful check-in.", { state, cron });
+  }
+
+  const checkedAt = new Date(state.last_checked_at).getTime();
+  const stale = !Number.isFinite(checkedAt) || Date.now() - checkedAt > 5 * 60 * 1000;
+  if (stale) {
+    return check("Transactional email delivery", "error", "The email queue worker has not checked in for more than five minutes.", { state, cron });
+  }
+
+  const overdueCount = Number(data?.overdue_count || 0);
+  const stuckCount = Number(data?.stuck_count || 0);
+  if (overdueCount || stuckCount || Number(state.last_failed_count || 0)) {
+    return check(
+      "Transactional email delivery",
+      "error",
+      state.last_error || `${overdueCount} emails are overdue and ${stuckCount} sends are stuck.`,
+      { state, cron, due_count: data?.due_count || 0, overdue_count: overdueCount, stuck_count: stuckCount },
+    );
+  }
+
+  return check(
+    "Transactional email delivery",
+    "ok",
+    "One-minute email worker is active, current, and has no overdue mail.",
+    { state, cron, due_count: data?.due_count || 0 },
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -356,6 +395,7 @@ Deno.serve(async (req) => {
     checkN8n(),
     checkStripe(),
     checkAutomatedOutageMonitor(adminClient),
+    checkEmailQueueWorker(adminClient),
   ]);
 
   const sections = [
