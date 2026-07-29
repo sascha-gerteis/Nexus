@@ -1637,7 +1637,7 @@ const NexusDB = (() => {
       .from("orders")
       .select("*, automations(title, slug, category, icon, color), developers(id, display_name, handle, avatar_letter)")
       .eq("buyer_id", userId)
-      .eq("payment_status", "paid")
+      .in("payment_status", ["paid", "refunded", "cancelled", "canceled"])
       .order("created_at", { ascending: false })
       .limit(100);
   }
@@ -1646,7 +1646,7 @@ const NexusDB = (() => {
     return supabase
       .from("orders")
       .select("*, automations(title, slug), developers(display_name, handle)")
-      .eq("payment_status", "paid")
+      .in("payment_status", ["paid", "refunded", "cancelled", "canceled"])
       .order("created_at", { ascending: false })
       .limit(250);
   }

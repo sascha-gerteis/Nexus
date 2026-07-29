@@ -237,6 +237,37 @@ async function checkProductHealthRunner() {
   }
 }
 
+async function checkAutomatedOutageMonitor(adminClient: any) {
+  const { data, error } = await adminClient.rpc("system_monitor_status");
+  if (error) return check("Automated outage alerts", "error", error.message);
+
+  const state = data?.state || null;
+  const cron = data?.cron || null;
+  if (!cron?.active) {
+    return check("Automated outage alerts", "error", "The five-minute outage monitor cron job is missing or inactive.", { cron });
+  }
+
+  if (!state?.last_checked_at) {
+    return check("Automated outage alerts", "warning", "Monitor cron is active and waiting for its first health check.", { cron });
+  }
+
+  const checkedAt = new Date(state.last_checked_at).getTime();
+  const stale = !Number.isFinite(checkedAt) || Date.now() - checkedAt > 15 * 60 * 1000;
+  if (stale) {
+    return check("Automated outage alerts", "error", "The outage monitor has not checked in for more than 15 minutes.", { state, cron });
+  }
+
+  if (state.current_status === "error") {
+    return check("Automated outage alerts", "error", state.last_message || "The automated monitor reports a production outage.", { state, cron });
+  }
+
+  if (state.current_status === "warning") {
+    return check("Automated outage alerts", "warning", "One failed check is awaiting confirmation before an alert is sent.", { state, cron });
+  }
+
+  return check("Automated outage alerts", "ok", "Five-minute monitor is active, current, and healthy.", { state, cron });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -289,6 +320,7 @@ Deno.serve(async (req) => {
     countTable(adminClient, "analytics_events"),
     countTable(adminClient, "workflow_node_mappings"),
     countTable(adminClient, "automation_health_checks"),
+    countTable(adminClient, "system_monitor_states"),
   ]);
 
   const scheduledRunnerChecks = await Promise.all([
@@ -323,6 +355,7 @@ Deno.serve(async (req) => {
   const externalChecks = await Promise.all([
     checkN8n(),
     checkStripe(),
+    checkAutomatedOutageMonitor(adminClient),
   ]);
 
   const sections = [
