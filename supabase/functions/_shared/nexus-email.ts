@@ -77,6 +77,73 @@ function bullets(items: unknown[]) {
   return `<ul>${cleanItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
+function eyebrow(value: unknown) {
+  const text = cleanString(value, 160);
+  return text
+    ? `<div style="margin:0 0 12px;color:#1377ff;font-size:12px;line-height:1.3;font-weight:900;letter-spacing:.12em;text-transform:uppercase;">${escapeHtml(text)}</div>`
+    : "";
+}
+
+function inlineLink(label: unknown, href: string) {
+  const text = cleanString(label, 240);
+  if (!text || !href) return "";
+  return `<a href="${escapeHtml(absoluteUrl(href))}" style="color:#0b5dd7;font-weight:800;text-decoration:underline;text-decoration-color:#a9cfff;text-underline-offset:3px;">${escapeHtml(text)}</a>`;
+}
+
+function journeySteps() {
+  const steps = [
+    ["1", "Choose an outcome", "Start with the report, alert, insight, or workflow your team needs."],
+    ["2", "Complete guided setup", "Add only the business details and credentials required for that product."],
+    ["3", "Receive the finished result", "Track progress and open every delivered output from your buyer dashboard."],
+  ];
+
+  return `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;border-collapse:separate;border-spacing:0 10px;">
+      ${steps.map(([number, title, copy]) => `
+        <tr>
+          <td width="46" valign="top" style="padding:0 12px 0 0;">
+            <div style="width:36px;height:36px;border-radius:12px;background:#eaf3ff;color:#0b5dd7;font-size:15px;line-height:36px;font-weight:900;text-align:center;">${number}</div>
+          </td>
+          <td style="padding:0 0 13px;border-bottom:1px solid #edf3fb;">
+            <div style="margin:0 0 3px;color:#071d3a;font-size:15px;font-weight:900;">${title}</div>
+            <div style="color:#61748f;font-size:14px;line-height:1.55;">${copy}</div>
+          </td>
+        </tr>
+      `).join("")}
+    </table>
+  `;
+}
+
+function recommendationCard(context: Record<string, unknown>) {
+  const title = cleanString(context.recommended_title || "A popular Nexus automation", 240);
+  const description = cleanString(
+    context.recommended_description || "A practical starting point for turning recurring business work into a clear, delivered result.",
+    800,
+  );
+  const bestFor = cleanString(context.recommended_best_for, 500);
+  const price = cleanString(context.recommended_price_display, 120);
+  const href = cleanString(context.recommended_href || "/pages/marketplace/index.html", 800);
+
+  return `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:22px 0 18px;background:#f6faff;border:1px solid #cfe3ff;border-radius:18px;overflow:hidden;">
+      <tr>
+        <td style="padding:22px;">
+          <div style="display:inline-block;margin:0 0 12px;padding:6px 10px;border-radius:999px;background:#dcecff;color:#0b5dd7;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;">Most purchased on Nexus</div>
+          <div style="margin:0 0 8px;color:#071d3a;font-size:21px;line-height:1.25;font-weight:900;">${escapeHtml(title)}</div>
+          <div style="margin:0 0 14px;color:#526985;font-size:14px;line-height:1.65;">${escapeHtml(description)}</div>
+          ${bestFor ? `<div style="margin:0 0 12px;padding:12px 14px;background:#ffffff;border-radius:12px;color:#526985;font-size:13px;line-height:1.55;"><strong style="color:#173b68;">Best for:</strong> ${escapeHtml(bestFor)}</div>` : ""}
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+            <tr>
+              <td style="color:#173b68;font-size:14px;font-weight:800;">${price ? escapeHtml(price) : "View product details"}</td>
+              <td align="right" style="font-size:14px;">${inlineLink("View product", href)}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
 function emailLayout(input: {
   preheader?: string;
   title: string;
@@ -88,9 +155,9 @@ function emailLayout(input: {
   const ctaHref = cleanString(input.ctaHref, 1000);
   const cta = ctaHref && input.ctaLabel
     ? `
-      <p style="margin:28px 0 0;">
-        <a href="${escapeHtml(ctaHref)}" style="display:inline-block;background:#1377ff;color:#ffffff;text-decoration:none;font-weight:800;padding:14px 20px;border-radius:14px;">
-          ${escapeHtml(input.ctaLabel)}
+      <p style="margin:30px 0 4px;">
+        <a href="${escapeHtml(ctaHref)}" style="display:inline-block;background:#1377ff;color:#ffffff;text-decoration:none;font-size:15px;line-height:1;font-weight:900;padding:16px 22px;border-radius:13px;box-shadow:0 8px 20px rgba(19,119,255,.22);">
+          ${escapeHtml(input.ctaLabel)} &rarr;
         </a>
       </p>
     `
@@ -104,32 +171,43 @@ function emailLayout(input: {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${title}</title>
   </head>
-  <body style="margin:0;background:#f4f8ff;color:#071d3a;font-family:Inter,Arial,sans-serif;">
+  <body style="margin:0;background:#eef4fc;color:#071d3a;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
     <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;">
       ${escapeHtml(input.preheader || input.title)}
     </span>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f8ff;padding:28px 14px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef4fc;padding:34px 14px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #dcecff;border-radius:22px;overflow:hidden;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #d8e6f7;border-radius:24px;overflow:hidden;box-shadow:0 18px 48px rgba(27,61,104,.10);">
             <tr>
-              <td style="padding:26px 28px 18px;border-bottom:1px solid #e7f0ff;">
-                <div style="font-size:26px;font-weight:900;color:#0b4fc5;letter-spacing:-.02em;">Nexus</div>
+              <td style="padding:24px 28px;background:#071d3a;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td width="52" valign="middle">
+                      <div style="width:42px;height:42px;border-radius:13px;background:#1377ff;color:#ffffff;font-size:19px;line-height:42px;font-weight:900;text-align:center;">N</div>
+                    </td>
+                    <td valign="middle">
+                      <div style="font-size:23px;line-height:1.1;font-weight:900;color:#ffffff;letter-spacing:-.02em;">Nexus</div>
+                      <div style="margin-top:4px;font-size:11px;line-height:1.3;font-weight:700;color:#9fb6d5;letter-spacing:.08em;text-transform:uppercase;">Business automation marketplace</div>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
             <tr>
-              <td style="padding:30px 28px;">
-                <h1 style="margin:0 0 16px;font-size:28px;line-height:1.15;color:#071d3a;">${title}</h1>
-                <div style="font-size:16px;line-height:1.65;color:#4c617d;">
+              <td style="padding:34px 30px 32px;">
+                <h1 style="margin:0 0 18px;font-size:30px;line-height:1.16;letter-spacing:-.025em;color:#071d3a;">${title}</h1>
+                <div style="font-size:16px;line-height:1.7;color:#4c617d;">
                   ${input.body}
                 </div>
                 ${cta}
               </td>
             </tr>
             <tr>
-              <td style="padding:20px 28px;background:#f8fbff;border-top:1px solid #e7f0ff;font-size:13px;line-height:1.5;color:#6a7b94;">
-                Nexus sends transactional emails about your account, orders, setup, messages, and marketplace activity.
-                Reply to this email to reach the Nexus team.
+              <td style="padding:22px 30px;background:#f7faff;border-top:1px solid #e4edf8;font-size:13px;line-height:1.65;color:#6a7b94;">
+                <strong style="color:#173b68;">Need a hand?</strong> Reply to this email and the Nexus team will help.<br>
+                <a href="${escapeHtml(absoluteUrl("/"))}" style="color:#0b5dd7;text-decoration:none;font-weight:800;">nexus-ai.software</a>
+                &nbsp;&middot;&nbsp; Your orders, setup progress, messages, and outputs stay in your buyer dashboard.
               </td>
             </tr>
           </table>
@@ -140,7 +218,6 @@ function emailLayout(input: {
 </html>
   `.trim();
 }
-
 function makeTemplate(subject: string, title: string, body: string, ctaLabel?: string, ctaHref?: string): TemplateResult {
   const html = emailLayout({
     preheader: subject,
@@ -177,33 +254,34 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
   switch (type) {
     case "buyer_welcome":
       return makeTemplate(
-        "Welcome to Nexus",
-        `Welcome${name ? `, ${name}` : ""}.`,
+        "Welcome to Nexus - let's automate the busywork",
+        `${name ? `${name}, your` : "Your"} automation workspace is ready.`,
         [
-          paragraph("Nexus helps you buy practical business automations with clear output previews, connected setup, and a dashboard for orders, messages, and results."),
-          bullets([
-            "Browse products by the business outcome you need.",
-            "Preview the output before buying.",
-            "Choose self-serve setup or guided install when available.",
-            "Track setup, outputs, and support from your buyer dashboard.",
-          ]),
+          eyebrow("Welcome to Nexus"),
+          paragraph("Nexus turns repetitive business work into finished reports, alerts, insights, and workflows without asking you to build the automation yourself."),
+          journeySteps(),
+          `<div style="margin:20px 0 0;padding:16px 18px;background:#f6faff;border-left:4px solid #1377ff;border-radius:0 12px 12px 0;color:#405b7c;font-size:14px;line-height:1.6;"><strong style="color:#173b68;">Everything stays organized.</strong> Purchases, setup progress, delivered outputs, and support are available from your Nexus dashboard.</div>`,
         ].join(""),
-        "Open buyer dashboard",
-        "/pages/buyer/dashboard.html",
+        "Explore Nexus automations",
+        "/pages/marketplace/index.html",
       );
 
-    case "buyer_choose_first":
+    case "buyer_choose_first": {
+      const recommendationHref = cleanString(context.recommended_href || "/pages/marketplace/index.html", 800);
       return makeTemplate(
-        "Need help choosing your first automation?",
-        "Find the workflow that fits your manual task.",
+        "A strong first automation: the Nexus bestseller",
+        "Start with a proven business outcome.",
         [
-          paragraph("If you are not sure whether you need reporting, competitor tracking, social listening, support automation, or a custom workflow, start with the recommendation flow."),
-          paragraph("Tell Nexus what your team currently does manually and we will point you toward the closest product or a custom automation request."),
+          eyebrow("Recommended first pick"),
+          paragraph("Not sure where to begin? We looked at what Nexus customers purchase most often and highlighted the current bestseller below."),
+          recommendationCard(context),
+          paragraph("It is a strong starting point when you want visible value quickly: complete the setup once, then receive clear outputs through your Nexus dashboard."),
+          `<div style="margin-top:18px;color:#61748f;font-size:14px;line-height:1.6;">Need something different? ${inlineLink("Browse every automation", "/pages/marketplace/index.html")} or ${inlineLink("request a custom workflow", "/pages/custom-request/index.html")}.</div>`,
         ].join(""),
-        "Get a workflow recommendation",
-        "/pages/marketplace/index.html#workflow-recommendation",
+        "View the Nexus bestseller",
+        recommendationHref,
       );
-
+    }
     case "buyer_output_preview":
       return makeTemplate(
         "Why Nexus shows outputs before checkout",

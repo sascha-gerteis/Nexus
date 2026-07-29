@@ -211,6 +211,130 @@ async function deliverEmail(row: any) {
   return await sendWithResend(row);
 }
 
+function recommendationPriceDisplay(value: unknown, pricingType: unknown) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return "View pricing";
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: amount % 1 ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  const type = cleanString(pricingType, 80).toLowerCase();
+  if (type === "monthly" || type === "subscription") return `${formatted}/month`;
+  if (type === "one_time" || type === "one-time") return `${formatted} one-time`;
+  return formatted;
+}
+
+async function loadBestSellingRecommendation(adminClient: any) {
+  try {
+    const [automationsResult, bundlesResult, ordersResult] = await Promise.all([
+      adminClient
+        .from("automations")
+        .select("id,title,slug,short_description,best_for,price_usd,pricing_type,sales_count")
+        .eq("status", "live"),
+      adminClient
+        .from("automation_bundles")
+        .select("id,title,slug,short_description,outcome,price_usd,pricing_type")
+        .eq("status", "active"),
+      adminClient
+        .from("orders")
+        .select("automation_id,bundle_id,parent_order_id")
+        .eq("payment_status", "paid")
+        .limit(5000),
+    ]);
+
+    if (automationsResult.error || bundlesResult.error || ordersResult.error) {
+      console.warn("Could not load onboarding bestseller:", automationsResult.error || bundlesResult.error || ordersResult.error);
+      return {};
+    }
+
+    const sales = new Map<string, number>();
+    for (const order of ordersResult.data || []) {
+      let key = "";
+      if (order.bundle_id && !order.parent_order_id) key = `bundle:${order.bundle_id}`;
+      else if (order.automation_id && !order.bundle_id) key = `automation:${order.automation_id}`;
+      if (key) sales.set(key, (sales.get(key) || 0) + 1);
+    }
+
+    const candidates = [
+      ...(automationsResult.data || []).map((item: any) => ({
+        ...item,
+        kind: "automation",
+        best_for: item.best_for || "",
+        paid_sales: sales.get(`automation:${item.id}`) || 0,
+      })),
+      ...(bundlesResult.data || []).map((item: any) => ({
+        ...item,
+        kind: "bundle",
+        best_for: item.outcome || "",
+        paid_sales: sales.get(`bundle:${item.id}`) || 0,
+      })),
+    ].filter((item) => item.slug);
+
+    candidates.sort((left, right) => {
+      const paidDifference = Number(right.paid_sales || 0) - Number(left.paid_sales || 0);
+      if (paidDifference) return paidDifference;
+      const recordedDifference = Number(right.sales_count || 0) - Number(left.sales_count || 0);
+      if (recordedDifference) return recordedDifference;
+      return String(left.title || "").localeCompare(String(right.title || ""));
+    });
+
+    const top = candidates[0];
+    if (!top) return {};
+    const parameter = top.kind === "bundle" ? "bundle" : "product";
+
+    return {
+      recommended_title: cleanString(top.title, 240),
+      recommended_description: cleanString(top.short_description, 800),
+      recommended_best_for: cleanString(top.best_for, 500),
+      recommended_price_display: recommendationPriceDisplay(top.price_usd, top.pricing_type),
+      recommended_href: `/pages/marketplace/index.html?${parameter}=${encodeURIComponent(cleanString(top.slug, 240))}`,
+      recommended_kind: top.kind,
+      recommended_product_id: cleanString(top.id, 80),
+      recommended_paid_sales: Number(top.paid_sales || 0),
+    };
+  } catch (error) {
+    console.warn("Could not prepare onboarding bestseller:", error);
+    return {};
+  }
+}
+
+async function refreshOnboardingEmail(adminClient: any, row: any) {
+  if (!["buyer_welcome", "buyer_choose_first"].includes(cleanString(row.email_type, 120))) return row;
+
+  const recommendation = row.email_type === "buyer_choose_first"
+    ? await loadBestSellingRecommendation(adminClient)
+    : {};
+  const context = {
+    ...(row.metadata && typeof row.metadata === "object" ? row.metadata : {}),
+    name: row.recipient_name || "",
+    ...recommendation,
+  };
+  const template = buildEmailTemplate(row.email_type, context);
+  const prepared = {
+    ...row,
+    subject: template.subject,
+    html_body: template.html,
+    text_body: template.text,
+    metadata: { ...(row.metadata || {}), ...recommendation },
+  };
+
+  const { error } = await adminClient
+    .from("email_queue")
+    .update({
+      subject: prepared.subject,
+      html_body: prepared.html_body,
+      text_body: prepared.text_body,
+      metadata: prepared.metadata,
+      updated_at: nowIso(),
+    })
+    .eq("id", row.id)
+    .eq("status", "sending");
+  if (error) console.warn("Could not persist refreshed onboarding email:", error);
+
+  return prepared;
+}
 async function sendQueuedEmail(adminClient: any, row: any) {
   const { data: locked, error: lockError } = await adminClient
     .from("email_queue")
@@ -229,12 +353,17 @@ async function sendQueuedEmail(adminClient: any, row: any) {
   if (!locked) return { id: row.id, status: "skipped", reason: "already_locked" };
 
   try {
-    const providerMessageId = await deliverEmail(locked);
+    const prepared = await refreshOnboardingEmail(adminClient, locked);
+    const providerMessageId = await deliverEmail(prepared);
 
     await adminClient
       .from("email_queue")
       .update({
         status: "sent",
+        subject: prepared.subject,
+        html_body: prepared.html_body,
+        text_body: prepared.text_body,
+        metadata: prepared.metadata,
         provider: EMAIL_PROVIDER,
         provider_message_id: providerMessageId,
         sent_at: nowIso(),

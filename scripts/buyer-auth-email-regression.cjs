@@ -10,6 +10,8 @@ const config = read("supabase/config.toml");
 const databaseClient = read("assets/js/nexus-db.js");
 const registerPage = read("pages/buyer/register.html");
 const loginPage = read("pages/buyer/login.html");
+const lifecycleTemplates = read("supabase/functions/_shared/nexus-email.ts");
+const emailSender = read("supabase/functions/send-platform-email/index.ts");
 
 assert.equal(
   (template.match(/\{\{\s*\.ConfirmationURL\s*\}\}/g) || []).length,
@@ -37,5 +39,20 @@ assert.doesNotMatch(registerPage, /If Supabase email confirmation is enabled/);
 
 assert.match(loginPage, /params\.get\("confirmed"\) === "1"/);
 assert.match(loginPage, /<strong>Email confirmed\.<\/strong>/);
+
+assert.doesNotMatch(lifecycleTemplates, /<script(?=[\\s>])|<link(?=[\\s>])|@import|<img(?=[\\s>])/i);
+assert.doesNotMatch(lifecycleTemplates, /\?without|let\?s/);
+assert.match(lifecycleTemplates, /Business automation marketplace/);
+assert.match(lifecycleTemplates, /Most purchased on Nexus/);
+assert.match(lifecycleTemplates, /Explore Nexus automations/);
+assert.match(lifecycleTemplates, /View the Nexus bestseller/);
+assert.match(lifecycleTemplates, /request a custom workflow/);
+assert.match(emailSender, /loadBestSellingRecommendation/);
+assert.match(emailSender, /\.eq\("payment_status", "paid"\)/);
+assert.match(emailSender, /\.eq\("status", "live"\)/);
+assert.match(emailSender, /\.eq\("status", "active"\)/);
+assert.match(emailSender, /refreshOnboardingEmail\(adminClient, locked\)/);
+assert.match(emailSender, /\["buyer_welcome", "buyer_choose_first"\]/);
+assert.match(emailSender, /recommended_href: `\/pages\/marketplace\/index\.html\?\$\{parameter\}=/);
 
 console.log("Buyer auth email regression checks passed.");
