@@ -52,7 +52,17 @@ function providerErrorMessage(provider: string, response: Response, data: unknow
 }
 
 async function requireAdminOrSecret(req: Request, adminClient: any) {
+  const workerToken = req.headers.get("x-nexus-email-worker") || "";
   const secret = req.headers.get("x-nexus-email-secret") || req.headers.get("x-nexus-runtime-secret") || "";
+
+  if (workerToken) {
+    const { data: authorized, error } = await adminClient.rpc("authorize_email_queue_worker", {
+      p_token: workerToken,
+    });
+    if (!error && authorized === true) {
+      return { ok: true, user: null, error: "" };
+    }
+  }
 
   if (EMAIL_CRON_SECRET && secret && secret === EMAIL_CRON_SECRET) {
     return { ok: true, user: null, error: "" };
@@ -258,6 +268,20 @@ async function sendQueuedEmail(adminClient: any, row: any) {
 }
 
 async function sendDue(adminClient: any, limit: number) {
+  const staleSendingCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { error: recoveryError } = await adminClient
+    .from("email_queue")
+    .update({
+      status: "pending",
+      sending_started_at: null,
+      scheduled_for: nowIso(),
+      last_error: "Recovered after an interrupted email worker attempt.",
+      updated_at: nowIso(),
+    })
+    .eq("status", "sending")
+    .lt("sending_started_at", staleSendingCutoff);
+  if (recoveryError) throw new Error(recoveryError.message);
+
   const { data, error } = await adminClient
     .from("email_queue")
     .select("*")
@@ -341,6 +365,19 @@ Deno.serve(async (req) => {
 
     if (action === "send_due") {
       const results = await sendDue(adminClient, Number(body.limit || 25));
+      const sentCount = results.filter((item) => item.status === "sent").length;
+      const failedCount = results.filter((item) => item.status === "failed" || item.status === "pending").length;
+      const { error: workerStateError } = await adminClient
+        .from("email_queue_worker_states")
+        .upsert({
+          singleton: true,
+          last_checked_at: nowIso(),
+          last_sent_count: sentCount,
+          last_failed_count: failedCount,
+          last_error: failedCount ? "One or more due emails could not be delivered." : null,
+          updated_at: nowIso(),
+        }, { onConflict: "singleton" });
+      if (workerStateError) throw new Error(workerStateError.message);
       return jsonResponse({ ok: true, results, count: results.length });
     }
 

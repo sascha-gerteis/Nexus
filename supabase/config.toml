@@ -32,6 +32,9 @@ verify_jwt = false
 [functions.monitor-system-health]
 verify_jwt = false
 
+[functions.send-platform-email]
+verify_jwt = false
+
 [functions.run-scheduled-automations]
 verify_jwt = false
 

@@ -120,17 +120,29 @@ async function checkRuntimeBacklog(adminClient: any) {
 }
 
 async function checkEmailBacklog(adminClient: any) {
-  const staleCutoff = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+  const stalePendingCutoff = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+  const staleSendingCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   try {
-    const stalePending = await exactCount(
-      adminClient.from("email_queue").select("id", { count: "exact", head: true }).eq("status", "pending").lt("created_at", staleCutoff),
-    );
-    if (stalePending) {
-      return result("email_queue", "Transactional email queue", "warning", `${stalePending} emails have been pending for more than 20 minutes.`, { stale_pending: stalePending });
+    const [stalePending, staleSending] = await Promise.all([
+      exactCount(
+        adminClient.from("email_queue").select("id", { count: "exact", head: true }).eq("status", "pending").lte("scheduled_for", stalePendingCutoff),
+      ),
+      exactCount(
+        adminClient.from("email_queue").select("id", { count: "exact", head: true }).eq("status", "sending").lte("sending_started_at", staleSendingCutoff),
+      ),
+    ]);
+    if (stalePending || staleSending) {
+      return result(
+        "email_queue",
+        "Transactional email queue",
+        "error",
+        `${stalePending} due emails are delayed and ${staleSending} sends are stuck.`,
+        { stale_pending: stalePending, stale_sending: staleSending },
+      );
     }
-    return result("email_queue", "Transactional email queue", "ok", "Transactional email queue has no stale pending mail.");
+    return result("email_queue", "Transactional email queue", "ok", "Transactional email queue has no overdue or stuck mail.");
   } catch (error) {
-    return result("email_queue", "Transactional email queue", "warning", error instanceof Error ? error.message : "Could not inspect email queue.");
+    return result("email_queue", "Transactional email queue", "error", error instanceof Error ? error.message : "Could not inspect email queue.");
   }
 }
 

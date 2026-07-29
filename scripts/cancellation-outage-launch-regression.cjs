@@ -16,8 +16,10 @@ const listCancellation = read("supabase/functions/list-cancellation-requests/ind
 const cancellationMigration = read("supabase/migrations/20260729000100_subscription_cancellation_refunds.sql");
 const monitor = read("supabase/functions/monitor-system-health/index.ts");
 const monitorMigration = read("supabase/migrations/20260729000200_system_outage_monitor.sql");
+const emailWorkerMigration = read("supabase/migrations/20260729000300_email_queue_worker.sql");
 const systemHealth = read("supabase/functions/system-health/index.ts");
 const email = read("supabase/functions/_shared/nexus-email.ts");
+const emailSender = read("supabase/functions/send-platform-email/index.ts");
 const database = read("assets/js/nexus-db.js");
 const dashboard = read("pages/buyer/dashboard.html");
 const adminCancellation = read("pages/admin/customer-automations.html");
@@ -58,10 +60,17 @@ const notFound = read("404.html");
   [monitorMigration, "'nexus-system-monitor-5min'", "monitor cron job"],
   [monitorMigration, "'*/5 * * * *'", "five-minute monitor schedule"],
   [systemHealth, "checkAutomatedOutageMonitor", "admin monitor verification"],
+  [systemHealth, "checkEmailQueueWorker", "admin email worker verification"],
+  [emailSender, "authorize_email_queue_worker", "database-owned email worker authorization"],
+  [emailSender, "Recovered after an interrupted email worker attempt.", "stuck email recovery"],
+  [emailWorkerMigration, "encode(digest(coalesce(p_token, ''), 'sha256'), 'hex')", "email worker token hashing"],
+  [emailWorkerMigration, "'nexus-email-queue-1min'", "one-minute email cron job"],
+  [emailWorkerMigration, "and scheduled_for <= now() - interval '48 hours'", "stale pre-launch mail preservation"],
   [email, 'case "subscription_cancellation_approved"', "buyer refund email"],
   [email, 'case "system_outage_alert"', "admin outage email"],
   [email, 'case "system_outage_recovered"', "admin recovery email"],
   [config, "[functions.monitor-system-health]", "monitor function config"],
+  [config, "[functions.send-platform-email]", "email function config"],
   [setup, "https://support.google.com/youtube/answer/3250431?hl=en", "YouTube Channel ID docs"],
   [setup, "https://help.getslick.com/en/articles/6362168-how-to-find-your-facebook-review-link", "Facebook Reviews URL docs"],
   [setup, "https://www.sixthcitymarketing.com/2025/02/11/create-google-review-link/", "Google Reviews URL docs"],
@@ -72,5 +81,6 @@ const notFound = read("404.html");
 rejectText(reviewCancellation, '.from("automation_outputs")', "output mutation in cancellation approval");
 rejectText(requestCancellation, '.from("automation_outputs")', "output mutation in cancellation request");
 rejectText(monitorMigration, "x-nexus-monitor-worker', '<", "placeholder monitor secret");
+rejectText(emailWorkerMigration, "x-nexus-email-worker', '<", "placeholder email worker secret");
 
 console.log("Cancellation, refund, outage-alert, tutorial, and 404 launch checks passed.");
