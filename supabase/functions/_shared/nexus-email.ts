@@ -164,6 +164,15 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
   const messagePreview = cleanString(context.message_preview || "You have a new message in Nexus.", 500);
   const dashboardUrl = cleanString(context.dashboard_url || "/pages/buyer/dashboard.html", 500);
   const orderUrl = cleanString(context.order_url || dashboardUrl, 500);
+  const adminNotes = cleanString(context.admin_notes, 1000);
+  const refundDisplay = cleanString(context.refund_display || "your latest monthly payment", 120);
+  const refundStatus = cleanString(context.refund_status || "submitted", 80);
+  const monitorSummary = cleanString(context.monitor_summary || "A monitored Nexus service needs attention.", 1200);
+  const monitorDetails = cleanString(context.monitor_details, 4000)
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const checkedAt = cleanString(context.checked_at, 120);
 
   switch (type) {
     case "buyer_welcome":
@@ -291,6 +300,36 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
         orderUrl,
       );
 
+    case "subscription_cancellation_approved":
+      return makeTemplate(
+        `Subscription cancelled: ${productTitle}`,
+        "Your subscription was cancelled and refunded.",
+        [
+          paragraph(`A Nexus admin approved your cancellation for ${productTitle}. Stripe will not charge this subscription again.`),
+          bullets([
+            `Refund: ${refundDisplay}`,
+            `Stripe refund status: ${refundStatus}`,
+            "All outputs delivered before cancellation remain available in your buyer dashboard.",
+          ]),
+          paragraph("Your bank may take several business days to display a completed Stripe refund."),
+        ].join(""),
+        "View saved outputs",
+        dashboardUrl,
+      );
+
+    case "subscription_cancellation_rejected":
+      return makeTemplate(
+        `Cancellation update: ${productTitle}`,
+        "Your subscription remains active.",
+        [
+          paragraph(`Nexus reviewed the cancellation request for ${productTitle} and did not approve it.`),
+          adminNotes ? paragraph(`Admin note: ${adminNotes}`) : "",
+          paragraph("Contact Nexus support if you believe this decision needs another review."),
+        ].join(""),
+        "Open buyer dashboard",
+        dashboardUrl,
+      );
+
     case "message_received":
       return makeTemplate(
         "New Nexus message",
@@ -300,6 +339,32 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
           paragraph("Open Nexus to reply in the same conversation so the order, setup, and support context stays connected."),
         ].join(""),
         "Open messages",
+        dashboardUrl,
+      );
+
+    case "system_outage_alert":
+      return makeTemplate(
+        "Action needed: Nexus production outage detected",
+        "Nexus production needs attention.",
+        [
+          paragraph(monitorSummary),
+          bullets(monitorDetails),
+          paragraph(`The monitor confirmed this across ${2} consecutive checks before alerting.${checkedAt ? ` Last checked: ${checkedAt}.` : ""}`),
+        ].join(""),
+        "Open system health",
+        dashboardUrl,
+      );
+
+    case "system_outage_recovered":
+      return makeTemplate(
+        "Nexus production services recovered",
+        "Monitored services are healthy again.",
+        [
+          paragraph(monitorSummary),
+          bullets(monitorDetails),
+          checkedAt ? paragraph(`Recovered check: ${checkedAt}.`) : "",
+        ].join(""),
+        "Open system health",
         dashboardUrl,
       );
 

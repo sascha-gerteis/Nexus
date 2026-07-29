@@ -116,6 +116,21 @@
         label: "Meta Pixel ID",
         docs: "https://www.facebook.com/help/952192354843755",
         video: "https://www.youtube.com/watch?v=QmlPvwi6Us4"
+      },
+      youtube_channel_id: {
+        label: "YouTube Channel ID",
+        docs: "https://support.google.com/youtube/answer/3250431?hl=en",
+        video: "https://www.youtube.com/watch?v=K2ALBuWtdW8"
+      },
+      facebook_reviews_url: {
+        label: "Facebook Reviews URL",
+        docs: "https://help.getslick.com/en/articles/6362168-how-to-find-your-facebook-review-link",
+        video: "https://www.youtube.com/watch?v=4e1QobK6NVQ"
+      },
+      google_reviews_url: {
+        label: "Google Reviews URL",
+        docs: "https://www.sixthcitymarketing.com/2025/02/11/create-google-review-link/",
+        video: "https://www.youtube.com/watch?v=oR4ulJ4odns"
       }
     });
 
@@ -441,6 +456,21 @@
         ...identityNames.map(value => value.replaceAll("_", " "))
       ].join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
       const identityMatches = pattern => identityNames.some(value => pattern.test(value));
+
+      if (
+        identityMatches(/^(?:(?:your|competitor)_)?youtube_channel_id(?:_\d+)?$/) ||
+        (/\byoutube\b/.test(text) && /\bchannel id\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.youtube_channel_id;
+
+      if (
+        identityMatches(/^(?:(?:your|competitor)_)?facebook_reviews?_url(?:_\d+)?$/) ||
+        (/\bfacebook\b/.test(text) && /\breviews? (?:url|link)\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.facebook_reviews_url;
+
+      if (
+        identityMatches(/^(?:(?:your|competitor)_)?google_(?:maps|reviews?)_url(?:_\d+)?$/) ||
+        (/\bgoogle\b/.test(text) && /\b(?:maps|reviews?) (?:url|link)\b/.test(text))
+      ) return CREDENTIAL_TUTORIALS.google_reviews_url;
 
       if (
         identityMatches(/^(?:meta_|facebook_|fb_)?pixel_id$/) ||

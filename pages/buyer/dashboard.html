@@ -239,7 +239,7 @@
       <h2>Request cancellation</h2>
 
       <p id="cancelAutomationModalText">
-        Tell Nexus why you want to cancel this automation. Your request will be reviewed before anything is cancelled.
+        Only monthly subscriptions can be cancelled. A Nexus admin must approve the request before Stripe cancels and refunds it. Delivered outputs will remain available.
       </p>
 
       <form id="cancelAutomationForm">
@@ -352,7 +352,7 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
 <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
-<script src="/assets/js/nexus-db.js?v=20260722-order-id-isolation"></script>
+<script src="/assets/js/nexus-db.js?v=20260729-cancel-refund"></script>
 <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
 
   <script>
@@ -582,7 +582,7 @@ function humanizeSetupStatus(item) {
     }
 
     function getAutomationPrimaryActionKind(item, latestOutput, state) {
-      if (state?.label === "Ready" && latestOutput) return "output";
+      if (["Ready", "Cancelled"].includes(state?.label) && latestOutput) return "output";
       if (state?.label === "Issue detected") return "support";
       return "setup";
     }
@@ -715,6 +715,17 @@ function humanizeSetupStatus(item) {
       const runtimeStatus = String(item.runtime_status || "not_started").toLowerCase();
       const healthStatus = String(item.health_status || "not_configured").toLowerCase();
       const status = String(item.status || "").toLowerCase();
+
+      if ([status, setupStatus, runtimeStatus, healthStatus].some(value => value === "cancelled" || value === "canceled")) {
+        return {
+          label: "Cancelled",
+          tone: "purple",
+          description: latestOutput
+            ? "This monthly subscription is cancelled. Every previously delivered output remains available."
+            : "This monthly subscription is cancelled. Its order history remains available.",
+          primaryAction: latestOutput ? "View output" : "View history"
+        };
+      }
 
       if (
         item.last_error_message ||
@@ -859,6 +870,8 @@ function orderStatusLabel(order) {
   const payment = String(order.payment_status || "").toLowerCase();
   const status = String(order.order_status || "").toLowerCase();
 
+  if (payment === "refunded") return "Refunded";
+  if (payment === "cancelled" || payment === "canceled") return "Cancelled";
   if (payment === "paid") return "Paid";
   if (payment === "expired") return "Expired";
   if (payment === "payment_failed") return "Payment failed";
@@ -968,6 +981,29 @@ function isBundleOrder(order) {
 function orderIdFromAutomation(item) {
   const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
   return item?.order_id || order.id || "";
+}
+
+function cancellationOrder(record = {}) {
+  const source = Object.prototype.hasOwnProperty.call(record || {}, "orders") ? record.orders : record;
+  return Array.isArray(source) ? source[0] || {} : source || {};
+}
+
+function canRequestSubscriptionCancellation(record = {}) {
+  const order = cancellationOrder(record);
+  const stripeMode = String(order.stripe_mode || "").toLowerCase();
+  const subscriptionId = String(order.stripe_subscription_id || "").trim();
+  const terminalStates = [
+    order.payment_status,
+    order.order_status,
+    order.stripe_subscription_status
+  ].map(value => String(value || "").toLowerCase());
+
+  return (
+    stripeMode === "subscription" &&
+    Boolean(subscriptionId) &&
+    String(order.payment_status || "").toLowerCase() === "paid" &&
+    !terminalStates.some(value => ["cancelled", "canceled", "refunded"].includes(value))
+  );
 }
 
 function bundleIdFromAutomation(item) {
@@ -1782,7 +1818,18 @@ function buildBuyerBundleRows(orders = [], automations = [], outputs = [], runs 
         primaryAction: "View bundle setup"
       };
 
-      if (!included.length || awaitingInitialSetup) {
+      const cancelledOrder = [order.payment_status, order.order_status, order.stripe_subscription_status]
+        .map(value => String(value || "").toLowerCase())
+        .some(value => ["cancelled", "canceled", "refunded"].includes(value));
+
+      if (cancelledOrder) {
+        state = {
+          label: "Cancelled",
+          tone: "purple",
+          description: "This bundle subscription is cancelled. All previously delivered outputs remain available.",
+          primaryAction: "View bundle setup"
+        };
+      } else if (!included.length || awaitingInitialSetup) {
         state = {
           label: "Needs setup",
           tone: "orange",
@@ -2831,6 +2878,8 @@ function openAutomationDetail(customerAutomationId) {
       const outputProgressLabel = included.length
         ? `${completedOutputCount}/${included.length}`
         : `${Number(outputCount) || 0}`;
+      const cancellationAnchor = included.find(item => item?.id) || null;
+      const canCancelSubscription = Boolean(cancellationAnchor && canRequestSubscriptionCancellation(order));
 
       return `
         <article class="buyer-automation-board-card buyer-bundle-board-card">
@@ -2915,6 +2964,20 @@ function openAutomationDetail(customerAutomationId) {
                 : ""
             }
             <button class="btn btn-secondary btn-small" type="button" onclick="activateTab('orders')">View order</button>
+            ${
+              canCancelSubscription
+                ? `
+                  <button
+                    class="buyer-cancel-link inline"
+                    type="button"
+                    data-cancel-automation-id="${escapeHtml(cancellationAnchor.id)}"
+                    data-cancel-automation-name="${escapeHtml(title)}"
+                  >
+                    Request cancellation
+                  </button>
+                `
+                : ""
+            }
           </div>
         </article>
       `;
@@ -2957,6 +3020,7 @@ function openAutomationDetail(customerAutomationId) {
       const currentAutomationOutputs = automationOutputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
       const automationRuns = runsForAutomation(item.id, orderId);
       const recurring = isRecurringAutomation(item);
+      const canCancelSubscription = canRequestSubscriptionCancellation(item);
 
       return `
         <article class="buyer-automation-board-card">
@@ -3046,14 +3110,20 @@ function openAutomationDetail(customerAutomationId) {
                 `
                 : ""
             }
-            <button
-              class="buyer-cancel-link inline"
-              type="button"
-              data-cancel-automation-id="${item.id}"
-              data-cancel-automation-name="${escapeHtml(productTitle)}"
-            >
-              Request cancellation
-            </button>
+            ${
+              canCancelSubscription
+                ? `
+                  <button
+                    class="buyer-cancel-link inline"
+                    type="button"
+                    data-cancel-automation-id="${escapeHtml(item.id)}"
+                    data-cancel-automation-name="${escapeHtml(productTitle)}"
+                  >
+                    Request cancellation
+                  </button>
+                `
+                : ""
+            }
           </div>
         </article>
       `;
@@ -3579,7 +3649,7 @@ function openAutomationDetail(customerAutomationId) {
       reason.value = "";
 
       if (text) {
-        text.textContent = `Tell Nexus why you want to cancel "${automationName}". Your request will be reviewed before anything is cancelled.`;
+        text.textContent = `Tell Nexus why you want to cancel the monthly subscription "${automationName}". A Nexus admin must approve it first. Approval cancels future billing and refunds the latest successful monthly payment. Delivered outputs stay in your dashboard.`;
       }
 
       modal.classList.add("open");
