@@ -2965,6 +2965,18 @@ Deno.serve(async (req) => {
       return errorResponse("You do not have access to this automation.", 403);
     }
 
+    const adminManagedPilot = [
+      customerAutomation.install_type,
+      order.install_type,
+    ].some((value) => lowerString(value) === "admin_managed_pilot");
+
+    if (adminManagedPilot && !isAdmin) {
+      return errorResponse(
+        "This pilot is managed by Nexus. Your output will appear in the dashboard when it is ready.",
+        403,
+      );
+    }
+
     const action = lowerString(body.action);
     const retryFailedBundleWorkflow = action === "retry_failed_bundle_workflow";
     let bundleRetryAuthorization: any = null;

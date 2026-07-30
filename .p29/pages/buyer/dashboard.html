@@ -10,6 +10,42 @@
 
   <link rel="stylesheet" href="/assets/css/nexus.css?v=20260719-bundle-runtime-source">
 
+  <style>
+    .buyer-pilot-note,
+    .buyer-pilot-review-callout {
+      border: 1px solid #cbd9ff;
+      border-radius: 14px;
+      background: #f4f7ff;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    .buyer-pilot-note > span,
+    .buyer-pilot-review-callout > div > span {
+      display: block;
+      color: #2563ff;
+      font-size: .75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .buyer-pilot-note p,
+    .buyer-pilot-review-callout p {
+      margin: .35rem 0 0;
+      color: var(--muted);
+      white-space: pre-line;
+    }
+    .buyer-pilot-review-callout {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .buyer-pilot-review-callout strong { display: block; margin-top: .3rem; }
+    @media (max-width: 680px) {
+      .buyer-pilot-review-callout { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
 
@@ -445,7 +481,8 @@
     self_server: "Self-serve",
     nexus_install: "Nexus Guided Install",
     nexus_guided: "Nexus Guided Install",
-    guided_install: "Nexus Guided Install"
+    guided_install: "Nexus Guided Install",
+    admin_managed_pilot: "Admin-managed pilot"
   };
 
   if (labels[raw]) return labels[raw];
@@ -506,9 +543,39 @@ function humanizeSetupStatus(item) {
       }) || null;
     }
 
+    function isNexusPilot(item) {
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+      const priceSource = String(order.price_source || "").toLowerCase();
+      const priceDisplay = String(order.price_display || "").toLowerCase();
+
+      return priceSource === "admin_pilot" || priceDisplay.includes("complimentary pilot");
+    }
+
+    function pilotBuyerNote(item) {
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+      const rawNote = String(order.setup_notes || "").trim();
+      if (!rawNote) return "";
+
+      return rawNote
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && line !== "[PILOT GRANT]")
+        .filter((line) => !line.toLowerCase().startsWith("granted by "))
+        .join("\n");
+    }
+
+    function isAdminManagedPilot(item) {
+      const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+
+      return [item?.install_type, order.install_type]
+        .some((value) => String(value || "").toLowerCase() === "admin_managed_pilot");
+    }
+
     function isGuidedInstall(item) {
       const installType = String(item?.install_type || "").toLowerCase();
       const setupStatus = String(item?.setup_status || "").toLowerCase();
+
+      if (isAdminManagedPilot(item)) return false;
 
       return (
         installType.includes("guided") ||
@@ -519,6 +586,8 @@ function humanizeSetupStatus(item) {
 
     function getBuyerSetupUrl(item) {
       const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
+
+      if (isAdminManagedPilot(item)) return "";
       const bundleId = item?.bundle_id || order.bundle_id;
       const orderId = item?.order_id || order.id;
 
@@ -534,6 +603,7 @@ function humanizeSetupStatus(item) {
     }
 
     function getBuyerSetupActionLabel(item) {
+      if (isAdminManagedPilot(item)) return "No setup needed";
       const setupStatus = String(item?.setup_status || "").toLowerCase();
       const order = Array.isArray(item?.orders) ? item.orders[0] || {} : item?.orders || {};
 
@@ -561,6 +631,7 @@ function humanizeSetupStatus(item) {
     }
 
     function getSetupDisplayLabel(item) {
+      if (isAdminManagedPilot(item)) return "Managed by Nexus";
       return humanizeSetupStatus(item);
     }
     function getAutomationActionButton(item, latestOutput, state) {
@@ -569,6 +640,10 @@ function humanizeSetupStatus(item) {
       const supportLink = "/pages/contact/index.html";
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
       const actionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
+
+      if (actionKind === "none") {
+        return `<span class="pill blue">No action needed</span>`;
+      }
 
       if (actionKind === "output") {
         return `<a class="btn btn-primary btn-small" href="${outputLink}">View latest output</a>`;
@@ -584,6 +659,7 @@ function humanizeSetupStatus(item) {
     function getAutomationPrimaryActionKind(item, latestOutput, state) {
       if (["Ready", "Cancelled"].includes(state?.label) && latestOutput) return "output";
       if (state?.label === "Issue detected") return "support";
+      if (isAdminManagedPilot(item)) return "none";
       return "setup";
     }
 
@@ -837,6 +913,15 @@ function humanizeSetupStatus(item) {
           tone: "orange",
           description: "Your automation is currently running. Outputs will appear when it finishes.",
           primaryAction: "View status"
+        };
+      }
+
+      if (isAdminManagedPilot(item) && !latestOutput) {
+        return {
+          label: "Pilot being prepared",
+          tone: "blue",
+          description: "Nexus is completing setup and will publish the report here. You do not need to provide anything.",
+          primaryAction: "No action needed"
         };
       }
 
@@ -3021,6 +3106,8 @@ function openAutomationDetail(customerAutomationId) {
       const automationRuns = runsForAutomation(item.id, orderId);
       const recurring = isRecurringAutomation(item);
       const canCancelSubscription = canRequestSubscriptionCancellation(item);
+      const nexusPilot = isNexusPilot(item);
+      const pilotNote = pilotBuyerNote(item);
 
       return `
         <article class="buyer-automation-board-card">
@@ -3030,13 +3117,25 @@ function openAutomationDetail(customerAutomationId) {
             </div>
             <div>
               <div class="buyer-automation-title-row">
+                ${nexusPilot ? `<span class="pill purple">Nexus pilot</span>` : ""}
                 <span class="${pillClassFromTone(state.tone)}">${escapeHtml(state.label)}</span>
-                <span class="buyer-builder-inline">Built by ${escapeHtml(developerName)}</span>
+                <span class="buyer-builder-inline">${nexusPilot ? "Provided by Nexus | " : ""}Built by ${escapeHtml(developerName)}</span>
               </div>
               <h3>${escapeHtml(productTitle)}</h3>
               <p>${escapeHtml(product.short_description || state.description)}</p>
             </div>
           </div>
+
+          ${
+            pilotNote
+              ? `
+                <div class="buyer-pilot-note">
+                  <span>Note from Nexus</span>
+                  <p>${escapeHtml(pilotNote)}</p>
+                </div>
+              `
+              : ""
+          }
 
           <div class="buyer-automation-board-meta">
             <div class="${recurring ? "monthly" : ""}">
@@ -3080,6 +3179,23 @@ function openAutomationDetail(customerAutomationId) {
           }
 
           ${
+            nexusPilot && latestOutput
+              ? `
+                <div class="buyer-pilot-review-callout">
+                  <div>
+                    <span>Your Nexus pilot is ready</span>
+                    <strong>How useful was this result?</strong>
+                    <p>Your feedback helps Nexus improve the pilot and recommend the right next automation.</p>
+                  </div>
+                  <button class="btn btn-primary btn-small" type="button" onclick="openProductReviewModal('${escapeJsString(product.id)}', '${escapeJsString(`Your Nexus pilot: ${productTitle}`)}')">
+                    Review your pilot
+                  </button>
+                </div>
+              `
+              : ""
+          }
+
+          ${
             item.last_error_message
               ? `
                 <div class="buyer-error-box">
@@ -3095,10 +3211,10 @@ function openAutomationDetail(customerAutomationId) {
             <button class="btn btn-secondary btn-small" type="button" onclick="openAutomationDetail('${escapeJsString(item.id)}')">
               Schedule & history
             </button>
-            ${primaryActionKind !== "setup" ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
+            ${setupUrl && !["setup", "none"].includes(primaryActionKind) ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
             ${latestOutput && primaryActionKind !== "output" ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View latest output</a>` : ""}
             ${
-              product.id
+              product.id && !nexusPilot
                 ? `
                   <button
                     class="btn btn-secondary btn-small"
@@ -3199,7 +3315,7 @@ function openAutomationDetail(customerAutomationId) {
 
             <div class="buyer-automation-card-actions">
               ${getAutomationActionButton(item, latestOutput, state)}
-              ${primaryActionKind !== "setup" ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
+              ${setupUrl && !["setup", "none"].includes(primaryActionKind) ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
               ${latestOutput && primaryActionKind !== "output" ? `<a class="btn btn-secondary btn-small" href="${outputLink}">Open latest output</a>` : ""}
             </div>
           </article>

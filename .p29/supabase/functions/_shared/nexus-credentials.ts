@@ -1504,12 +1504,27 @@ export function httpCredentialReferenceHint(node: any, credentialCarriers: Map<s
 
 function isNexusInternalRuntimeNode(node: any) {
   const name = lower(node?.name);
-  return [
+  if ([
     "nexus webhook trigger",
     "nexus runtime context",
     "nexus runtime merge",
     "nexus submit output",
-  ].includes(name);
+  ].includes(name)) {
+    return true;
+  }
+
+  /*
+    n8n appends a number when older workflows already contain a Nexus callback
+    node (for example "Nexus Submit Output1"). Those numbered copies are still
+    platform-owned runtime plumbing and must never become developer credential
+    requirements. Match the owned callback endpoint as well so renamed legacy
+    nodes remain excluded without hiding ordinary developer Supabase calls.
+  */
+  const numberedSubmitOutput = /^nexus submit output\s*\d+$/.test(name);
+  const runtimeCallbackTarget = lower(rawHttpTarget(node))
+    .includes("/functions/v1/runtime-submit-output");
+
+  return numberedSubmitOutput || runtimeCallbackTarget;
 }
 
 function rawHttpTarget(node: any) {

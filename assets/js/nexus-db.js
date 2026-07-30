@@ -3007,6 +3007,8 @@ async function listBuyerCustomerAutomations(userId) {
         bundle_id,
         order_type,
         install_type,
+        price_source,
+        setup_notes,
         stripe_mode,
         stripe_subscription_id,
         stripe_subscription_status,
@@ -3047,6 +3049,8 @@ async function listBuyerCustomerAutomations(userId) {
         bundle_id,
         order_type,
         install_type,
+        price_source,
+        setup_notes,
         created_at
       )
     `;
@@ -3707,6 +3711,19 @@ async function listAdminOrders() {
   };
 }
 
+async function listAdminPilotGrants() {
+  return callNexusFunction("admin-pilot-grants", {
+    action: "list"
+  });
+}
+
+async function createAdminPilotGrant(payload = {}) {
+  return callNexusFunction("admin-pilot-grants", {
+    action: "grant",
+    ...payload
+  });
+}
+
 async function updateAdminInstallRequest(payload) {
   return callNexusFunction("nexus-install-request", {
     action: "admin_update",
@@ -3970,6 +3987,8 @@ updateContactMessage,
 getNexusInstallRequest,
 submitNexusInstallRequest,
 listAdminOrders,
+listAdminPilotGrants,
+createAdminPilotGrant,
 updateAdminInstallRequest,
 listDeveloperInstallRequests,
 updateDeveloperInstallRequest,

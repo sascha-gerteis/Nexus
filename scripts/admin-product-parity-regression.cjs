@@ -48,5 +48,8 @@ assert.ok(html.includes('statusOverride: "draft"'), "Draft save must force draft
 assert.ok(html.includes('statusOverride: "live"'), "Publish must be explicit and gated.");
 assert.ok(html.includes('this.hasRealPassingTest(product)'), "Publishing must require saved-profile real-test evidence.");
 assert.ok(html.includes('this.credentialScan?.errors'), "Publishing must include credential readiness.");
+assert.ok(html.includes('const effectiveStatus = runtimeChanged ? "draft" : requestedStatus;'), "Runtime changes must always move a product back to draft.");
+assert.ok(html.includes('const validationStatus = existingStatus === "live" ? "live" : "draft";'), "Cosmetic edits must not take an already-live product offline during publish validation.");
+assert.ok(html.includes('savedProfileEvidence || legacyLiveEvidence'), "Previously-live healthy legacy workflows may reuse their unchanged passing test.");
 
 console.log("Admin product parity regression checks passed.");

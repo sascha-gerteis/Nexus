@@ -28,6 +28,9 @@ jobs:
       - name: Verify launch-critical cancellation and outage safeguards
         run: node scripts/cancellation-outage-launch-regression.cjs
 
+      - name: Verify admin pilot grant safeguards
+        run: node scripts/admin-pilot-grant-regression.cjs
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 

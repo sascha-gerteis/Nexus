@@ -243,6 +243,51 @@ scenario("Credential scanner traces Set/Edit Fields API key carriers into HTTP n
   assert(credentialsShared.includes("removeCredentialLikeHttpParameters"), "Credential apply must remove raw credential headers/query params from HTTP nodes.");
 });
 
+scenario("Nexus runtime output callbacks never become developer Supabase credentials", () => {
+  const runtimeCallbackNode = {
+    name: "Nexus Submit Output1",
+    type: "n8n-nodes-base.httpRequest",
+    parameters: {
+      method: "POST",
+      url: "https://example-project.supabase.co/functions/v1/runtime-submit-output",
+      authentication: "genericCredentialType",
+      genericAuthType: "supabaseApi",
+    },
+    credentials: {
+      supabaseApi: {
+        id: "platform-managed",
+        name: "Nexus platform callback",
+      },
+    },
+  };
+  const renamedRuntimeCallbackNode = {
+    ...runtimeCallbackNode,
+    name: "Deliver result to Nexus",
+  };
+  const developerSupabaseNode = {
+    ...runtimeCallbackNode,
+    name: "Read developer Supabase table",
+    parameters: {
+      ...runtimeCallbackNode.parameters,
+      url: "https://example-project.supabase.co/rest/v1/reports",
+    },
+  };
+
+  assert(
+    detectWorkflowCredentialSlots({ nodes: [runtimeCallbackNode], connections: {} }).length === 0,
+    "Numbered Nexus output nodes must not create developer credential requirements.",
+  );
+  assert(
+    detectWorkflowCredentialSlots({ nodes: [renamedRuntimeCallbackNode], connections: {} }).length === 0,
+    "Renamed nodes targeting the Nexus runtime callback must remain platform-managed.",
+  );
+  const developerSlots = detectWorkflowCredentialSlots({ nodes: [developerSupabaseNode], connections: {} });
+  assert(
+    developerSlots.length === 1 && developerSlots[0].provider === "supabase",
+    "Ordinary developer Supabase API calls must still require developer credentials.",
+  );
+});
+
 scenario("Nexus dynamic placeholders always import as real n8n expressions", () => {
   assert(importFunction.includes('if (!output.includes("Nexus Runtime Context")) return output;'), "Expression guard must detect every injected Nexus runtime reference.");
   assert(importFunction.includes("if (isCodeParameterKey(childKey)) return output;"), "Code-node placeholders must remain valid direct JavaScript accessors.");

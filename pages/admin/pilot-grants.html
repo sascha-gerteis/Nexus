@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+
+  <title>Pilot Grants | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+
+  <style>
+    .pilot-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .pilot-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+      padding: 1.25rem;
+      box-shadow: 0 10px 28px rgba(24, 36, 72, .06);
+    }
+
+    .pilot-card h3 {
+      margin: 0 0 .35rem;
+    }
+
+    .pilot-card > p {
+      margin-top: 0;
+      color: var(--muted);
+    }
+
+    .pilot-form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .pilot-field.full {
+      grid-column: 1 / -1;
+    }
+
+    .pilot-field label {
+      display: block;
+      margin-bottom: .45rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .pilot-field small {
+      display: block;
+      margin-top: .4rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .pilot-mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .75rem;
+    }
+
+    .pilot-mode {
+      position: relative;
+      display: block;
+      cursor: pointer;
+    }
+
+    .pilot-mode input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .pilot-mode-body {
+      display: block;
+      height: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem;
+      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+
+    .pilot-mode input:checked + .pilot-mode-body {
+      border-color: #2563ff;
+      background: #f5f8ff;
+      box-shadow: 0 0 0 3px rgba(37, 99, 255, .12);
+    }
+
+    .pilot-mode input:focus-visible + .pilot-mode-body {
+      outline: 3px solid rgba(37, 99, 255, .3);
+      outline-offset: 2px;
+    }
+
+    .pilot-mode-title {
+      display: block;
+      margin-bottom: .35rem;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .pilot-mode-copy {
+      display: block;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.5;
+    }
+
+    .pilot-summary {
+      border-radius: 14px;
+      padding: 1rem;
+      background: #f7f9fe;
+      border: 1px solid #dfe7f8;
+    }
+
+    .pilot-summary strong,
+    .pilot-summary span {
+      display: block;
+    }
+
+    .pilot-summary span {
+      margin-top: .25rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .pilot-safety {
+      display: grid;
+      gap: .7rem;
+      margin-top: 1rem;
+    }
+
+    .pilot-safety-item {
+      display: flex;
+      gap: .65rem;
+      align-items: flex-start;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .pilot-safety-check {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      border-radius: 50%;
+      background: #e9f8ef;
+      color: #14834f;
+      font-weight: 900;
+      font-size: .75rem;
+    }
+
+    .pilot-result {
+      display: none;
+      margin-top: 1rem;
+      border-radius: 14px;
+      padding: 1rem;
+      line-height: 1.5;
+    }
+
+    .pilot-result.success {
+      display: block;
+      background: #ecf9f1;
+      border: 1px solid #bce8cb;
+      color: #155f3b;
+    }
+
+    .pilot-result.error {
+      display: block;
+      background: #fff1f1;
+      border: 1px solid #f1c3c3;
+      color: #8a2929;
+    }
+
+    .pilot-result .btn {
+      margin-top: .75rem;
+    }
+
+    .pilot-list {
+      display: grid;
+      gap: .75rem;
+    }
+
+    .pilot-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) auto;
+      gap: 1rem;
+      align-items: center;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    .pilot-row h4 {
+      margin: 0 0 .25rem;
+    }
+
+    .pilot-row p,
+    .pilot-row small {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .pilot-row-meta {
+      display: grid;
+      gap: .35rem;
+    }
+
+    .pilot-empty {
+      padding: 1.25rem;
+      border: 1px dashed var(--line);
+      border-radius: 14px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 1050px) {
+      .pilot-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .pilot-form-grid,
+      .pilot-mode-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .pilot-field.full {
+        grid-column: auto;
+      }
+
+      .pilot-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body data-admin="true" data-admin-page="pilot-grants">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+      <a href="/pages/admin/dashboard.html">Overview</a>
+      <a href="/pages/admin/orders.html">Orders</a>
+      <a class="active" href="/pages/admin/pilot-grants.html">Pilot Grants</a>
+      <a href="/pages/admin/automations.html">Products</a>
+      <a href="/pages/marketplace/index.html">View Marketplace</a>
+      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+    </aside>
+
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Admin pilot operations</span>
+        <h2>Grant a complimentary product pilot.</h2>
+        <p>
+          Add one live product to a buyer account. Let the buyer complete setup, or prepare it privately and deliver only the finished output.
+        </p>
+      </div>
+
+      <div class="pilot-layout">
+        <section class="pilot-card">
+          <h3>New pilot grant</h3>
+          <p>Only owner admins can create a grant. Every grant uses normal Nexus ownership and output attribution.</p>
+
+          <form id="pilotGrantForm" onsubmit="submitPilotGrant(event)">
+            <div class="pilot-form-grid">
+              <div class="pilot-field">
+                <label for="buyerSearch">Find buyer</label>
+                <input class="input" id="buyerSearch" type="search" placeholder="Search name, email or company" oninput="renderBuyerOptions()">
+                <small>Only existing buyer accounts are available.</small>
+              </div>
+
+              <div class="pilot-field">
+                <label for="pilotBuyer">Buyer account</label>
+                <select class="input" id="pilotBuyer" required onchange="updatePilotSummary()">
+                  <option value="">Loading buyers...</option>
+                </select>
+              </div>
+
+              <div class="pilot-field">
+                <label for="productSearch">Find product</label>
+                <input class="input" id="productSearch" type="search" placeholder="Search product or category" oninput="renderProductOptions()">
+                <small>Only live products that pass checkout readiness are shown.</small>
+              </div>
+
+              <div class="pilot-field">
+                <label for="pilotProduct">Pilot product</label>
+                <select class="input" id="pilotProduct" required onchange="updatePilotSummary()">
+                  <option value="">Loading products...</option>
+                </select>
+              </div>
+
+              <div class="pilot-field full">
+                <label>Buyer experience</label>
+                <div class="pilot-mode-grid">
+                  <label class="pilot-mode">
+                    <input type="radio" name="pilotMode" value="buyer_setup" checked onchange="updatePilotSummary()">
+                    <span class="pilot-mode-body">
+                      <span class="pilot-mode-title">Buyer completes setup</span>
+                      <span class="pilot-mode-copy">The product appears in the buyer dashboard with its normal setup form. The buyer submits it and receives the output.</span>
+                    </span>
+                  </label>
+
+                  <label class="pilot-mode">
+                    <input type="radio" name="pilotMode" value="output_only" onchange="updatePilotSummary()">
+                    <span class="pilot-mode-body">
+                      <span class="pilot-mode-title">Nexus prepares output</span>
+                      <span class="pilot-mode-copy">The buyer sees that Nexus is preparing the pilot, but cannot access setup. You fill the setup and run it from Orders.</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="pilot-field full">
+                <label for="pilotNote">Internal note <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
+                <textarea class="textarea" id="pilotNote" maxlength="2000" placeholder="Agency pilot context, agreed scope, or follow-up notes..."></textarea>
+              </div>
+
+              <div class="pilot-field full">
+                <div class="pilot-summary" id="pilotSummary">
+                  <strong>Select a buyer and product</strong>
+                  <span>The exact grant behavior will be summarized here before you confirm.</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-top:1rem">
+              <button class="btn btn-primary" id="grantPilotButton" type="submit">Grant complimentary pilot</button>
+              <span style="color:var(--muted);font-size:.9rem">One product ? one pilot run ? no charge</span>
+            </div>
+
+            <div class="pilot-result" id="pilotResult" role="status" aria-live="polite"></div>
+          </form>
+        </section>
+
+        <aside class="pilot-card">
+          <h3>Production safeguards</h3>
+          <p>This path is deliberately separate from checkout while preserving buyer ownership.</p>
+
+          <div class="pilot-safety">
+            <div class="pilot-safety-item">
+              <span class="pilot-safety-check">?</span>
+              <span>No Stripe charge, subscription, renewal, invoice, developer payout, or cancellation request is created.</span>
+            </div>
+            <div class="pilot-safety-item">
+              <span class="pilot-safety-check">?</span>
+              <span>The pilot is one-time and manual even when the marketplace product normally has monthly pricing.</span>
+            </div>
+            <div class="pilot-safety-item">
+              <span class="pilot-safety-check">?</span>
+              <span>Outputs use the real order, buyer, automation, and run identity. Existing callback protections stay active.</span>
+            </div>
+            <div class="pilot-safety-item">
+              <span class="pilot-safety-check">?</span>
+              <span>A buyer cannot receive the same product pilot twice by accident.</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <section class="pilot-card" style="margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+          <div>
+            <h3>Recent pilot grants</h3>
+            <p style="margin:0;color:var(--muted)">Open an output-only pilot in Orders to fill setup, provision, and run it.</p>
+          </div>
+          <button class="btn btn-secondary btn-small" type="button" onclick="loadPilotData()">Refresh</button>
+        </div>
+
+        <div class="pilot-list" id="pilotList">
+          <div class="pilot-empty">Loading pilot grants...</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/assets/js/nexus-ui.js?v=20260730-pilot-grants"></script>
+  <script src="/assets/js/nexus-db.js?v=20260730-pilot-grants"></script>
+  <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+
+  <script>
+    let pilotBuyers = [];
+    let pilotProducts = [];
+    let pilotGrants = [];
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value).replaceAll("`", "&#096;");
+    }
+
+    function safeLower(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function dateLabel(value) {
+      if (!value) return "Unknown date";
+
+      try {
+        return new Date(value).toLocaleString();
+      } catch {
+        return String(value);
+      }
+    }
+
+    function selectedMode() {
+      return document.querySelector('input[name="pilotMode"]:checked')?.value || "buyer_setup";
+    }
+
+    function buyerLabel(buyer) {
+      const identity = buyer.name || buyer.email || "Buyer";
+      const details = [buyer.email, buyer.company].filter(Boolean).filter(value => value !== identity);
+      return details.length ? `${identity} ? ${details.join(" ? ")}` : identity;
+    }
+
+    function productLabel(product) {
+      const developer = product.developer?.display_name || product.developer?.handle || "Nexus";
+      return `${product.title || "Product"} ? ${developer}`;
+    }
+
+    function renderBuyerOptions() {
+      const select = document.getElementById("pilotBuyer");
+      const query = safeLower(document.getElementById("buyerSearch")?.value);
+      const selected = select.value;
+      const matches = pilotBuyers.filter((buyer) => {
+        return [
+          buyer.name,
+          buyer.email,
+          buyer.company
+        ].some(value => safeLower(value).includes(query));
+      });
+
+      select.innerHTML = `
+        <option value="">Select buyer account</option>
+        ${matches.map((buyer) => `
+          <option value="${escapeAttribute(buyer.id)}">${escapeHtml(buyerLabel(buyer))}</option>
+        `).join("")}
+      `;
+
+      if (matches.some(buyer => buyer.id === selected)) select.value = selected;
+      updatePilotSummary();
+    }
+
+    function renderProductOptions() {
+      const select = document.getElementById("pilotProduct");
+      const query = safeLower(document.getElementById("productSearch")?.value);
+      const selected = select.value;
+      const matches = pilotProducts.filter((product) => {
+        return [
+          product.title,
+          product.category,
+          product.developer?.display_name,
+          product.developer?.handle
+        ].some(value => safeLower(value).includes(query));
+      });
+
+      select.innerHTML = `
+        <option value="">Select live product</option>
+        ${matches.map((product) => `
+          <option value="${escapeAttribute(product.id)}">${escapeHtml(productLabel(product))}</option>
+        `).join("")}
+      `;
+
+      if (matches.some(product => product.id === selected)) select.value = selected;
+      updatePilotSummary();
+    }
+
+    function updatePilotSummary() {
+      const buyerId = document.getElementById("pilotBuyer")?.value || "";
+      const productId = document.getElementById("pilotProduct")?.value || "";
+      const buyer = pilotBuyers.find(item => item.id === buyerId);
+      const product = pilotProducts.find(item => item.id === productId);
+      const mode = selectedMode();
+      const summary = document.getElementById("pilotSummary");
+
+      if (!buyer || !product) {
+        summary.innerHTML = `
+          <strong>Select a buyer and product</strong>
+          <span>The exact grant behavior will be summarized here before you confirm.</span>
+        `;
+        return;
+      }
+
+      const behavior = mode === "output_only"
+        ? "Nexus will complete setup privately. The buyer sees no setup form and receives the finished output in their dashboard."
+        : "The buyer will see the product immediately and complete its normal setup form before the pilot runs.";
+
+      summary.innerHTML = `
+        <strong>${escapeHtml(product.title)} ? ${escapeHtml(buyer.name || buyer.email)}</strong>
+        <span>${escapeHtml(behavior)}</span>
+      `;
+    }
+
+    function statusLabel(grant) {
+      const customerAutomation = grant.customer_automation || {};
+      const runtimeStatus = safeLower(customerAutomation.runtime_status);
+      const setupStatus = safeLower(customerAutomation.setup_status);
+
+      if (runtimeStatus === "success") return "Output delivered";
+      if (runtimeStatus === "running") return "Running";
+      if (runtimeStatus === "queued") return "Queued";
+      if (runtimeStatus === "error" || runtimeStatus === "failed") return "Needs attention";
+      if (setupStatus === "submitted" || setupStatus === "completed" || setupStatus === "complete") return "Setup saved";
+      if (grant.mode === "output_only") return "Nexus setup";
+      return "Buyer setup";
+    }
+
+    function statusPillClass(label) {
+      const value = safeLower(label);
+      if (value.includes("delivered") || value.includes("saved")) return "pill green";
+      if (value.includes("attention") || value.includes("error")) return "pill red";
+      if (value.includes("running") || value.includes("nexus")) return "pill blue";
+      return "pill orange";
+    }
+
+    function renderPilotGrants() {
+      const list = document.getElementById("pilotList");
+
+      if (!pilotGrants.length) {
+        list.innerHTML = `<div class="pilot-empty">No complimentary pilots have been granted yet.</div>`;
+        return;
+      }
+
+      list.innerHTML = pilotGrants.map((grant) => {
+        const order = grant.order || {};
+        const label = statusLabel(grant);
+        const buyer = order.buyer_name || order.buyer_email || "Buyer";
+        const modeLabel = grant.mode === "output_only" ? "Nexus prepares output" : "Buyer completes setup";
+
+        return `
+          <article class="pilot-row">
+            <div>
+              <span class="${statusPillClass(label)}">${escapeHtml(label)}</span>
+              <h4>${escapeHtml(order.automation_title || "Pilot product")}</h4>
+              <p>${escapeHtml(buyer)}${order.buyer_company ? ` ? ${escapeHtml(order.buyer_company)}` : ""}</p>
+            </div>
+            <div class="pilot-row-meta">
+              <strong>${escapeHtml(modeLabel)}</strong>
+              <small>${escapeHtml(dateLabel(order.created_at))}</small>
+            </div>
+            <a class="btn btn-secondary btn-small" href="/pages/admin/orders.html?order_id=${encodeURIComponent(order.id || "")}">
+              ${grant.mode === "output_only" ? "Open setup & run" : "Open order"}
+            </a>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function showPilotResult(type, message, orderId = "", outputOnly = false) {
+      const result = document.getElementById("pilotResult");
+      result.className = `pilot-result ${type}`;
+      result.innerHTML = `
+        <strong>${type === "success" ? "Pilot grant ready" : "Pilot grant failed"}</strong>
+        <div>${escapeHtml(message)}</div>
+        ${
+          type === "success" && orderId
+            ? `<a class="btn btn-secondary btn-small" href="/pages/admin/orders.html?order_id=${encodeURIComponent(orderId)}">${outputOnly ? "Open setup & run" : "Open order"}</a>`
+            : ""
+        }
+      `;
+    }
+
+    async function loadPilotData() {
+      const list = document.getElementById("pilotList");
+      if (list) list.innerHTML = `<div class="pilot-empty">Loading pilot grants...</div>`;
+
+      const buyerSelect = document.getElementById("pilotBuyer");
+      const productSelect = document.getElementById("pilotProduct");
+      const selectedBuyer = buyerSelect?.value || "";
+      const selectedProduct = productSelect?.value || "";
+      const { data, error } = await NexusDB.listAdminPilotGrants();
+
+      if (error) {
+        if (list) {
+          list.innerHTML = `<div class="pilot-empty">${escapeHtml(error.message || "Could not load pilot grants.")}</div>`;
+        }
+        showPilotResult("error", error.message || "Could not load pilot grants.");
+        return;
+      }
+
+      pilotBuyers = data?.buyers || [];
+      pilotProducts = data?.products || [];
+      pilotGrants = data?.grants || [];
+      renderBuyerOptions();
+      renderProductOptions();
+
+      if (pilotBuyers.some(buyer => buyer.id === selectedBuyer)) buyerSelect.value = selectedBuyer;
+      if (pilotProducts.some(product => product.id === selectedProduct)) productSelect.value = selectedProduct;
+
+      updatePilotSummary();
+      renderPilotGrants();
+    }
+
+    async function submitPilotGrant(event) {
+      event.preventDefault();
+
+      const buyerId = document.getElementById("pilotBuyer").value;
+      const automationId = document.getElementById("pilotProduct").value;
+      const note = document.getElementById("pilotNote").value.trim();
+      const mode = selectedMode();
+      const buyer = pilotBuyers.find(item => item.id === buyerId);
+      const product = pilotProducts.find(item => item.id === automationId);
+
+      if (!buyer || !product) {
+        showPilotResult("error", "Select a buyer account and a live product.");
+        return;
+      }
+
+      const modeExplanation = mode === "output_only"
+        ? "You will complete setup and run it from the admin Orders page. The buyer cannot access setup."
+        : "The buyer will receive the product in their dashboard and complete setup.";
+      const confirmed = window.confirm(
+        `Grant ${product.title} to ${buyer.name || buyer.email} as a complimentary pilot?\n\n${modeExplanation}\n\nNo Stripe charge or subscription will be created.`
+      );
+
+      if (!confirmed) return;
+
+      const button = document.getElementById("grantPilotButton");
+      button.disabled = true;
+      button.textContent = "Granting pilot...";
+
+      try {
+        const { data, error } = await NexusDB.createAdminPilotGrant({
+          buyer_id: buyerId,
+          automation_id: automationId,
+          mode,
+          note
+        });
+
+        if (error) {
+          showPilotResult("error", error.message || "Could not grant the pilot.");
+          return;
+        }
+
+        const orderId = data?.order?.id || "";
+        showPilotResult(
+          "success",
+          data?.message || "The complimentary pilot was granted.",
+          orderId,
+          mode === "output_only"
+        );
+        await loadPilotData();
+      } catch (error) {
+        showPilotResult("error", error?.message || "Could not grant the pilot.");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Grant complimentary pilot";
+      }
+    }
+
+    async function initPilotPage() {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") {
+        await NexusUI.mountGlobalNav();
+      }
+
+      const profile = await NexusDB.requireAdmin();
+      if (!profile) return;
+
+      await loadPilotData();
+    }
+
+    document.addEventListener("DOMContentLoaded", initPilotPage);
+  </script>
+</body>
+</html>

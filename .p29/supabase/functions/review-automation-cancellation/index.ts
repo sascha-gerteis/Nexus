@@ -113,6 +113,42 @@ async function refundableCharge(stripe: Stripe, subscription: Stripe.Subscriptio
   return { charge, chargeId, paymentIntentId };
 }
 
+async function markCustomerAutomationsCancelled(
+  adminClient: any,
+  orderId: string,
+  buyerId: string,
+  now: string,
+) {
+  const coreUpdates = {
+    status: "cancelled",
+    setup_status: "cancelled",
+    runtime_status: "cancelled",
+    health_status: "cancelled",
+    updated_at: now,
+  };
+
+  let result = await adminClient
+    .from("customer_automations")
+    .update({
+      ...coreUpdates,
+      schedule_status: "cancelled",
+      next_run_at: null,
+      last_error_message: null,
+    })
+    .eq("order_id", orderId)
+    .eq("buyer_id", buyerId);
+
+  if (result.error) {
+    result = await adminClient
+      .from("customer_automations")
+      .update(coreUpdates)
+      .eq("order_id", orderId)
+      .eq("buyer_id", buyerId);
+  }
+
+  return result.error || null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
@@ -280,20 +316,12 @@ Deno.serve(async (req) => {
     }
 
     const refundStatus = cleanString(refund.status || "pending").toLowerCase();
-    const { error: automationUpdateError } = await adminClient
-      .from("customer_automations")
-      .update({
-        status: "cancelled",
-        setup_status: "cancelled",
-        runtime_status: "cancelled",
-        health_status: "cancelled",
-        schedule_status: "cancelled",
-        next_run_at: null,
-        last_error_message: null,
-        updated_at: now,
-      })
-      .eq("order_id", order.id)
-      .eq("buyer_id", request.buyer_id);
+    const automationUpdateError = await markCustomerAutomationsCancelled(
+      adminClient,
+      order.id,
+      request.buyer_id,
+      now,
+    );
 
     if (automationUpdateError) {
       return errorResponse(`Stripe completed, but Nexus could not update the subscription records: ${automationUpdateError.message}. Retry this approval safely.`, 500);

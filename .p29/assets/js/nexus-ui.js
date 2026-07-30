@@ -4401,6 +4401,7 @@ function adminSidebarSections(active = "", options = {}) {
         { id: "staff", label: "Staff Overview", href: "/pages/admin/staff.html", staffOnly: true },
         { id: "dashboard", label: "Overview", href: "/pages/admin/dashboard.html" },
         { id: "orders", label: "Orders", href: "/pages/admin/orders.html" },
+        { id: "pilot-grants", label: "Pilot Grants", href: "/pages/admin/pilot-grants.html" },
         { id: "analytics", label: "Analytics", href: "/pages/admin/analytics.html" },
         { id: "finance", label: "Finance", href: "/pages/admin/finance.html" },
         { id: "health", label: "System Health", href: "/pages/admin/health.html" }

@@ -89,30 +89,7 @@ Deno.serve(async (req) => {
           last_error_message,
           automations(title, slug, icon, color)
         ),
-        orders(
-          id,
-          buyer_name,
-          buyer_email,
-          buyer_company,
-          automation_title,
-          price_display,
-          currency,
-          payment_status,
-          order_status,
-          order_type,
-          bundle_id,
-          stripe_mode,
-          stripe_subscription_id,
-          stripe_subscription_status,
-          payment_environment,
-          stripe_refund_id,
-          refund_status,
-          refunded_at,
-          refunded_amount,
-          refunded_currency,
-          cancellation_approved_at,
-          created_at
-        ),
+        orders(*),
         automations(title, slug, icon, color)
       `)
       .order("created_at", { ascending: false });

@@ -156,6 +156,7 @@
   <script>
     let allOrderRows = [];
     let currentOrderRow = null;
+    let requestedOrderOpened = false;
 
     function escapeHtml(value) {
       return String(value || "")
@@ -214,6 +215,10 @@
     function normalizeInstallLabel(value) {
       const installType = safeLower(value);
 
+      if (installType === "admin_managed_pilot") {
+        return "Admin-managed pilot";
+      }
+
       if (
         installType.includes("nexus") ||
         installType.includes("guided")
@@ -239,6 +244,7 @@
       return Boolean(
         installRequest ||
         installText.includes("nexus") ||
+        installText.includes("admin_managed_pilot") ||
         installText.includes("guided")
       );
     }
@@ -358,6 +364,23 @@
       allOrderRows = data || [];
 
       renderOrders();
+      openRequestedOrder();
+    }
+
+    function openRequestedOrder() {
+      if (requestedOrderOpened) return;
+
+      const requestedOrderId = new URLSearchParams(location.search).get("order_id") || "";
+      if (!requestedOrderId) return;
+
+      const index = allOrderRows.findIndex((row) => {
+        return String(row?.order?.id || "") === requestedOrderId;
+      });
+
+      if (index < 0) return;
+
+      requestedOrderOpened = true;
+      openOrderModal(index);
     }
 
     function renderStats() {
@@ -566,6 +589,11 @@
       const credentialSchema = normalizeSchema(automation.credential_schema);
       const existingAnswers = latestSubmission.answers || latestSubmission.setup_answers || {};
       const hasSubmitted = Boolean(latestSubmission.id);
+      const adminManagedPilot = [
+        customerAutomation.install_type,
+        row.order?.install_type
+      ].some(value => safeLower(value) === "admin_managed_pilot");
+      const setupHeading = adminManagedPilot ? "Pilot setup on behalf" : "Guided install setup";
 
       if (!customerAutomation?.id) {
         return `
@@ -592,8 +620,12 @@
 
       return `
         <div class="admin-order-detail-box">
-          <h3>Guided install setup</h3>
-          <p>These are the exact setup fields from this product. Fill them for the customer, then run the workflow.</p>
+          <h3>${escapeHtml(setupHeading)}</h3>
+          <p>${
+            adminManagedPilot
+              ? "Fill the product setup privately, then provision and run it. The buyer only sees the output when it is ready."
+              : "These are the exact setup fields from this product. Fill them for the customer, then run the workflow."
+          }</p>
 
           <form id="adminSetupForm" class="form-grid" style="margin-top:1rem">
             ${setupSchema.map(field => renderAdminSetupControl(field, existingAnswers, false, hasSubmitted)).join("")}

@@ -1830,6 +1830,7 @@
       const providerChanged = Boolean(existingProduct.id) &&
         String(existingProduct.workflow_source_platform || "") !== workflowProvider;
       const runtimeChanged = workflowJsonChanged || pythonChanged || providerChanged;
+      const effectiveStatus = runtimeChanged ? "draft" : requestedStatus;
 
       if ((workflowProvider === "n8n" || workflowProvider === "make" || workflowProvider === "zapier") && runtimeTypeElement) {
         runtimeTypeElement.value = "n8n_managed";
@@ -1848,7 +1849,7 @@
         badge: String(formData.get("badge") || ""),
         icon: String(formData.get("icon") || "AI").slice(0, 3).toUpperCase(),
         color: String(formData.get("color") || "blue"),
-        status: requestedStatus,
+        status: effectiveStatus,
         featured: formData.get("featured") === "on",
 
         pricing_type: String(formData.get("pricing_type") || "custom_quote"),
@@ -2098,7 +2099,19 @@
     },
 
     hasRealPassingTest(product = this.currentSavedProduct) {
-      return Boolean(this.isPassingTestStatus(product?.n8n_last_test_status) && this.testResultUsesSavedProfile(product?.n8n_last_test_result || {}));
+      const result = product?.n8n_last_test_result || {};
+      const savedProfileEvidence = this.testResultUsesSavedProfile(result);
+      const resultWorkflowId = String(result.workflow_id || "").trim();
+      const currentWorkflowId = String(product?.n8n_workflow_id || "").trim();
+      const legacyLiveEvidence = String(product?.status || "").toLowerCase() === "live" &&
+        String(product?.health_status || "").toLowerCase() === "healthy" &&
+        result.ok !== false &&
+        Boolean(currentWorkflowId) &&
+        (!resultWorkflowId || resultWorkflowId === currentWorkflowId);
+      return Boolean(
+        this.isPassingTestStatus(product?.n8n_last_test_status) &&
+        (savedProfileEvidence || legacyLiveEvidence)
+      );
     },
 
     workflowProvider(product = this.currentSavedProduct) {
@@ -2144,7 +2157,10 @@
       const originalText = button?.textContent || "Publish product";
       if (button) { button.disabled = true; button.textContent = "Checking..."; }
       try {
-        let product = await this.saveProductFromEditor({ silent: true, syncStripe: false, statusOverride: "draft" });
+        const existingProduct = await this.getExistingProduct(this.getCurrentProductId());
+        const existingStatus = String(existingProduct?.status || "").toLowerCase();
+        const validationStatus = existingStatus === "live" ? "live" : "draft";
+        let product = await this.saveProductFromEditor({ silent: true, syncStripe: false, statusOverride: validationStatus });
         await this.refreshProductWorkflowFields(product.id);
         product = this.currentSavedProduct || product;
         if (!["python", "manual"].includes(this.workflowProvider(product))) await this.scanProductCredentials({ silent: true });
