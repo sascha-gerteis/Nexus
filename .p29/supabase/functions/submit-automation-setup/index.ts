@@ -583,9 +583,32 @@ function isUuid(value: unknown) {
   );
 }
 
+function credentialFieldName(field: any) {
+  return cleanString(field?.name || field?.key || field?.credential_key);
+}
+
+function schemaFieldIsRequired(field: any) {
+  const value = field?.required;
+  return value === true || value === 1 || ["true", "required", "yes", "1"].includes(lowerString(value));
+}
+
+function missingRequiredBuyerCredentials(
+  credentialSchema: any[],
+  answers: Record<string, unknown>,
+  savedCredentials: Record<string, unknown>,
+) {
+  return credentialSchema
+    .filter(schemaFieldIsRequired)
+    .filter((field: any) => {
+      const name = credentialFieldName(field);
+      return name && !cleanString(answers?.[name]) && !cleanString(savedCredentials?.[name]);
+    })
+    .map((field: any) => cleanString(field?.label || credentialFieldName(field)).replace(/_/g, " "));
+}
+
 function getCredentialFieldNames(credentialSchema: any[]) {
   return credentialSchema
-    .map((field: any) => cleanString(field?.name))
+    .map(credentialFieldName)
     .filter(Boolean);
 }
 
@@ -3008,6 +3031,23 @@ Deno.serve(async (req) => {
           credential: credentialSchema.length,
         },
       });
+    }
+
+    if (!isAdmin && !isDeveloper) {
+      const savedCredentialValues = await loadSavedCredentials(adminClient, customerAutomation.id);
+      const missingRequiredCredentials = missingRequiredBuyerCredentials(
+        credentialSchema,
+        answers,
+        savedCredentialValues,
+      );
+
+      if (missingRequiredCredentials.length) {
+        const fieldList = missingRequiredCredentials.join(", ");
+        return errorResponse(`Complete the required credential field${missingRequiredCredentials.length === 1 ? "" : "s"}: ${fieldList}.`, 400, {
+          status: "customer_action_required",
+          missing_required_credentials: missingRequiredCredentials,
+        });
+      }
     }
 
     if (retryFailedBundleWorkflow) {

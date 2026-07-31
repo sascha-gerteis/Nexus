@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { safeEnqueueOutputReadyEmail } from "../_shared/nexus-email.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -1489,6 +1490,16 @@ Deno.serve(async (req) => {
         500,
       );
     }
+
+    await safeEnqueueOutputReadyEmail(adminClient, {
+      outputId: output.id,
+      buyerId: callbackBuyerId || customerAutomation.buyer_id,
+      orderId: callbackOrderId,
+      automationId: callbackAutomationId || customerAutomation.automation_id,
+      customerAutomationId: customerAutomation.id,
+      productTitle: parentAutomation?.title || customerAutomation.name,
+      outputTitle: output.title || outputTitle,
+    });
 
     const callbackN8nExecutionId = callbackExecutionReference(body, callbackRunContext);
     const runtimeTypeForFinalCheck = cleanString(

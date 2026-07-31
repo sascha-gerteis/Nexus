@@ -16,6 +16,7 @@ const inlineScripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script
 
 assert.equal(inlineScripts.length, 1, "Expected one setup-page application script");
 const source = inlineScripts[0];
+const submitFunction = fs.readFileSync(path.join(root, "supabase", "functions", "submit-automation-setup", "index.ts"), "utf8");
 const context = vm.createContext({
   console: { warn() {}, error() {}, log() {} },
   URLSearchParams,
@@ -83,6 +84,14 @@ for (const field of [
   assert.equal(tutorialLabel(field), null, `Unrelated field received a tutorial: ${field.name}`);
 }
 
+assert.equal(evaluate('fieldIsRequired({ required: true })'), true);
+assert.equal(evaluate('fieldIsRequired({ required: "false" })'), false);
+assert.equal(
+  evaluate('fieldCanBeSkipped({ name: "meta_access_token", label: "Meta access token", required: true })'),
+  false,
+  "A required buyer credential must never expose the skip control"
+);
+
 assert.equal(evaluate("formatProcessingElapsed(102000)"), "1m 42s");
 assert.equal(evaluate("formatProcessingElapsed(3723000)"), "1h 2m 3s");
 assert.equal(evaluate('setupSubmissionIsPending({ code: "FUNCTION_TIMEOUT" })'), true);
@@ -101,6 +110,18 @@ assert.match(tutorialLinks, /target="_blank"/);
 assert.match(tutorialLinks, /rel="noopener noreferrer"/);
 assert.match(tutorialLinks, />\s*Docs\s*</);
 assert.match(tutorialLinks, />\s*Video\s*</);
+
+const duplicateTutorialLinks = evaluate('renderCredentialTutorialLinks({ name: "meta_access_token" })');
+assert.equal(duplicateTutorialLinks, "", "The same credential tutorial must render only once per setup page");
+evaluate("resetCredentialTutorialLinks()");
+const firstGoogleReviewTutorial = evaluate('renderCredentialTutorialLinks({ name: "google_maps_url" })');
+const secondGoogleReviewTutorial = evaluate('renderCredentialTutorialLinks({ name: "google_reviews_url_2" })');
+assert.match(firstGoogleReviewTutorial, />\s*Docs\s*</);
+assert.equal(secondGoogleReviewTutorial, "", "Repeated Google review fields must not repeat Docs and Video links");
+assert.equal(
+  evaluate('fieldHasSavedCredential({ name: "meta_access_token" }, { savedCredentialKeys: ["meta_access_token"] })'),
+  true
+);
 
 const expectedUrls = [
   "https://developers.facebook.com/docs/instagram-platform/",
@@ -174,6 +195,16 @@ assert.ok(!pendingBranch.includes("Started ${submittedCount}/${attemptedCount ||
 assert.ok(source.includes("listBuyerAutomationOutputsByCustomerAutomationIds"), "Expected buyer-scoped read-only output polling");
 assert.ok(!source.includes("checkN8nExecution("), "Processing UI must not mutate n8n execution state");
 assert.ok(!/setTimeout\s*\(\s*function\s*\(\)\s*\{\s*location\.href/.test(source), "Post-submit auto-redirect returned");
+assert.ok(submitFunction.includes("missingRequiredBuyerCredentials"), "Missing server-side required credential validation");
+assert.ok(submitFunction.includes("missing_required_credentials"), "Missing required credential error details");
+assert.ok(
+  submitFunction.includes("if (!isAdmin && !isDeveloper)"),
+  "Required credential enforcement must target buyer submissions without blocking admin maintenance"
+);
+assert.ok(
+  source.includes("if (bundleSetup) resetCredentialTutorialLinks();"),
+  "Bundle rendering must reset tutorial deduplication after discarded standalone field HTML"
+);
 assert.ok(css.includes(".setup-credential-help-link"), "Missing tutorial button styles");
 assert.ok(css.includes(".setup-processing-panel"), "Missing processing panel styles");
 assert.ok(css.includes(".setup-report-ready"), "Missing ready panel styles");

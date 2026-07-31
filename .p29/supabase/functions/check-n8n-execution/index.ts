@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { safeEnqueueOutputReadyEmail } from "../_shared/nexus-email.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -1042,7 +1043,7 @@ async function applyExecutionSuccess(
 
   let existingOutputsQuery = adminClient
     .from("automation_outputs")
-    .select("id")
+    .select("id, title")
     .eq("customer_automation_id", customerAutomation.id)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -1112,6 +1113,18 @@ async function applyExecutionSuccess(
       had_existing_output: false,
       order_status_checked: false,
     };
+  }
+
+  if (recoveredOutput?.id) {
+    await safeEnqueueOutputReadyEmail(adminClient, {
+      outputId: recoveredOutput.id,
+      buyerId: customerAutomation.buyer_id,
+      orderId: cleanString(runContext?.order_id) || customerAutomation.order_id,
+      automationId: customerAutomation.automation_id,
+      customerAutomationId: customerAutomation.id,
+      productTitle: customerAutomation.name,
+      outputTitle: recoveredOutput.title,
+    });
   }
 
   await adminClient

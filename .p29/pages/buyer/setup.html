@@ -229,8 +229,27 @@
       return match ? answers[match] : "";
     }
 
+    function fieldIsRequired(field = {}) {
+      const value = field.required;
+      return value === true || value === 1 || ["true", "required", "yes", "1"].includes(String(value || "").trim().toLowerCase());
+    }
+
+    function savedCredentialKeysFromSubmission(submission = {}) {
+      const value = submission?.credential_keys_available;
+      return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+    }
+
+    function fieldHasSavedCredential(field = {}, options = {}) {
+      if (field.has_saved_credential === true) return true;
+      const candidateNames = [field.name, field.key, field.credential_key, ...(field.original_field_names || [])]
+        .map(normalizeAnswerKey)
+        .filter(Boolean);
+      const savedKeys = new Set((options.savedCredentialKeys || []).map(normalizeAnswerKey).filter(Boolean));
+      return candidateNames.some(name => savedKeys.has(name));
+    }
+
     function fieldRequired(field) {
-      return field.required ? `data-original-required="true"` : `data-original-required="false"`;
+      return fieldIsRequired(field) ? `data-original-required="true"` : `data-original-required="false"`;
     }
 
     const SKIP_FIELD_PREFIX = "__nexus_skip__";
@@ -310,6 +329,8 @@
     }
 
     function fieldCanBeSkipped(field = {}) {
+      if (fieldIsRequired(field)) return false;
+
       if (field.allow_skip === false || field.skippable === false) return false;
 
       const name = fieldNameForMatching(field);
@@ -512,9 +533,19 @@
       return null;
     }
 
+    let renderedCredentialTutorialKeys = new Set();
+
+    function resetCredentialTutorialLinks() {
+      renderedCredentialTutorialKeys = new Set();
+    }
+
     function renderCredentialTutorialLinks(field = {}) {
       const tutorial = credentialTutorialForField(field);
       if (!tutorial) return "";
+
+      const tutorialKey = `${tutorial.docs}|${tutorial.video}`;
+      if (renderedCredentialTutorialKeys.has(tutorialKey)) return "";
+      renderedCredentialTutorialKeys.add(tutorialKey);
 
       const label = escapeHtml(tutorial.label);
       return `
@@ -532,7 +563,7 @@
     function renderSetupFieldLabel(field, label) {
       return `
         <div class="setup-field-label-row">
-          <label>${escapeHtml(label)} ${field.required ? "<span>*</span>" : ""}</label>
+          <label>${escapeHtml(label)} ${fieldIsRequired(field) ? "<span>*</span>" : ""}</label>
           ${renderCredentialTutorialLinks(field)}
         </div>
       `;
@@ -588,10 +619,11 @@
       }
 
       if (type === "secret") {
-        const secretRequired = field.required && !options.hasSubmitted
+        const hasSavedCredential = fieldHasSavedCredential(field, options);
+        const secretRequired = fieldIsRequired(field) && !hasSavedCredential
           ? `data-original-required="true"`
           : `data-original-required="false"`;
-        const placeholder = options.hasSubmitted
+        const placeholder = hasSavedCredential
           ? "Leave blank to keep saved credential"
           : (field.placeholder || "Paste API key, token, or secret value");
 
@@ -611,7 +643,7 @@
             >
             <small>
               ${escapeHtml(field.description || "This credential is used only for this automation and is never shown back after saving.")}
-              ${options.hasSubmitted ? " Leave blank to keep the saved value." : ""}
+              ${hasSavedCredential ? " Leave blank to keep the saved value." : ""}
             </small>
           </div>
         `;
@@ -1333,7 +1365,8 @@
         name: formName,
         label: field.label || bundleFieldLabelFromSemantic(originalName, originalName),
         type: kind === "credential" ? "secret" : field.type || "text",
-        required: Boolean(field.required),
+        required: fieldIsRequired(field),
+        has_saved_credential: kind === "credential" && savedCredentialKeysFromSubmission(entry.submission).some(key => normalizeAnswerKey(key) === normalizeAnswerKey(originalName)),
         semantic: `${kind}:${entryKey}:${originalName}`,
         sources: [sourceRecord],
         original_field_names: [originalName],
@@ -2365,6 +2398,7 @@ async function resolveProductFromCustomerAutomation(automation) {
           );
 
       const existingAnswers = bundleSetup ? bundleSetup.existingAnswers || {} : mergeSetupAnswers(latestSubmission);
+      const savedCredentialKeys = bundleSetup ? [] : savedCredentialKeysFromSubmission(latestSubmission);
       const installType = automation.install_type || order.install_type || "self_serve";
       const hasSubmitted = bundleSetup
         ? bundleSetup.entries.every(entry => entry.submission)
@@ -2421,9 +2455,10 @@ async function resolveProductFromCustomerAutomation(automation) {
       const lastErrorCode = automation.last_error_code || "";
       const lastErrorNode = automation.last_error_node || "";
       const hasAnySchema = visibleSetupSchema.length || credentialSchema.length;
+      resetCredentialTutorialLinks();
 
       const setupFieldsHtml = visibleSetupSchema.length
-        ? renderFieldListWithSkips(visibleSetupSchema, existingAnswers, { hasSubmitted })
+        ? renderFieldListWithSkips(visibleSetupSchema, existingAnswers, { hasSubmitted, savedCredentialKeys })
         : (
             hasAnySchema
               ? ""
@@ -2447,13 +2482,14 @@ async function resolveProductFromCustomerAutomation(automation) {
             </p>
           </div>
 
-          ${renderFieldListWithSkips(credentialSchema, existingAnswers, { hasSubmitted, isCredential: true })}
+          ${renderFieldListWithSkips(credentialSchema, existingAnswers, { hasSubmitted, savedCredentialKeys, isCredential: true })}
         `
         : "";
 
       const showCredentialsFirst = Boolean(bundleSetup && credentialSchema.some(field => isMetaAccessTokenField(field)));
+      if (bundleSetup) resetCredentialTutorialLinks();
       const formFields = bundleSetup
-        ? renderBundleSetupFields(bundleSetup, visibleSetupSchema, credentialSchema, existingAnswers, { hasSubmitted })
+        ? renderBundleSetupFields(bundleSetup, visibleSetupSchema, credentialSchema, existingAnswers, { hasSubmitted, savedCredentialKeys })
         : showCredentialsFirst
           ? credentialFieldsHtml + setupFieldsHtml
           : setupFieldsHtml + credentialFieldsHtml;

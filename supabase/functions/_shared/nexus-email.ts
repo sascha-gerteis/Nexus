@@ -240,6 +240,8 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
   const bundleTitle = cleanString(context.bundle_title || productTitle || "your bundle", 240);
   const messagePreview = cleanString(context.message_preview || "You have a new message in Nexus.", 500);
   const dashboardUrl = cleanString(context.dashboard_url || "/pages/buyer/dashboard.html", 500);
+  const outputTitle = cleanString(context.output_title, 240);
+  const outputUrl = cleanString(context.output_url || dashboardUrl, 500);
   const orderUrl = cleanString(context.order_url || dashboardUrl, 500);
   const adminNotes = cleanString(context.admin_notes, 1000);
   const refundDisplay = cleanString(context.refund_display || "your latest monthly payment", 120);
@@ -376,6 +378,23 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
         ].join(""),
         "Open buyer dashboard",
         orderUrl,
+      );
+
+    case "automation_output_ready":
+      return makeTemplate(
+        `Your ${productTitle} output is ready`,
+        `${name ? `${name}, your` : "Your"} result is ready.`,
+        [
+          eyebrow("Output ready"),
+          paragraph(`${productTitle} has finished processing and your result is available in Nexus.`),
+          outputTitle ? bullets([`Result: ${outputTitle}`]) : "",
+          bundleTitle && bundleTitle !== productTitle
+            ? paragraph(`This result is part of ${bundleTitle}.`)
+            : "",
+          paragraph("Open the finished output using the button below. It will also remain available in your buyer dashboard."),
+        ].join(""),
+        "View your result",
+        outputUrl,
       );
 
     case "subscription_cancellation_approved":
@@ -558,6 +577,88 @@ export async function safeEnqueueEmail(
     return result;
   } catch (error) {
     console.warn("Email queue failed:", type, error);
+    return { data: null, error, skipped: true, reason: "exception" };
+  }
+}
+
+export async function safeEnqueueOutputReadyEmail(
+  adminClient: any,
+  input: {
+    outputId?: string | null;
+    buyerId?: string | null;
+    orderId?: string | null;
+    automationId?: string | null;
+    customerAutomationId?: string | null;
+    productTitle?: string | null;
+    bundleTitle?: string | null;
+    outputTitle?: string | null;
+  },
+) {
+  try {
+    const outputId = cleanString(input.outputId, 120);
+    if (!outputId) {
+      return { data: null, error: null, skipped: true, reason: "missing_output_id" };
+    }
+
+    const orderId = cleanString(input.orderId, 120);
+    const buyerId = cleanString(input.buyerId, 120);
+    let order: Record<string, any> = {};
+
+    if (orderId) {
+      const { data, error } = await adminClient
+        .from("orders")
+        .select("*")
+        .eq("id", orderId)
+        .maybeSingle();
+
+      if (error) console.warn("Could not load output email order:", error.message);
+      if (data) order = data;
+    }
+
+    let recipientEmail = cleanString(order.buyer_email, 240).toLowerCase();
+    let recipientName = cleanString(order.buyer_name, 180);
+
+    if (!recipientEmail && buyerId) {
+      const { data } = await adminClient.auth.admin.getUserById(buyerId);
+      const buyer = data?.user;
+      recipientEmail = cleanString(buyer?.email, 240).toLowerCase();
+      recipientName = recipientName || cleanString(
+        buyer?.user_metadata?.full_name || buyer?.user_metadata?.name,
+        180,
+      );
+    }
+
+    const productTitle = cleanString(
+      input.productTitle || order.automation_title || "your automation",
+      240,
+    );
+    const orderIsBundle = cleanString(order.order_type, 40).toLowerCase() === "bundle";
+    const bundleTitle = cleanString(
+      input.bundleTitle || (orderIsBundle ? order.automation_title : ""),
+      240,
+    );
+    const outputUrl = `/pages/buyer/output.html?id=${encodeURIComponent(outputId)}`;
+
+    return await safeEnqueueEmail(
+      adminClient,
+      "automation_output_ready",
+      { email: recipientEmail, name: recipientName },
+      {
+        buyer_id: buyerId,
+        order_id: orderId,
+        automation_id: cleanString(input.automationId, 120),
+        customer_automation_id: cleanString(input.customerAutomationId, 120),
+        output_id: outputId,
+        product_title: productTitle,
+        bundle_title: bundleTitle,
+        output_title: cleanString(input.outputTitle, 240),
+        output_url: outputUrl,
+        dashboard_url: "/pages/buyer/dashboard.html#outputs",
+      },
+      { dedupeKey: `automation_output_ready:${outputId}` },
+    );
+  } catch (error) {
+    console.warn("Output-ready email queue failed:", error);
     return { data: null, error, skipped: true, reason: "exception" };
   }
 }

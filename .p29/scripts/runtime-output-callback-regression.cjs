@@ -6,6 +6,18 @@ const source = fs.readFileSync(
   path.join(__dirname, "..", "supabase", "functions", "runtime-submit-output", "index.ts"),
   "utf8",
 );
+const reconciliationSource = fs.readFileSync(
+  path.join(__dirname, "..", "supabase", "functions", "check-n8n-execution", "index.ts"),
+  "utf8",
+);
+
+assert.match(source, /safeEnqueueOutputReadyEmail/);
+assert.match(source, /outputId: output\.id/);
+assert.match(reconciliationSource, /safeEnqueueOutputReadyEmail/);
+assert.match(reconciliationSource, /if \(recoveredOutput\?\.id\)/);
+assert.match(reconciliationSource, /outputId: recoveredOutput\.id/);
+assert.doesNotMatch(reconciliationSource, /outputId: currentOutputId/);
+assert.match(reconciliationSource, /\.select\("id, title"\)/);
 
 assert.match(source, /function selectLegacyStandaloneCallbackRun\(/);
 assert.match(source, /cleanString\(run\?\.order_id\) === orderId/);
