@@ -346,7 +346,7 @@
 
             <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-top:1rem">
               <button class="btn btn-primary" id="grantPilotButton" type="submit">Grant complimentary pilot</button>
-              <span style="color:var(--muted);font-size:.9rem">One product ? one pilot run ? no charge</span>
+              <span style="color:var(--muted);font-size:.9rem">One product · one pilot run · no charge</span>
             </div>
 
             <div class="pilot-result" id="pilotResult" role="status" aria-live="polite"></div>
@@ -359,19 +359,19 @@
 
           <div class="pilot-safety">
             <div class="pilot-safety-item">
-              <span class="pilot-safety-check">?</span>
+              <span class="pilot-safety-check">✓</span>
               <span>No Stripe charge, subscription, renewal, invoice, developer payout, or cancellation request is created.</span>
             </div>
             <div class="pilot-safety-item">
-              <span class="pilot-safety-check">?</span>
+              <span class="pilot-safety-check">✓</span>
               <span>The pilot is one-time and manual even when the marketplace product normally has monthly pricing.</span>
             </div>
             <div class="pilot-safety-item">
-              <span class="pilot-safety-check">?</span>
+              <span class="pilot-safety-check">✓</span>
               <span>Outputs use the real order, buyer, automation, and run identity. Existing callback protections stay active.</span>
             </div>
             <div class="pilot-safety-item">
-              <span class="pilot-safety-check">?</span>
+              <span class="pilot-safety-check">✓</span>
               <span>A buyer cannot receive the same product pilot twice by accident.</span>
             </div>
           </div>
@@ -397,7 +397,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260730-pilot-grants"></script>
-  <script src="/assets/js/nexus-db.js?v=20260730-pilot-grants"></script>
+  <script src="/assets/js/nexus-db.js?v=20260802-analytics-correctness"></script>
   <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
 
   <script>
@@ -439,12 +439,12 @@
     function buyerLabel(buyer) {
       const identity = buyer.name || buyer.email || "Buyer";
       const details = [buyer.email, buyer.company].filter(Boolean).filter(value => value !== identity);
-      return details.length ? `${identity} ? ${details.join(" ? ")}` : identity;
+      return details.length ? `${identity} — ${details.join(" · ")}` : identity;
     }
 
     function productLabel(product) {
       const developer = product.developer?.display_name || product.developer?.handle || "Nexus";
-      return `${product.title || "Product"} ? ${developer}`;
+      return `${product.title || "Product"} — ${developer}`;
     }
 
     function renderBuyerOptions() {
@@ -515,7 +515,7 @@
         : "The buyer will see the product immediately and complete its normal setup form before the pilot runs.";
 
       summary.innerHTML = `
-        <strong>${escapeHtml(product.title)} ? ${escapeHtml(buyer.name || buyer.email)}</strong>
+        <strong>${escapeHtml(product.title)} → ${escapeHtml(buyer.name || buyer.email)}</strong>
         <span>${escapeHtml(behavior)}</span>
       `;
     }
@@ -561,7 +561,7 @@
             <div>
               <span class="${statusPillClass(label)}">${escapeHtml(label)}</span>
               <h4>${escapeHtml(order.automation_title || "Pilot product")}</h4>
-              <p>${escapeHtml(buyer)}${order.buyer_company ? ` ? ${escapeHtml(order.buyer_company)}` : ""}</p>
+              <p>${escapeHtml(buyer)}${order.buyer_company ? ` · ${escapeHtml(order.buyer_company)}` : ""}</p>
             </div>
             <div class="pilot-row-meta">
               <strong>${escapeHtml(modeLabel)}</strong>

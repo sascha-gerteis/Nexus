@@ -1143,7 +1143,7 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
   );
 
   const missingSlots = slots.filter((slot: any) => !boundSlotKeys.has(slotKey(slot)));
-  const errors = missingSlots.map((slot: any) => ({
+  const missingErrors = missingSlots.map((slot: any) => ({
     node_name: slot.node_name,
     node_type: slot.node_type,
     credential_key: slot.credential_key,
@@ -1158,6 +1158,15 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
         : `Add a ${slot.provider_label || slot.provider || "developer"} credential for ${slot.node_name} (${slot.n8n_credential_type || slot.credential_key || "n8n credential"}), then press Apply credentials & run check.`
       : `Add a ${slot.provider_label || slot.provider || "developer"} credential for ${slot.node_name} (${slot.n8n_credential_type || slot.credential_key || "n8n credential"}), then press Apply credentials & run check.`,
   }));
+  const retainedTechnicalTestErrors = (Array.isArray(product.credential_binding_errors)
+    ? product.credential_binding_errors
+    : [])
+    .filter((error: any) => (
+      Boolean(error?.detected_by_technical_test) &&
+      slots.some((slot: any) => bindingMatchesSlot(error, slot)) &&
+      !missingErrors.some((missing: any) => bindingMatchesSlot(missing, error))
+    ));
+  const errors = [...missingErrors, ...retainedTechnicalTestErrors];
   const credentialStatus = !slots.length
     ? "not_required"
     : errors.length || missingSlots.length
@@ -1170,7 +1179,7 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
     n8n_credential_bindings: bindings,
     credential_binding_status: credentialStatus,
     credential_binding_errors: errors,
-    n8n_last_credential_bound_at: !missingSlots.length ? new Date().toISOString() : product.n8n_last_credential_bound_at || null,
+    n8n_last_credential_bound_at: !errors.length ? new Date().toISOString() : product.n8n_last_credential_bound_at || null,
   };
 
   try {

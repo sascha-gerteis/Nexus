@@ -4,6 +4,7 @@ import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const IPINFO_TOKEN = Deno.env.get("IPINFO_TOKEN") || "";
 
 function cleanString(value: unknown, max = 500) {
   return String(value ?? "").trim().slice(0, max);
@@ -228,6 +229,63 @@ function requestCountryCode(req: Request, body: any) {
   return /^[A-Z]{2}$/.test(value) ? value : "";
 }
 
+function requestIpAddress(req: Request) {
+  const forwarded = cleanString(
+    req.headers.get("x-forwarded-for") ||
+      req.headers.get("cf-connecting-ip") ||
+      req.headers.get("x-real-ip") ||
+      "",
+    500,
+  );
+  const candidate = cleanString(forwarded.split(",")[0], 64).replace(/^\[|\]$/g, "");
+  if (!candidate || !/^[0-9a-f:.]+$/i.test(candidate)) return "";
+  if (
+    candidate === "::1" ||
+    /^f[cd][0-9a-f]{2}:/i.test(candidate) ||
+    /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(candidate)
+  ) return "";
+  return candidate;
+}
+
+async function resolveCountryCode(req: Request, body: any, adminClient: any, effectiveVisitorKey: string) {
+  const directCode = requestCountryCode(req, body);
+  if (directCode) return directCode;
+
+  if (effectiveVisitorKey) {
+    const { data: previous } = await adminClient
+      .from("analytics_events")
+      .select("country_code")
+      .eq("visitor_key", effectiveVisitorKey)
+      .not("country_code", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const previousCode = cleanString(previous?.country_code, 8).toUpperCase();
+    if (/^[A-Z]{2}$/.test(previousCode)) return previousCode;
+  }
+
+  if (!IPINFO_TOKEN) return "";
+  const ipAddress = requestIpAddress(req);
+  if (!ipAddress) return "";
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 1800);
+  try {
+    const response = await fetch(
+      `https://ipinfo.io/${encodeURIComponent(ipAddress)}?token=${encodeURIComponent(IPINFO_TOKEN)}`,
+      { headers: { Accept: "application/json" }, signal: controller.signal },
+    );
+    if (!response.ok) return "";
+    const payload = await response.json();
+    const countryCode = cleanString(payload?.country, 8).toUpperCase();
+    return /^[A-Z]{2}$/.test(countryCode) ? countryCode : "";
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function userAgentDimensions(value: unknown, hintedDevice: unknown = "") {
   const agent = lower(value);
   let deviceType = lower(hintedDevice);
@@ -269,6 +327,8 @@ async function trackEvent(req: Request, adminClient: any, body: any) {
 
   const dimensions = userAgentDimensions(userAgent, body.device_type);
   const anonymousId = cleanString(body.anonymous_id || "", 120);
+  const effectiveVisitorKey = anonymousId || auth.user?.id || cleanString(body.session_id || "", 120);
+  const countryCode = await resolveCountryCode(req, body, adminClient, effectiveVisitorKey);
 
   const row = {
     event_name: eventName,
@@ -283,10 +343,10 @@ async function trackEvent(req: Request, adminClient: any, body: any) {
     landing_page: cleanString(body.landing_page || body.page_path || "/", 500),
     anonymous_id: anonymousId,
     session_id: cleanString(body.session_id || "", 120),
-    visitor_key: anonymousId || auth.user?.id || cleanString(body.session_id || "", 120) || null,
+    visitor_key: effectiveVisitorKey || null,
     user_id: auth.user?.id || null,
     user_role: auth.profile?.role || "anonymous",
-    country_code: requestCountryCode(req, body) || null,
+    country_code: countryCode || null,
     timezone: cleanString(body.timezone || "", 120),
     language: cleanString(body.language || "", 40),
     device_type: dimensions.deviceType,
@@ -614,7 +674,15 @@ async function adminSummary(req: Request, adminClient: any, body: any) {
     p_audience: audience,
   });
 
-  if (!aggregateError && aggregate) return aggregate;
+  if (!aggregateError && aggregate) {
+    return {
+      ...aggregate,
+      meta: {
+        ...safeJsonObject(aggregate.meta, {}),
+        country_lookup_configured: Boolean(IPINFO_TOKEN),
+      },
+    };
+  }
 
   console.warn("Database analytics aggregation unavailable; using paginated fallback:", aggregateError?.message || "unknown error");
   const audienceFilter = (query: any) => {
@@ -630,6 +698,7 @@ async function adminSummary(req: Request, adminClient: any, body: any) {
     data_complete: !fetched.truncated,
     row_limit: fetched.truncated ? 100000 : null,
     audience,
+    country_lookup_configured: Boolean(IPINFO_TOKEN),
   };
   return summary;
 }

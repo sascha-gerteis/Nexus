@@ -9,6 +9,7 @@ const stripeWebhook = readSource("supabase/functions/stripe-webhook/index.ts");
 const submitSetup = readSource("supabase/functions/submit-automation-setup/index.ts");
 const runner = readSource("supabase/functions/run-scheduled-automations/index.ts");
 const provision = readSource("supabase/functions/provision-customer-workflow/index.ts");
+const ensureCustomerAutomations = readSource("supabase/functions/ensure-customer-automations/index.ts");
 const installRequest = readSource("supabase/functions/nexus-install-request/index.ts");
 const migration = readSource("supabase/monthly_subscription_runner_install_or_patch.sql");
 
@@ -43,10 +44,18 @@ function requireText(source, text, label) {
   [runner, '!subscriptionCancelled', "forced runs cannot bypass cancellation"],
   [runner, 'next_run_at = nextScheduledDate(frequency, scheduledFor, new Date())', "schedule advancement"],
   [provision, 'stripe_cancel_at_period_end', "provisioning cancellation guard"],
+  [ensureCustomerAutomations, '.from("automations")\n      .select("*")\n      .eq("id", order.automation_id)', "standalone product cadence lookup"],
+  [ensureCustomerAutomations, 'normalizeRunFrequency(product, order)', "product cadence independent of billing"],
+  [ensureCustomerAutomations, 'return "scheduled_interval";', "canonical scheduled trigger mode"],
+  [ensureCustomerAutomations, '["every_30_minutes", "hourly", "daily", "weekly", "monthly", "quarterly"]', "supported execution cadences"],
   [installRequest, 'stripe_cancel_at_period_end', "guided install cancellation guard"],
   [migration, 'create unique index if not exists idx_automation_runs_run_key_unique', "duplicate monthly run protection"],
   [migration, "'nexus-monthly-runner-daily'", "scheduled runner cron template"],
 ].forEach(([source, text, label]) => requireText(source, text, label));
+
+if (ensureCustomerAutomations.includes('run_frequency: isMonthlyOrder(order) ? "monthly"')) {
+  throw new Error("Standalone provisioning still overwrites product cadence with monthly billing.");
+}
 
 function addMonths(date, months) {
   const next = new Date(date.getTime());

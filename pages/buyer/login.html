@@ -82,7 +82,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260725-auth-email"></script>
+  <script src="/assets/js/nexus-db.js?v=20260802-analytics-correctness"></script>
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -91,7 +91,7 @@
       if (typeof NexusDB === "undefined") {
         statusBox.innerHTML = `
           <div class="error">
-            NexusDB failed to load. Check /assets/js/nexus-db.js?v=20260725-auth-email for errors.
+            NexusDB failed to load. Check /assets/js/nexus-db.js?v=20260802-analytics-correctness for errors.
           </div>
         `;
         return;

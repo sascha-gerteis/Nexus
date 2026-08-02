@@ -193,19 +193,31 @@ function productRuntimeChangedSinceCustomerSync(existing: any, product: any) {
 
 function normalizeRuntimeTriggerMode(product: any, isSubscription: boolean) {
   const raw = cleanString(product?.runtime_trigger_mode || product?.trigger_mode).toLowerCase();
+  const rawFrequency = cleanString(
+    product?.runtime_run_frequency || product?.run_frequency || product?.frequency,
+  ).toLowerCase();
 
   if (["on_demand", "on-demand", "chat", "manual_trigger"].includes(raw)) return "on_demand";
-  if (["scheduled", "recurring", "monthly", "daily", "weekly"].includes(raw)) return "scheduled";
-  if (isSubscription) return "scheduled";
+  if (["scheduled", "scheduled_interval", "recurring", "monthly", "daily", "weekly", "hourly"].includes(raw)) {
+    return "scheduled_interval";
+  }
+  if (["setup", "setup_complete", "after_setup", "manual"].includes(raw)) return "setup_complete";
+  if (["every_30_minutes", "hourly", "daily", "weekly", "monthly", "quarterly"].includes(rawFrequency)) {
+    return "scheduled_interval";
+  }
+  if (isSubscription) return "subscription_monthly";
 
-  return "setup";
+  return "setup_complete";
 }
 
 function normalizeRunFrequency(product: any, order: any) {
   const raw = cleanString(product?.runtime_run_frequency || product?.run_frequency || product?.frequency).toLowerCase();
+  const triggerMode = normalizeRuntimeTriggerMode(product, isMonthlyOrder(order));
 
-  if (["daily", "weekly", "monthly", "quarterly"].includes(raw)) return raw;
-  return isMonthlyOrder(order) ? "monthly" : "manual";
+  if (triggerMode === "on_demand") return "on_demand";
+  if (triggerMode === "setup_complete") return "manual";
+  if (["every_30_minutes", "hourly", "daily", "weekly", "monthly", "quarterly"].includes(raw)) return raw;
+  return triggerMode === "subscription_monthly" || isMonthlyOrder(order) ? "monthly" : "manual";
 }
 
 async function loadBundleProducts(adminClient: any, order: any) {
@@ -302,14 +314,35 @@ async function ensureForOrder(adminClient: any, order: any) {
     throw new Error(existingError.message);
   }
 
+  let product: any = null;
+  if (order.automation_id) {
+    const productResult = await adminClient
+      .from("automations")
+      .select("*")
+      .eq("id", order.automation_id)
+      .maybeSingle();
+
+    if (productResult.error) {
+      throw new Error(productResult.error.message);
+    }
+    product = productResult.data || null;
+  }
+
   const installType = normalizeInstallType(order.install_type);
   const setupStatus = setupStatusForInstallType(installType);
   const status = statusForInstallType(installType);
+  const runFrequency = product
+    ? normalizeRunFrequency(product, order)
+    : cleanString(existing?.run_frequency) || (isMonthlyOrder(order) ? "monthly" : "manual");
+  const runtimeTriggerMode = product
+    ? normalizeRuntimeTriggerMode(product, isMonthlyOrder(order))
+    : cleanString(existing?.runtime_trigger_mode) || (isMonthlyOrder(order) ? "subscription_monthly" : "setup_complete");
 
   if (existing?.id) {
     const updatePayload = {
       install_type: installType,
-      run_frequency: isMonthlyOrder(order) ? "monthly" : existing.run_frequency || "manual",
+      runtime_trigger_mode: runtimeTriggerMode,
+      run_frequency: runFrequency,
       updated_at: nowIso(),
     };
 
@@ -348,9 +381,10 @@ async function ensureForOrder(adminClient: any, order: any) {
     status,
     install_type: installType,
     setup_status: setupStatus,
+    runtime_trigger_mode: runtimeTriggerMode,
     runtime_status: "not_started",
     health_status: "not_configured",
-    run_frequency: isMonthlyOrder(order) ? "monthly" : "manual",
+    run_frequency: runFrequency,
     schedule_status: "inactive",
     created_at: nowIso(),
     updated_at: nowIso(),

@@ -12,14 +12,21 @@ const includesAll = (source, markers, label) => {
 
 const credentials = read("supabase/functions/_shared/nexus-credentials.ts");
 const technicalTest = read("supabase/functions/test-n8n-workflow/index.ts");
+const developerCredentials = read("supabase/functions/developer-credentials/index.ts");
 const developerDashboard = read("pages/developer/dashboard.html");
 
 includesAll(credentials, [
   "export function credentialMatchScore",
   "const gmailSlot =",
-  "credentialProviderName !== \"gmail\"",
+  "credentialProviderName && credentialProviderName !== \"gmail\"",
+  "!credentialProviderName && credentialType !== \"gmailoauth2\"",
   "credentialType !== \"gmailoauth2\"",
   "googleServiceAccountCredential && !canPreferGoogleServiceAccountForSlot(slot)",
+  "function credentialSelectionForSlot",
+  "credentialSelection.ambiguous",
+  "More than one saved",
+  "n8n-nodes-base.stickynote",
+  "if (isNonCredentialUtilityNode(node) || isNexusInternalRuntimeNode(node)) continue;",
   "getLiveN8nCredentialSummaries(credentialSyncAttempted)",
   "liveN8nCredentialLookupFailed",
   "requiresNativeAccountSetup(slot, slotCredentialType) &&\n      liveN8nCredentialLookupFailed",
@@ -38,10 +45,20 @@ includesAll(technicalTest, [
   "detected_by_technical_test: true",
 ], "technical-test credential downgrade");
 
+includesAll(developerCredentials, [
+  "const retainedTechnicalTestErrors =",
+  "Boolean(error?.detected_by_technical_test)",
+  "const errors = [...missingErrors, ...retainedTechnicalTestErrors]",
+  "n8n_last_credential_bound_at: !errors.length",
+], "credential scan failure retention");
+
 includesAll(developerDashboard, [
   'lowerText.includes("credential with id")',
   "The saved Gmail account no longer exists in hosted n8n.",
   "await scanCurrentProductCredentials();",
+  "Set up in n8n instead",
+  "Open n8n editor",
+  'provider === "gmail" || slotType === "gmailoauth2"',
 ], "developer credential guidance");
 
 console.log("Credential integrity regression passed.");

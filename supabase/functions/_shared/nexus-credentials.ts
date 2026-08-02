@@ -2646,8 +2646,9 @@ export function credentialMatchScore(credential: any, slot: any) {
   // Gmail's native node requires Gmail OAuth. A Google service account can be
   // reused for Sheets, Drive, or Docs, but it must never satisfy a Gmail slot.
   if (gmailSlot) {
-    if (credentialProviderName !== "gmail") return 0;
     if (credentialType && credentialType !== "gmailoauth2") return 0;
+    if (credentialProviderName && credentialProviderName !== "gmail") return 0;
+    if (!credentialProviderName && credentialType !== "gmailoauth2") return 0;
   }
 
   if (googleServiceAccountCredential && !canPreferGoogleServiceAccountForSlot(slot)) {
@@ -2698,17 +2699,31 @@ function previousCredentialIdForSlot(bindings: any[], slot: any) {
   ))?.developer_credential_id);
 }
 
-function bestCredentialForSlot(credentials: any[], slot: any, previousBindings: any[] = []) {
+function credentialSelectionForSlot(credentials: any[], slot: any, previousBindings: any[] = []) {
   const previousCredentialId = previousCredentialIdForSlot(previousBindings, slot);
-
-  return (credentials || [])
+  const ranked = (credentials || [])
     .map((credential) => ({
       credential,
       score: credentialMatchScore(credential, slot)
-        + (previousCredentialId && cleanString(credential?.id) === previousCredentialId ? 20 : 0),
+        + (cleanString(credential?.status || "active") === "active" ? 5 : 0),
     }))
     .filter((item) => item.score > 0)
-    .sort((left, right) => right.score - left.score)[0]?.credential || null;
+    .sort((left, right) => right.score - left.score);
+
+  const previous = ranked.find(({ credential }) => (
+    previousCredentialId && cleanString(credential?.id) === previousCredentialId
+  ));
+  if (previous) {
+    return { credential: previous.credential, ambiguous: false, candidates: [previous.credential] };
+  }
+
+  const topScore = ranked[0]?.score || 0;
+  const candidates = ranked.filter((item) => item.score === topScore).map((item) => item.credential);
+  if (candidates.length !== 1) {
+    return { credential: null, ambiguous: candidates.length > 1, candidates };
+  }
+
+  return { credential: candidates[0], ambiguous: false, candidates };
 }
 
 async function loadCredentialsForProduct(adminClient: SupabaseAdminClient, product: any) {
@@ -3399,7 +3414,8 @@ export async function bindAutomationCredentials(options: {
   }
 
   for (const slot of slots) {
-    let credential = bestCredentialForSlot(credentials, slot, previousBindings);
+    const credentialSelection = credentialSelectionForSlot(credentials, slot, previousBindings);
+    let credential = credentialSelection.credential;
     let credentialSyncAttempted = false;
     const usesNexusProxy = Boolean(slot.uses_nexus_proxy);
     const fieldCredentialBinding = usesFieldCredentialBinding(slot);
@@ -3732,9 +3748,14 @@ export async function bindAutomationCredentials(options: {
       continue;
     }
 
-    const missingMessage = isNativeN8nCredentialSlot(slot, slotCredentialType) && requiresNativeAccountSetup(slot, slotCredentialType)
-      ? nativeCredentialManualSetupMessage(slot, slot.n8n_credential_type || slot.credential_key, null)
-      : `Next: add a ${slot.provider_label || slot.provider || "developer"} credential for ${slot.node_name} (${slot.n8n_credential_type || slot.credential_key || "n8n credential"})${nodeSummaryText ? ` using ${nodeSummaryText}` : ""}, then press Apply credentials & run check.${importedCredentialNote}`;
+    const ambiguousCredentialLabels = credentialSelection.candidates
+      .map((candidate: any) => cleanString(candidate?.label || candidate?.provider_label || candidate?.id))
+      .filter(Boolean);
+    const missingMessage = credentialSelection.ambiguous
+      ? `More than one saved ${slot.provider_label || slot.provider || "developer"} credential matches "${slot.node_name}". Choose the correct saved account in this credential card, then press Apply credentials & run check.`
+      : isNativeN8nCredentialSlot(slot, slotCredentialType) && requiresNativeAccountSetup(slot, slotCredentialType)
+        ? nativeCredentialManualSetupMessage(slot, slot.n8n_credential_type || slot.credential_key, null)
+        : `Next: add a ${slot.provider_label || slot.provider || "developer"} credential for ${slot.node_name} (${slot.n8n_credential_type || slot.credential_key || "n8n credential"})${nodeSummaryText ? ` using ${nodeSummaryText}` : ""}, then press Apply credentials & run check.${importedCredentialNote}`;
 
     errors.push({
       node_name: slot.node_name,
@@ -3745,6 +3766,10 @@ export async function bindAutomationCredentials(options: {
       provider_label: slot.provider_label,
       imported_n8n_credential_id: slot.current_id || null,
       imported_n8n_credential_name: slot.current_name || null,
+      matching_credential_ids: credentialSelection.ambiguous
+        ? credentialSelection.candidates.map((candidate: any) => cleanString(candidate?.id)).filter(Boolean)
+        : [],
+      matching_credential_labels: credentialSelection.ambiguous ? ambiguousCredentialLabels : [],
       message: missingMessage,
     });
   }

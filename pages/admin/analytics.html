@@ -338,7 +338,9 @@
       const exact = meta.aggregation_mode === "database" && meta.data_complete !== false;
       document.getElementById("analyticsDataQuality").className = `analytics-quality ${exact ? "is-complete" : "is-warning"}`;
       document.getElementById("analyticsDataQuality").textContent = exact
-        ? `Full-range database aggregation · no 1,000-row ceiling · country signal available for ${formatNumber(meta.country_coverage, 1)}% of visitors.`
+        ? meta.country_lookup_configured
+          ? `Full-range database aggregation · no 1,000-row ceiling · country signal available for ${formatNumber(meta.country_coverage, 1)}% of visitors.`
+          : "Full-range database aggregation · no 1,000-row ceiling · country lookup needs an IPINFO_TOKEN before future visits can be attributed."
         : `Compatibility mode is active${meta.data_complete === false ? " and the safety ceiling was reached" : ""}. Apply the analytics insights migration for exact database aggregation.`;
 
       document.getElementById("topSources").innerHTML = listRows(

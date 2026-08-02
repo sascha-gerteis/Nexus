@@ -26,6 +26,11 @@ includesAll(edge, [
   'p_audience: audience',
   'aggregation_mode: "paginated_fallback"',
   'req.headers.get("cf-ipcountry")',
+  'req.headers.get("x-forwarded-for")',
+  'const IPINFO_TOKEN = Deno.env.get("IPINFO_TOKEN")',
+  'https://ipinfo.io/',
+  'resolveCountryCode(req, body, adminClient, effectiveVisitorKey)',
+  'country_lookup_configured: Boolean(IPINFO_TOKEN)',
   'visitor_key:',
   'country_code:',
   'device_type:',
@@ -193,6 +198,7 @@ includesAll(adminPage, [
   'id="analyticsFunnel"',
   "Full-range database aggregation",
   "no 1,000-row ceiling",
+  "country lookup needs an IPINFO_TOKEN",
   "NexusDB.getAdminAnalytics(days, audience)",
 ], "admin analytics page");
 
@@ -207,10 +213,13 @@ includesAll(privacy, [
 ], "privacy disclosure");
 
 const htmlFiles = [];
+const ignoredDirectories = new Set([".git", ".p29", "node_modules", "nexus-phase1-final"]);
 const walk = (directory) => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) walk(fullPath);
+    if (entry.isDirectory()) {
+      if (!ignoredDirectories.has(entry.name)) walk(fullPath);
+    }
     else if (entry.name.endsWith(".html")) htmlFiles.push(fullPath);
   }
 };

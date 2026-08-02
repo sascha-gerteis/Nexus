@@ -569,7 +569,7 @@
                           <input class="input" data-credential-name="n8n_credential_name" placeholder="Optional display name from n8n">
                         </div>
                       </div>
-                      <p class="muted">For native account nodes like Google Sheets, Gmail, Drive, Slack OAuth, and Microsoft, the safest setup is to create/select the account once in the locked n8n editor, then save its credential ID here. Nexus will bind it to every matching node and run the check.</p>
+                      <p class="muted">Nexus first tries to connect and bind the account automatically. If an OAuth provider requires an interactive sign-in, open the locked n8n editor, select the account there, save the workflow, then return and run the technical check.</p>
                     </div>
                     <div class="full" data-generic-credential-field>
                       <label>API key / token</label>
@@ -4525,6 +4525,10 @@ company_url = context["inputs"].get("company_url")
         return credentialProvider === "googleserviceaccount" || credentialType === "googleapi";
       }
 
+      if (provider === "gmail" || slotType === "gmailoauth2") {
+        return credentialType === "gmailoauth2" && (!credentialProvider || credentialProvider === "gmail");
+      }
+
       if (genericTypes.has(slotType) && provider && provider !== "bearertoken" && provider !== "webhookapi" && provider !== "basicauth") {
         return providerMatches;
       }
@@ -4581,8 +4585,10 @@ company_url = context["inputs"].get("company_url")
         const nodeNames = group.slots.map((slot) => slot.node_name || "Workflow node").slice(0, 4);
         const firstError = group.errors[0]?.message || "";
         const setupHints = Array.from(new Set(group.slots.flatMap((slot) => Array.isArray(slot.setup_hints) ? slot.setup_hints : []).filter(Boolean))).join(" ");
-        const nativeFallbackCopy = nativeEditorGroup && missing
-          ? `This is a native account credential. Use Add ${group.provider} account here first. For Google/Gmail, Nexus will show a Connect Google button and then bind it to this workflow.`
+        const editorFallbackCopy = missing
+          ? nativeEditorGroup
+            ? `Try Nexus setup first. If ${group.provider} requires an interactive OAuth sign-in, use Set up in n8n instead, select the account, save the workflow, then return and run the technical check.`
+            : `Nexus normally applies this credential automatically. If the provider rejects automatic setup, use Open n8n editor, configure only this credential, save, then return and run the technical check.`
           : "";
         const fieldCredentialCopy = fieldCredentialGroup
           ? "Field-based secret: Nexus keeps this token in the field where the workflow uses it and will not change the node Authorization settings."
@@ -4623,7 +4629,9 @@ company_url = context["inputs"].get("company_url")
             <button class="btn btn-secondary btn-small" type="button" data-prepare-credential-group="${index}">
               ${credentialActionText}
             </button>
-            ${nativeEditorGroup ? `<button class="btn btn-secondary btn-small" type="button" data-open-workflow-editor="${index}">Fallback editor setup</button>` : ""}
+            <button class="btn btn-secondary btn-small" type="button" data-open-workflow-editor="${index}">
+              ${nativeEditorGroup ? "Set up in n8n instead" : "Open n8n editor"}
+            </button>
           </div>
         `;
 
@@ -4643,7 +4651,8 @@ company_url = context["inputs"].get("company_url")
             <p class="flow-credential-nodes">${NexusUI.escapeHtml(nodeNames.join(", "))}${group.slots.length > 4 ? ` +${group.slots.length - 4} more` : ""}</p>
             ${fieldCredentialCopy ? `<p class="muted">${NexusUI.escapeHtml(fieldCredentialCopy)}</p>` : ""}
             ${setupHints ? `<p class="muted">${NexusUI.escapeHtml(setupHints)}</p>` : ""}
-            ${nativeFallbackCopy ? `<p class="error">${NexusUI.escapeHtml(nativeFallbackCopy)}</p>` : firstError ? `<p class="error">${NexusUI.escapeHtml(firstError)}</p>` : ""}
+            ${firstError ? `<p class="error">${NexusUI.escapeHtml(firstError)}</p>` : ""}
+            ${editorFallbackCopy ? `<p class="muted">${NexusUI.escapeHtml(editorFallbackCopy)}</p>` : ""}
             ${savedCredentialPicker}
             ${credentialActionRow}
           </article>
