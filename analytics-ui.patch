@@ -1,0 +1,499 @@
+diff --git a/pages/admin/analytics.html b/pages/admin/analytics.html
+--- a/pages/admin/analytics.html
++++ b/pages/admin/analytics.html
+@@ -8,7 +8,7 @@
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+ 
+-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
++  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260801-analytics-insights">
+@@ -35,8 +35,8 @@
+         <div>
+           <span class="eyebrow">Analytics</span>
+-          <h1>Platform activity dashboard.</h1>
+-          <p>Track page views, product interest, developer profile visits, checkout starts, and buyer message intent.</p>
++          <h1>Platform intelligence.</h1>
++          <p>Understand who visits Nexus, where they arrive from, what they use, and which actions lead toward a purchase or custom request.</p>
+         </div>
+ 
+@@ -47,6 +47,12 @@
+             <option value="365">Last year</option>
+           </select>
++          <select class="select" id="analyticsAudience" onchange="loadAnalytics()" aria-label="Analytics audience">
++            <option value="customer" selected>Customers &amp; public</option>
++            <option value="developer">Developers</option>
++            <option value="admin">Admin team</option>
++            <option value="all">Everyone</option>
++          </select>
+           <button class="btn btn-primary" type="button" onclick="loadAnalytics()">Refresh</button>
+@@ -54,7 +60,7 @@
+       </section>
+ 
+       <section class="admin-dashboard-section">
+@@ -63,57 +69,137 @@
+           <article class="admin-metric-card"><span>Status</span><strong>Loading...</strong><p>Preparing analytics.</p></article>
+         </div>
++        <div class="analytics-quality" id="analyticsDataQuality">Checking data coverage...</div>
+       </section>
+ 
+       <section class="admin-dashboard-section">
++        <div class="admin-dashboard-section-head">
++          <div>
++            <span class="eyebrow">Intent</span>
++            <h2>High-value activity</h2>
++            <p>Signals that visitors are moving from browsing toward contacting, requesting, or buying.</p>
++          </div>
++        </div>
++        <div class="admin-metric-grid" id="analyticsIntentSummary"></div>
++      </section>
++
++      <section class="admin-dashboard-section">
++        <div class="admin-dashboard-section-head">
++          <div>
++            <span class="eyebrow">Acquisition</span>
++            <h2>Where traffic begins</h2>
++            <p>Session-level attribution and the first page people see.</p>
++          </div>
++        </div>
+         <div class="analytics-grid">
+           <article class="admin-health-section">
+             <div class="admin-health-section-head">
+-              <h3>Top products</h3>
+-              <span>Views and clicks</span>
++              <h3>Traffic sources</h3>
++              <span>Sessions by source</span>
+             </div>
+-            <div class="admin-health-list" id="topProducts"></div>
++            <div class="admin-health-list" id="topSources"></div>
+           </article>
+ 
+           <article class="admin-health-section">
+             <div class="admin-health-section-head">
+-              <h3>Top developers</h3>
+-              <span>Profile/product activity</span>
++              <h3>Landing pages</h3>
++              <span>First page per session</span>
+             </div>
+-            <div class="admin-health-list" id="topDevelopers"></div>
++            <div class="admin-health-list" id="topLandingPages"></div>
+           </article>
+         </div>
+       </section>
+ 
+       <section class="admin-dashboard-section">
++        <div class="admin-dashboard-section-head">
++          <div>
++            <span class="eyebrow">Content</span>
++            <h2>What people view</h2>
++            <p>Most visited pages and the last page seen before a session ends.</p>
++          </div>
++        </div>
+         <div class="analytics-grid">
+           <article class="admin-health-section">
+             <div class="admin-health-section-head">
+               <h3>Top pages</h3>
+-              <span>Page views</span>
++              <span>Views, visitors, sessions</span>
+             </div>
+             <div class="admin-health-list" id="topPages"></div>
+           </article>
+ 
+           <article class="admin-health-section">
+             <div class="admin-health-section-head">
+-              <h3>Events</h3>
+-              <span>What people did</span>
++              <h3>Exit pages</h3>
++              <span>Last page per session</span>
+             </div>
+-            <div class="admin-health-list" id="eventBreakdown"></div>
++            <div class="admin-health-list" id="topExitPages"></div>
+           </article>
+         </div>
+       </section>
+ 
+       <section class="admin-dashboard-section">
++        <div class="admin-dashboard-section-head">
++          <div>
++            <span class="eyebrow">Audience</span>
++            <h2>Who is using Nexus</h2>
++            <p>Coarse country signal, device category, browser, operating system, and account role. Raw IP addresses are not stored in Nexus analytics.</p>
++          </div>
++        </div>
++        <div class="analytics-grid analytics-grid-three">
++          <article class="admin-health-section">
++            <div class="admin-health-section-head"><h3>Countries</h3><span>Unique visitors</span></div>
++            <div class="admin-health-list" id="topCountries"></div>
++          </article>
++          <article class="admin-health-section">
++            <div class="admin-health-section-head"><h3>Devices</h3><span>Device, browser, OS</span></div>
++            <div class="admin-health-list" id="topDevices"></div>
++          </article>
++          <article class="admin-health-section">
++            <div class="admin-health-section-head"><h3>User roles</h3><span>Unique visitors</span></div>
++            <div class="admin-health-list" id="userRoles"></div>
++          </article>
++        </div>
++      </section>
++
++      <section class="admin-dashboard-section">
++        <div class="admin-dashboard-section-head">
++          <div>
++            <span class="eyebrow">Usage</span>
++            <h2>What gets used most</h2>
++            <p>High-frequency platform actions and the products receiving the most interest.</p>
++          </div>
++        </div>
++        <div class="analytics-grid">
++          <article class="admin-health-section">
++            <div class="admin-health-section-head"><h3>Top actions</h3><span>Excludes page views</span></div>
++            <div class="admin-health-list" id="topActions"></div>
++          </article>
++          <article class="admin-health-section">
++            <div class="admin-health-section-head"><h3>Top products</h3><span>Views and checkout intent</span></div>
++            <div class="admin-health-list" id="topProducts"></div>
++          </article>
++        </div>
++      </section>
++
++      <section class="admin-dashboard-section">
++        <div class="analytics-grid">
++          <article class="admin-health-section">
++            <div class="admin-health-section-head"><h3>Top developers</h3><span>Profile and product activity</span></div>
++            <div class="admin-health-list" id="topDevelopers"></div>
++          </article>
++          <article class="admin-health-section">
++            <div class="admin-health-section-head"><h3>Intent paths</h3><span>Visitors reaching each action</span></div>
++            <div class="analytics-funnel" id="analyticsFunnel"></div>
++          </article>
++        </div>
++      </section>
++
++      <section class="admin-dashboard-section">
+         <div class="admin-dashboard-section-head">
+           <div>
+             <span class="eyebrow">Timeline</span>
+             <h2>Daily activity</h2>
+-            <p>Simple launch signal by day.</p>
++            <p>Events, page views, visitors, and sessions across the selected period.</p>
+           </div>
+@@ -127,7 +213,7 @@
+           <div>
+             <span class="eyebrow">Recent</span>
+             <h2>Latest events</h2>
+-            <p>Recent platform activity for debugging launch flows.</p>
++            <p>Recent privacy-conscious activity for debugging launch flows and validating attribution.</p>
+           </div>
+@@ -142,7 +228,7 @@
+   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+   <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+-  <script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
++  <script src="/assets/js/nexus-db.js?v=20260801-analytics-insights"></script>
+ 
+   <script>
+@@ -159,7 +245,29 @@
+       return String(name || "event").replaceAll("_", " ");
+     }
+ 
+-    function metric(label, value, note) {
++    function formatNumber(value, maximumFractionDigits = 0) {
++      return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits });
++    }
++
++    function formatDuration(value) {
++      const seconds = Math.max(0, Number(value || 0));
++      if (seconds < 60) return `${Math.round(seconds)}s`;
++      const minutes = Math.floor(seconds / 60);
++      const remainder = Math.round(seconds % 60);
++      return `${minutes}m ${remainder}s`;
++    }
++
++    function countryLabel(code) {
++      const clean = String(code || "").toUpperCase();
++      if (!clean || clean === "UNKNOWN") return "Unknown country";
++      try {
++        return new Intl.DisplayNames(["en"], { type: "region" }).of(clean) || clean;
++      } catch {
++        return clean;
++      }
++    }
++
++    function metric(label, value, note, displayValue = null) {
+       return `
+         <article class="admin-metric-card">
+           <span>${escapeHtml(label)}</span>
+-          <strong>${Number(value || 0).toLocaleString()}</strong>
++          <strong>${escapeHtml(displayValue === null ? formatNumber(value) : displayValue)}</strong>
+           <p>${escapeHtml(note)}</p>
+@@ -169,12 +277,14 @@
+       `;
+     }
+ 
+-    function listRows(items, getTitle, getMeta) {
++    function listRows(items, getTitle, getMeta, getValue = (item) => item.count) {
+       return (items || []).map((item) => `
+         <article class="admin-health-row green">
+           <div>
+-            <span class="pill green">${Number(item.count || 0).toLocaleString()}</span>
++            <span class="pill green">${escapeHtml(formatNumber(getValue(item)))}</span>
+             <strong>${escapeHtml(getTitle(item))}</strong>
+             <p>${escapeHtml(getMeta(item))}</p>
+@@ -184,18 +294,36 @@
+     }
+ 
+     function renderDaily(items) {
+-      const max = Math.max(1, ...(items || []).map((item) => Number(item.count || 0)));
++      const max = Math.max(1, ...(items || []).map((item) => Number(item.events || item.count || 0)));
+       return (items || []).map((item) => {
+-        const width = Math.max(4, Math.round((Number(item.count || 0) / max) * 100));
++        const events = Number(item.events || item.count || 0);
++        const width = events > 0 ? Math.max(2, Math.round((events / max) * 100)) : 0;
+         return `
+           <div class="analytics-bar-row">
+             <span>${escapeHtml(item.date)}</span>
+             <div><i style="width:${width}%"></i></div>
+-            <strong>${Number(item.count || 0).toLocaleString()}</strong>
++            <strong>${formatNumber(events)} events · ${formatNumber(item.page_views)} views · ${formatNumber(item.visitors)} visitors · ${formatNumber(item.sessions)} sessions</strong>
+           </div>
+         `;
+       }).join("") || `<div class="admin-health-empty">No daily activity yet.</div>`;
+     }
+ 
++    function renderFunnel(items) {
++      return (items || []).map((item) => {
++        const rate = Math.max(0, Math.min(100, Number(item.rate || 0)));
++        return `
++          <div class="analytics-funnel-row">
++            <div><strong>${escapeHtml(item.stage || "Stage")}</strong><span>${formatNumber(item.visitors)} visitors · ${formatNumber(rate, 1)}%</span></div>
++            <div class="analytics-funnel-track"><i style="width:${rate}%"></i></div>
++          </div>
++        `;
++      }).join("") || `<div class="admin-health-empty">No intent data yet.</div>`;
++    }
++
+     function renderAnalytics(data) {
+       const totals = data?.totals || {};
+-      document.getElementById("analyticsUpdatedAt").textContent = `Last refreshed ${new Date().toLocaleString()}`;
++      const meta = data?.meta || {};
++      const audience = document.getElementById("analyticsAudience")?.selectedOptions?.[0]?.textContent || "Selected audience";
++      document.getElementById("analyticsUpdatedAt").textContent = `${audience} · Last refreshed ${new Date().toLocaleString()}`;
+       document.getElementById("analyticsSummary").innerHTML = [
+-        metric("Events", totals.events, "All tracked platform events."),
+-        metric("Visitors", totals.unique_visitors, "Unique anonymous or logged-in visitors."),
+-        metric("Page views", totals.page_views, "Website and dashboard views."),
++        metric("Unique visitors", totals.unique_visitors, "Distinct first-party visitor identifiers."),
++        metric("Sessions", totals.sessions, "30-minute activity sessions."),
++        metric("Page views", totals.page_views, "Pages viewed in the selected period."),
++        metric("All events", totals.events, "Exact tracked activity across the full range."),
++        metric("Pages / session", totals.pages_per_session, "Average page depth per session.", formatNumber(totals.pages_per_session, 2)),
++        metric("Avg. session", totals.avg_session_seconds, "Average elapsed activity time.", formatDuration(totals.avg_session_seconds)),
++        metric("New visitors", totals.new_visitors, "First observed during this period."),
++        metric("Returning visitors", totals.returning_visitors, "First observed before this period.")
++      ].join("");
++
++      document.getElementById("analyticsIntentSummary").innerHTML = [
+         metric("Product views", totals.product_views, "Product preview/open events."),
+         metric("Profile views", totals.profile_views, "Developer profile visits."),
+         metric("Checkout starts", totals.checkout_starts, "Buyers who started Stripe checkout."),
+         metric("Messages", totals.message_clicks, "Buyer intent to contact a developer."),
+-        metric("Custom requests", totals.custom_request_starts, "Custom automation request intent.")
++        metric("Custom request starts", totals.custom_request_starts, "Visitors who began a custom request."),
++        metric("Custom requests sent", totals.custom_request_submits, "Completed custom request submissions."),
++        metric("Bounce rate", totals.bounce_rate, "Sessions with one or fewer page views.", `${formatNumber(totals.bounce_rate, 1)}%`),
++        metric("Events / session", totals.events_per_session, "Average tracked actions per session.", formatNumber(totals.events_per_session, 2))
+       ].join("");
+ 
++      const exact = meta.aggregation_mode === "database" && meta.data_complete !== false;
++      document.getElementById("analyticsDataQuality").className = `analytics-quality ${exact ? "is-complete" : "is-warning"}`;
++      document.getElementById("analyticsDataQuality").textContent = exact
++        ? `Full-range database aggregation · no 1,000-row ceiling · country signal available for ${formatNumber(meta.country_coverage, 1)}% of visitors.`
++        : `Compatibility mode is active${meta.data_complete === false ? " and the safety ceiling was reached" : ""}. Apply the analytics insights migration for exact database aggregation.`;
++
++      document.getElementById("topSources").innerHTML = listRows(
++        data?.top_sources,
++        (item) => item.source || "direct",
++        (item) => `${item.medium || "none"} · ${formatNumber(item.visitors)} visitors${item.campaign_sessions ? ` · ${formatNumber(item.campaign_sessions)} campaign sessions` : ""}`,
++        (item) => item.sessions
++      );
++      document.getElementById("topLandingPages").innerHTML = listRows(
++        data?.top_landing_pages,
++        (item) => item.page_path || "/",
++        (item) => `${formatNumber(item.visitors)} visitors`,
++        (item) => item.sessions
++      );
+       document.getElementById("topProducts").innerHTML = listRows(
+         data?.top_products,
+         (item) => item.product_title || item.product_slug || "Untitled product",
+-        (item) => [item.developer_name, item.product_slug].filter(Boolean).join(" | ")
++        (item) => `${item.developer_name || "Nexus"} · ${formatNumber(item.views)} views · ${formatNumber(item.checkout_starts)} checkout starts · ${formatNumber(item.visitors)} visitors`,
++        (item) => item.views || item.count
+       );
+       document.getElementById("topDevelopers").innerHTML = listRows(
+         data?.top_developers,
+         (item) => item.developer_name || "Unknown developer",
+-        (item) => item.developer_id || "Developer activity"
++        (item) => `${formatNumber(item.profile_views)} profile views · ${formatNumber(item.product_views)} product views · ${formatNumber(item.visitors)} visitors`
+       );
+       document.getElementById("topPages").innerHTML = listRows(
+         data?.top_pages,
+         (item) => item.page_path || "Unknown page",
+-        (item) => item.page_url || ""
++        (item) => `${formatNumber(item.visitors)} visitors · ${formatNumber(item.sessions)} sessions`,
++        (item) => item.page_views || item.count
++      );
++      document.getElementById("topExitPages").innerHTML = listRows(
++        data?.top_exit_pages,
++        (item) => item.page_path || "Unknown page",
++        (item) => `${formatNumber(item.visitors)} visitors`,
++        (item) => item.sessions
+       );
+-      document.getElementById("eventBreakdown").innerHTML = listRows(
+-        data?.events_by_name,
++      document.getElementById("topActions").innerHTML = listRows(
++        data?.top_actions,
+         (item) => labelEvent(item.event_name),
+-        () => "Tracked event type"
++        (item) => `${formatNumber(item.visitors)} unique visitors`
++      );
++      document.getElementById("topCountries").innerHTML = listRows(
++        data?.countries,
++        (item) => countryLabel(item.country_code),
++        (item) => `${formatNumber(item.sessions)} sessions · ${formatNumber(item.page_views)} page views`,
++        (item) => item.visitors
++      );
++      document.getElementById("topDevices").innerHTML = listRows(
++        data?.devices,
++        (item) => String(item.device_type || "unknown").replace(/^./, (char) => char.toUpperCase()),
++        (item) => `${item.browser_name || "Other browser"} · ${item.os_name || "Other OS"} · ${formatNumber(item.sessions)} sessions`,
++        (item) => item.visitors
++      );
++      document.getElementById("userRoles").innerHTML = listRows(
++        data?.user_roles,
++        (item) => labelEvent(item.user_role || "anonymous"),
++        (item) => `${formatNumber(item.events)} events`,
++        (item) => item.visitors
+       );
++      document.getElementById("analyticsFunnel").innerHTML = renderFunnel(data?.funnel || []);
+       document.getElementById("dailyActivity").innerHTML = renderDaily(data?.daily || []);
+       document.getElementById("recentEvents").innerHTML = (data?.recent_events || []).map((event) => `
+@@ -232,7 +397,7 @@
+           <div>
+             <span class="pill green">${escapeHtml(labelEvent(event.event_name))}</span>
+             <strong>${escapeHtml(event.product_title || event.page_path || "Platform event")}</strong>
+-            <p>${escapeHtml([event.developer_name, event.user_role, event.created_at ? new Date(event.created_at).toLocaleString() : ""].filter(Boolean).join(" | "))}</p>
++            <p>${escapeHtml([event.source, countryLabel(event.country_code), event.device_type, event.developer_name, event.user_role, event.created_at ? new Date(event.created_at).toLocaleString() : ""].filter(Boolean).join(" · "))}</p>
+           </div>
+@@ -243,10 +408,12 @@
+     async function loadAnalytics() {
+       const days = Number(document.getElementById("analyticsDays").value || 30);
++      const audience = document.getElementById("analyticsAudience").value || "customer";
+       document.getElementById("analyticsSummary").innerHTML = `<article class="admin-metric-card"><span>Status</span><strong>Loading...</strong><p>Reading analytics events.</p></article>`;
+-      const { data, error } = await NexusDB.getAdminAnalytics(days);
++      document.getElementById("analyticsDataQuality").textContent = "Reading the complete selected range...";
++      const { data, error } = await NexusDB.getAdminAnalytics(days, audience);
+       if (error) {
+diff --git a/assets/css/nexus.css b/assets/css/nexus.css
+--- a/assets/css/nexus.css
++++ b/assets/css/nexus.css
+@@ -16570,6 +16570,11 @@
+   gap: 1rem;
+ }
+ 
++.analytics-grid-three {
++  grid-template-columns: repeat(3, minmax(0, 1fr));
++  align-items: start;
++}
++
+ .analytics-list {
+@@ -16632,8 +16637,74 @@
+   color: var(--navy);
+ }
+ 
++.analytics-quality {
++  margin-top: 1rem;
++  padding: .9rem 1rem;
++  border: 1px solid var(--line);
++  border-radius: 16px;
++  background: rgba(255, 255, 255, .82);
++  color: var(--muted);
++  font-size: .9rem;
++  font-weight: 750;
++}
++
++.analytics-quality.is-complete {
++  border-color: rgba(16, 185, 129, .28);
++  background: rgba(16, 185, 129, .08);
++  color: #047857;
++}
++
++.analytics-quality.is-warning {
++  border-color: rgba(245, 158, 11, .35);
++  background: rgba(245, 158, 11, .09);
++  color: #92400e;
++}
++
++.analytics-funnel {
++  display: grid;
++  gap: 1rem;
++}
++
++.analytics-funnel-row {
++  display: grid;
++  gap: .55rem;
++  padding: .9rem;
++  border: 1px solid var(--line);
++  border-radius: 16px;
++  background: rgba(255, 255, 255, .82);
++}
++
++.analytics-funnel-row > div:first-child {
++  display: flex;
++  justify-content: space-between;
++  gap: .75rem;
++  align-items: baseline;
++}
++
++.analytics-funnel-row strong {
++  color: var(--navy);
++}
++
++.analytics-funnel-row span {
++  color: var(--muted);
++  font-size: .82rem;
++  font-weight: 800;
++}
++
++.analytics-funnel-track {
++  height: .7rem;
++  overflow: hidden;
++  border-radius: 999px;
++  background: rgba(37, 99, 255, .1);
++}
++
++.analytics-funnel-track i {
++  display: block;
++  height: 100%;
++  min-width: .25rem;
++  border-radius: inherit;
++  background: linear-gradient(90deg, var(--blue), var(--cyan));
++}
++
+ @media (max-width: 760px) {
+   .analytics-grid {
+     grid-template-columns: 1fr;
+@@ -16646,6 +16717,17 @@
+   .analytics-list-row {
+     grid-template-columns: 1fr;
+   }
++
++  .analytics-funnel-row > div:first-child {
++    align-items: flex-start;
++    flex-direction: column;
++    gap: .25rem;
++  }
++}
++
++@media (min-width: 761px) and (max-width: 1120px) {
++  .analytics-grid-three {
++    grid-template-columns: 1fr 1fr;
++  }
+ }

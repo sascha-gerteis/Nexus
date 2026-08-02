@@ -1181,7 +1181,7 @@ company_url = context["inputs"].get("company_url")
 
   <div class="toast" id="toast"></div>
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-<script src="/assets/js/nexus-db.js?v=20260714-paid-orders-only"></script>
+<script src="/assets/js/nexus-db.js?v=20260801-analytics-insights"></script>
   <script>
     const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, pendingCredentialSlot: null, testProfile: null, revealedCredentials: {}, workflowPollers: {} };
 
@@ -4552,6 +4552,13 @@ company_url = context["inputs"].get("company_url")
       const providers = credentialRequirementNames(slots);
       const boundProviders = Array.from(new Set((bindings || []).map((binding) => binding.provider_label || binding.provider || binding.n8n_credential_type).filter(Boolean)));
 
+      if (lowerText.includes("credential with id") && lowerText.includes("does not exist")) {
+        const gmailFailure = lowerText.includes("gmailoauth2") || providers.some((provider) => String(provider).toLowerCase().includes("gmail"));
+        return gmailFailure
+          ? "The saved Gmail account no longer exists in hosted n8n. Reconnect Gmail with Connect Google, apply credentials, then run the technical check again."
+          : "The saved account credential no longer exists in hosted n8n. Reconnect it in the credential panel, apply credentials, then run the technical check again.";
+      }
+
       if (lowerText.includes("incorrect api key") || lowerText.includes("authorization failed") || lowerText.includes("unauthorized")) {
         const providerText = providers.length ? providers.join(", ") : "the detected provider";
         const boundText = boundProviders.length ? ` Current binding: ${boundProviders.join(", ")}.` : "";
@@ -4880,13 +4887,13 @@ company_url = context["inputs"].get("company_url")
           error_message: testError.message || "Credential update test failed."
         };
         updateLocalWorkflowRun(automationId, failedResult);
-        renderCredentialSlots({
-          ...data,
-          run_status: failedResult.status || "failed",
-          test_result: failedResult,
-          message: "Credential run check failed. Fix the key or workflow, then run the check again."
-        });
-        renderCredentialWorkflowList();
+        const guidance = workflowRunGuidance(
+          failedResult.error_message || failedResult.message || testError.message,
+          data?.slots || data?.requirements || [],
+          data?.bindings || []
+        );
+        NexusUI.toast(guidance || "Credential run check failed. Fix the account or workflow, then run the check again.");
+        await scanCurrentProductCredentials();
         return;
       }
 

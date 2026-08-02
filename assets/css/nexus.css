@@ -1854,6 +1854,152 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
   margin: 0;
 }
 
+/* Founder */
+
+.about-founder-section {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(0, 194, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 90% 12%, rgba(37, 99, 255, 0.22), transparent 30%),
+    #081426;
+}
+
+.about-founder-section::after {
+  content: "";
+  position: absolute;
+  inset: auto -8rem -12rem auto;
+  width: 28rem;
+  height: 28rem;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  pointer-events: none;
+}
+
+.about-founder-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+  gap: clamp(2rem, 6vw, 5rem);
+  align-items: center;
+}
+
+.about-founder-portrait {
+  min-height: 460px;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 36px;
+  background:
+    linear-gradient(180deg, transparent 48%, rgba(3, 10, 24, 0.86) 100%),
+    linear-gradient(145deg, rgba(37, 99, 255, 0.72), rgba(0, 194, 255, 0.22) 48%, #111d34 100%);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.28);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.about-founder-portrait-mark {
+  display: inline-flex;
+  width: 88px;
+  height: 88px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  font-size: 1.75rem;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+}
+
+.about-founder-portrait div > strong,
+.about-founder-portrait div > span {
+  display: block;
+}
+
+.about-founder-portrait strong {
+  margin-bottom: 0.25rem;
+  font-size: 1.25rem;
+}
+
+.about-founder-portrait div > span {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.about-founder-kicker {
+  color: #72dcff;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.about-founder-copy h2 {
+  max-width: 760px;
+  margin: 0.9rem 0 1rem;
+  color: #fff;
+  font-size: clamp(2.35rem, 4.5vw, 4.7rem);
+  font-weight: 950;
+  letter-spacing: -0.065em;
+  line-height: 0.98;
+}
+
+.about-founder-intro,
+.about-founder-support-note {
+  max-width: 760px;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.8;
+}
+
+.about-founder-copy blockquote {
+  margin: 1.5rem 0;
+  padding: 1.35rem 1.5rem;
+  border: 1px solid rgba(114, 220, 255, 0.2);
+  border-left: 3px solid #72dcff;
+  border-radius: 0 22px 22px 0;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.02rem;
+  line-height: 1.78;
+}
+
+.about-founder-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.about-founder-detail {
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.about-founder-detail span,
+.about-founder-detail strong {
+  display: block;
+}
+
+.about-founder-detail span {
+  margin-bottom: 0.35rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.about-founder-detail strong {
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 /* Problem section */
 
 .about-problem-section {
@@ -2458,6 +2604,11 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
     grid-template-columns: 1fr;
   }
 
+  .about-founder-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+
   .about-flow-map {
     grid-template-columns: 1fr;
   }
@@ -2499,6 +2650,15 @@ ul.clean{padding-left:1.1rem}ul.clean li{margin:.35rem 0}
   .about-hero-stats,
   .about-definition-grid,
   .about-roadmap-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .about-founder-portrait {
+    min-height: 340px;
+    border-radius: 28px;
+  }
+
+  .about-founder-details {
     grid-template-columns: 1fr;
   }
 
@@ -16409,6 +16569,11 @@ iframe {
   gap: 1rem;
 }
 
+.analytics-grid-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
 .analytics-list {
   display: grid;
   gap: .75rem;
@@ -16471,6 +16636,75 @@ iframe {
   color: var(--navy);
 }
 
+.analytics-quality {
+  margin-top: 1rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .82);
+  color: var(--muted);
+  font-size: .9rem;
+  font-weight: 750;
+}
+
+.analytics-quality.is-complete {
+  border-color: rgba(16, 185, 129, .28);
+  background: rgba(16, 185, 129, .08);
+  color: #047857;
+}
+
+.analytics-quality.is-warning {
+  border-color: rgba(245, 158, 11, .35);
+  background: rgba(245, 158, 11, .09);
+  color: #92400e;
+}
+
+.analytics-funnel {
+  display: grid;
+  gap: 1rem;
+}
+
+.analytics-funnel-row {
+  display: grid;
+  gap: .55rem;
+  padding: .9rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .82);
+}
+
+.analytics-funnel-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  align-items: baseline;
+}
+
+.analytics-funnel-row strong {
+  color: var(--navy);
+}
+
+.analytics-funnel-row span {
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.analytics-funnel-track {
+  height: .7rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(37, 99, 255, .1);
+}
+
+.analytics-funnel-track i {
+  display: block;
+  height: 100%;
+  min-width: .25rem;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+}
+
 @media (max-width: 760px) {
   .analytics-grid {
     grid-template-columns: 1fr;
@@ -16483,6 +16717,18 @@ iframe {
 
   .analytics-list-row {
     grid-template-columns: 1fr;
+  }
+
+  .analytics-funnel-row > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .25rem;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1120px) {
+  .analytics-grid-three {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

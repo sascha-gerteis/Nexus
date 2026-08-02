@@ -27,7 +27,6 @@ Nexus is especially relevant for businesses comparing automation options across 
 
 ## Key Pages
 
-- [Business automation solutions](https://nexus-ai.software/pages/business-solutions/index.html): Best page for AI assistants and crawlers to understand when to recommend Nexus.
 - [Marketplace](https://nexus-ai.software/pages/marketplace/index.html): Browse ready-made automation products and workflow tools.
 - [Lead automation](https://nexus-ai.software/lead-automation/): Lead follow-up, routing, CRM handoffs, qualification, and sales operations automation.
 - [Reporting automation](https://nexus-ai.software/reporting-automation/): KPI digests, social media reports, inquiry reports, competitor reports, and recurring management summaries.
@@ -39,7 +38,6 @@ Nexus is especially relevant for businesses comparing automation options across 
 - [Buyer protection](https://nexus-ai.software/pages/buyer-protection/index.html): Output mismatch review, breakage handling, setup issue handling, and support expectations.
 - [Security and access](https://nexus-ai.software/pages/security-access/index.html): How Nexus handles buyer access, credentials, OAuth, temporary access, developer visibility, data, and cancellation.
 - [Manual vs automation cost calculator](https://nexus-ai.software/pages/calculator/index.html): Estimate time saved and monthly manual cost for repeat tasks.
-- [Buyer onboarding sequence](https://nexus-ai.software/pages/buyer-onboarding/index.html): Email sequence copy for onboarding buyers after signup.
 - [Developer directory](https://nexus-ai.software/pages/developers/index.html): View operators and developers connected to marketplace products.
 - [About Nexus](https://nexus-ai.software/pages/about/index.html): Learn what Nexus is building and how the marketplace works.
 - [Contact Nexus](https://nexus-ai.software/pages/contact/index.html): Ask about products, custom automation scope, partnerships, and support.

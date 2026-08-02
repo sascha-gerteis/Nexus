@@ -2618,7 +2618,7 @@ function canUseCredentialForSlot(credential: any, slot: any) {
   return credentialMatchScore(credential, slot) > 0;
 }
 
-function credentialMatchScore(credential: any, slot: any) {
+export function credentialMatchScore(credential: any, slot: any) {
   const slotType = lower(slot?.n8n_credential_type || slot?.credential_key);
   const credentialType = lower(credential?.n8n_credential_type);
   const slotProviderName = slotProvider(slot);
@@ -2639,6 +2639,20 @@ function credentialMatchScore(credential: any, slot: any) {
     !isGenericHttpCredentialType(slotType) &&
     slotHasSpecificProvider,
   );
+
+  const gmailSlot = slotProviderName === "gmail" || slotType === "gmailoauth2";
+  const googleServiceAccountCredential = credentialProviderName === "google_service_account" || credentialType === "googleapi";
+
+  // Gmail's native node requires Gmail OAuth. A Google service account can be
+  // reused for Sheets, Drive, or Docs, but it must never satisfy a Gmail slot.
+  if (gmailSlot) {
+    if (credentialProviderName !== "gmail") return 0;
+    if (credentialType && credentialType !== "gmailoauth2") return 0;
+  }
+
+  if (googleServiceAccountCredential && !canPreferGoogleServiceAccountForSlot(slot)) {
+    return 0;
+  }
 
   if (slotProviderName === "google_service_account" || slotType === "googleapi") {
     if (credentialProviderName !== "google_service_account" && credentialType !== "googleapi") return 0;
@@ -3326,7 +3340,11 @@ export async function bindAutomationCredentials(options: {
   ].map(cleanString).join(":");
   let liveN8nCredentialSummaries: any[] | null = null;
   let liveN8nCredentialLookupFailed = false;
-  const getLiveN8nCredentialSummaries = async () => {
+  const getLiveN8nCredentialSummaries = async (forceRefresh = false) => {
+    if (forceRefresh) {
+      liveN8nCredentialSummaries = null;
+      liveN8nCredentialLookupFailed = false;
+    }
     if (liveN8nCredentialSummaries) return liveN8nCredentialSummaries;
 
     try {
@@ -3382,6 +3400,7 @@ export async function bindAutomationCredentials(options: {
 
   for (const slot of slots) {
     let credential = bestCredentialForSlot(credentials, slot, previousBindings);
+    let credentialSyncAttempted = false;
     const usesNexusProxy = Boolean(slot.uses_nexus_proxy);
     const fieldCredentialBinding = usesFieldCredentialBinding(slot);
     const existingNativeCredentialId = cleanString(slot.current_id);
@@ -3398,7 +3417,11 @@ export async function bindAutomationCredentials(options: {
       allowExistingNativeN8nCredentials &&
       nativeN8nSlot &&
       nativeAccountSetupRequired &&
-      (existingNativeCredentialId || existingNativeCredentialName),
+      (existingNativeCredentialId || existingNativeCredentialName) &&
+      (
+        liveN8nCredentialLookupFailed ||
+        Boolean(reusableNativeCredential?.n8n_credential_id)
+      ),
     );
 
     /*
@@ -3459,19 +3482,31 @@ export async function bindAutomationCredentials(options: {
       allowExistingNativeN8nCredentials &&
       credential?.n8n_credential_id &&
       !credential.manual_n8n_credential &&
-      !existingNativeCredentialId &&
-      !reusableNativeCredentials.get(nativeReuseKey(slot))?.n8n_credential_id
+      !liveN8nCredentialLookupFailed
     ) {
-      /*
-        A stored Nexus credential ID for Gmail/Google OAuth/etc can be stale
-        after credentials are recreated inside n8n. If the live workflow does
-        not currently point to that credential, do not push it back into n8n.
-      */
-      credential = null;
+      const storedCredentialType = cleanString(slot.n8n_credential_type || slot.credential_key || credential.n8n_credential_type);
+      const summaries = await getLiveN8nCredentialSummaries();
+      const storedCredentialIsLive = findLiveN8nCredentialSummary(
+        summaries,
+        storedCredentialType,
+        cleanString(credential.n8n_credential_id),
+        cleanString(credential.n8n_credential_name || credential.label),
+      );
+
+      if (!storedCredentialIsLive) {
+        credential = credential.encrypted_payload
+          ? {
+              ...credential,
+              n8n_credential_id: null,
+              n8n_credential_name: null,
+            }
+          : null;
+      }
     }
 
     if (credential && syncMissingN8nCredentials && !usesNexusProxy && !credential.manual_n8n_credential && !fieldCredentialBinding) {
       try {
+        credentialSyncAttempted = true;
         credential = await syncCredentialToN8n({
           adminClient,
           credential,
@@ -3513,7 +3548,7 @@ export async function bindAutomationCredentials(options: {
       const credentialType = cleanString(slot.n8n_credential_type || slot.credential_key || credential.n8n_credential_type);
       const credentialId = cleanString(credential.n8n_credential_id);
       const credentialName = cleanString(credential.n8n_credential_name || credential.label || existingNativeCredentialName);
-      const summaries = await getLiveN8nCredentialSummaries();
+      const summaries = await getLiveN8nCredentialSummaries(credentialSyncAttempted);
       const liveCredential = findLiveN8nCredentialSummary(summaries, credentialType, credentialId, credentialName);
 
       if (liveCredential) {
@@ -3544,12 +3579,46 @@ export async function bindAutomationCredentials(options: {
           }
         }
         reusableNativeCredentials.set(nativeReuseKey(slot), credential);
-      } else {
-        // OAuth/native n8n credentials can be created through the embedded editor and
-        // already be attached to the workflow even when the credential summary list
-        // does not expose a matching row. Preserve the workflow reference and let
-        // the real technical run be the source of truth.
+      } else if (liveN8nCredentialLookupFailed) {
+        // Some n8n versions do not expose credential summaries through the public
+        // API. Preserve the reference only when verification itself was unavailable;
+        // the full technical run remains the source of truth in that case.
+        preserveHostedWorkflowForNativeCredentials = true;
         reusableNativeCredentials.set(nativeReuseKey(slot), credential);
+      } else {
+        const provider = cleanString(slot.provider_label || slot.provider || credentialType || "Provider");
+        const reconnectInstruction = lower(credentialType) === "gmailoauth2"
+          ? "Reconnect Gmail with Connect Google, apply credentials, then run the technical check again."
+          : `Reconnect ${provider} in the credential panel, apply credentials, then run the technical check again.`;
+        const missingMessage = `${provider} credential "${credentialName || credentialId}" no longer exists in hosted n8n. ${reconnectInstruction}`;
+
+        if (cleanString(credential.id)) {
+          try {
+            await adminClient
+              .from("developer_credentials")
+              .update({
+                status: "needs_attention",
+                last_error: missingMessage,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", credential.id);
+          } catch (error) {
+            console.warn("Could not flag missing live n8n credential:", error instanceof Error ? error.message : error);
+          }
+        }
+
+        errors.push({
+          node_name: slot.node_name,
+          node_type: slot.node_type,
+          credential_key: slot.credential_key,
+          n8n_credential_type: credentialType,
+          provider: slot.provider,
+          provider_label: slot.provider_label,
+          missing_n8n_credential_id: credentialId || null,
+          message: missingMessage,
+        });
+        credential = null;
+        continue;
       }
     }
 
@@ -3635,7 +3704,8 @@ export async function bindAutomationCredentials(options: {
     if (
       allowExistingNativeN8nCredentials &&
       isNativeN8nCredentialSlot(slot, slotCredentialType) &&
-      requiresNativeAccountSetup(slot, slotCredentialType)
+      requiresNativeAccountSetup(slot, slotCredentialType) &&
+      liveN8nCredentialLookupFailed
     ) {
       /*
         n8n's public workflow API can hide native OAuth account credentials
@@ -3654,7 +3724,7 @@ export async function bindAutomationCredentials(options: {
         credential_key: slot.credential_key,
         n8n_credential_type: slot.n8n_credential_type || slot.credential_key,
         n8n_credential_id: null,
-        n8n_credential_name: existingNativeCredentialName || "Native n8n account credential",
+        n8n_credential_name: existingNativeCredentialName || "Unverified native n8n account credential",
         developer_credential_id: null,
         manual_n8n_credential: true,
         native_credential_hidden_by_n8n_api: true,

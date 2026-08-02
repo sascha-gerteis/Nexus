@@ -1,0 +1,19 @@
+diff --git a/supabase/migrations/20260801000100_analytics_insights.sql b/supabase/migrations/20260801000100_analytics_insights.sql
+--- a/supabase/migrations/20260801000100_analytics_insights.sql
++++ b/supabase/migrations/20260801000100_analytics_insights.sql
+@@ -350,10 +350,10 @@
+       select
+         coalesce(automation_id::text, nullif(product_slug, ''), nullif(product_title, ''), 'unknown') as product_key,
+-        max(automation_id)::text as automation_id,
++        max(automation_id::text) as automation_id,
+         max(product_slug) as product_slug,
+         max(coalesce(product_title, 'Untitled product')) as product_title,
+-        max(developer_id)::text as developer_id,
++        max(developer_id::text) as developer_id,
+         max(coalesce(developer_name, '')) as developer_name,
+@@ -372,7 +372,7 @@
+       select
+         coalesce(developer_id::text, profile_developer_id::text, nullif(developer_name, ''), 'unknown') as developer_key,
+-        max(coalesce(developer_id, profile_developer_id))::text as developer_id,
++        max(coalesce(developer_id, profile_developer_id)::text) as developer_id,
+         max(coalesce(developer_name, 'Unknown developer')) as developer_name,

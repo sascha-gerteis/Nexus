@@ -1,0 +1,16 @@
+diff --git a/scripts/admin-analytics-insights-regression.cjs b/scripts/admin-analytics-insights-regression.cjs
+--- a/scripts/admin-analytics-insights-regression.cjs
++++ b/scripts/admin-analytics-insights-regression.cjs
+@@
+ const sinceIso = (days) => new Date(Date.now() - days * 86400000).toISOString();
++const dayKey = (value) => new Date(value).toISOString().slice(0, 10);
+ const summarizeEvents = new Function(
+   "emptySummary",
+   "cleanString",
+   "safeJsonObject",
+   "visitorKey",
+   "sinceIso",
++  "dayKey",
+   `${summarizeSource}; return summarizeEvents;`,
+-)(emptySummary, cleanString, safeJsonObject, visitorKey, sinceIso);
++)(emptySummary, cleanString, safeJsonObject, visitorKey, sinceIso, dayKey);

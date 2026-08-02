@@ -1,0 +1,30 @@
+diff --git a/assets/js/nexus-db.js b/assets/js/nexus-db.js
+--- a/assets/js/nexus-db.js
++++ b/assets/js/nexus-db.js
+@@ -3579,6 +3579,13 @@
+   };
+ }
+ 
++function analyticsTrackingDisabled() {
++  return navigator.globalPrivacyControl === true ||
++    String(navigator.doNotTrack || "") === "1" ||
++    localStorage.getItem("nexus_analytics_opt_out") === "1";
++}
++
+ async function trackAnalyticsEvent(eventName, payload = {}) {
+-  if (!eventName || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
++  if (!eventName || !SUPABASE_URL || !SUPABASE_ANON_KEY || analyticsTrackingDisabled()) {
+     return { data: null, error: null };
+   }
+diff --git a/supabase/functions/analytics-events/index.ts b/supabase/functions/analytics-events/index.ts
+--- a/supabase/functions/analytics-events/index.ts
++++ b/supabase/functions/analytics-events/index.ts
+@@ -256,6 +256,10 @@
+   const viewport = safeJsonObject(body.viewport, {});
+   const eventName = sanitizeEventName(body.event_name || body.event || body.name);
+   const userAgent = cleanString(req.headers.get("user-agent") || body.user_agent || "", 1000);
++  if (/bot\b|crawler|spider|slurp|headlesschrome|lighthouse/i.test(userAgent)) {
++    return { tracked: false, ignored: "automated_client" };
++  }
++
+   const dimensions = userAgentDimensions(userAgent, body.device_type);

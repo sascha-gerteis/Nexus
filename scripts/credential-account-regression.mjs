@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
 const {
+  credentialMatchScore,
   encryptCredentialPayload,
   syncCredentialToN8n,
 } = await import(pathToFileURL(path.join(
@@ -13,6 +14,41 @@ const {
 const credentialSecret = "nexus-credential-account-regression-secret";
 const captures = [];
 const originalFetch = globalThis.fetch;
+
+const gmailSlot = {
+  provider: "gmail",
+  provider_label: "Gmail",
+  node_name: "Email the SEO report",
+  node_type: "n8n-nodes-base.gmail",
+  credential_key: "gmailOAuth2",
+  n8n_credential_type: "gmailOAuth2",
+};
+const googleSheetsSlot = {
+  provider: "google_sheets",
+  provider_label: "Google Sheets",
+  node_name: "Load Previous Snapshot",
+  node_type: "n8n-nodes-base.googleSheets",
+  credential_key: "googleSheetsOAuth2Api",
+  n8n_credential_type: "googleSheetsOAuth2Api",
+};
+const gmailCredential = {
+  provider: "gmail",
+  n8n_credential_type: "gmailOAuth2",
+};
+const googleServiceAccountCredential = {
+  provider: "google_service_account",
+  n8n_credential_type: "googleApi",
+};
+
+if (credentialMatchScore(gmailCredential, gmailSlot) <= 0) {
+  throw new Error("Gmail OAuth no longer matches a Gmail node.");
+}
+if (credentialMatchScore(googleServiceAccountCredential, gmailSlot) !== 0) {
+  throw new Error("Google Service Account incorrectly satisfies a Gmail OAuth node.");
+}
+if (credentialMatchScore(googleServiceAccountCredential, googleSheetsSlot) <= 0) {
+  throw new Error("Google Service Account no longer matches a compatible Google Sheets node.");
+}
 
 const adminClient = {
   from() {
@@ -185,5 +221,6 @@ try {
 console.log(JSON.stringify({
   accountShapes: fixtures.map((fixture) => fixture.type),
   calls: captures.length,
+  strictGmailCompatibility: true,
   passed: true,
 }));

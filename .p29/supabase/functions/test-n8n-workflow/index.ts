@@ -1502,6 +1502,86 @@ async function updateAutomationTestResult(adminClient: any, automationId: string
     console.warn("Could not load automation before updating test health:", error instanceof Error ? error.message : error);
   }
 
+  const credentialFailureText = [result?.error_message, result?.message]
+    .map((value) => cleanString(value))
+    .filter(Boolean)
+    .join(" ");
+  const credentialFailure = failed && isCredentialAuthFailureText(credentialFailureText);
+  const credentialPatch: Record<string, unknown> = {};
+  let failedDeveloperCredentialIds: string[] = [];
+
+  if (credentialFailure && automation) {
+    const requirements = Array.isArray(automation.developer_credential_requirements)
+      ? automation.developer_credential_requirements
+      : [];
+    const bindings = Array.isArray(automation.n8n_credential_bindings)
+      ? automation.n8n_credential_bindings
+      : [];
+    const existingErrors = Array.isArray(automation.credential_binding_errors)
+      ? automation.credential_binding_errors
+      : [];
+    const errorNode = cleanString(result?.error_node || "Workflow credential");
+    const credentialTypeMatch = credentialFailureText.match(/does not exist for type\s+"([^"]+)"/i);
+    const failedCredentialType = cleanString(credentialTypeMatch?.[1]);
+    const matchingRequirement = (slot: any) => {
+      const nodeMatches = errorNode && cleanString(slot?.node_name) === errorNode;
+      const typeMatches = failedCredentialType && [slot?.n8n_credential_type, slot?.credential_key]
+        .map((value) => cleanString(value))
+        .includes(failedCredentialType);
+      return Boolean(nodeMatches || typeMatches);
+    };
+    const affectedSlots = requirements.filter(matchingRequirement);
+    const slotsForError = affectedSlots.length
+      ? affectedSlots
+      : [{
+          node_name: errorNode,
+          node_type: cleanString(result?.error_node_type),
+          credential_key: failedCredentialType || "credential",
+          n8n_credential_type: failedCredentialType || null,
+          provider: failedCredentialType.toLowerCase() === "gmailoauth2" ? "gmail" : "credential",
+          provider_label: failedCredentialType.toLowerCase() === "gmailoauth2" ? "Gmail" : "Credential",
+        }];
+    const affectedKeys = new Set(slotsForError.map((slot: any) => (
+      `${cleanString(slot?.node_name)}:${cleanString(slot?.credential_key || slot?.n8n_credential_type)}`
+    )));
+    const retainedErrors = existingErrors.filter((error: any) => !affectedKeys.has(
+      `${cleanString(error?.node_name)}:${cleanString(error?.credential_key || error?.n8n_credential_type)}`
+    ));
+    const failureErrors = slotsForError.map((slot: any) => {
+      const provider = cleanString(slot?.provider_label || slot?.provider || "Credential");
+      const credentialType = cleanString(slot?.n8n_credential_type || slot?.credential_key || failedCredentialType);
+      const nodeName = cleanString(slot?.node_name || errorNode || "workflow node");
+      const reconnect = credentialType.toLowerCase() === "gmailoauth2" || provider.toLowerCase().includes("gmail")
+        ? "Reconnect Gmail with Connect Google, apply credentials, then run the technical check again."
+        : `Reconnect ${provider} in the credential panel, apply credentials, then run the technical check again.`;
+
+      return {
+        node_name: nodeName,
+        node_type: cleanString(slot?.node_type || result?.error_node_type),
+        credential_key: cleanString(slot?.credential_key || credentialType || "credential"),
+        n8n_credential_type: credentialType || null,
+        provider: cleanString(slot?.provider),
+        provider_label: provider,
+        message: `${provider} credential on "${nodeName}" is missing or was rejected by hosted n8n. ${reconnect} Original n8n error: ${credentialFailureText}`,
+        detected_by_technical_test: true,
+      };
+    });
+
+    failedDeveloperCredentialIds = Array.from(new Set(bindings
+      .filter((binding: any) => slotsForError.some((slot: any) => (
+        cleanString(binding?.node_name) === cleanString(slot?.node_name) &&
+        cleanString(binding?.credential_key || binding?.n8n_credential_type) === cleanString(slot?.credential_key || slot?.n8n_credential_type)
+      )))
+      .map((binding: any) => cleanString(binding?.developer_credential_id))
+      .filter(Boolean)));
+
+    Object.assign(credentialPatch, {
+      credential_binding_status: "needs_credentials",
+      credential_binding_errors: [...retainedErrors, ...failureErrors],
+      n8n_last_credential_bound_at: null,
+    });
+  }
+
   const healthPatch: Record<string, unknown> = terminal
     ? passed
       ? {
@@ -1544,6 +1624,7 @@ async function updateAutomationTestResult(adminClient: any, automationId: string
       n8n_last_test_error: result.ok ? null : result.error_message || result.message,
       n8n_last_test_result: storedResult,
       n8n_last_tested_at: now,
+      ...credentialPatch,
       ...healthPatch,
       updated_at: now,
     })
@@ -1551,6 +1632,21 @@ async function updateAutomationTestResult(adminClient: any, automationId: string
 
   if (error) {
     console.warn("Could not update automations test columns:", error.message);
+  }
+
+  if (credentialFailure && failedDeveloperCredentialIds.length) {
+    const { error: credentialStatusError } = await adminClient
+      .from("developer_credentials")
+      .update({
+        status: "needs_attention",
+        last_error: credentialFailureText,
+        updated_at: now,
+      })
+      .in("id", failedDeveloperCredentialIds);
+
+    if (credentialStatusError) {
+      console.warn("Could not flag failed developer credentials:", credentialStatusError.message);
+    }
   }
 
   await validateReusableImportMappings(adminClient, automationId, result);

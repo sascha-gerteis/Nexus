@@ -1,0 +1,108 @@
+diff --git a/supabase/functions/analytics-events/index.ts b/supabase/functions/analytics-events/index.ts
+--- a/supabase/functions/analytics-events/index.ts
++++ b/supabase/functions/analytics-events/index.ts
+@@
+-    touchDimension(byCountry, cleanString(event.country_code || "UNKNOWN").toUpperCase(), visitor, sessionId, {
++    const country = touchDimension(byCountry, cleanString(event.country_code || "UNKNOWN").toUpperCase(), visitor, sessionId, {
+       country_code: cleanString(event.country_code || "UNKNOWN").toUpperCase(),
+     });
++    if (name === "page_view") country.page_views = Number(country.page_views || 0) + 1;
+diff --git a/scripts/admin-analytics-insights-regression.cjs b/scripts/admin-analytics-insights-regression.cjs
+--- a/scripts/admin-analytics-insights-regression.cjs
++++ b/scripts/admin-analytics-insights-regression.cjs
+@@
+ assert(!edge.includes(".limit(20000)"), "the incomplete 20,000-row fetch must not return");
++
++const summarizeSource = edge.match(/function summarizeEvents[\s\S]*?(?=\nasync function fetchEvents)/)?.[0] || "";
++assert(summarizeSource, "fallback summarizer could not be extracted");
++const emptySummary = (days) => ({
++  days,
++  totals: {
++    events: 0,
++    page_views: 0,
++    unique_visitors: 0,
++    sessions: 0,
++    new_visitors: 0,
++    returning_visitors: 0,
++    authenticated_visitors: 0,
++    product_views: 0,
++    developer_profile_views: 0,
++    checkout_clicks: 0,
++    orders: 0,
++    setup_submissions: 0,
++    output_views: 0,
++    custom_submits: 0,
++    pages_per_session: 0,
++    events_per_session: 0,
++    avg_session_duration_seconds: 0,
++    bounce_rate: 0,
++  },
++  aggregation_mode: "empty",
++  data_complete: true,
++  scanned_rows: 0,
++  truncated: false,
++  daily: [],
++  event_breakdown: [],
++  action_breakdown: [],
++  top_pages: [],
++  top_landing_pages: [],
++  top_exit_pages: [],
++  top_sources: [],
++  countries: [],
++  devices: [],
++  user_roles: [],
++  top_products: [],
++  top_developers: [],
++  funnel: [],
++  recent_events: [],
++});
++const cleanString = (value, max = 500) => String(value ?? "").trim().slice(0, max);
++const safeJsonObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
++const visitorKey = (event) => cleanString(event.visitor_key || event.anonymous_id || event.user_id || event.session_id || "anonymous");
++const sinceIso = (days) => new Date(Date.now() - days * 86400000).toISOString();
++const summarizeEvents = new Function(
++  "emptySummary",
++  "cleanString",
++  "safeJsonObject",
++  "visitorKey",
++  "sinceIso",
++  `${summarizeSource}; return summarizeEvents;`,
++)(emptySummary, cleanString, safeJsonObject, visitorKey, sinceIso);
++
++const largeFixture = Array.from({ length: 2505 }, (_, index) => {
++  const visitor = `visitor-${index % 35}`;
++  const session = `session-${index % 70}`;
++  const eventNames = ["page_view", "product_view", "checkout_click", "order_created", "setup_submit", "output_view"];
++  const event_name = eventNames[index % eventNames.length];
++  return {
++    id: `event-${index}`,
++    event_name,
++    action: event_name,
++    visitor_key: visitor,
++    anonymous_id: visitor,
++    session_id: session,
++    user_id: index % 5 === 0 ? `user-${index % 11}` : null,
++    user_role: index % 5 === 0 ? "buyer" : "anonymous",
++    page_path: index % 2 === 0 ? "/" : "/pages/marketplace.html",
++    page_title: index % 2 === 0 ? "Nexus" : "Marketplace",
++    landing_page: index % 3 === 0 ? "/" : "/pages/marketplace.html",
++    referrer_host: index % 4 === 0 ? "google.com" : "",
++    source: index % 4 === 0 ? "google" : "direct",
++    medium: index % 4 === 0 ? "organic" : "none",
++    campaign: "",
++    country_code: index % 2 === 0 ? "TH" : "CH",
++    device_type: index % 2 === 0 ? "desktop" : "mobile",
++    browser_name: "Chrome",
++    os_name: index % 2 === 0 ? "Windows" : "Android",
++    metadata: { is_new_visitor: index < 35 },
++    created_at: new Date(Date.now() - index * 1000).toISOString(),
++  };
++});
++const largeSummary = summarizeEvents(largeFixture, 30);
++assert(largeSummary.totals.events === 2505, "fallback summary was capped below 2,505 events");
++assert(largeSummary.totals.unique_visitors === 35, "fallback unique visitors are incorrect");
++assert(largeSummary.totals.sessions === 70, "fallback sessions are incorrect");
++assert(largeSummary.top_sources.length >= 2, "fallback sources were not aggregated");
++assert(largeSummary.countries.some((country) => country.country_code === "TH" && country.page_views > 0), "country page views were not aggregated");
++assert(largeSummary.devices.length >= 2, "fallback devices were not aggregated");
++assert(largeSummary.funnel.length >= 5, "fallback funnel was not aggregated");

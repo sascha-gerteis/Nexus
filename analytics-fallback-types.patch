@@ -1,0 +1,27 @@
+diff --git a/supabase/functions/analytics-events/index.ts b/supabase/functions/analytics-events/index.ts
+--- a/supabase/functions/analytics-events/index.ts
++++ b/supabase/functions/analytics-events/index.ts
+@@
+-    const dayItem = daily.get(day) || { date: day, events: 0, page_views: 0, visitors: new Set<string>(), sessions: new Set<string>() };
++    const dayItem = daily.get(day) || { date: day, events: 0, page_views: 0, visitors: new Set(), sessions: new Set() };
+@@
+-        visitors: new Set<string>(),
++        visitors: new Set(),
+@@
+-  const bySource = new Map<string, any>();
+-  const byLanding = new Map<string, any>();
+-  const byExit = new Map<string, any>();
++  const bySource = new Map();
++  const byLanding = new Map();
++  const byExit = new Map();
+diff --git a/scripts/admin-analytics-insights-regression.cjs b/scripts/admin-analytics-insights-regression.cjs
+--- a/scripts/admin-analytics-insights-regression.cjs
++++ b/scripts/admin-analytics-insights-regression.cjs
+@@
+-    avg_session_duration_seconds: 0,
++    avg_session_seconds: 0,
+@@
+-  event_breakdown: [],
+-  action_breakdown: [],
++  events_by_name: [],
++  top_actions: [],

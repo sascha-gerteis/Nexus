@@ -3466,6 +3466,8 @@ async function getSystemHealth() {
   });
 }
 
+const ANALYTICS_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+
 function readStoredId(storage, key, prefix) {
   try {
     let value = storage.getItem(key);
@@ -3479,8 +3481,82 @@ function readStoredId(storage, key, prefix) {
   }
 }
 
+function analyticsDeviceType() {
+  const agent = String(navigator.userAgent || "").toLowerCase();
+  if (/ipad|tablet|kindle|silk/.test(agent)) return "tablet";
+  if (/mobi|android|iphone|ipod/.test(agent) || Number(window.innerWidth || 0) < 720) return "mobile";
+  return "desktop";
+}
+
+function analyticsReferrerHost(value) {
+  try {
+    return new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function readAnalyticsSession(params) {
+  const now = Date.now();
+  const storageKey = "nexus_analytics_session_v2";
+  let session = null;
+
+  try {
+    session = JSON.parse(localStorage.getItem(storageKey) || "null");
+  } catch {
+    session = null;
+  }
+
+  const expired = !session?.id || !Number(session.last_activity_at) || now - Number(session.last_activity_at) > ANALYTICS_SESSION_TIMEOUT_MS;
+  if (expired) {
+    const referrerHost = analyticsReferrerHost(document.referrer || "");
+    const currentHost = String(location.hostname || "").toLowerCase().replace(/^www\./, "");
+    const externalReferrer = referrerHost && referrerHost !== currentHost ? referrerHost : "";
+    const utmSource = String(params.get("utm_source") || "").trim().slice(0, 120);
+    const utmMedium = String(params.get("utm_medium") || "").trim().slice(0, 120);
+
+    session = {
+      id: `session_${now.toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
+      started_at: new Date(now).toISOString(),
+      last_activity_at: now,
+      landing_page: location.pathname || "/",
+      referrer_host: externalReferrer,
+      source: utmSource || externalReferrer || "direct",
+      medium: utmMedium || (externalReferrer ? "referral" : "none"),
+      campaign: String(params.get("utm_campaign") || "").trim().slice(0, 160),
+      term: String(params.get("utm_term") || "").trim().slice(0, 160),
+      content: String(params.get("utm_content") || "").trim().slice(0, 160)
+    };
+  } else {
+    session.last_activity_at = now;
+  }
+
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(session));
+  } catch {
+    // Analytics must never interrupt the page when storage is unavailable.
+  }
+
+  return session;
+}
+
+function analyticsFirstSeenAt() {
+  const key = "nexus_analytics_first_seen_at";
+  try {
+    let value = localStorage.getItem(key);
+    if (!value) {
+      value = new Date().toISOString();
+      localStorage.setItem(key, value);
+    }
+    return value;
+  } catch {
+    return "";
+  }
+}
+
 function analyticsBasePayload(extra = {}) {
   const params = new URLSearchParams(location.search || "");
+  const session = readAnalyticsSession(params);
   const viewport = {
     width: window.innerWidth || 0,
     height: window.innerHeight || 0,
@@ -3492,7 +3568,15 @@ function analyticsBasePayload(extra = {}) {
     page_url: location.href,
     referrer: document.referrer || "",
     anonymous_id: readStoredId(localStorage, "nexus_analytics_anonymous_id", "anon"),
-    session_id: readStoredId(sessionStorage, "nexus_analytics_session_id", "session"),
+    session_id: session.id,
+    landing_page: session.landing_page,
+    referrer_host: session.referrer_host,
+    source: session.source,
+    medium: session.medium,
+    campaign: session.campaign,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    language: navigator.language || "",
+    device_type: analyticsDeviceType(),
     product_slug: params.get("slug") || extra.product_slug || "",
     profile_developer_id: params.get("id") || extra.profile_developer_id || "",
     viewport,
@@ -3500,14 +3584,27 @@ function analyticsBasePayload(extra = {}) {
       title: document.title || "",
       page: document.body?.dataset?.page || "",
       admin_page: document.body?.dataset?.adminPage || "",
+      session_started_at: session.started_at,
+      visitor_first_seen_at: analyticsFirstSeenAt(),
+      utm_term: session.term,
+      utm_content: session.content,
       ...extra.metadata
     },
     ...extra
   };
 }
 
+function analyticsTrackingDisabled() {
+  if (navigator.globalPrivacyControl === true || String(navigator.doNotTrack || "") === "1") return true;
+  try {
+    return localStorage.getItem("nexus_analytics_opt_out") === "1";
+  } catch {
+    return false;
+  }
+}
+
 async function trackAnalyticsEvent(eventName, payload = {}) {
-  if (!eventName || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  if (!eventName || !SUPABASE_URL || !SUPABASE_ANON_KEY || analyticsTrackingDisabled()) {
     return { data: null, error: null };
   }
 
@@ -3526,10 +3623,11 @@ function trackPageView() {
   }, 800);
 }
 
-async function getAdminAnalytics(days = 30) {
+async function getAdminAnalytics(days = 30, audience = "customer") {
   return callNexusFunction("analytics-events", {
     action: "admin_summary",
-    days
+    days,
+    audience
   });
 }
 

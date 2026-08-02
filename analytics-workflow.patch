@@ -1,0 +1,11 @@
+diff --git a/.github/workflows/deploy-pages.yml b/.github/workflows/deploy-pages.yml
+--- a/.github/workflows/deploy-pages.yml
++++ b/.github/workflows/deploy-pages.yml
+@@ -34,6 +34,9 @@
+       - name: Verify legal, indexing, and founder trust safeguards
+         run: node scripts/legal-trust-launch-regression.cjs
+ 
++      - name: Verify admin analytics insights
++        run: node scripts/admin-analytics-insights-regression.cjs
++
+       - name: Configure Pages

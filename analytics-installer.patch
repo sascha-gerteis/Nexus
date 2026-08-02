@@ -1,0 +1,53 @@
+diff --git a/supabase/analytics_install_or_patch.sql b/supabase/analytics_install_or_patch.sql
+--- a/supabase/analytics_install_or_patch.sql
++++ b/supabase/analytics_install_or_patch.sql
+@@ -28,8 +28,20 @@
+   add column if not exists page_path text,
+   add column if not exists page_url text,
+   add column if not exists referrer text,
++  add column if not exists referrer_host text,
++  add column if not exists source text,
++  add column if not exists medium text,
++  add column if not exists campaign text,
++  add column if not exists landing_page text,
+   add column if not exists anonymous_id text,
+   add column if not exists session_id text,
++  add column if not exists visitor_key text,
++  add column if not exists country_code text,
++  add column if not exists timezone text,
++  add column if not exists language text,
++  add column if not exists device_type text,
++  add column if not exists browser_name text,
++  add column if not exists os_name text,
+   add column if not exists user_id uuid references auth.users(id) on delete set null,
+@@ -44,6 +56,16 @@
+   add column if not exists user_agent text,
+   add column if not exists created_at timestamptz not null default now();
+ 
++update public.analytics_events
++set visitor_key = coalesce(
++  nullif(anonymous_id, ''),
++  user_id::text,
++  nullif(session_id, ''),
++  id::text
++)
++where visitor_key is null or visitor_key = '';
++
+ create index if not exists idx_analytics_events_created_at
+@@ -61,6 +83,18 @@
+ create index if not exists idx_analytics_events_page_created
+   on public.analytics_events(page_path, created_at desc);
+ 
++create index if not exists idx_analytics_events_visitor_created
++  on public.analytics_events(visitor_key, created_at desc);
++
++create index if not exists idx_analytics_events_session_created
++  on public.analytics_events(session_id, created_at desc);
++
++create index if not exists idx_analytics_events_source_created
++  on public.analytics_events(source, created_at desc);
++
++create index if not exists idx_analytics_events_country_created
++  on public.analytics_events(country_code, created_at desc);
++
+ alter table public.analytics_events enable row level security;

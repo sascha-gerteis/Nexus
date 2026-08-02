@@ -1,0 +1,53 @@
+diff --git a/supabase/functions/analytics-events/index.ts b/supabase/functions/analytics-events/index.ts
+--- a/supabase/functions/analytics-events/index.ts
++++ b/supabase/functions/analytics-events/index.ts
+@@ -312,22 +312,22 @@
+-function summarizeEvents(events: any[], days: number) {
++function summarizeEvents(events, days) {
+   const summary = emptySummary(days);
+-  const visitors = new Set<string>();
+-  const authenticatedVisitors = new Set<string>();
+-  const sessions = new Map<string, any>();
+-  const daily = new Map<string, any>();
+-  const byName = new Map<string, any>();
+-  const byAction = new Map<string, any>();
+-  const byPage = new Map<string, any>();
+-  const byProduct = new Map<string, any>();
+-  const byDeveloper = new Map<string, any>();
+-  const byCountry = new Map<string, any>();
+-  const byDevice = new Map<string, any>();
+-  const byRole = new Map<string, any>();
+-  const firstSeenByVisitor = new Map<string, number>();
+-  const funnelVisitors: Record<string, Set<string>> = {
+-    product_view: new Set<string>(),
+-    checkout_start: new Set<string>(),
+-    message_intent: new Set<string>(),
+-    custom_request_submit: new Set<string>(),
++  const visitors = new Set();
++  const authenticatedVisitors = new Set();
++  const sessions = new Map();
++  const daily = new Map();
++  const byName = new Map();
++  const byAction = new Map();
++  const byPage = new Map();
++  const byProduct = new Map();
++  const byDeveloper = new Map();
++  const byCountry = new Map();
++  const byDevice = new Map();
++  const byRole = new Map();
++  const firstSeenByVisitor = new Map();
++  const funnelVisitors = {
++    product_view: new Set(),
++    checkout_start: new Set(),
++    message_intent: new Set(),
++    custom_request_submit: new Set(),
+   };
+ 
+-  function touchDimension(map: Map<string, any>, key: string, visitor: string, session: string, patch: Record<string, unknown> = {}) {
++  function touchDimension(map, key, visitor, session, patch = {}) {
+@@ -335,8 +335,8 @@
+-    const item = map.get(safeKey) || { key: safeKey, events: 0, visitors: new Set<string>(), sessions: new Set<string>(), ...patch };
++    const item = map.get(safeKey) || { key: safeKey, events: 0, visitors: new Set(), sessions: new Set(), ...patch };
+@@ -349,7 +349,7 @@
+-  function dimensionRows(map: Map<string, any>, limit = 20) {
++  function dimensionRows(map, limit = 20) {

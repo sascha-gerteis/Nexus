@@ -31,6 +31,15 @@ jobs:
       - name: Verify admin pilot grant safeguards
         run: node scripts/admin-pilot-grant-regression.cjs
 
+      - name: Verify legal, indexing, and founder trust safeguards
+        run: node scripts/legal-trust-launch-regression.cjs
+
+      - name: Verify admin analytics insights
+        run: node scripts/admin-analytics-insights-regression.cjs
+
+      - name: Verify credential integrity safeguards
+        run: node scripts/credential-integrity-regression.cjs
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
