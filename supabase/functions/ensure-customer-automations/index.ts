@@ -398,6 +398,7 @@ async function ensureForOrder(adminClient: any, order: any) {
 
   if (createResult.error) {
     const fallbackPayload = { ...createPayload };
+    delete fallbackPayload.runtime_trigger_mode;
     delete fallbackPayload.run_frequency;
     delete fallbackPayload.schedule_status;
 

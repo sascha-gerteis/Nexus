@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <link rel="stylesheet" href="/assets/css/automation-finder.css?v=20260806-finder-v1">
+  <title>Automation Finder | Find the Right Business Automation</title>
+  <meta name="description" content="Describe a repeated business process, estimate its monthly cost, and find a live Nexus automation or submit a structured custom request.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nexus-ai.software/pages/automation-finder/index.html">
+  <link rel="alternate" type="text/markdown" href="/llms.txt">
+  <meta property="og:title" content="Automation Finder | Nexus">
+  <meta property="og:description" content="Turn a repeated business problem into a live product match or a clear automation request.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nexus-ai.software/pages/automation-finder/index.html">
+  <meta property="og:image" content="https://nexus-ai.software/assets/favicons/android-chrome-512x512.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#2563ff">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Nexus Automation Finder",
+    "url": "https://nexus-ai.software/pages/automation-finder/index.html",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "description": "A decision tool that estimates repeated-work cost and matches the need against live Nexus automation products."
+  }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="/assets/js/config.js?v=20260713-code-stability"></script>
+</head>
+<body data-page="automation-finder">
+  <header class="site-header" id="globalNav" data-active="marketplace"></header>
+
+  <main>
+    <section class="finder-hero">
+      <div class="container finder-hero-grid">
+        <div>
+          <span class="eyebrow">Nexus Automation Finder</span>
+          <h1>Describe the work. Find the outcome.</h1>
+          <p>See what repeated work costs, whether it is ready to automate, and whether a verified Nexus product already solves it.</p>
+          <div class="finder-hero-actions">
+            <a class="btn btn-primary" href="#finder-assessment">Find my automation</a>
+            <a class="btn btn-secondary" href="/pages/marketplace/index.html">Browse all products</a>
+          </div>
+        </div>
+        <aside class="finder-promise" aria-label="How the Automation Finder works">
+          <span class="finder-promise-label">No made-up matches</span>
+          <ol>
+            <li><strong>Measure</strong><span>Estimate time and manual cost.</span></li>
+            <li><strong>Match</strong><span>Search only products live on Nexus.</span></li>
+            <li><strong>Request</strong><span>If nothing fits, send Nexus a ready-made brief.</span></li>
+          </ol>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section finder-section" id="finder-assessment">
+      <div class="container finder-layout">
+        <form class="finder-form" id="automationFinderForm">
+          <div class="finder-form-head">
+            <div>
+              <span class="finder-kicker">Your workflow</span>
+              <h2>What should stop taking your time?</h2>
+              <p>Plain language is enough. Your answers are used for this assessment and, only if you choose, your custom request.</p>
+            </div>
+            <span class="finder-catalogue-status" id="finderCatalogueStatus" aria-live="polite">Loading live products...</span>
+          </div>
+
+          <fieldset class="finder-fieldset">
+            <legend><span>1</span> The work and result</legend>
+            <div class="finder-fields">
+              <label class="finder-field full">
+                <span>What repeated task or problem takes too much time? <b>Required</b></span>
+                <textarea class="textarea" name="task_problem" rows="4" minlength="15" required placeholder="Example: Every Monday we copy data from three marketing tools into a spreadsheet and write a client report."></textarea>
+              </label>
+              <label class="finder-field full">
+                <span>How do you handle it today? <b>Required</b></span>
+                <textarea class="textarea" name="current_process" rows="3" minlength="10" required placeholder="List the main manual steps, handoffs, or checks."></textarea>
+              </label>
+              <label class="finder-field">
+                <span>Tools or data sources <b>Required</b></span>
+                <input class="input" name="tools" required placeholder="Google Sheets, HubSpot, email, website...">
+              </label>
+              <label class="finder-field">
+                <span>What should come back? <b>Required</b></span>
+                <input class="input" name="desired_output" required placeholder="A report, alert, lead list, follow-up...">
+              </label>
+              <label class="finder-field full">
+                <span>What happens when this is late, missed, or wrong?</span>
+                <textarea class="textarea" name="consequence" rows="2" placeholder="Example: A client waits for their report and our team loses time checking the numbers."></textarea>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="finder-fieldset">
+            <legend><span>2</span> Time and volume</legend>
+            <div class="finder-fields finder-fields-compact">
+              <label class="finder-field">
+                <span>Frequency <b>Required</b></span>
+                <select class="select" name="frequency" id="finderFrequency" required>
+                  <option value="">Choose frequency</option>
+                  <option value="one_time">One-time</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="event">Whenever new data arrives</option>
+                </select>
+              </label>
+              <label class="finder-field">
+                <span>Times per month <b>Required</b></span>
+                <input class="input" name="occurrences" id="finderOccurrences" type="number" min="1" max="10000" value="4" required>
+              </label>
+              <label class="finder-field">
+                <span>Minutes each time <b>Required</b></span>
+                <input class="input" name="minutes" type="number" min="1" max="10080" value="45" required>
+              </label>
+              <label class="finder-field">
+                <span>People involved <b>Required</b></span>
+                <input class="input" name="people" type="number" min="1" max="1000" value="1" required>
+              </label>
+              <label class="finder-field">
+                <span>Average hourly cost (USD) <b>Required</b></span>
+                <input class="input" name="hourly_cost" type="number" min="0" max="10000" step="0.01" value="25" required>
+              </label>
+              <label class="finder-field">
+                <span>How soon is this needed?</span>
+                <select class="select" name="urgency">
+                  <option value="exploring">Exploring</option>
+                  <option value="month">This month</option>
+                  <option value="week">This week</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="finder-fieldset">
+            <legend><span>3</span> Controls</legend>
+            <div class="finder-fields">
+              <label class="finder-field">
+                <span>Should a person approve the result?</span>
+                <select class="select" name="human_review">
+                  <option value="unsure">Not sure</option>
+                  <option value="yes">Yes, before it is used or sent</option>
+                  <option value="no">No, it can run automatically</option>
+                </select>
+              </label>
+              <label class="finder-field">
+                <span>Does it involve sensitive data?</span>
+                <select class="select" name="sensitive_data">
+                  <option value="none">No sensitive data</option>
+                  <option value="customer">Customer or personal data</option>
+                  <option value="financial">Financial data</option>
+                  <option value="health">Health or highly sensitive data</option>
+                  <option value="unsure">Not sure</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="finder-submit-row">
+            <button class="btn btn-primary finder-submit" type="submit">Find my best next step</button>
+            <span>About 2 minutes · no account required</span>
+          </div>
+        </form>
+
+        <aside class="finder-side">
+          <div class="finder-side-card">
+            <span class="finder-kicker">What you will get</span>
+            <h3>A decision, not a directory.</h3>
+            <ul>
+              <li>Estimated monthly hours and manual cost</li>
+              <li>An automation-readiness assessment</li>
+              <li>Up to three credible live matches</li>
+              <li>A structured request if no product fits</li>
+            </ul>
+          </div>
+          <div class="finder-side-note">
+            <strong>Important</strong>
+            <p>This is an estimate, not a promise that every minute or cost can be removed. Sensitive and high-impact workflows may need human approval.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section alt finder-results-section" id="finderResults" hidden aria-live="polite">
+      <div class="container">
+        <div class="finder-results-head">
+          <div>
+            <span class="eyebrow">Your assessment</span>
+            <h2 id="finderResultTitle">Your best next step</h2>
+            <p id="finderResultSummary"></p>
+          </div>
+          <button class="btn btn-secondary btn-small" id="finderEditButton" type="button">Edit answers</button>
+        </div>
+
+        <div class="finder-metrics" id="finderMetrics"></div>
+        <div class="finder-readiness" id="finderReadiness"></div>
+
+        <div class="finder-matches" id="finderMatches" hidden>
+          <div class="finder-subhead">
+            <div><span class="finder-kicker">Live Nexus catalogue</span><h3>Products that fit your request</h3></div>
+            <span>Ranked from your answers, not sponsored placement.</span>
+          </div>
+          <div class="finder-match-grid" id="finderMatchGrid"></div>
+          <div class="finder-none-fit">
+            <span>None of these solve the exact problem?</span>
+            <button class="btn btn-secondary btn-small" id="finderRequestInstead" type="button">Create a custom request instead</button>
+          </div>
+        </div>
+
+        <div class="finder-custom" id="finderCustom" hidden>
+          <div class="finder-custom-copy">
+            <span class="finder-kicker">No exact live match</span>
+            <h3>Turn this into a buildable request.</h3>
+            <p id="finderCustomReason">Nexus will not recommend a weak match. Review the generated title and brief, then send it directly to the Nexus team.</p>
+          </div>
+          <form class="finder-request-form" id="finderRequestForm">
+            <label class="finder-field full">
+              <span>Suggested automation title <b>Editable</b></span>
+              <input class="input" name="request_title" maxlength="120" required>
+            </label>
+            <label class="finder-field full">
+              <span>Automation brief <b>Editable</b></span>
+              <textarea class="textarea finder-brief" name="request_brief" rows="14" required></textarea>
+            </label>
+            <div class="finder-fields finder-contact-fields">
+              <label class="finder-field"><span>Your name <b>Required</b></span><input class="input" name="name" required></label>
+              <label class="finder-field"><span>Email <b>Required</b></span><input class="input" name="email" type="email" required></label>
+              <label class="finder-field full"><span>Company</span><input class="input" name="company"></label>
+            </div>
+            <div class="finder-request-actions">
+              <button class="btn btn-primary" type="submit">Send this request to Nexus</button>
+              <span id="finderRequestStatus" aria-live="polite">It will appear in the Nexus review inbox.</span>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="section finder-explainer">
+      <div class="container">
+        <div class="section-head left">
+          <span class="eyebrow">Built for honest decisions</span>
+          <h2>What the Finder does—and does not do.</h2>
+        </div>
+        <div class="finder-explainer-grid">
+          <article><strong>Live catalogue only</strong><p>A recommendation must exist and be available on Nexus when you run the assessment.</p></article>
+          <article><strong>Confidence required</strong><p>If your need does not closely overlap with a product’s purpose and output, no product is recommended.</p></article>
+          <article><strong>Your numbers stay estimates</strong><p>Time and cost calculations show the size of the problem. Actual savings depend on setup and adoption.</p></article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-row">
+      <div><strong>Nexus</strong><br><span>The trusted marketplace layer for business automation.</span></div>
+      <div class="footer-links">
+        <a href="/pages/marketplace/index.html">Marketplace</a>
+        <a href="/pages/calculator/index.html">Calculator</a>
+        <a href="/pages/product-standards/index.html">Standards</a>
+        <a href="/pages/buyer-protection/index.html">Protection</a>
+        <a href="/pages/about/index.html">About</a>
+        <a href="/pages/contact/index.html">Contact</a>
+        <a href="/pages/legal/privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast"></div>
+  <script defer src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
+  <script defer src="/assets/js/nexus-db.js?v=20260801-analytics-insights"></script>
+  <script defer src="/assets/js/nexus-buyer-nav.js?v=20260713-code-stability"></script>
+  <script defer src="/assets/js/nexus-automation-finder.js?v=20260806-finder-v1"></script>
+</body>
+</html>

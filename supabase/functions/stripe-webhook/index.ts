@@ -350,6 +350,7 @@ async function safeUpdateCustomerAutomationsByOrder(orderId: string, payload: Re
   for (const key of [
     "run_frequency",
     "runtime_trigger_mode",
+    "runtime_output_mode",
     "runtime_no_change_policy",
     "runtime_response_mode",
     "schedule_status",
@@ -380,6 +381,7 @@ async function safeInsertCustomerAutomation(payload: Record<string, unknown>) {
   for (const key of [
     "run_frequency",
     "runtime_trigger_mode",
+    "runtime_output_mode",
     "runtime_no_change_policy",
     "runtime_response_mode",
     "schedule_status",
