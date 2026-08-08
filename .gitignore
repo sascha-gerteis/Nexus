@@ -17,3 +17,11 @@ __pycache__/
 dist/
 build/
 
+# Local worktrees, backups, generated audit copies, and server logs.
+/.codex-*
+/.codex-backups/
+/.agents/
+/.p29/
+/nexus-phase1-final/
+/dev-server.out.log
+/dev-server.err.log

@@ -20,7 +20,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Use deterministic Node runtime
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Verify repository hygiene
+        run: node scripts/repository-hygiene-regression.cjs
 
       - name: Verify checkout auth-session safety
         run: node scripts/auth-session-checkout-regression.cjs

@@ -2,7 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
+const read = (relativePath) =>
+  fs.readFileSync(path.join(root, relativePath), "utf8").replaceAll("\r\n", "\n");
 const assert = (condition, message) => {
   if (!condition) throw new Error(`Credential integrity regression failed: ${message}`);
 };

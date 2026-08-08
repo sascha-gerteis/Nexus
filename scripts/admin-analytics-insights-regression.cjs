@@ -218,7 +218,10 @@ const walk = (directory) => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (!ignoredDirectories.has(entry.name)) walk(fullPath);
+      const ignored =
+        ignoredDirectories.has(entry.name) ||
+        entry.name.startsWith(".codex-");
+      if (!ignored) walk(fullPath);
     }
     else if (entry.name.endsWith(".html")) htmlFiles.push(fullPath);
   }
