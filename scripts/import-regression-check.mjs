@@ -297,6 +297,14 @@ scenario("Nexus dynamic placeholders always import as real n8n expressions", () 
   assert(importFunction.includes('type === "SETUP" && isLikelyCredentialPlaceholderKey(name)'), "Detected NEXUS_SETUP token aliases must generate credential fields instead of plain setup fields.");
 });
 
+scenario("Optional provider-data HTTP nodes fail through without weakening credentials or callbacks", () => {
+  assert(importFunction.includes("applyOptionalDataFailThroughToWorkflowNodes"), "Imports must apply the optional-data HTTP fail-through policy.");
+  assert(importFunction.includes('onError: "continueRegularOutput"'), "Optional provider HTTP nodes must continue through their regular output when optional data is unavailable.");
+  assert(importFunction.includes('cleanString(node?.name) === "Nexus Submit Output"'), "Nexus output callbacks must be excluded from optional fail-through handling.");
+  assert(importFunction.includes("schemaFieldRequired(field) && schemaFieldIsCredentialLike(field)"), "Required credentials must never be classified as optional data.");
+  assert(importFunction.includes("nodeReferencesSchemaField"), "Fail-through must only apply to nodes that reference a skippable schema field.");
+});
+
 scenario("Native OpenAI model credentials are treated as openAiApi, not generic HTTP", () => {
   assert(credentialsShared.includes('credentialType = "openAiApi"'), "Native OpenAI model slots must force openAiApi credential type.");
   assert(credentialsShared.includes('type === "openaiapi"'), "OpenAI credential sync must have an openAiApi payload branch.");

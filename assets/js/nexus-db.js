@@ -425,7 +425,7 @@ const NexusDB = (() => {
       if (window.NexusUI?.toast) {
         window.NexusUI.toast(allowStaff ? "Admin access required." : "Owner admin access required.");
       }
-      location.href = role === ADMIN_STAFF_ROLE ? "/pages/admin/staff.html" : "/index.html";
+      location.href = role === ADMIN_STAFF_ROLE ? "/pages/admin/staff.html" : "/";
       return null;
     }
 
@@ -725,7 +725,7 @@ const NexusDB = (() => {
     clearAuthCaches();
     await supabase.auth.signOut();
     clearAuthCaches();
-    location.href = "/index.html";
+    location.href = "/";
   }
 
   async function ensureBuyerProfileFromUser(user) {

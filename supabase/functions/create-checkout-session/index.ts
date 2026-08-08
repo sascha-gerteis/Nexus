@@ -1324,7 +1324,7 @@ async function createBundleCheckoutSession(options: {
       },
     ],
     success_url: `${SITE_URL}/pages/checkout/success.html?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${SITE_URL}/pages/checkout/index.html?bundle=${encodeURIComponent(checkout.bundle.slug || "")}&step=setup&checkout=cancelled&order_id=${order.id}`,
+    cancel_url: `${SITE_URL}/pages/checkout?bundle=${encodeURIComponent(checkout.bundle.slug || "")}&step=setup&checkout=cancelled&order_id=${order.id}`,
     metadata,
   };
 
@@ -1635,7 +1635,7 @@ Deno.serve(async (req) => {
       customer_email: buyerEmail || undefined,
       line_items: lineItems,
       success_url: `${SITE_URL}/pages/checkout/success.html?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${SITE_URL}/pages/checkout/index.html?slug=${encodeURIComponent(product.slug || "")}&step=setup&checkout=cancelled&order_id=${order.id}`,
+      cancel_url: `${SITE_URL}/pages/checkout?slug=${encodeURIComponent(product.slug || "")}&step=setup&checkout=cancelled&order_id=${order.id}`,
       metadata,
     };
 

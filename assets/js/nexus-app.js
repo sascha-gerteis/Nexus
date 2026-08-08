@@ -196,7 +196,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   }
 
   function marketplaceShareHref(type, slug) {
-    const url = new URL("/pages/marketplace/index.html", location.origin);
+    const url = new URL("/pages/marketplace", location.origin);
     url.searchParams.set(type === "bundle" ? "bundle" : "product", slug || "");
     return url.href;
   }
@@ -454,8 +454,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
                 ${products.map((product) => {
                   const slug = encodeURIComponent(product.slug || "");
                   const href = isRequestOnlyProduct(product)
-                    ? `/pages/custom-request/index.html?slug=${slug}`
-                    : `/pages/checkout/index.html?slug=${slug}&step=setup`;
+                    ? `/pages/custom-request?slug=${slug}`
+                    : `/pages/checkout?slug=${slug}&step=setup`;
                   const label = isRequestOnlyProduct(product) ? "Request" : "Buy";
 
                   return `
@@ -716,7 +716,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
             <h3>Tell us a little more.</h3>
             <p>Describe the manual work, desired output, or tools involved so Nexus can compare it against current products.</p>
           </div>
-          <a class="btn btn-secondary btn-small" href="/pages/contact/index.html">Ask Nexus directly</a>
+          <a class="btn btn-secondary btn-small" href="/pages/contact">Ask Nexus directly</a>
         </div>
       `;
       result.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -758,7 +758,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
             New approved developer products are included automatically when they match.
           </p>
         </div>
-        <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom solution</a>
+        <a class="btn btn-primary btn-small" href="/pages/custom-request">Request custom solution</a>
       </div>
       <div class="marketplace-recommendation-grid">
         ${scored.map(marketplaceRecommendationCard).join("")}
@@ -823,7 +823,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
           </p>
           ${summary ? `<small>Request context: ${NexusUI.escapeHtml(summary)}</small>` : ""}
         </div>
-        <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom solution</a>
+        <a class="btn btn-primary btn-small" href="/pages/custom-request">Request custom solution</a>
       </div>
       <div class="success" style="margin-top:1rem">
         Describe the process once. Nexus will recommend an existing product if one truly fits, or route it as a custom request.
@@ -982,8 +982,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     const encodedSlug = encodeURIComponent(slug);
     const isRequestOnly = isRequestOnlyProduct(product);
     const actionHref = isRequestOnly
-      ? `/pages/custom-request/index.html?slug=${encodedSlug}`
-      : `/pages/checkout/index.html?slug=${encodedSlug}&step=setup`;
+      ? `/pages/custom-request?slug=${encodedSlug}`
+      : `/pages/checkout?slug=${encodedSlug}&step=setup`;
     const actionLabel = isRequestOnly ? "Request" : "Buy";
     const matchText = item.matchedTerms?.length
       ? `Matched: ${item.matchedTerms.join(", ")}`
@@ -1117,15 +1117,15 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
     const isCustomRequest = isRequestOnlyProduct(product);
     const ctaHref = isCustomRequest
-      ? `/pages/custom-request/index.html?slug=${encodeURIComponent(product.slug)}`
-      : `/pages/checkout/index.html?slug=${encodeURIComponent(product.slug)}&step=setup`;
+      ? `/pages/custom-request?slug=${encodeURIComponent(product.slug)}`
+      : `/pages/checkout?slug=${encodeURIComponent(product.slug)}&step=setup`;
     const ctaLabel = isCustomRequest ? "Request custom solution" : "Buy / choose setup";
     const ctaText = isCustomRequest
       ? "Tell Nexus what you need and we will review scope, tools, budget, and timeline."
       : "Buy opens the dedicated setup page where the buyer chooses self-serve or guided setup.";
     const isNexusProduct = !product.developer_id || String(product.developers?.handle || "").toLowerCase() === "nexus-internal";
     const messageButton = isNexusProduct
-      ? `<a class="btn btn-secondary" href="/pages/contact/index.html">Ask Nexus</a>`
+      ? `<a class="btn btn-secondary" href="/pages/contact">Ask Nexus</a>`
       : `<button class="btn btn-secondary" type="button" onclick="NexusApp.startProductMessage('${product.id}')">Message developer</button>`;
 
     const main = `
@@ -1277,8 +1277,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
             If one included product is paused later, Nexus keeps the bundle live with the remaining active products and adjusts future pricing. ${NexusUI.escapeHtml(bundleBillingSentence)}
           </p>
           <div class="hero-actions" style="justify-content:flex-start">
-            <a class="btn btn-primary" href="/pages/checkout/index.html?bundle=${encodeURIComponent(bundle.slug || "")}&step=setup">Buy bundle</a>
-            <a class="btn btn-secondary" href="/pages/contact/index.html">Ask Nexus</a>
+            <a class="btn btn-primary" href="/pages/checkout?bundle=${encodeURIComponent(bundle.slug || "")}&step=setup">Buy bundle</a>
+            <a class="btn btn-secondary" href="/pages/contact">Ask Nexus</a>
             <button class="btn btn-secondary" type="button" onclick="NexusApp.copyMarketplaceLink('bundle', '${NexusUI.escapeAttribute(bundle.slug || "")}')">Copy link</button>
           </div>
         </div>
@@ -1429,7 +1429,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   }
 
   async function openSetupChoice(slug) {
-    window.location.href = `/pages/checkout/index.html?slug=${encodeURIComponent(slug)}&step=setup`;
+    window.location.href = `/pages/checkout?slug=${encodeURIComponent(slug)}&step=setup`;
   }
 
   async function startProductMessage(productId) {
@@ -1619,7 +1619,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
       <div class="card">
         <h2>${bundleSlug ? "Bundle" : "Product"} not found</h2>
         <p>Return to the marketplace and choose again.</p>
-        <a class="btn btn-primary" href="/pages/marketplace/index.html">Back to marketplace</a>
+        <a class="btn btn-primary" href="/pages/marketplace">Back to marketplace</a>
       </div>
     `;
     return;
@@ -1628,7 +1628,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
   activeProduct = product;
 
   if (isRequestOnlyProduct(product)) {
-    const requestHref = `/pages/custom-request/index.html?slug=${encodeURIComponent(product.slug || "")}`;
+    const requestHref = `/pages/custom-request?slug=${encodeURIComponent(product.slug || "")}`;
 
     root.innerHTML = `
       <div class="card">
@@ -1642,7 +1642,7 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
         </p>
         <div class="card-actions">
           <a class="btn btn-primary" href="${requestHref}">Request custom solution</a>
-          <a class="btn btn-secondary" href="/pages/marketplace/index.html">Back to marketplace</a>
+          <a class="btn btn-secondary" href="/pages/marketplace">Back to marketplace</a>
         </div>
       </div>
     `;
@@ -4844,7 +4844,7 @@ if (shouldImportN8n) {
 
           const link = document.createElement("a");
           link.className = button.className || "btn btn-primary btn-small";
-          link.href = `/pages/checkout/index.html?slug=${encodeURIComponent(slug)}&step=setup`;
+          link.href = `/pages/checkout?slug=${encodeURIComponent(slug)}&step=setup`;
           link.textContent = "Buy";
 
           button.replaceWith(link);

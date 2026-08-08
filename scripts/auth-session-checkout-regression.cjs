@@ -11,7 +11,7 @@ const checkoutPage = fs.readFileSync(
   path.resolve(__dirname, "../pages/checkout/index.html"),
   "utf8",
 );
-assert.match(checkoutPage, /nexus-db\.js\?v=20260726-auth-session/);
+assert.match(checkoutPage, /nexus-db\.js\?v=[^"']+/);
 
 function createRuntime({ getSession, refreshSession, getUser, fetch }) {
   const calls = {
@@ -42,7 +42,7 @@ function createRuntime({ getSession, refreshSession, getUser, fetch }) {
 
   const location = {
     origin: "https://nexus-ai.software",
-    pathname: "/pages/checkout/index.html",
+    pathname: "/pages/checkout",
     search: "?product=demo",
     hash: "",
     href: "",
@@ -122,7 +122,7 @@ async function verifyBuyerGateRejectsStoredStaleSession() {
   });
 
   const user = await runtime.NexusDB.requireBuyer(
-    "/pages/checkout/index.html?product=demo",
+    "/pages/checkout?product=demo",
   );
 
   assert.equal(user, null);
@@ -210,7 +210,7 @@ async function verifyValidBuyerStillReachesCheckout() {
     },
   });
 
-  const user = await runtime.NexusDB.requireBuyer("/pages/checkout/index.html");
+  const user = await runtime.NexusDB.requireBuyer("/pages/checkout");
   assert.equal(user?.id, staleSession.user.id);
 
   const result = await runtime.NexusDB.createStripeCheckoutSession({

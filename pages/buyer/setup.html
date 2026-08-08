@@ -25,15 +25,15 @@
 <body data-page="buyer-setup">
   <header class="site-header">
     <div class="container nav">
-      <a class="logo" href="/index.html">
+      <a class="logo" href="/">
         <span>Nexus&nbsp;</span>
       </a>
 
       <nav class="nav-links">
-        <a class="nav-link" href="/index.html">Home</a>
-        <a class="nav-link" href="/pages/marketplace/index.html">Marketplace</a>
+        <a class="nav-link" href="/">Home</a>
+        <a class="nav-link" href="/pages/marketplace">Marketplace</a>
         <a class="nav-link active" href="/pages/buyer/dashboard.html">Dashboard</a>
-        <a class="nav-link" href="/pages/contact/index.html">Support</a>
+        <a class="nav-link" href="/pages/contact">Support</a>
         <button class="btn btn-secondary btn-small" type="button" onclick="NexusDB.signOut()">Logout</button>
       </nav>
     </div>
@@ -281,6 +281,9 @@
       if (/\b(google\s*analytics|ga4)\b/.test(text)) return "google_analytics";
       if (/\b(google\s*ads|adwords)\b/.test(text)) return "google_ads";
       if (/\b(mailchimp|klaviyo|email\s*marketing)\b/.test(text)) return "email_marketing";
+      if (/\bapify\b/.test(text)) return "apify";
+      if (/\b(?:serpapi|serper)\b/.test(text)) return "search_data";
+      if (/\b(?:firecrawl|browserless)\b/.test(text)) return "web_scraping";
       if (/\b(shopify|woocommerce|stripe|hubspot|salesforce|airtable|notion|slack|telegram|whatsapp|webflow|wordpress|calendly|pipedrive|zoho|quickbooks|xero)\b/.test(text)) {
         return detectBundleProvider(text) || "external_tool";
       }
@@ -305,6 +308,9 @@
         google_analytics: "Google Analytics data",
         google_ads: "Google Ads data",
         email_marketing: "Email marketing data",
+        apify: "Apify data",
+        search_data: "Search provider data",
+        web_scraping: "Web scraping data",
         shopify: "Shopify data",
         woocommerce: "WooCommerce data",
         stripe: "Stripe data",
@@ -328,9 +334,22 @@
       return labels[group] || group.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     }
 
-    function fieldCanBeSkipped(field = {}) {
-      if (fieldIsRequired(field)) return false;
+    function fieldIsRequiredCredential(field = {}) {
+      if (!fieldIsRequired(field)) return false;
 
+      const name = fieldNameForMatching(field);
+      const text = fieldTextForMatching(field);
+      const type = String(field.type || "").trim().toLowerCase();
+      const credentialLike =
+        type === "secret" ||
+        field.customer_owned === true ||
+        Boolean(field.credential_key) ||
+        /\b(?:api[ _-]*key|access[ _-]*token|refresh[ _-]*token|password|secret|credential)\b/.test(`${name} ${text}`);
+
+      return credentialLike;
+    }
+
+    function fieldCanBeSkipped(field = {}) {
       if (field.allow_skip === false || field.skippable === false) return false;
 
       const name = fieldNameForMatching(field);
@@ -338,6 +357,7 @@
       const group = setupFieldSkipGroup(field);
 
       if (!group) return false;
+      if (fieldIsRequiredCredential(field)) return false;
 
       if ([
         "business_name",

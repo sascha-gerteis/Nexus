@@ -1225,10 +1225,10 @@ function productColorTheme(color) {
     const showSave = Boolean(cardOptions.showSave) && !isBundle && Boolean(product.id);
     const saveSelected = Boolean(cardOptions.savedSelected);
     const ctaHref = isBundle
-      ? `/pages/checkout/index.html?bundle=${slug}&step=setup`
+      ? `/pages/checkout?bundle=${slug}&step=setup`
       : isCustomRequest
-      ? `/pages/custom-request/index.html?slug=${slug}`
-      : `/pages/checkout/index.html?slug=${slug}&step=setup`;
+      ? `/pages/custom-request?slug=${slug}`
+      : `/pages/checkout?slug=${slug}&step=setup`;
     const ctaLabel = isCustomRequest ? t("common_request_custom_automation") : t("common_buy");
     const guideLabel = recommendedProductLabel(product);
     const openAction = isBundle
@@ -3068,11 +3068,23 @@ function persistLanguage(language) {
   document.documentElement.dir = RTL_LANGUAGES.includes(normalized) ? "rtl" : "ltr";
 }
 
+function cleanInternalPathname(pathname = "") {
+  const raw = String(pathname || "/");
+  const legacyIndexSuffix = "/" + "index.html";
+  const withoutIndex = raw.toLowerCase().endsWith(legacyIndexSuffix)
+    ? raw.slice(0, -legacyIndexSuffix.length) || "/"
+    : raw;
+
+  if (withoutIndex === "/") return "/";
+  return withoutIndex.replace(/\/+$/, "") || "/";
+}
+
 function updateCurrentUrlLanguage(language) {
   if (!window.history?.replaceState) return;
 
   try {
     const url = new URL(window.location.href);
+    url.pathname = cleanInternalPathname(url.pathname);
 
     const normalized = normalizeLanguage(language);
 
@@ -3097,6 +3109,7 @@ function localizedInternalUrl(href, language = getLanguage()) {
     const url = new URL(href, location.origin);
 
     if (url.origin !== location.origin) return href;
+    url.pathname = cleanInternalPathname(url.pathname);
 
     const normalized = normalizeLanguage(language);
 
@@ -3680,7 +3693,7 @@ function globalNav(active = "") {
   const compactAccountNav = isCompactAccountNav(active);
   const developerNav = compactAccountNav
     ? `
-        <a class="nav-link ${active === "developers" ? "active" : ""}" href="/pages/developers/index.html" data-i18n="nav_developers">
+        <a class="nav-link ${active === "developers" ? "active" : ""}" href="/pages/developers" data-i18n="nav_developers">
           ${t("nav_developers")}
         </a>
       `
@@ -3692,7 +3705,7 @@ function globalNav(active = "") {
           </button>
 
           <div class="nav-dropdown-menu" role="menu">
-            <a href="/pages/developers/index.html" role="menuitem" data-i18n="nav_browse_developers">
+            <a href="/pages/developers" role="menuitem" data-i18n="nav_browse_developers">
               ${t("nav_browse_developers")}
             </a>
             <a href="/pages/developers/waitlist.html" role="menuitem" data-i18n="nav_developer_apply">
@@ -3707,7 +3720,7 @@ function globalNav(active = "") {
 
   return `
     <div class="container nav">
-      <a class="logo" href="/index.html">
+      <a class="logo" href="/">
         <span>Nexus&nbsp;</span>
       </a>
 
@@ -3727,14 +3740,14 @@ function globalNav(active = "") {
         ${
           compactAccountNav
             ? `
-              <a class="nav-link ${active === "home" ? "active" : ""}" href="/index.html" data-i18n="nav_home">
+              <a class="nav-link ${active === "home" ? "active" : ""}" href="/" data-i18n="nav_home">
                 ${t("nav_home")}
               </a>
             `
             : ""
         }
 
-        <a class="nav-link ${active === "marketplace" ? "active" : ""}" href="/pages/marketplace/index.html" data-i18n="nav_marketplace">
+        <a class="nav-link ${active === "marketplace" ? "active" : ""}" href="/pages/marketplace" data-i18n="nav_marketplace">
           ${t("nav_marketplace")}
         </a>
 
@@ -3744,13 +3757,13 @@ function globalNav(active = "") {
           compactAccountNav
             ? ""
             : `
-              <a class="nav-link ${active === "about" ? "active" : ""}" href="/pages/about/index.html" data-i18n="nav_about">
+              <a class="nav-link ${active === "about" ? "active" : ""}" href="/pages/about" data-i18n="nav_about">
                 ${t("nav_about")}
               </a>
             `
         }
 
-        <a class="nav-link ${active === "contact" ? "active" : ""}" href="/pages/contact/index.html" data-i18n="nav_contact">
+        <a class="nav-link ${active === "contact" ? "active" : ""}" href="/pages/contact" data-i18n="nav_contact">
           ${t("nav_contact")}
         </a>
 
@@ -3845,7 +3858,7 @@ if (accountButton) {
           await NexusDB.signOut();
         }
 
-        window.location.href = "/index.html";
+        window.location.href = "/";
       };
     } else {
       accountButton.onclick = null;
@@ -4430,7 +4443,7 @@ function adminSidebarSections(active = "", options = {}) {
       label: "Tools",
       items: [
         { id: "checkout-intents", label: "Checkout Prep", href: "/pages/admin/checkout-intents.html" },
-        { id: "marketplace", label: "View Marketplace", href: "/pages/marketplace/index.html" },
+        { id: "marketplace", label: "View Marketplace", href: "/pages/marketplace" },
         { id: "logout", label: "Logout", href: "#", action: "logout" }
       ]
     }
@@ -4564,6 +4577,7 @@ applyTranslations,
 refreshLanguageState,
 startTranslationObserver,
 startLanguageNavigationGuard,
+cleanInternalPathname,
 localizedInternalUrl,
 localizeInternalLinks,
 localizeRecord,

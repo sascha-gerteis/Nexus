@@ -289,7 +289,7 @@ async function loadBestSellingRecommendation(adminClient: any) {
       recommended_description: cleanString(top.short_description, 800),
       recommended_best_for: cleanString(top.best_for, 500),
       recommended_price_display: recommendationPriceDisplay(top.price_usd, top.pricing_type),
-      recommended_href: `/pages/marketplace/index.html?${parameter}=${encodeURIComponent(cleanString(top.slug, 240))}`,
+      recommended_href: `/pages/marketplace?${parameter}=${encodeURIComponent(cleanString(top.slug, 240))}`,
       recommended_kind: top.kind,
       recommended_product_id: cleanString(top.id, 80),
       recommended_paid_sales: Number(top.paid_sales || 0),

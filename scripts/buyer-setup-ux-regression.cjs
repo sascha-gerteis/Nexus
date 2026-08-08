@@ -91,6 +91,26 @@ assert.equal(
   false,
   "A required buyer credential must never expose the skip control"
 );
+assert.equal(
+  evaluate('fieldCanBeSkipped({ name: "apify_token", label: "Apify token", type: "secret", required: true })'),
+  false,
+  "Required provider credentials must remain mandatory"
+);
+assert.equal(
+  evaluate('fieldCanBeSkipped({ name: "tiktok_profile_url", label: "TikTok profile URL", type: "url", required: true })'),
+  true,
+  "Required platform data must still offer the explicit no-data path"
+);
+assert.equal(
+  evaluate('fieldCanBeSkipped({ name: "apify_dataset_url", label: "Apify dataset URL", type: "url", required: true })'),
+  true,
+  "Apify data fields must offer the explicit no-data path"
+);
+assert.equal(
+  evaluate('fieldCanBeSkipped({ name: "competitor_urls", label: "Competitor URLs", type: "textarea", required: true, allow_skip: false })'),
+  false,
+  "Schema authors must be able to explicitly block skipping"
+);
 
 assert.equal(evaluate("formatProcessingElapsed(102000)"), "1m 42s");
 assert.equal(evaluate("formatProcessingElapsed(3723000)"), "1h 2m 3s");

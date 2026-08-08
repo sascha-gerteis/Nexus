@@ -78,9 +78,9 @@
           </div>
 
           <div class="buyer-dashboard-hero-actions">
-            <a class="btn btn-primary" href="/pages/marketplace/index.html">Browse automations</a>
+            <a class="btn btn-primary" href="/pages/marketplace">Browse automations</a>
             <a class="btn btn-secondary" href="/pages/buyer/settings.html">Settings</a>
-            <a class="btn btn-secondary" href="/pages/contact/index.html">Get support</a>
+            <a class="btn btn-secondary" href="/pages/contact">Get support</a>
           </div>
         </div>
       </div>
@@ -143,7 +143,7 @@
                 <h2>Saved products</h2>
                 <p>Products you want to compare, revisit, or buy later.</p>
               </div>
-              <a class="btn btn-secondary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+              <a class="btn btn-secondary btn-small" href="/pages/marketplace">Browse marketplace</a>
             </div>
 
             <div id="buyerSavedProductsList" class="buyer-saved-products-grid">
@@ -637,7 +637,7 @@ function humanizeSetupStatus(item) {
     function getAutomationActionButton(item, latestOutput, state) {
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
-      const supportLink = "/pages/contact/index.html";
+      const supportLink = "/pages/contact";
       const outputLink = latestOutput ? `/pages/buyer/output.html?id=${encodeURIComponent(latestOutput.id)}` : "";
       const actionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
 
@@ -2640,7 +2640,7 @@ function openAutomationDetail(customerAutomationId) {
           <div class="buyer-empty-clean">
             <h3>No saved products yet</h3>
             <p>Use the Save button on marketplace cards to keep products here for later.</p>
-            <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse products</a>
+            <a class="btn btn-primary btn-small" href="/pages/marketplace">Browse products</a>
           </div>
         `;
         return;
@@ -2751,7 +2751,7 @@ function openAutomationDetail(customerAutomationId) {
                 : `
                   <h3>No automations yet</h3>
                   <p>Buy your first automation from the marketplace to start using Nexus.</p>
-                  <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+                  <a class="btn btn-primary btn-small" href="/pages/marketplace">Browse marketplace</a>
                 `
             }
           </article>
@@ -2824,7 +2824,7 @@ function openAutomationDetail(customerAutomationId) {
           <div class="buyer-empty-clean">
             <h3>No automations yet</h3>
             <p>After purchasing an automation, it will appear here.</p>
-            <a class="btn btn-primary btn-small" href="/pages/marketplace/index.html">Browse marketplace</a>
+            <a class="btn btn-primary btn-small" href="/pages/marketplace">Browse marketplace</a>
           </div>
         `;
         return;

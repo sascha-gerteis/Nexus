@@ -41,7 +41,7 @@
   <a href="/pages/admin/waitlist.html">Developer Intake</a>
   <a href="/pages/admin/reviews.html">Reviews</a>
   <a href="/pages/admin/developer-profile.html">Developer Profile</a>
-  <a href="/pages/marketplace/index.html">View Marketplace</a>
+  <a href="/pages/marketplace">View Marketplace</a>
   <a href="#" onclick="NexusDB.signOut()">Logout</a>
 </aside>
 
@@ -1274,7 +1274,7 @@
 
     workflowEditorUrl(productId) {
       const returnPath = `${location.pathname}${location.search}${location.hash}`;
-      return `/pages/workflow-editor/index.html?automation_id=${encodeURIComponent(productId)}&return=${encodeURIComponent(returnPath)}`;
+      return `/pages/workflow-editor?automation_id=${encodeURIComponent(productId)}&return=${encodeURIComponent(returnPath)}`;
     },
 
     openWorkflowEditor(productId = "") {

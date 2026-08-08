@@ -2982,6 +2982,97 @@ function proxyNodeDiagnostics(workflow: any) {
     });
 }
 
+function schemaFieldRequired(field: any) {
+  const value = field?.required;
+  return value === true || value === 1 || ["true", "required", "yes", "1"].includes(lower(value));
+}
+
+function schemaFieldIsCredentialLike(field: any) {
+  const name = cleanString(field?.name || field?.key || field?.credential_key);
+  const text = lower([
+    name,
+    field?.label,
+    field?.description,
+    field?.type,
+  ].filter(Boolean).join(" "));
+
+  return (
+    lower(field?.type) === "secret" ||
+    field?.customer_owned === true ||
+    Boolean(field?.credential_key) ||
+    /\b(?:api[ _-]*key|access[ _-]*token|refresh[ _-]*token|password|secret|credential)\b/.test(text)
+  );
+}
+
+function schemaFieldAllowsOptionalDataSkip(field: any) {
+  if (!field || typeof field !== "object") return false;
+  if (field.allow_skip === false || field.skippable === false) return false;
+  if (schemaFieldRequired(field) && schemaFieldIsCredentialLike(field)) return false;
+  if (field.allow_skip === true || field.skippable === true) return true;
+
+  const name = cleanString(field?.name || field?.key || field?.credential_key);
+  const text = lower([name, field?.label, field?.description].filter(Boolean).join(" "));
+
+  if (
+    [
+      "business_name",
+      "brand_name",
+      "company_name",
+      "report_recipient_email",
+      "contact_email",
+      "technical_contact_email",
+      "buyer_email",
+      "email",
+    ].includes(normalizedSetupKey(name))
+  ) return false;
+
+  if (/\b(?:recipient|contact|buyer|technical)\b/.test(text) && /\bemail\b/.test(text)) return false;
+
+  return /\b(?:tiktok|youtube|instagram|facebook|meta|linkedin|twitter|pinterest|reddit|snapchat|threads|competitor|google sheets?|spreadsheet|google analytics|ga4|google ads|adwords|apify|serpapi|serper|firecrawl|browserless|shopify|woocommerce|hubspot|salesforce|airtable|notion|slack|telegram|whatsapp)\b/.test(text);
+}
+
+function nodeReferencesSchemaField(node: any, key: string) {
+  const normalizedKey = normalizedSetupKey(key);
+  if (!normalizedKey) return false;
+
+  const text = JSON.stringify(node?.parameters || {});
+  const escaped = escapeRegExp(normalizedKey);
+  const patterns = [
+    new RegExp(`NEXUS_(?:SETUP|SECRET)\\.${escaped}\\b`, "i"),
+    new RegExp(`(?:setup|secrets)\\.${escaped}\\b`, "i"),
+    new RegExp(`(?:setup|secrets)\\[['\"]${escaped}['\"]\\]`, "i"),
+    new RegExp(`\\b${escaped}\\b`, "i"),
+  ];
+
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function applyOptionalDataFailThroughToWorkflowNodes(nodes: any[], product: any) {
+  const skippableFields = [
+    ...normalizeJsonArray(product?.setup_schema),
+    ...normalizeJsonArray(product?.credential_schema),
+  ].filter(schemaFieldAllowsOptionalDataSkip);
+
+  if (!skippableFields.length) return nodes;
+
+  return nodes.map((node: any) => {
+    if (!node || typeof node !== "object" || !isHttpRequestNode(node)) return node;
+    if (cleanString(node?.name) === "Nexus Submit Output") return node;
+    if (node.onError || node.continueOnFail === true) return node;
+
+    const matchedFields = skippableFields.filter((field: any) =>
+      nodeReferencesSchemaField(node, cleanString(field?.name || field?.key || field?.credential_key))
+    );
+
+    if (!matchedFields.length) return node;
+
+    return {
+      ...node,
+      onError: "continueRegularOutput",
+    };
+  });
+}
+
 function applyRetrySettingsToWorkflowNodes(nodes: any[]) {
   return nodes.map((node: any) => {
     if (!node || typeof node !== "object") return node;
@@ -3351,6 +3442,7 @@ function normalizeWorkflow(product: any, rawWorkflow: any, supabaseUrl: string, 
     especially Facebook Graph OAuthException code 2 / temporary 500 errors.
   */
   nodes = normalizeHttpRequestNodesForN8n(nodes, product);
+  nodes = applyOptionalDataFailThroughToWorkflowNodes(nodes, product);
   nodes = applyRetrySettingsToWorkflowNodes(nodes);
 
   return {

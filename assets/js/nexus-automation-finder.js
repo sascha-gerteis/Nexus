@@ -191,13 +191,13 @@
     const slug = encodeURIComponent(item.slug || "");
     if (item.is_bundle) {
       return {
-        view: `/pages/marketplace/index.html?bundle=${slug}`,
-        checkout: `/pages/checkout/index.html?bundle=${slug}&step=setup`
+        view: `/pages/marketplace?bundle=${slug}`,
+        checkout: `/pages/checkout?bundle=${slug}&step=setup`
       };
     }
     return {
-      view: `/pages/marketplace/index.html?product=${slug}`,
-      checkout: `/pages/checkout/index.html?slug=${slug}&step=setup`
+      view: `/pages/marketplace?product=${slug}`,
+      checkout: `/pages/checkout?slug=${slug}&step=setup`
     };
   }
 

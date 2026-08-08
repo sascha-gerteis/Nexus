@@ -73,7 +73,7 @@
         },
         "potentialAction": {
           "@type": "SearchAction",
-          "target": "https://nexus-ai.software/pages/marketplace/index.html?search={search_term_string}",
+          "target": "https://nexus-ai.software/pages/marketplace?search={search_term_string}",
           "query-input": "required name=search_term_string"
         }
       },
@@ -175,8 +175,8 @@
           </p>
 
           <div class="home-hero-actions">
-            <a class="btn btn-primary" href="/pages/marketplace/index.html">Find my solution</a>
-            <a class="btn btn-secondary" href="/pages/automation-finder/index.html">Use Automation Finder</a>
+            <a class="btn btn-primary" href="/pages/marketplace">Find my solution</a>
+            <a class="btn btn-secondary" href="/pages/automation-finder">Use Automation Finder</a>
            
           </div>
 
@@ -366,12 +366,12 @@
         </div>
 
         <div class="home-quiz-grid">
-          <a href="/pages/marketplace/index.html?search=lead%20follow-up" onclick="return NexusHomeQuiz(event, 'lead')">Lead follow-up</a>
-          <a href="/pages/marketplace/index.html?search=reports" onclick="return NexusHomeQuiz(event, 'reports')">Reports</a>
-          <a href="/pages/marketplace/index.html?search=support" onclick="return NexusHomeQuiz(event, 'support')">Customer support</a>
-          <a href="/pages/marketplace/index.html?search=social%20content" onclick="return NexusHomeQuiz(event, 'social')">Social media and content</a>
-          <a href="/pages/marketplace/index.html?search=operations" onclick="return NexusHomeQuiz(event, 'operations')">Internal operations</a>
-          <a href="/pages/contact/index.html" onclick="return NexusHomeQuiz(event, 'unsure')">I am not sure</a>
+          <a href="/pages/marketplace?search=lead%20follow-up" onclick="return NexusHomeQuiz(event, 'lead')">Lead follow-up</a>
+          <a href="/pages/marketplace?search=reports" onclick="return NexusHomeQuiz(event, 'reports')">Reports</a>
+          <a href="/pages/marketplace?search=support" onclick="return NexusHomeQuiz(event, 'support')">Customer support</a>
+          <a href="/pages/marketplace?search=social%20content" onclick="return NexusHomeQuiz(event, 'social')">Social media and content</a>
+          <a href="/pages/marketplace?search=operations" onclick="return NexusHomeQuiz(event, 'operations')">Internal operations</a>
+          <a href="/pages/contact" onclick="return NexusHomeQuiz(event, 'unsure')">I am not sure</a>
         </div>
 
         <div class="home-quiz-result" id="homeQuizResult" hidden></div>
@@ -480,8 +480,8 @@
               <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
             </div>
             <div class="card-actions">
-              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('ai-social-media-reports') : location.href='/pages/checkout/index.html?slug=ai-social-media-reports&step=setup'">View output</button>
-              <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=ai-social-media-reports&step=setup">Buy</a>
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('ai-social-media-reports') : location.href='/pages/checkout?slug=ai-social-media-reports&step=setup'">View output</button>
+              <a class="btn btn-primary btn-small" href="/pages/checkout?slug=ai-social-media-reports&step=setup">Buy</a>
             </div>
           </article>
 
@@ -509,8 +509,8 @@
               <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
             </div>
             <div class="card-actions">
-              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('competitor-report') : location.href='/pages/checkout/index.html?slug=competitor-report&step=setup'">View output</button>
-              <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=competitor-report&step=setup">Buy</a>
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('competitor-report') : location.href='/pages/checkout?slug=competitor-report&step=setup'">View output</button>
+              <a class="btn btn-primary btn-small" href="/pages/checkout?slug=competitor-report&step=setup">Buy</a>
             </div>
           </article>
 
@@ -538,15 +538,15 @@
               <div class="meta"><span>Setup</span><strong>Self-serve or guided</strong></div>
             </div>
             <div class="card-actions">
-              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('inquiry-report') : location.href='/pages/checkout/index.html?slug=inquiry-report&step=setup'">View output</button>
-              <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=inquiry-report&step=setup">Buy</a>
+              <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('inquiry-report') : location.href='/pages/checkout?slug=inquiry-report&step=setup'">View output</button>
+              <a class="btn btn-primary btn-small" href="/pages/checkout?slug=inquiry-report&step=setup">Buy</a>
             </div>
           </article>
         </div>
 
         <div class="home-featured-footer">
-          <a class="btn btn-primary" href="/pages/marketplace/index.html">Browse ready-made solutions</a>
-          <a class="btn btn-secondary" href="/pages/automation-finder/index.html">Use Automation Finder</a>
+          <a class="btn btn-primary" href="/pages/marketplace">Browse ready-made solutions</a>
+          <a class="btn btn-secondary" href="/pages/automation-finder">Use Automation Finder</a>
         </div>
       </div>
     </section>
@@ -612,8 +612,8 @@
                 </div>
               </div>
               <div class="home-product-actions">
-                <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('social-listening-intelligence') : location.href='/pages/checkout/index.html?slug=social-listening-intelligence&step=setup'">View output</button>
-                <a class="btn btn-primary btn-small" href="/pages/checkout/index.html?slug=social-listening-intelligence&step=setup">Buy</a>
+                <button type="button" class="btn btn-secondary btn-small" onclick="event.stopPropagation(); window.NexusApp ? NexusApp.openProduct('social-listening-intelligence') : location.href='/pages/checkout?slug=social-listening-intelligence&step=setup'">View output</button>
+                <a class="btn btn-primary btn-small" href="/pages/checkout?slug=social-listening-intelligence&step=setup">Buy</a>
               </div>
             </div>
           </div>
@@ -649,7 +649,7 @@
               <li>Track orders and conversations from the dashboard</li>
             </ul>
 
-            <a class="btn btn-primary" href="/pages/marketplace/index.html">Browse products</a>
+            <a class="btn btn-primary" href="/pages/marketplace">Browse products</a>
           </div>
 
           <div class="home-audience-card developer">
@@ -690,7 +690,7 @@
               product fits or if it needs a custom setup.
             </p>
           </div>
-          <a class="btn btn-primary" href="/pages/contact/index.html">Ask Nexus what fits</a>
+          <a class="btn btn-primary" href="/pages/contact">Ask Nexus what fits</a>
         </div>
       </div>
     </section>
@@ -796,8 +796,8 @@
           </p>
 
           <div class="home-final-actions">
-            <a class="btn btn-primary" href="/pages/marketplace/index.html">Browse ready-made solutions</a>
-            <a class="btn btn-secondary" href="/pages/contact/index.html">Request a custom solution</a>
+            <a class="btn btn-primary" href="/pages/marketplace">Browse ready-made solutions</a>
+            <a class="btn btn-secondary" href="/pages/contact">Request a custom solution</a>
           </div>
         </div>
       </div>
@@ -812,17 +812,17 @@
       </div>
 
       <div class="footer-links">
-        <a href="/pages/marketplace/index.html">Marketplace</a>
-        <a href="/pages/automation-finder/index.html">Automation Finder</a>
-        <a href="/pages/developers/index.html">Developers</a>
+        <a href="/pages/marketplace">Marketplace</a>
+        <a href="/pages/automation-finder">Automation Finder</a>
+        <a href="/pages/developers">Developers</a>
         <a href="/pages/developers/waitlist.html">Apply as developer</a>
-        <a href="/pages/product-standards/index.html">Standards</a>
-        <a href="/pages/buyer-protection/index.html">Protection</a>
-        <a href="/pages/security-access/index.html">Security</a>
-        <a href="/pages/calculator/index.html">Calculator</a>
+        <a href="/pages/product-standards">Standards</a>
+        <a href="/pages/buyer-protection">Protection</a>
+        <a href="/pages/security-access">Security</a>
+        <a href="/pages/calculator">Calculator</a>
         <a href="/status/">Status</a>
-        <a href="/pages/about/index.html">About</a>
-        <a href="/pages/contact/index.html">Contact</a>
+        <a href="/pages/about">About</a>
+        <a href="/pages/contact">Contact</a>
         <a href="/pages/legal/privacy.html">Privacy</a>
       </div>
     </div>
@@ -898,8 +898,8 @@
         categories: ["sales", "lead", "crm", "growth"],
         keywords: ["lead", "follow-up", "follow up", "crm", "sales", "pipeline", "handoff", "handoffs", "inbound", "prospect"],
         links: [
-          ["Browse lead solutions", "/pages/marketplace/index.html?search=lead"],
-          ["Ask Nexus what fits", "/pages/contact/index.html"]
+          ["Browse lead solutions", "/pages/marketplace?search=lead"],
+          ["Ask Nexus what fits", "/pages/contact"]
         ]
       },
       reports: {
@@ -908,7 +908,7 @@
         categories: ["report", "reporting", "analytics", "intelligence", "management"],
         keywords: ["report", "reports", "kpi", "summary", "summaries", "dashboard", "digest", "brief", "analytics", "insight"],
         links: [
-          ["Browse reporting products", "/pages/marketplace/index.html?search=report"],
+          ["Browse reporting products", "/pages/marketplace?search=report"],
           ["Reporting guide", "/reporting-automation/"]
         ]
       },
@@ -918,7 +918,7 @@
         categories: ["support", "customer", "service", "inquiry"],
         keywords: ["support", "ticket", "tickets", "customer", "inquiry", "inquiries", "triage", "reply", "response", "escalation"],
         links: [
-          ["Browse support products", "/pages/marketplace/index.html?search=support"],
+          ["Browse support products", "/pages/marketplace?search=support"],
           ["Support guide", "/customer-support-automation/"]
         ]
       },
@@ -928,7 +928,7 @@
         categories: ["marketing", "social", "content", "brand"],
         keywords: ["social", "content", "brand", "marketing", "sentiment", "listening", "competitor", "campaign", "post", "media"],
         links: [
-          ["Browse social products", "/pages/marketplace/index.html?search=social"],
+          ["Browse social products", "/pages/marketplace?search=social"],
           ["Social listening guide", "/social-listening-automation/"]
         ]
       },
@@ -938,8 +938,8 @@
         categories: ["operations", "finance", "admin", "internal", "process"],
         keywords: ["operations", "approval", "approvals", "invoice", "finance", "handoff", "reminder", "process", "task", "internal"],
         links: [
-          ["Ask Nexus what fits", "/pages/contact/index.html"],
-          ["Browse operations products", "/pages/marketplace/index.html?search=operations"]
+          ["Ask Nexus what fits", "/pages/contact"],
+          ["Browse operations products", "/pages/marketplace?search=operations"]
         ]
       },
       unsure: {
@@ -948,8 +948,8 @@
         categories: ["report", "support", "marketing", "operations", "sales"],
         keywords: ["automation", "process", "report", "support", "lead", "operations", "social", "custom", "business"],
         links: [
-          ["Get help choosing", "/pages/contact/index.html"],
-          ["Browse marketplace", "/pages/marketplace/index.html"]
+          ["Get help choosing", "/pages/contact"],
+          ["Browse marketplace", "/pages/marketplace"]
         ]
       }
     };
@@ -998,7 +998,7 @@
             </div>
             <div class="home-quiz-result-actions">
               <button class="btn btn-primary btn-small" type="submit">Get a product recommendation</button>
-              <a class="btn btn-secondary btn-small" href="/pages/contact/index.html">Ask Nexus directly</a>
+              <a class="btn btn-secondary btn-small" href="/pages/contact">Ask Nexus directly</a>
             </div>
           </form>
           <div class="home-quiz-calc-output" id="homeRecommendationCalcResult" hidden></div>
@@ -1033,7 +1033,7 @@
             <span>Custom path</span>
             <strong>No close marketplace match yet.</strong>
             <p>This process may need a custom request instead of forcing a weak product match.</p>
-            <a href="/pages/custom-request/index.html">Request custom solution</a>
+            <a href="/pages/custom-request">Request custom solution</a>
           </article>
         `}
       </div>
@@ -1106,7 +1106,7 @@
             <strong>No close marketplace match yet.</strong>
             <span>Nexus did not find enough product fit to recommend a ready-made solution confidently.</span>
           </div>
-          <a class="btn btn-primary btn-small" href="/pages/custom-request/index.html">Request custom solution</a>
+          <a class="btn btn-primary btn-small" href="/pages/custom-request">Request custom solution</a>
         </div>
         <div class="success">
           Send the process to Nexus. If an existing product truly fits, Nexus can point you to it; otherwise this should become a custom setup path.
@@ -1125,7 +1125,7 @@
           <strong>Best product matches</strong>
           <span>Matched with enough domain fit from your manual process, desired output, tools, and frequency.</span>
         </div>
-        <a class="btn btn-secondary btn-small" href="/pages/marketplace/index.html#marketplace-recommendation">Open full matcher</a>
+        <a class="btn btn-secondary btn-small" href="/pages/marketplace#marketplace-recommendation">Open full matcher</a>
       </div>
       <div class="home-quiz-result-products">
         ${recommendations.map(homeQuizProductCard).join("")}
@@ -1318,13 +1318,13 @@
     const description = product?.short_description || product?.outcome || product?.problem || "Open the product to review the setup path and expected result.";
     const requestOnly = product?.is_demo || product?.listing_type === "custom_request" || product?.pricing_type === "custom_quote";
     const actionHref = requestOnly
-      ? `/pages/custom-request/index.html?slug=${encodeURIComponent(slug)}`
-      : `/pages/checkout/index.html?slug=${encodeURIComponent(slug)}&step=setup`;
+      ? `/pages/custom-request?slug=${encodeURIComponent(slug)}`
+      : `/pages/checkout?slug=${encodeURIComponent(slug)}&step=setup`;
     const hasLiveProduct = Array.isArray(window.NexusHomeProducts)
       && window.NexusHomeProducts.some((item) => String(item?.slug || "") === slug);
     const previewAction = slug && hasLiveProduct
       ? `window.NexusApp ? NexusApp.openProduct(decodeURIComponent('${encodeURIComponent(slug)}')) : location.href='${actionHref}'`
-      : `location.href='/pages/marketplace/index.html'`;
+      : `location.href='/pages/marketplace'`;
 
     return `
       <article class="home-quiz-product">

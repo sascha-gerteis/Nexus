@@ -44,19 +44,19 @@ assert(script.includes('inquiry_type: "custom_automation"') && script.includes('
 assert(script.includes("automation_finder_assessment") && script.includes("automation_finder_custom_request_submit"), "Finder analytics are missing");
 assert(!script.includes("createStripeCheckoutSession") && !script.includes("submitAutomationSetup"), "Finder must not mutate checkout or automation runtime");
 assert(css.includes(".finder-match-grid") && css.includes("@media (max-width: 680px)"), "Finder responsive styles are missing");
-assert(marketplace.includes('/pages/automation-finder/index.html'), "Marketplace Finder entry is missing");
-assert(calculator.includes('/pages/automation-finder/index.html'), "Calculator Finder entry is missing");
-assert(sitemap.includes('https://nexus-ai.software/pages/automation-finder/index.html'), "Finder sitemap entry is missing");
-assert(homepage.includes('href="/pages/automation-finder/index.html">Use Automation Finder</a>'), "Homepage Finder CTA is missing");
+assert(marketplace.includes('/pages/automation-finder'), "Marketplace Finder entry is missing");
+assert(calculator.includes('/pages/automation-finder'), "Calculator Finder entry is missing");
+assert(sitemap.includes('https://nexus-ai.software/pages/automation-finder'), "Finder sitemap entry is missing");
+assert(homepage.includes('href="/pages/automation-finder">Use Automation Finder</a>'), "Homepage Finder CTA is missing");
 assert(!sharedUi.includes('data-i18n="nav_finder"'), "Finder must not be placed in the global header navigation");
 assert(page.includes('data-active="marketplace"'), "Finder should retain the Marketplace navigation context");
-assert(businessSolutions.includes('href="/pages/automation-finder/index.html">Use Automation Finder</a>'), "Business Solutions Finder CTA is missing");
+assert(businessSolutions.includes('href="/pages/automation-finder">Use Automation Finder</a>'), "Business Solutions Finder CTA is missing");
 for (const [name, content] of Object.entries(contextualPages)) {
-  assert(content.includes('href="/pages/automation-finder/index.html">Use Automation Finder</a>'), `${name} Finder CTA is missing`);
+  assert(content.includes('href="/pages/automation-finder">Use Automation Finder</a>'), `${name} Finder CTA is missing`);
 }
 for (const [name, content] of Object.entries(footerPages)) {
   const footer = content.match(/<footer\b[\s\S]*?<\/footer>/i)?.[0] || "";
-  assert(footer.includes('href="/pages/automation-finder/index.html">Automation Finder</a>'), `${name} Finder footer link is missing`);
+  assert(footer.includes('href="/pages/automation-finder">Automation Finder</a>'), `${name} Finder footer link is missing`);
 }
 
 console.log("Automation Finder regression checks passed.");

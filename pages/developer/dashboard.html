@@ -68,7 +68,7 @@
         </div>
 
         <div class="developer-console-hero-actions">
-          <a class="btn btn-primary" id="developerPublicProfileLink" href="/pages/developers/index.html" target="_blank">View public profile</a>
+          <a class="btn btn-primary" id="developerPublicProfileLink" href="/pages/developers" target="_blank">View public profile</a>
           <button class="btn btn-secondary" type="button" onclick="activeTab('products')">Manage products</button>
           <button class="btn btn-secondary" type="button" onclick="openProductEditor()">Add product</button>
         </div>
@@ -4957,7 +4957,7 @@ company_url = context["inputs"].get("company_url")
 
     function workflowEditorUrl(automationId) {
       const returnPath = `${location.pathname}${location.search}${location.hash}`;
-      return `/pages/workflow-editor/index.html?automation_id=${encodeURIComponent(automationId)}&return=${encodeURIComponent(returnPath)}`;
+      return `/pages/workflow-editor?automation_id=${encodeURIComponent(automationId)}&return=${encodeURIComponent(returnPath)}`;
     }
 
     function openEmbeddedWorkflowEditor(automationId = "") {

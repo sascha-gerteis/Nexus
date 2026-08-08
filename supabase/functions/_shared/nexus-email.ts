@@ -122,7 +122,7 @@ function recommendationCard(context: Record<string, unknown>) {
   );
   const bestFor = cleanString(context.recommended_best_for, 500);
   const price = cleanString(context.recommended_price_display, 120);
-  const href = cleanString(context.recommended_href || "/pages/marketplace/index.html", 800);
+  const href = cleanString(context.recommended_href || "/pages/marketplace", 800);
 
   return `
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:22px 0 18px;background:#f6faff;border:1px solid #cfe3ff;border-radius:18px;overflow:hidden;">
@@ -265,11 +265,11 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
           `<div style="margin:20px 0 0;padding:16px 18px;background:#f6faff;border-left:4px solid #1377ff;border-radius:0 12px 12px 0;color:#405b7c;font-size:14px;line-height:1.6;"><strong style="color:#173b68;">Everything stays organized.</strong> Purchases, setup progress, delivered outputs, and support are available from your Nexus dashboard.</div>`,
         ].join(""),
         "Explore Nexus automations",
-        "/pages/marketplace/index.html",
+        "/pages/marketplace",
       );
 
     case "buyer_choose_first": {
-      const recommendationHref = cleanString(context.recommended_href || "/pages/marketplace/index.html", 800);
+      const recommendationHref = cleanString(context.recommended_href || "/pages/marketplace", 800);
       return makeTemplate(
         "A strong first automation: the Nexus bestseller",
         "Start with a proven business outcome.",
@@ -278,7 +278,7 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
           paragraph("Not sure where to begin? We looked at what Nexus customers purchase most often and highlighted the current bestseller below."),
           recommendationCard(context),
           paragraph("It is a strong starting point when you want visible value quickly: complete the setup once, then receive clear outputs through your Nexus dashboard."),
-          `<div style="margin-top:18px;color:#61748f;font-size:14px;line-height:1.6;">Need something different? ${inlineLink("Browse every automation", "/pages/marketplace/index.html")} or ${inlineLink("request a custom workflow", "/pages/custom-request/index.html")}.</div>`,
+          `<div style="margin-top:18px;color:#61748f;font-size:14px;line-height:1.6;">Need something different? ${inlineLink("Browse every automation", "/pages/marketplace")} or ${inlineLink("request a custom workflow", "/pages/custom-request")}.</div>`,
         ].join(""),
         "View the Nexus bestseller",
         recommendationHref,
@@ -293,7 +293,7 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
           paragraph("Use the preview to check if the report, alert, summary, or dashboard view is useful for your team before setup begins."),
         ].join(""),
         "Browse output previews",
-        "/pages/marketplace/index.html",
+        "/pages/marketplace",
       );
 
     case "buyer_guided_setup":
@@ -317,7 +317,7 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
           paragraph("The best request includes what you do manually, which tools are involved, and what output you want each week or month."),
         ].join(""),
         "Request custom automation",
-        "/pages/custom-request/index.html",
+        "/pages/custom-request",
       );
 
     case "developer_waitlist_confirmation":
@@ -353,7 +353,7 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
           paragraph("For product, setup, or custom automation questions, we usually reply within 1-2 business days."),
         ].join(""),
         "Browse marketplace",
-        "/pages/marketplace/index.html",
+        "/pages/marketplace",
       );
 
     case "order_payment_received":
