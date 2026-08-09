@@ -4,6 +4,7 @@ const vm = require("vm");
 const html = fs.readFileSync("pages/buyer/dashboard.html", "utf8");
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
 const source = scripts[scripts.length - 1][1];
+const css = fs.readFileSync("assets/css/nexus.css", "utf8");
 const mutedConsole = Object.fromEntries(["log", "warn", "error", "info", "debug"].map(key => [key, () => {}]));
 const documentStub = {
   addEventListener() {},
@@ -277,6 +278,30 @@ const newestAttempt = context.latestBundleAttemptForOrder([
     updated_at: iso("2026-07-21T10:06:00Z")
   }
 ], "order-1", "bundle-1");
+const visualRequirements = [
+  [source, "function outputVisualTone(", "Missing stable output color helper"],
+  [source, "buyer-output-hero-card buyer-output-tone", "Newest output is not color coded"],
+  [source, "buyer-output-group-card buyer-output-tone", "Output groups are not color coded"],
+  [source, "buyer-output-row buyer-output-tone", "Output rows are not color coded"],
+  [css, "Buyer output library: product identity and report differentiation", "Missing scoped output library styles"],
+  [css, ".buyer-output-group-card.buyer-output-tone", "Missing colored output group styles"],
+  [css, ".buyer-output-row.buyer-output-tone", "Missing colored output row styles"]
+];
+for (const [haystack, needle, message] of visualRequirements) {
+  if (!haystack.includes(needle)) throw new Error(message);
+}
+if ((source.match(/buyer-output-row buyer-output-tone/g) || []).length !== 1) {
+  throw new Error("Output coloring escaped the Outputs-tab row template");
+}
+if (!source.includes('<a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">')) {
+  throw new Error("Automation-detail output history was changed by the Outputs-tab redesign");
+}
+if (context.outputVisualTone("teal", "Report") !== "teal") {
+  throw new Error("Saved product colors must remain authoritative");
+}
+if (context.outputVisualTone("", "Stable report") !== context.outputVisualTone("", "Stable report")) {
+  throw new Error("Legacy output fallback colors must remain stable");
+}
 const result = {
   allCancelled: cancelled.outputCount,
   oneSuccess: partial.outputCount,

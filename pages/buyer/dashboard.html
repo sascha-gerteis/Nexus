@@ -3402,6 +3402,20 @@ function openAutomationDetail(customerAutomationId) {
       `;
     }
 
+    function outputVisualTone(value, seed = "") {
+      const allowed = ["blue", "cyan", "teal", "green", "yellow", "orange", "red", "pink", "purple", "violet", "indigo"];
+      const normalized = String(value || "").trim().toLowerCase();
+      if (allowed.includes(normalized)) return normalized;
+
+      const palette = ["blue", "purple", "teal", "orange", "indigo", "pink", "cyan", "green"];
+      const key = String(seed || "output");
+      let hash = 0;
+      for (let index = 0; index < key.length; index += 1) {
+        hash = ((hash << 5) - hash + key.charCodeAt(index)) | 0;
+      }
+      return palette[Math.abs(hash) % palette.length];
+    }
+
     function renderOutputs(outputs, automations = []) {
       const root = document.getElementById("buyerOutputsList");
 
@@ -3469,9 +3483,9 @@ function openAutomationDetail(customerAutomationId) {
 
       root.innerHTML = `
         <div class="buyer-output-command">
-          <div class="buyer-output-hero-card">
+          <div class="buyer-output-hero-card buyer-output-tone tone-${outputVisualTone(latestContext.color || latest.automations?.color, latestContext.title)}">
             <div>
-              <span class="${NexusUI.pillClass(latest.automations?.color || "blue")}">
+              <span class="${NexusUI.pillClass(outputVisualTone(latestContext.color || latest.automations?.color, latestContext.title))}">
                 Newest output
               </span>
               <h3>${escapeHtml(latest.title || "Automation output")}</h3>
@@ -3496,7 +3510,7 @@ function openAutomationDetail(customerAutomationId) {
           <div class="buyer-output-library">
             ${
               Object.values(grouped).map(group => `
-                <section class="buyer-output-group-card">
+                <section class="buyer-output-group-card buyer-output-tone tone-${outputVisualTone(group.color, group.title)}">
                   <div class="buyer-output-group-head">
                     <div>
                       <span>${escapeHtml(group.category || "Output")}</span>
@@ -3509,7 +3523,7 @@ function openAutomationDetail(customerAutomationId) {
                   </div>
                   <div class="buyer-output-row-list">
                     ${group.items.map(output => `
-                      <a class="buyer-output-row" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
+                      <a class="buyer-output-row buyer-output-tone tone-${outputVisualTone(output.__context?.itemColor || group.color, output.__context?.childTitle || output.title)}" href="/pages/buyer/output.html?id=${encodeURIComponent(output.id)}">
                         <div>
                           <strong>${escapeHtml(output.title || "Automation output")}</strong>
                           <small>${escapeHtml(output.__context?.childTitle ? `${output.__context.childTitle} inside ${group.title}` : `${group.category || "Output"} from ${group.title} by ${group.developerName}`)}</small>
@@ -3548,14 +3562,18 @@ function openAutomationDetail(customerAutomationId) {
       const bundleRow = bundleRowForOutput(output, bundleRows);
       if (bundleRow) {
         const child = (bundleRow.included || []).find(item => item.id === output?.customer_automation_id) || {};
+        const childProduct = child.automations || {};
         const title = bundleRow.order?.automation_title || bundleRow.snapshot?.bundle_title || "Automation bundle";
         const childTitle = productTitleFromAutomation(child);
+        const color = bundleRow.color || bundleRow.snapshot?.bundle_color || bundleRow.snapshot?.color || "purple";
 
         return {
           title,
           childTitle,
           category: "Bundle output",
           developerName: "Nexus",
+          color,
+          itemColor: childProduct.color || child.color || "",
           groupKey: `bundle:${bundleRow.orderId || bundleRow.bundleId || title}`,
           description: `${bundleRow.outputCount || 0} latest output${bundleRow.outputCount === 1 ? "" : "s"} from ${bundleRow.included.length} included workflow${bundleRow.included.length === 1 ? "" : "s"}.`
         };
@@ -3581,6 +3599,8 @@ function openAutomationDetail(customerAutomationId) {
         title,
         category: output?.output_type || product.category || customerAutomation.automations?.category || "Output",
         developerName: developerDisplayNameOptional(customerAutomation) || developerDisplayNameOptional(output) || "Nexus",
+        color: product.color || customerAutomation.automations?.color || "",
+        itemColor: product.color || customerAutomation.automations?.color || "",
         groupKey: customerAutomationOrderId
           ? `automation:${output.customer_automation_id || output.automation_id || product.id || title}:${customerAutomationOrderId}`
           : output.customer_automation_id || output.automation_id || product.id || title || "output"
@@ -3619,6 +3639,7 @@ function openAutomationDetail(customerAutomationId) {
             category: context.category,
             developerName: context.developerName,
             description: context.description,
+            color: context.color,
             items: []
           };
         }
