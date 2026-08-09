@@ -143,6 +143,50 @@ assert.equal(
   true
 );
 
+const socialAuditFields = evaluate(`inferBuyerCredentialFields(
+  [
+    { name: "instagram_url", label: "Instagram URL", type: "url" },
+    { name: "facebook_url", label: "Facebook URL", type: "url" }
+  ],
+  [],
+  { title: "Social Media Customer Perspective Audit" }
+)`);
+assert.equal(
+  socialAuditFields.length,
+  0,
+  "Social profile URLs must not create a false Meta access-token requirement"
+);
+
+const explicitMetaPlaceholderFields = evaluate(`inferBuyerCredentialFields(
+  [{ name: "business_name", label: "Business name", type: "text" }],
+  [],
+  { detected_placeholders: { secrets: ["meta_access_token"] } }
+)`);
+assert.equal(explicitMetaPlaceholderFields.length, 1, "An explicit Meta token placeholder must remain supported");
+assert.equal(explicitMetaPlaceholderFields[0].name, "meta_access_token");
+
+const socialAuditWithInternalApifyFields = evaluate(`inferBuyerCredentialFields(
+  [
+    { name: "instagram_url", label: "Instagram URL", type: "url" },
+    { name: "facebook_url", label: "Facebook URL", type: "url" }
+  ],
+  [],
+  {
+    title: "Social Media Customer Perspective Audit",
+    detected_placeholders: {
+      runtime_context: {
+        setup: ["instagram_url", "facebook_url"],
+        secret: ["apify_token"]
+      }
+    }
+  }
+)`);
+assert.equal(
+  socialAuditWithInternalApifyFields.length,
+  0,
+  "An unrelated internal token must not combine with social profile fields to create a Meta credential"
+);
+
 const expectedUrls = [
   "https://developers.facebook.com/docs/instagram-platform/",
   "https://www.youtube.com/watch?v=OFm4laUrv3Y",

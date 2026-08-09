@@ -1218,46 +1218,31 @@
 
     function productLooksLikeMetaSetup(product = {}, setupSchema = []) {
       const detected = asAnswerObject(product.detected_placeholders);
-      const placeholderText = JSON.stringify([
-        detected,
-        product.placeholder_mappings,
-        product.placeholderMappings,
-        product.workflow_variables,
-        product.workflowVariables
-      ] || {}).toLowerCase();
-      const productText = [
-        product.title,
-        product.slug,
-        product.category,
-        product.badge,
-        product.short_description,
-        product.long_description,
-        product.problem,
-        product.outcome,
-        product.name,
-        product.description,
-        product.workflow_source_platform,
-        placeholderText
-      ].map(value => String(value || "")).join(" ").toLowerCase();
-
-      const setupText = setupSchema.map(field => fieldTextForMatching(field)).join(" ");
-      const hasSocialProduct = /\b(meta|facebook|fb|instagram|ig|social media|social listening)\b/.test(productText);
-      const hasMetaSetupField = /\b(meta|facebook|fb|instagram|ig)\b/.test(setupText);
-      const hasTokenPlaceholder = /\b(meta|facebook|fb|instagram|ig)[_\s-]*(access[_\s-]*)?token\b|\b(access[_\s-]*)?token\b.*\b(meta|facebook|instagram)\b/.test(placeholderText);
-      const hasLegacyBrandNotes = setupSchema.some(field => fieldNameForMatching(field) === "brand_notes");
-      const hasLegacySocialNotes = setupSchema.some(field => {
-        const name = fieldNameForMatching(field);
-        const text = fieldTextForMatching(field);
-        return (
-          name === "brand_notes" ||
-          name === "notes" ||
-          name === "social_notes" ||
-          name === "brand_context" ||
-          /\b(brand|social|facebook|instagram|meta)\b/.test(text)
-        );
+      const runtimeContext = asAnswerObject(detected.runtime_context);
+      const mappingCandidates = [
+        ...(Array.isArray(product.placeholder_mappings) ? product.placeholder_mappings : []),
+        ...(Array.isArray(product.placeholderMappings) ? product.placeholderMappings : [])
+      ].filter(mapping => {
+        const source = cleanFlag(mapping?.source || mapping?.source_type || mapping?.kind);
+        return source === "secret" || source === "credential";
       });
+      const workflowVariables = asAnswerObject(product.workflow_variables || product.workflowVariables);
+      const explicitSecretText = JSON.stringify([
+        detected.secret,
+        detected.secrets,
+        runtimeContext.secret,
+        runtimeContext.secrets,
+        workflowVariables.secret,
+        workflowVariables.secrets,
+        mappingCandidates
+      ]).toLowerCase();
+      const hasTokenPlaceholder = /\b(meta|facebook|fb|instagram|ig)[_\s-]*(access[_\s-]*)?token\b/.test(explicitSecretText);
 
-      return hasTokenPlaceholder || hasMetaSetupField || hasLegacyBrandNotes || (hasSocialProduct && hasLegacySocialNotes);
+      // Social-media titles and profile URLs do not prove the workflow calls
+      // Meta's authenticated APIs. Infer a buyer secret only from an explicit
+      // secret-scoped workflow token placeholder. Explicit credential_schema
+      // fields are already included by inferBuyerCredentialFields().
+      return hasTokenPlaceholder;
     }
 
     function inferBuyerCredentialFields(setupSchema = [], credentialSchema = [], product = {}) {
