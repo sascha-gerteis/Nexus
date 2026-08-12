@@ -1045,7 +1045,7 @@ function isMonthlyOrder(order: any) {
 
 function runtimeTriggerMode(automation: any, order: any) {
   const mode = cleanString(automation?.runtime_trigger_mode).toLowerCase();
-  if (["setup_complete", "on_demand", "scheduled_interval", "subscription_monthly", "manual"].includes(mode)) {
+  if (["setup_complete", "on_demand", "scheduled_interval", "subscription_monthly", "manual", "buyer_webhook"].includes(mode)) {
     return mode;
   }
 
@@ -1057,6 +1057,7 @@ function runtimeRunFrequency(automation: any, order: any) {
   const frequency = cleanString(automation?.runtime_run_frequency).toLowerCase();
   const allowed = new Set(["manual", "on_demand", "every_30_minutes", "hourly", "daily", "weekly", "monthly"]);
 
+  if (mode === "buyer_webhook") return "manual";
   if (mode === "on_demand") return "on_demand";
   if (mode === "subscription_monthly") return "monthly";
   if (mode === "scheduled_interval") {
@@ -2913,7 +2914,7 @@ Deno.serve(async (req) => {
       developerProfile = developerData || null;
     }
 
-    const skipRuntimeTrigger = (isAdmin || isDeveloper) && Boolean(body.skip_runtime_trigger);
+    const operatorRequestedSkipRuntime = (isAdmin || isDeveloper) && Boolean(body.skip_runtime_trigger);
 
     const customerAutomationId = cleanString(
       body.customer_automation_id ||
@@ -2952,6 +2953,9 @@ Deno.serve(async (req) => {
     const customerAutomation = loaded.data;
     const automation = loaded.automation || {};
     const order = loaded.order || {};
+    // Baseline setup is saved, but only a later authenticated external event
+    // may start an explicitly metered buyer-webhook product.
+    const skipRuntimeTrigger = operatorRequestedSkipRuntime || runtimeTriggerMode(automation, order) === "buyer_webhook";
     bundleOrderId = bundleOrderId || cleanString(customerAutomation.order_id) || cleanString(order.id);
     submittedBundleId = submittedBundleId || cleanString(customerAutomation.bundle_id) || cleanString(order.bundle_id);
     const orderIsBundle = lowerString(order.order_type) === "bundle" || Boolean(submittedBundleId);

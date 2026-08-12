@@ -685,6 +685,7 @@
         <select class="select" name="runtime_trigger_mode">
           <option value="setup_complete">Run after buyer setup</option>
           <option value="on_demand">On demand / question triggered</option>
+          <option value="buyer_webhook">External buyer webhook request (usage metered)</option>
           <option value="scheduled_interval">Run on a schedule</option>
           <option value="subscription_monthly">Monthly output</option>
           <option value="manual">Manual delivery</option>
@@ -722,6 +723,29 @@
           <option value="webhook_ack">Webhook acknowledgement</option>
         </select>
         <small>Dashboard output requires visible content. Use alert/message/webhook modes for email bots or automations where the buyer sees the result somewhere else.</small>
+      </div>
+
+      <div>
+        <label>Included webhook runs / month</label>
+        <input class="input" name="webhook_included_runs" type="number" min="0" step="1" value="0" placeholder="e.g. 10">
+        <small>Only the new External buyer webhook request mode uses this allowance. Existing products ignore it.</small>
+      </div>
+
+      <div>
+        <label>Runs in each additional pack</label>
+        <input class="input" name="webhook_topup_runs" type="number" min="0" step="1" value="0" placeholder="e.g. 10">
+        <small>Set both run-pack fields to 0 to disable top-ups.</small>
+      </div>
+
+      <div>
+        <label>Additional run-pack price</label>
+        <input class="input" name="webhook_topup_price" type="number" min="0" step="0.01" value="0" placeholder="e.g. 19.00">
+        <small>Charged once in the product currency. Runs expire at the end of the current subscription billing period.</small>
+      </div>
+
+      <div>
+        <label>Usage enforcement</label>
+        <div class="runtime-import-result compact">Hard stop at the allowance. Duplicate event IDs never count twice.</div>
       </div>
 
       <div class="full workflow-source-panel workflow-source-make hidden">
@@ -1900,6 +1924,12 @@
         runtime_run_frequency: String(formData.get("runtime_run_frequency") || existingProduct.runtime_run_frequency || "manual"),
         runtime_no_change_policy: String(formData.get("runtime_no_change_policy") || existingProduct.runtime_no_change_policy || "no_output"),
         runtime_response_mode: String(formData.get("runtime_response_mode") || existingProduct.runtime_response_mode || "dashboard_output"),
+        webhook_included_runs: String(formData.get("runtime_trigger_mode") || "") === "buyer_webhook"
+          ? Math.max(0, Math.floor(Number(formData.get("webhook_included_runs") || 0))) : 0,
+        webhook_topup_runs: String(formData.get("runtime_trigger_mode") || "") === "buyer_webhook"
+          ? Math.max(0, Math.floor(Number(formData.get("webhook_topup_runs") || 0))) : 0,
+        webhook_topup_price: String(formData.get("runtime_trigger_mode") || "") === "buyer_webhook"
+          ? Math.max(0, Number(formData.get("webhook_topup_price") || 0)) : 0,
         runtime_event_schema: runtimeEventSchema,
         workflow_source_platform: workflowProvider,
         make_blueprint: ["make", "zapier"].includes(workflowProvider) ? sourceBlueprint : null,
@@ -2190,6 +2220,7 @@
     validatePublishReadiness(product = this.currentSavedProduct) {
       const provider = this.workflowProvider(product);
       const isCustom = String(product?.listing_type || "") === "custom_request";
+      const isBuyerWebhook = String(product?.runtime_trigger_mode || "").toLowerCase() === "buyer_webhook";
       const detectedSetup = product?.detected_placeholders?.setup;
       const setupPlaceholders = Array.isArray(detectedSetup) ? detectedSetup : detectedSetup && typeof detectedSetup === "object" ? Object.values(detectedSetup).flat() : [];
       const credentialErrors = Array.isArray(this.credentialScan?.errors) ? this.credentialScan.errors : [];
@@ -2198,6 +2229,19 @@
         { label: "Buyer output preview", ok: Boolean(String(product?.preview_code || "").trim() || String(product?.preview_image_url || "").trim() || String(product?.preview_base64 || "").trim()), detail: "Add the exact sample output buyers should expect." },
         { label: "Buyer setup schema", ok: !setupPlaceholders.length || this.schemaArray(product?.setup_schema).length > 0, detail: setupPlaceholders.length ? "The workflow uses buyer placeholders, so setup fields are required." : "No buyer setup placeholders detected." }
       ];
+      if (isBuyerWebhook) {
+        const packRuns = Number(product?.webhook_topup_runs || 0);
+        const packPrice = Number(product?.webhook_topup_price || 0);
+        checks.push(
+          { label: "Webhook monthly pricing", ok: String(product?.pricing_type || "") === "monthly", detail: "Buyer webhook request products must be monthly subscriptions." },
+          { label: "Included webhook runs", ok: Number(product?.webhook_included_runs || 0) >= 1, detail: "Set the number of requests included in each billing period." },
+          {
+            label: "Additional run pack",
+            ok: (packRuns === 0 && packPrice === 0) || (packRuns >= 1 && packPrice > 0),
+            detail: "Set both pack quantity and price, or leave both at zero."
+          }
+        );
+      }
       if (!isCustom && provider === "python") {
         checks.push(
           { label: "Python script", ok: Boolean(String(product?.python_script_code || "").trim()), detail: "Save a Python script and entrypoint." },

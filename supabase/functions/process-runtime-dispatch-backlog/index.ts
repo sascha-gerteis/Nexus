@@ -482,9 +482,10 @@ function buildRuntimePayload(params: {
 }) {
   const { queue, run, customerAutomation, automation, order, submission, secrets } = params;
   const setupAnswers = asObject(submission?.setup_answers);
-  const rawSetup = Object.keys(setupAnswers).length
+  const savedSetup = Object.keys(setupAnswers).length
     ? { ...setupAnswers }
     : { ...asObject(submission?.answers) };
+  const rawSetup = { ...savedSetup, ...asObject(queue.setup_overrides) };
   for (const secretKey of Object.keys(secrets)) delete rawSetup[secretKey];
   const setup = applySheetAccessSetup(rawSetup, automation, customerAutomation);
   const runKey = cleanString(run.run_key);
@@ -502,7 +503,9 @@ function buildRuntimePayload(params: {
     bundle_order_id: customerAutomation.order_id || order?.id || "",
     setup,
     event: asObject(queue.event_payload),
-    request: asObject(queue.event_payload),
+    request: Object.keys(asObject(queue.request_payload)).length
+      ? asObject(queue.request_payload)
+      : asObject(queue.event_payload),
     secrets,
     customer: {
       id: customerAutomation.buyer_id || order?.buyer_id || "",

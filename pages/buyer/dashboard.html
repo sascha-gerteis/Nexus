@@ -634,6 +634,18 @@ function humanizeSetupStatus(item) {
       if (isAdminManagedPilot(item)) return "Managed by Nexus";
       return humanizeSetupStatus(item);
     }
+
+    function buyerWebhookSetupAvailable(item) {
+      const product = Array.isArray(item?.automations) ? item.automations[0] : item?.automations;
+      const triggerMode = String(product?.runtime_trigger_mode || item?.runtime_trigger_mode || "").toLowerCase();
+      return triggerMode === "buyer_webhook";
+    }
+
+    function getBuyerWebhookSetupUrl(item) {
+      if (!item?.id || !buyerWebhookSetupAvailable(item)) return "";
+      return `/pages/buyer/webhook-setup.html?id=${encodeURIComponent(item.id)}`;
+    }
+
     function getAutomationActionButton(item, latestOutput, state) {
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
@@ -1419,6 +1431,7 @@ function latestBundleAttemptForOrder(bundleAttempts = [], orderId = "", bundleId
   return (bundleAttempts || [])
     .filter(attempt => {
       if (!attempt?.id || String(attempt.order_id || "") !== String(orderId || "")) return false;
+      if (String(attempt.attempt_kind || "setup_bundle") !== "setup_bundle") return false;
       return !bundleId || !attempt.bundle_id || String(attempt.bundle_id) === String(bundleId);
     })
     .sort((a, b) => bundleAttemptSequenceMs(b) - bundleAttemptSequenceMs(a))[0] || null;
@@ -3211,6 +3224,7 @@ function openAutomationDetail(customerAutomationId) {
             <button class="btn btn-secondary btn-small" type="button" onclick="openAutomationDetail('${escapeJsString(item.id)}')">
               Schedule & history
             </button>
+            ${getBuyerWebhookSetupUrl(item) ? `<a class="btn btn-secondary btn-small" href="${getBuyerWebhookSetupUrl(item)}">Webhook setup</a>` : ""}
             ${setupUrl && !["setup", "none"].includes(primaryActionKind) ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
             ${latestOutput && primaryActionKind !== "output" ? `<a class="btn btn-secondary btn-small" href="${outputLink}">View latest output</a>` : ""}
             ${
@@ -3315,6 +3329,7 @@ function openAutomationDetail(customerAutomationId) {
 
             <div class="buyer-automation-card-actions">
               ${getAutomationActionButton(item, latestOutput, state)}
+              ${getBuyerWebhookSetupUrl(item) ? `<a class="btn btn-secondary btn-small" href="${getBuyerWebhookSetupUrl(item)}">Webhook setup</a>` : ""}
               ${setupUrl && !["setup", "none"].includes(primaryActionKind) ? `<a class="btn btn-secondary btn-small" href="${setupUrl}">${escapeHtml(setupLabel)}</a>` : ""}
               ${latestOutput && primaryActionKind !== "output" ? `<a class="btn btn-secondary btn-small" href="${outputLink}">Open latest output</a>` : ""}
             </div>

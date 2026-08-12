@@ -252,6 +252,10 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
     .map((item) => item.trim())
     .filter(Boolean);
   const checkedAt = cleanString(context.checked_at, 120);
+  const remainingUnits = Math.max(0, Number(context.remaining_units || 0));
+  const totalUnits = Math.max(0, Number(context.total_units || 0));
+  const addedUnits = Math.max(0, Number(context.added_units || context.units || 0));
+  const usagePeriodEnd = cleanString(context.period_end, 120);
 
   switch (type) {
     case "buyer_welcome":
@@ -395,6 +399,55 @@ export function buildEmailTemplate(type: string, context: Record<string, unknown
         ].join(""),
         "View your result",
         outputUrl,
+      );
+
+    case "webhook_usage_warning":
+      return makeTemplate(
+        `${productTitle} is running low on webhook runs`,
+        `${remainingUnits} webhook run${remainingUnits === 1 ? "" : "s"} remaining.`,
+        [
+          eyebrow("Usage alert"),
+          paragraph(`${productTitle} has used most of its available webhook requests for the current billing period.`),
+          bullets([
+            `${remainingUnits} of ${totalUnits} runs remain`,
+            usagePeriodEnd ? `Allowance renews at the end of the billing period: ${usagePeriodEnd}` : "The included allowance renews with the subscription billing period",
+          ]),
+          paragraph("You can add a run pack now to prevent incoming requests from being paused at the limit."),
+        ].join(""),
+        "Manage webhook usage",
+        dashboardUrl,
+      );
+
+    case "webhook_usage_exhausted":
+      return makeTemplate(
+        `${productTitle} reached its webhook run limit`,
+        "Incoming requests are paused at the monthly limit.",
+        [
+          eyebrow("Run limit reached"),
+          paragraph(`${productTitle} has used all ${totalUnits} available webhook runs for this billing period.`),
+          paragraph("Nexus is returning HTTP 429 to new requests so nothing runs without an available unit and no request is silently charged."),
+          usagePeriodEnd ? paragraph(`The included allowance renews at the end of the current billing period: ${usagePeriodEnd}.`) : "",
+          paragraph("Add a run pack to resume requests immediately."),
+        ].join(""),
+        "Add more runs",
+        dashboardUrl,
+      );
+
+    case "webhook_usage_topup_paid":
+      return makeTemplate(
+        `${addedUnits} webhook runs added to ${productTitle}`,
+        "Your additional run pack is ready now.",
+        [
+          eyebrow("Run pack confirmed"),
+          paragraph(`Nexus added ${addedUnits} additional webhook run${addedUnits === 1 ? "" : "s"} to ${productTitle}.`),
+          bullets([
+            `${remainingUnits} runs are currently available`,
+            usagePeriodEnd ? `These runs are valid through the current billing period ending ${usagePeriodEnd}` : "These runs apply to the current subscription billing period",
+          ]),
+          paragraph("If live requests were paused at the limit, they can be accepted again immediately."),
+        ].join(""),
+        "Manage webhook usage",
+        dashboardUrl,
       );
 
     case "subscription_cancellation_approved":

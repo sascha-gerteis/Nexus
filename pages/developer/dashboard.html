@@ -305,6 +305,7 @@
                   <select class="select" name="runtime_trigger_mode">
                     <option value="setup_complete">Run after buyer setup</option>
                     <option value="on_demand">On demand / question triggered</option>
+                    <option value="buyer_webhook">External buyer webhook request (usage metered)</option>
                     <option value="scheduled_interval">Run on a schedule</option>
                     <option value="subscription_monthly">Monthly output</option>
                     <option value="manual">Manual delivery</option>
@@ -339,6 +340,28 @@
                     <option value="webhook_ack">Webhook acknowledgement</option>
                   </select>
                   <small>Dashboard output requires visible content. Use alert/message/webhook modes for email bots or automations where the buyer sees the result somewhere else.</small>
+                </div>
+                <div>
+                  <label>Included webhook runs / month</label>
+                  <input class="input" name="webhook_included_runs" type="number" min="0" step="1" value="0" placeholder="e.g. 10">
+                  <small>Used only when Runtime behavior is External buyer webhook request. All existing modes ignore this field.</small>
+                </div>
+                <div>
+                  <label>Runs in each additional pack</label>
+                  <input class="input" name="webhook_topup_runs" type="number" min="0" step="1" value="0" placeholder="e.g. 10">
+                  <small>Set this and the pack price to 0 if buyers cannot purchase extra runs.</small>
+                </div>
+                <div>
+                  <label id="developerWebhookTopupPriceLabel">Additional run-pack price</label>
+                  <input class="input" name="webhook_topup_price" type="number" min="0" step="0.01" value="0" placeholder="e.g. 19.00">
+                </div>
+                <div>
+                  <label>Usage enforcement</label>
+                  <div class="developer-generated-mapping-stats">
+                    <span class="good"><strong>Hard limit</strong>Requests stop at the allowance</span>
+                    <span><strong>Duplicates</strong>Same event ID never counts twice</span>
+                  </div>
+                  <small>Run packs last through the buyer's current subscription billing period.</small>
                 </div>
                 <div class="full developer-workflow-source-panel developer-workflow-source-make hidden">
                   <div class="make-import-assistant">
@@ -2021,6 +2044,9 @@ company_url = context["inputs"].get("company_url")
       form.elements.runtime_run_frequency.value = "manual";
       form.elements.runtime_no_change_policy.value = "no_output";
       form.elements.runtime_response_mode.value = "dashboard_output";
+      form.elements.webhook_included_runs.value = "0";
+      form.elements.webhook_topup_runs.value = "0";
+      form.elements.webhook_topup_price.value = "0";
       form.elements.workflow_provider.value = "n8n";
       if (form.elements.python_script_code) form.elements.python_script_code.value = "";
       if (form.elements.python_requirements) form.elements.python_requirements.value = "";
@@ -2053,9 +2079,11 @@ company_url = context["inputs"].get("company_url")
       const currency = String(form?.elements?.currency?.value || "USD").toUpperCase();
       const priceLabel = document.getElementById("developerPriceAmountLabel");
       const setupFeeLabel = document.getElementById("developerSetupFeeAmountLabel");
+      const webhookTopupLabel = document.getElementById("developerWebhookTopupPriceLabel");
 
       if (priceLabel) priceLabel.textContent = `Price (${currency})`;
       if (setupFeeLabel) setupFeeLabel.textContent = `Guided install fee (${currency})`;
+      if (webhookTopupLabel) webhookTopupLabel.textContent = `Additional run-pack price (${currency})`;
     }
 
     function productMainPriceValue(product) {
@@ -5171,6 +5199,9 @@ company_url = context["inputs"].get("company_url")
         runtime_run_frequency: String(formData.get("runtime_run_frequency") || "manual"),
         runtime_no_change_policy: String(formData.get("runtime_no_change_policy") || "no_output"),
         runtime_response_mode: String(formData.get("runtime_response_mode") || "dashboard_output"),
+        webhook_included_runs: Number(formData.get("webhook_included_runs") || 0),
+        webhook_topup_runs: Number(formData.get("webhook_topup_runs") || 0),
+        webhook_topup_price: Number(formData.get("webhook_topup_price") || 0),
         workflow_source_platform: workflowProvider,
         n8n_workflow_json: n8nWorkflowJson,
         python_script_code: pythonScriptCode,

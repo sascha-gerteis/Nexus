@@ -197,6 +197,9 @@ function normalizeRuntimeTriggerMode(product: any, isSubscription: boolean) {
     product?.runtime_run_frequency || product?.run_frequency || product?.frequency,
   ).toLowerCase();
 
+  // Only this exact stored mode opts a product into metered webhook requests.
+  // Legacy on-demand/chat products remain on their existing runtime path.
+  if (raw === "buyer_webhook") return "buyer_webhook";
   if (["on_demand", "on-demand", "chat", "manual_trigger"].includes(raw)) return "on_demand";
   if (["scheduled", "scheduled_interval", "recurring", "monthly", "daily", "weekly", "hourly"].includes(raw)) {
     return "scheduled_interval";
@@ -214,6 +217,7 @@ function normalizeRunFrequency(product: any, order: any) {
   const raw = cleanString(product?.runtime_run_frequency || product?.run_frequency || product?.frequency).toLowerCase();
   const triggerMode = normalizeRuntimeTriggerMode(product, isMonthlyOrder(order));
 
+  if (triggerMode === "buyer_webhook") return "manual";
   if (triggerMode === "on_demand") return "on_demand";
   if (triggerMode === "setup_complete") return "manual";
   if (["every_30_minutes", "hourly", "daily", "weekly", "monthly", "quarterly"].includes(raw)) return raw;

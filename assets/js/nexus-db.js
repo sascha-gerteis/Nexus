@@ -2070,6 +2070,10 @@ async function createStripeCheckoutSession(payload) {
   return result;
 }
 
+async function createUsageTopupCheckout(payload = {}) {
+  return callNexusFunction("create-usage-topup-checkout", payload);
+}
+
 async function getBuyerAccount(payload = {}) {
   return callNexusFunction("buyer-account", payload);
 }
@@ -3230,6 +3234,7 @@ async function listBuyerBundleRunAttempts(userId) {
       order_id,
       bundle_id,
       buyer_id,
+      attempt_kind,
       status,
       expected_count,
       completed_count,
@@ -3458,6 +3463,10 @@ async function provisionCustomerWorkflow(customerAutomationId) {
 
 async function runScheduledAutomation(payload = {}) {
   return callNexusFunction("run-scheduled-automations", payload);
+}
+
+async function manageBuyerWebhook(payload = {}) {
+  return callNexusFunction("buyer-webhook-config", payload);
 }
 
 async function getSystemHealth() {
@@ -4040,7 +4049,8 @@ async function listMakeImportMappings(payload = {}) {
     listAdminNotifications,
     markAdminNotificationRead,
     syncStripeProduct,
-createStripeCheckoutSession,
+    createStripeCheckoutSession,
+    createUsageTopupCheckout,
 getBuyerOrderById,
 getCustomerAutomationByOrderId,
 getBuyerCustomerAutomationById,
@@ -4070,6 +4080,7 @@ submitAutomationSetup,
 checkN8nExecution,
 provisionCustomerWorkflow,
 runScheduledAutomation,
+manageBuyerWebhook,
 getSystemHealth,
 manageAutomationLifecycle,
 safeDeleteAutomation,

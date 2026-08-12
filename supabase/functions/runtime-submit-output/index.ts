@@ -831,7 +831,7 @@ async function findCallbackRunContext(
   if (runId || runKey) {
     let query = adminClient
       .from("automation_runs")
-      .select("id, run_key, customer_automation_id, buyer_id, automation_id, order_id, bundle_run_attempt_id, bundle_run_item_id, status, n8n_execution_id, created_at, updated_at, started_at, finished_at")
+      .select("id, run_key, customer_automation_id, buyer_id, automation_id, order_id, bundle_run_attempt_id, bundle_run_item_id, trigger_type, trigger_source, status, n8n_execution_id, created_at, updated_at, started_at, finished_at")
       .limit(1);
 
     query = runId ? query.eq("id", runId) : query.eq("run_key", runKey);
@@ -917,6 +917,166 @@ async function updateExistingRunFromCallback(
 
   return Boolean(fallback.data?.id);
 }
+
+function outboundHostname(value: string) {
+  return cleanString(value).toLowerCase().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "");
+}
+
+function outboundPrivateIpv4(address: string) {
+  const parts = address.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  const [a, b] = parts;
+  return a === 0 || a === 10 || a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    a >= 224;
+}
+
+function outboundPrivateIpv6(address: string) {
+  const value = outboundHostname(address);
+  return value === "::" || value === "::1" || value.startsWith("fc") || value.startsWith("fd") ||
+    /^fe[89ab]/.test(value) || value.startsWith("::ffff:127.") || value.startsWith("::ffff:10.") ||
+    value.startsWith("::ffff:192.168.") || value.startsWith("::ffff:169.254.");
+}
+
+async function safeLiveOutboundUrl(value: unknown) {
+  const raw = cleanString(value);
+  if (!raw || raw.length > 2048) throw new Error("Saved result destination is invalid.");
+  const url = new URL(raw);
+  const host = outboundHostname(url.hostname);
+  if (url.protocol !== "https:" || url.username || url.password || (url.port && !["443", "8443"].includes(url.port))) {
+    throw new Error("Saved result destination is not a permitted HTTPS endpoint.");
+  }
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
+      host.endsWith(".internal") || host.endsWith(".home") || host === "metadata.google.internal" ||
+      outboundPrivateIpv4(host) || outboundPrivateIpv6(host)) {
+    throw new Error("Saved result destination points to a restricted network.");
+  }
+  const literalIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(":");
+  if (!literalIp) {
+    const addresses: string[] = [];
+    try { addresses.push(...await Deno.resolveDns(host, "A")); } catch { /* IPv6-only is allowed */ }
+    try { addresses.push(...await Deno.resolveDns(host, "AAAA")); } catch { /* IPv4-only is allowed */ }
+    if (!addresses.length || addresses.some((address) => outboundPrivateIpv4(address) || outboundPrivateIpv6(address))) {
+      throw new Error("Saved result destination does not resolve to a public network.");
+    }
+  }
+  url.hash = "";
+  return url.toString();
+}
+
+async function recordLiveOutboundDelivery(adminClient: any, config: any, params: {
+  status: "succeeded" | "failed";
+  eventId: string;
+  responseStatus?: number | null;
+  errorMessage?: string;
+  payloadPreview?: Record<string, unknown>;
+}) {
+  const payload = {
+    status: params.status,
+    response_status: params.responseStatus || null,
+    error_message: params.errorMessage || null,
+    payload_preview: params.payloadPreview || {},
+  };
+  const { data: existing } = await adminClient
+    .from("customer_automation_webhook_tests")
+    .select("id")
+    .eq("webhook_config_id", config.id)
+    .eq("direction", "outbound")
+    .eq("event_id", params.eventId)
+    .maybeSingle();
+  if (existing?.id) {
+    await adminClient.from("customer_automation_webhook_tests").update(payload).eq("id", existing.id);
+  } else {
+    await adminClient.from("customer_automation_webhook_tests").insert({
+      webhook_config_id: config.id,
+      customer_automation_id: config.customer_automation_id,
+      buyer_id: config.buyer_id,
+      direction: "outbound",
+      event_id: params.eventId,
+      created_at: new Date().toISOString(),
+      ...payload,
+    });
+  }
+}
+
+async function deliverBuyerWebhookOutput(adminClient: any, params: {
+  customerAutomation: any;
+  parentAutomation: any;
+  callbackRunContext: any;
+  output: any;
+  callbackOrderId: string;
+  callbackBuyerId: string;
+  callbackAutomationId: string;
+}) {
+  const productMode = cleanString(params.parentAutomation?.runtime_trigger_mode).toLowerCase();
+  const runTrigger = cleanString(params.callbackRunContext?.trigger_type).toLowerCase();
+  if (productMode !== "buyer_webhook" || runTrigger !== "buyer_webhook") return;
+
+  const { data: config, error: configError } = await adminClient
+    .from("customer_automation_webhook_configs")
+    .select("*")
+    .eq("customer_automation_id", params.customerAutomation.id)
+    .maybeSingle();
+  if (configError || !config || config.live_enabled !== true || config.outbound_status !== "confirmed" || !config.outbound_url) return;
+
+  const eventId = `output:${params.output.id}`;
+  const { data: alreadyDelivered } = await adminClient
+    .from("customer_automation_webhook_tests")
+    .select("id")
+    .eq("webhook_config_id", config.id)
+    .eq("direction", "outbound")
+    .eq("event_id", eventId)
+    .eq("status", "succeeded")
+    .maybeSingle();
+  if (alreadyDelivered?.id) return;
+
+  const delivery = {
+    event: "nexus.output.ready",
+    event_id: eventId,
+    customer_automation_id: params.customerAutomation.id,
+    order_id: params.callbackOrderId,
+    automation_id: params.callbackAutomationId,
+    run_id: params.callbackRunContext.id,
+    output: {
+      id: params.output.id,
+      output_type: params.output.output_type,
+      status: params.output.status,
+      title: params.output.title,
+      summary: params.output.summary,
+      content_text: params.output.content_text,
+      content_html: params.output.content_html,
+      content_json: params.output.content_json,
+      file_url: params.output.file_url,
+      created_at: params.output.created_at,
+    },
+  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const target = await safeLiveOutboundUrl(config.outbound_url);
+    const response = await fetch(target, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": "Nexus-Webhook/1.0", "x-nexus-event-id": eventId },
+      body: JSON.stringify(delivery),
+      redirect: "error",
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Destination returned HTTP ${response.status}.`);
+    await recordLiveOutboundDelivery(adminClient, config, { status: "succeeded", eventId, responseStatus: response.status, payloadPreview: { event: delivery.event, output_id: params.output.id } });
+    await adminClient.from("customer_automation_webhook_configs").update({ outbound_last_tested_at: new Date().toISOString(), outbound_last_status_code: response.status, outbound_last_error: null, updated_at: new Date().toISOString() }).eq("id", config.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Result destination rejected the output.";
+    await recordLiveOutboundDelivery(adminClient, config, { status: "failed", eventId, errorMessage: message, payloadPreview: { event: delivery.event, output_id: params.output.id } });
+    await adminClient.from("customer_automation_webhook_configs").update({ outbound_last_tested_at: new Date().toISOString(), outbound_last_status_code: null, outbound_last_error: message, updated_at: new Date().toISOString() }).eq("id", config.id);
+    await insertEvent(adminClient, { customer_automation_id: params.customerAutomation.id, buyer_id: params.callbackBuyerId, automation_id: params.callbackAutomationId, order_id: params.callbackOrderId, event_type: "webhook_output_delivery_failed", title: "Result destination needs attention", message, created_by: "runtime" });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -1644,6 +1804,16 @@ Deno.serve(async (req) => {
         title: outputTitle,
       }),
       created_by: "runtime",
+    });
+
+    await deliverBuyerWebhookOutput(adminClient, {
+      customerAutomation,
+      parentAutomation,
+      callbackRunContext,
+      output,
+      callbackOrderId,
+      callbackBuyerId: callbackBuyerId || customerAutomation.buyer_id,
+      callbackAutomationId: callbackAutomationId || customerAutomation.automation_id,
     });
 
     return jsonResponse({

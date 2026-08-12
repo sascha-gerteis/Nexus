@@ -61,3 +61,12 @@ verify_jwt = false
 
 [functions.process-runtime-dispatch-backlog]
 verify_jwt = false
+
+[functions.buyer-webhook-config]
+verify_jwt = false
+
+[functions.buyer-webhook-ingress]
+verify_jwt = false
+
+[functions.create-usage-topup-checkout]
+verify_jwt = false

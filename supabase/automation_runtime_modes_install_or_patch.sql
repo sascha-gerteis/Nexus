@@ -28,6 +28,7 @@ begin
         'legacy',
         'setup_complete',
         'on_demand',
+        'buyer_webhook',
         'scheduled_interval',
         'subscription_monthly',
         'manual'

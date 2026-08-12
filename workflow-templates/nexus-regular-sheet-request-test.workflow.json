@@ -1,0 +1,99 @@
+{
+  "name": "Nexus Regular Product - Sheet Request Echo Test",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "d324046b-9448-4b4c-aaf0-87bd0d747c21",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -540,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "url": "{{Nexus_setup|sheet_csv_url}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "d6c02a7e-4ba9-4e32-8073-cff048bbbcdb",
+      "name": "Read Public Test Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -260,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $('Nexus Runtime Context').first().json || {};\nconst setup = context.setup || {};\nconst requestText = String(setup.request_text || '').trim();\nconst sheetUrl = String(setup.sheet_csv_url || '').trim();\nconst source = $input.first()?.json;\nconst rawSheet = typeof source === 'string'\n  ? source\n  : typeof source?.data === 'string'\n    ? source.data\n    : JSON.stringify(source || {}, null, 2);\nconst escapeHtml = (value) => String(value || '')\n  .replaceAll('&', '&amp;')\n  .replaceAll('<', '&lt;')\n  .replaceAll('>', '&gt;')\n  .replaceAll('\\\"', '&quot;')\n  .replaceAll(\"'\", '&#039;');\nconst preview = rawSheet.slice(0, 5000);\nreturn [{\n  json: {\n    title: 'Regular product test output',\n    summary: `Processed the request and read ${rawSheet.length} characters from the test sheet.`,\n    content_html: `<section style=\"font-family:Arial,sans-serif;color:#172033;line-height:1.6\"><h1 style=\"margin:0 0 12px\">Regular Nexus product test passed</h1><p><strong>Customer request:</strong> ${escapeHtml(requestText)}</p><p><strong>Sheet source:</strong> <a href=\"${escapeHtml(sheetUrl)}\" target=\"_blank\" rel=\"noopener noreferrer\">Open test sheet</a></p><h2 style=\"margin:22px 0 8px\">Sheet response preview</h2><pre style=\"white-space:pre-wrap;background:#f4f6fa;padding:16px;border-radius:10px;border:1px solid #dce2eb\">${escapeHtml(preview)}</pre></section>`,\n    output_type: 'report'\n  }\n}];"
+      },
+      "id": "4cc33658-58bc-4206-b9ee-741f9ca1622a",
+      "name": "Build Regular Product Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Nexus regular-product acceptance test\nThis intentionally contains no Nexus Webhook Trigger, Runtime Context, or Submit Output node. Nexus must add its standard runtime nodes during import. Keep the product runtime mode on the normal one-time/default path; never select Buyer webhook for this test.",
+        "height": 260,
+        "width": 460
+      },
+      "id": "c5e30500-88a8-407f-8da5-e9af9256b2c1",
+      "name": "Test Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -540,
+        -220
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Public Test Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Public Test Sheet": {
+      "main": [
+        [
+          {
+            "node": "Build Regular Product Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "87749724-97be-46cf-9cfa-f7da56590dcb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "nexusTestPurpose": "legacy_regular_product_unchanged"
+  },
+  "tags": []
+}

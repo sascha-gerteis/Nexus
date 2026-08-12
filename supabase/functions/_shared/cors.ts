@@ -1,7 +1,7 @@
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, stripe-signature, x-nexus-runtime-secret, browser-id, n8n-browser-id",
+    "authorization, x-client-info, apikey, content-type, stripe-signature, x-nexus-runtime-secret, x-nexus-webhook-secret, x-nexus-webhook-test, x-nexus-event-id, browser-id, n8n-browser-id",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 };
 

@@ -32,6 +32,7 @@ function runtimeTriggerMode(value: unknown) {
   return [
     "setup_complete",
     "on_demand",
+    "buyer_webhook",
     "scheduled_interval",
     "subscription_monthly",
     "manual",
@@ -50,6 +51,7 @@ function runtimeRunFrequency(value: unknown, triggerMode = "setup_complete") {
     "monthly",
   ].includes(frequency)) return frequency;
 
+  if (triggerMode === "buyer_webhook") return "manual";
   if (triggerMode === "on_demand") return "on_demand";
   if (triggerMode === "scheduled_interval") return "daily";
   if (triggerMode === "subscription_monthly") return "monthly";
@@ -907,6 +909,23 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
     ? "manual"
     : requestedTriggerMode;
   const runFrequency = runtimeRunFrequency(body.runtime_run_frequency, triggerMode);
+  const webhookIncludedRuns = triggerMode === "buyer_webhook"
+    ? Math.max(0, Math.floor(numberValue(body.webhook_included_runs)))
+    : 0;
+  const webhookTopupRuns = triggerMode === "buyer_webhook"
+    ? Math.max(0, Math.floor(numberValue(body.webhook_topup_runs)))
+    : 0;
+  const webhookTopupPrice = triggerMode === "buyer_webhook"
+    ? Math.max(0, Math.round(numberValue(body.webhook_topup_price) * 100) / 100)
+    : 0;
+
+  if (status === "pending_review" && triggerMode === "buyer_webhook") {
+    if (pricingType !== "monthly") throw new Error("Buyer webhook products must use monthly subscription pricing.");
+    if (webhookIncludedRuns < 1) throw new Error("Enter at least one included webhook run per month.");
+    if ((webhookTopupRuns > 0) !== (webhookTopupPrice > 0)) {
+      throw new Error("Additional-run pack quantity and price must either both be set or both be zero.");
+    }
+  }
   const detectedPlaceholders = cleanJsonObject(body.detected_placeholders);
   const sheetAccessConfig = cleanSheetAccessConfig(body.sheet_access_config);
   if (Object.keys(sheetAccessConfig).length) {
@@ -1010,6 +1029,9 @@ function buildProductPayload(body: Record<string, unknown>, developerId: string,
             : runFrequency === "monthly"
               ? "month"
               : "month",
+    webhook_included_runs: webhookIncludedRuns,
+    webhook_topup_runs: webhookTopupRuns,
+    webhook_topup_price: webhookTopupPrice,
     runtime_no_change_policy: runtimeNoChangePolicy(body.runtime_no_change_policy),
     runtime_response_mode: runtimeResponseMode(body.runtime_response_mode),
     workflow_source_platform: listingType === "custom_request" ? "manual" : workflowSourcePlatform,

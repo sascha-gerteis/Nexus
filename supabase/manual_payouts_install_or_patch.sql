@@ -181,7 +181,7 @@ alter table if exists public.developer_payout_requests
 
 alter table if exists public.developer_earnings
   add constraint developer_earnings_source_type_check
-  check (source_type in ('order_payment', 'subscription_invoice', 'manual_adjustment'));
+  check (source_type in ('order_payment', 'subscription_invoice', 'usage_topup', 'manual_adjustment'));
 
 alter table if exists public.developer_earnings
   add constraint developer_earnings_status_check

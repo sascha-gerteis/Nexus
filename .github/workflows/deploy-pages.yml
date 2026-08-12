@@ -49,6 +49,17 @@ jobs:
       - name: Verify credential integrity safeguards
         run: node scripts/credential-integrity-regression.cjs
 
+      - name: Verify buyer webhook setup safeguards
+        run: node scripts/buyer-webhook-setup-regression.cjs
+
+      - name: Verify opt-in webhook usage and legacy compatibility
+        run: node scripts/buyer-webhook-usage-regression.cjs
+
+      - name: Verify buyer webhook event mapping
+        run: |
+          node scripts/buyer-webhook-event-mapping-regression.cjs
+          node --experimental-strip-types scripts/buyer-webhook-event-mapping-semantic-regression.mjs
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 

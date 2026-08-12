@@ -115,6 +115,7 @@ function normalizeProductRunFrequency(product: any, isSubscription: boolean) {
 
   if (!mode || mode === "legacy") return isSubscription ? "monthly" : "manual";
   if (mode === "manual" || mode === "setup_complete") return "manual";
+  if (mode === "buyer_webhook") return "manual";
   if (mode === "on_demand") return "on_demand";
   if (mode === "subscription_monthly") return "monthly";
   if (mode === "scheduled_interval") return allowed.has(frequency) && !["manual", "on_demand"].includes(frequency)
@@ -126,7 +127,7 @@ function normalizeProductRunFrequency(product: any, isSubscription: boolean) {
 
 function normalizeRuntimeTriggerMode(product: any, isSubscription: boolean) {
   const mode = cleanString(product?.runtime_trigger_mode).toLowerCase();
-  if (["setup_complete", "on_demand", "scheduled_interval", "subscription_monthly", "manual"].includes(mode)) {
+  if (["setup_complete", "on_demand", "scheduled_interval", "subscription_monthly", "manual", "buyer_webhook"].includes(mode)) {
     return mode;
   }
 
@@ -674,6 +675,150 @@ async function recordDeveloperEarningForOrder(
   }
 }
 
+function isUsageTopupSession(session: Stripe.Checkout.Session) {
+  return cleanString(session.metadata?.checkout_kind).toLowerCase() === "usage_topup";
+}
+
+async function recordDeveloperEarningForUsageTopup(
+  topup: any,
+  session: Stripe.Checkout.Session,
+  stripeClient = liveStripe,
+) {
+  const sourceId = cleanString(session.id);
+  const product = await getAutomationProduct(cleanString(topup.automation_id));
+  const developer = one(product?.developers);
+  const developerId = cleanString(product?.developer_id);
+  const developerHandle = cleanString(developer?.handle).toLowerCase();
+  const currency = cleanString(topup.currency || session.currency || "USD").toUpperCase();
+  const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : "";
+  const feeSnapshot = await getStripeFeeSnapshot(paymentIntentId, stripeClient);
+  const grossAmount = roundMoney(stripeAmountToMajor(session.amount_total || 0) || Number(topup.amount || 0));
+  const stripeFeeAmount = roundMoney(feeSnapshot.stripeFeeAmount || 0);
+  const netAmount = roundMoney(Math.max(0, grossAmount - stripeFeeAmount));
+  const internalProduct = !developerId || developerHandle === "nexus-internal";
+  const platformFeeAmount = internalProduct ? grossAmount : roundMoney(grossAmount * 0.2);
+  const developerAmount = internalProduct ? 0 : roundMoney(grossAmount * 0.8);
+  const platformNetAmount = roundMoney(platformFeeAmount - stripeFeeAmount);
+
+  await adminClient
+    .from("automation_usage_topups")
+    .update({
+      stripe_fee_amount: stripeFeeAmount,
+      platform_fee_amount: platformFeeAmount,
+      developer_earning_amount: developerAmount,
+      updated_at: nowIso(),
+    })
+    .eq("id", topup.id);
+
+  if (internalProduct || !sourceId) return;
+
+  const { data: existing, error: existingError } = await adminClient
+    .from("developer_earnings")
+    .select("id")
+    .eq("source_type", "usage_topup")
+    .eq("source_id", sourceId)
+    .maybeSingle();
+  if (existingError) {
+    if (!isMissingWalletSchemaError(existingError)) {
+      console.warn("Could not check usage top-up earning:", existingError.message);
+    }
+    return;
+  }
+  if (existing?.id) return;
+
+  const { data: order } = await adminClient
+    .from("orders")
+    .select("id,buyer_email,automation_title")
+    .eq("id", topup.order_id)
+    .maybeSingle();
+
+  const { error: earningError } = await adminClient
+    .from("developer_earnings")
+    .insert({
+      developer_id: developerId,
+      automation_id: topup.automation_id,
+      order_id: topup.order_id,
+      source_type: "usage_topup",
+      source_id: sourceId,
+      currency,
+      gross_amount: grossAmount,
+      stripe_fee_amount: stripeFeeAmount,
+      net_amount: netAmount,
+      platform_fee_amount: platformFeeAmount,
+      platform_net_amount: platformNetAmount,
+      developer_amount: developerAmount,
+      platform_fee_bps: 2000,
+      developer_share_bps: 8000,
+      status: "available",
+      transfer_status: "available",
+      payout_status: "available",
+      stripe_payment_intent_id: paymentIntentId,
+      stripe_charge_id: feeSnapshot.chargeId,
+      stripe_balance_transaction_id: feeSnapshot.balanceTransactionId,
+      metadata: {
+        source: "nexus_usage_topup",
+        usage_topup_id: topup.id,
+        customer_automation_id: topup.customer_automation_id,
+        units: topup.units,
+        automation_title: product?.title || order?.automation_title || "",
+        buyer_email: order?.buyer_email || "",
+      },
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
+  if (earningError) {
+    if (!isMissingWalletSchemaError(earningError)) {
+      console.warn("Could not create usage top-up earning:", earningError.message);
+    }
+    return;
+  }
+
+  const recipient = await loadDeveloperEmailRecipient(developerId);
+  if (recipient) {
+    await safeEnqueueEmail(
+      adminClient,
+      "developer_order_received",
+      recipient,
+      {
+        product_title: `${product?.title || order?.automation_title || "Automation"} run pack`,
+        buyer_email: order?.buyer_email || "",
+        developer_amount: developerAmount,
+        currency,
+        dashboard_url: "/pages/developer/dashboard.html#wallet",
+      },
+      { dedupeKey: `developer_usage_topup:${topup.id}:${developerId}` },
+    );
+  }
+}
+
+async function renewBuyerWebhookUsageEntitlements(
+  orderId: string,
+  periodStart: string | null,
+  periodEnd: string | null,
+  sourceKey: string,
+) {
+  if (!orderId || !periodStart || !periodEnd) return;
+  const { data: rows, error: lookupError } = await adminClient
+    .from("customer_automations")
+    .select("id,automations!inner(runtime_trigger_mode)")
+    .eq("order_id", orderId);
+  if (lookupError) {
+    console.warn("Could not check buyer-webhook allowance renewal:", lookupError.message);
+    return;
+  }
+  const eligible = (rows || []).some((row: any) =>
+    cleanString(one(row.automations)?.runtime_trigger_mode).toLowerCase() === "buyer_webhook"
+  );
+  if (!eligible) return;
+  const { error } = await adminClient.rpc("renew_order_usage_entitlements", {
+    p_order_id: orderId,
+    p_period_start: periodStart,
+    p_period_end: periodEnd,
+    p_source_key: sourceKey,
+  });
+  if (error) throw new Error(`Could not renew buyer webhook allowance: ${error.message}`);
+}
+
 async function markDeveloperEarningForCharge(
   charge: Stripe.Charge,
   nextStatus: "refunded" | "disputed",
@@ -767,13 +912,15 @@ async function activateScheduleIfReady(order: any, subscriptionStatus = "") {
 
   for (const customerAutomation of customerAutomations || []) {
     const automationProduct = one(customerAutomation.automations) || {};
+    const runtimeTriggerMode = normalizeRuntimeTriggerMode(automationProduct, true);
     const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automationProduct, order);
     const runFrequency = normalizeProductRunFrequency(automationProduct, true);
-    const ready = setupIsReady(customerAutomation) && Boolean(webhookUrl);
+    const ready = runtimeTriggerMode !== "buyer_webhook" && setupIsReady(customerAutomation) && Boolean(webhookUrl);
 
     await adminClient
       .from("customer_automations")
       .update({
+        runtime_trigger_mode: runtimeTriggerMode,
         run_frequency: runFrequency,
         schedule_status: ready ? "active" : "inactive",
         schedule_anchor_at: customerAutomation.schedule_anchor_at || null,
@@ -991,14 +1138,15 @@ async function activateBundleSchedulesIfReady(order: any, subscriptionStatus = "
 
   for (const customerAutomation of rows || []) {
     const automationProduct = one(customerAutomation.automations) || {};
+    const runtimeTriggerMode = normalizeRuntimeTriggerMode(automationProduct, true);
     const webhookUrl = getRuntimeWebhookUrl(customerAutomation, automationProduct, order);
-    const ready = setupIsReady(customerAutomation) && Boolean(webhookUrl);
+    const ready = runtimeTriggerMode !== "buyer_webhook" && setupIsReady(customerAutomation) && Boolean(webhookUrl);
     const runFrequency = normalizeProductRunFrequency(automationProduct, true);
 
     await adminClient
       .from("customer_automations")
       .update({
-        runtime_trigger_mode: normalizeRuntimeTriggerMode(automationProduct, true),
+        runtime_trigger_mode: runtimeTriggerMode,
         runtime_no_change_policy: normalizeRuntimeNoChangePolicy(automationProduct),
         runtime_response_mode: normalizeRuntimeResponseMode(automationProduct),
         run_frequency: runFrequency,
@@ -1282,6 +1430,77 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
   });
 }
 
+async function handleUsageTopupCompleted(session: Stripe.Checkout.Session, stripeClient = liveStripe) {
+  const topupId = cleanString(session.metadata?.usage_topup_id);
+  if (!topupId) throw new Error(`Usage top-up session ${session.id} is missing usage_topup_id.`);
+  if (session.payment_status !== "paid") return;
+
+  const { data: topup, error: topupError } = await adminClient
+    .from("automation_usage_topups")
+    .select("*")
+    .eq("id", topupId)
+    .eq("stripe_checkout_session_id", session.id)
+    .maybeSingle();
+  if (topupError || !topup) {
+    throw new Error(topupError?.message || `Usage top-up ${topupId} was not found.`);
+  }
+
+  const expectedLivemode = cleanString(topup.payment_environment).toLowerCase() !== "test";
+  if (Boolean(session.livemode) !== expectedLivemode) {
+    throw new Error("Usage top-up payment environment does not match the Stripe event.");
+  }
+  if (cleanString(session.metadata?.customer_automation_id) !== cleanString(topup.customer_automation_id) ||
+      cleanString(session.metadata?.buyer_id) !== cleanString(topup.buyer_id)) {
+    throw new Error("Usage top-up purchase identity does not match Stripe metadata.");
+  }
+
+  const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : "";
+  const { data: fulfillment, error: fulfillmentError } = await adminClient.rpc(
+    "fulfill_customer_automation_usage_topup",
+    {
+      p_topup_id: topup.id,
+      p_stripe_checkout_session_id: session.id,
+      p_stripe_payment_intent_id: paymentIntentId || null,
+    },
+  );
+  if (fulfillmentError || !fulfillment?.ok) {
+    throw new Error(fulfillmentError?.message || fulfillment?.error || "Usage top-up could not be fulfilled.");
+  }
+
+  await recordDeveloperEarningForUsageTopup(topup, session, stripeClient);
+
+  const [{ data: order }, { data: product }] = await Promise.all([
+    adminClient.from("orders").select("buyer_email,buyer_name").eq("id", topup.order_id).maybeSingle(),
+    adminClient.from("automations").select("title").eq("id", topup.automation_id).maybeSingle(),
+  ]);
+  if (order?.buyer_email) {
+    await safeEnqueueEmail(
+      adminClient,
+      "webhook_usage_topup_paid",
+      { email: order.buyer_email, name: order.buyer_name },
+      {
+        product_title: product?.title || "Your automation",
+        added_units: topup.units,
+        remaining_units: fulfillment.remaining_units,
+        period_end: fulfillment.period_end,
+        dashboard_url: `/pages/buyer/webhook-setup.html?id=${encodeURIComponent(topup.customer_automation_id)}`,
+      },
+      { dedupeKey: `webhook_usage_topup_paid:${topup.id}` },
+    );
+  }
+}
+
+async function handleUsageTopupExpired(session: Stripe.Checkout.Session) {
+  const topupId = cleanString(session.metadata?.usage_topup_id);
+  if (!topupId) return;
+  await adminClient
+    .from("automation_usage_topups")
+    .update({ status: "expired", updated_at: nowIso() })
+    .eq("id", topupId)
+    .eq("stripe_checkout_session_id", session.id)
+    .eq("status", "pending");
+}
+
 async function handleInvoicePaid(invoice: Stripe.Invoice, stripeClient = liveStripe) {
   const subscriptionId =
     typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : "";
@@ -1312,6 +1531,13 @@ async function handleInvoicePaid(invoice: Stripe.Invoice, stripeClient = liveStr
     last_invoice_paid_at: nowIso(),
     updated_at: nowIso(),
   });
+
+  await renewBuyerWebhookUsageEntitlements(
+    order.id,
+    subscriptionSnapshot.current_period_start || period.start,
+    subscriptionSnapshot.current_period_end || period.end,
+    `invoice:${invoice.id}`,
+  );
 
   if (order.order_type === "bundle" || order.bundle_id) {
     await activateBundleSchedulesIfReady(
@@ -1530,13 +1756,21 @@ Deno.serve(async (request) => {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        await handleCheckoutCompleted(session, stripeClient);
+        if (isUsageTopupSession(session)) await handleUsageTopupCompleted(session, stripeClient);
+        else await handleCheckoutCompleted(session, stripeClient);
+        break;
+      }
+
+      case "checkout.session.async_payment_succeeded": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (isUsageTopupSession(session)) await handleUsageTopupCompleted(session, stripeClient);
         break;
       }
 
       case "checkout.session.expired": {
         const session = event.data.object as Stripe.Checkout.Session;
-        await handleCheckoutExpired(session);
+        if (isUsageTopupSession(session)) await handleUsageTopupExpired(session);
+        else await handleCheckoutExpired(session);
         break;
       }
 
@@ -1592,6 +1826,14 @@ Deno.serve(async (request) => {
     });
   } catch (error) {
     console.error("Webhook processing failed:", error);
+    // stripe_events is the success marker. If processing failed after the
+    // marker was inserted, remove it so Stripe's retry can safely resume.
+    // Fulfillment handlers are idempotent, including usage top-ups.
+    try {
+      await adminClient.from("stripe_events").delete().eq("id", event.id);
+    } catch (cleanupError) {
+      console.warn("Could not clear failed Stripe event marker:", cleanupError);
+    }
 
     return new Response(
       JSON.stringify({
