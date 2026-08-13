@@ -1,0 +1,68 @@
+{
+  "name": "Nexus Buyer Webhook - Customer Request Processor Test",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "27b21186-1884-4db5-966b-3f37ad81b66d",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -420,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $('Nexus Runtime Context').first().json || {};\nconst setup = context.setup || {};\nconst event = context.event || {};\nconst request = context.request || {};\nconst customer = context.customer || {};\nconst system = context.system || {};\n\nconst text = (value, fallback = '') => {\n  const normalized = String(value ?? '').trim();\n  return normalized || fallback;\n};\nconst escapeHtml = (value) => String(value ?? '')\n  .replaceAll('&', '&amp;')\n  .replaceAll('<', '&lt;')\n  .replaceAll('>', '&gt;')\n  .replaceAll('\\\"', '&quot;')\n  .replaceAll(\"'\", '&#039;');\n\nconst businessName = text(setup.business_name, text(customer.company, 'Webhook customer'));\nconst message = text(setup.event_message, text(request?.customer?.message, text(request.message, 'No message supplied')));\nconst externalCustomerId = text(setup.external_customer_id, text(request?.customer?.id, text(request.customer_id, 'not supplied')));\nconst priority = text(setup.event_priority, text(request?.customer?.priority, text(request.priority, text(setup.default_priority, 'normal'))));\nconst replyPrefix = text(setup.reply_prefix, 'Webhook request processed');\nconst eventId = text(event.id, text(system.idempotency_key, 'technical-test'));\nconst eventType = text(event.type, text(request.event, 'external.request'));\nconst receivedAt = text(event.received_at, new Date().toISOString());\n\nconst title = `${replyPrefix}: ${businessName}`;\nconst summary = `Processed ${eventType} for customer ${externalCustomerId} with ${priority} priority.`;\nconst contentHtml = `<section style=\"font-family:Arial,sans-serif;color:#172033;line-height:1.6\">\n  <div style=\"padding:22px;border-radius:16px;background:linear-gradient(135deg,#eef6ff,#f7fbff);border:1px solid #cfe1f7\">\n    <p style=\"margin:0 0 8px;color:#2f65a7;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase\">Nexus webhook acceptance output</p>\n    <h1 style=\"margin:0 0 8px;font-size:25px;color:#14263f\">${escapeHtml(title)}</h1>\n    <p style=\"margin:0;color:#52657e\">${escapeHtml(summary)}</p>\n  </div>\n  <table style=\"width:100%;margin-top:18px;border-collapse:collapse\">\n    <tr><td style=\"padding:10px;border-bottom:1px solid #e4eaf1;font-weight:700\">Event ID</td><td style=\"padding:10px;border-bottom:1px solid #e4eaf1\">${escapeHtml(eventId)}</td></tr>\n    <tr><td style=\"padding:10px;border-bottom:1px solid #e4eaf1;font-weight:700\">Event type</td><td style=\"padding:10px;border-bottom:1px solid #e4eaf1\">${escapeHtml(eventType)}</td></tr>\n    <tr><td style=\"padding:10px;border-bottom:1px solid #e4eaf1;font-weight:700\">External customer</td><td style=\"padding:10px;border-bottom:1px solid #e4eaf1\">${escapeHtml(externalCustomerId)}</td></tr>\n    <tr><td style=\"padding:10px;border-bottom:1px solid #e4eaf1;font-weight:700\">Priority</td><td style=\"padding:10px;border-bottom:1px solid #e4eaf1\">${escapeHtml(priority)}</td></tr>\n    <tr><td style=\"padding:10px;border-bottom:1px solid #e4eaf1;font-weight:700\">Received</td><td style=\"padding:10px;border-bottom:1px solid #e4eaf1\">${escapeHtml(receivedAt)}</td></tr>\n  </table>\n  <div style=\"margin-top:18px;padding:16px;border-left:4px solid #2563eb;background:#f6f9fd\"><strong>Customer message</strong><p style=\"margin:8px 0 0\">${escapeHtml(message)}</p></div>\n</section>`;\n\nreturn [{ json: {\n  title,\n  summary,\n  content_html: contentHtml,\n  output_type: 'report',\n  event_id: eventId,\n  event_type: eventType,\n  external_customer_id: externalCustomerId,\n  priority,\n  processed_at: new Date().toISOString()\n} }];"
+      },
+      "id": "5167c96a-0a67-4773-b98b-50d4a8ac7615",
+      "name": "Create Webhook Customer Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Buyer-webhook acceptance product\nUpload this raw workflow to Nexus. Nexus must add the hosted webhook trigger, runtime context, and output callback. Configure the product as a monthly External buyer webhook request product with 3 included runs and a 2-run top-up pack. No developer or buyer credentials are required.",
+        "height": 240,
+        "width": 500
+      },
+      "id": "88a5116c-375d-4221-9998-b2d939168686",
+      "name": "Webhook Test Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -440,
+        -220
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Webhook Customer Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "42d9bf23-a1f6-4896-9256-b5c19d1f637a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "nexusTestPurpose": "buyer_webhook_full_acceptance"
+  },
+  "tags": []
+}
