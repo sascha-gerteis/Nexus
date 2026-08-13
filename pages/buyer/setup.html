@@ -53,7 +53,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260802-analytics-correctness"></script>
+  <script src="/assets/js/nexus-db.js?v=20260813-webhook-routing"></script>
 
   <script>
     let activeCustomerAutomation = null;
@@ -2370,6 +2370,23 @@ async function resolveProductFromCustomerAutomation(automation) {
       activeCustomerAutomation = automation;
       activeProduct = loadedProduct || await resolveProductFromCustomerAutomation(automation);
       latestSubmission = submission;
+
+      const automationOrder = Array.isArray(automation.orders)
+        ? automation.orders[0] || {}
+        : automation.orders || {};
+      const belongsToBundle = Boolean(
+        automation.bundle_id ||
+        automationOrder.bundle_id ||
+        String(automationOrder.order_type || "").toLowerCase() === "bundle"
+      );
+      const runtimeTriggerMode = String(
+        activeProduct?.runtime_trigger_mode || automation.runtime_trigger_mode || ""
+      ).toLowerCase();
+
+      if (!belongsToBundle && runtimeTriggerMode === "buyer_webhook") {
+        location.replace(`/pages/buyer/webhook-setup.html?id=${encodeURIComponent(automation.id)}`);
+        return;
+      }
       activeBundleSetup = await loadBundleSetupContext(automation, activeProduct, latestSubmission);
 
       renderSetupForm(root);

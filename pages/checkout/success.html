@@ -60,7 +60,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260801-analytics-insights"></script>
+  <script src="/assets/js/nexus-db.js?v=20260813-webhook-routing"></script>
   <script src="/assets/js/nexus-buyer-nav.js?v=20260713-code-stability"></script>
   <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
 
@@ -78,6 +78,23 @@
           buttonText: "Complete bundle setup",
           statusText: "Your bundle setup form is ready. Redirecting you now...",
           message: "Payment received. Complete one setup form and Nexus will start every included workflow."
+        };
+      }
+
+      const product = Array.isArray(automation?.automations)
+        ? automation.automations[0] || {}
+        : automation?.automations || {};
+      const runtimeTriggerMode = String(
+        product.runtime_trigger_mode || automation?.runtime_trigger_mode || ""
+      ).toLowerCase();
+
+      if (runtimeTriggerMode === "buyer_webhook") {
+        return {
+          url: `/pages/buyer/webhook-setup.html?id=${encodeURIComponent(automation.id)}`,
+          title: "Your webhook connection is ready.",
+          buttonText: "Connect webhook",
+          statusText: "Your webhook workspace is ready. Redirecting you now...",
+          message: "Payment received. Connect, test, map, and activate your webhook before sending live requests."
         };
       }
 

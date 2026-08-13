@@ -2609,7 +2609,7 @@ async function getCustomerAutomationByOrderId(orderId) {
 
   return supabase
     .from("customer_automations")
-    .select("*, automations(title, slug, setup_schema, credential_schema, developer_credential_requirements, runtime_type), orders(id, payment_status, order_status, automation_id, automation_title, bundle_id, order_type)")
+    .select("*, automations(title, slug, setup_schema, credential_schema, developer_credential_requirements, runtime_type, runtime_trigger_mode, runtime_response_mode, runtime_event_schema), orders(id, payment_status, order_status, automation_id, automation_title, bundle_id, order_type)")
     .eq("order_id", orderId)
     .eq("buyer_id", user.id)
     .order("created_at", { ascending: true })
@@ -2644,6 +2644,9 @@ async function getBuyerCustomerAutomationById(customerAutomationId) {
         credential_schema,
         developer_credential_requirements,
         runtime_type,
+        runtime_trigger_mode,
+        runtime_response_mode,
+        runtime_event_schema,
         runtime_webhook_url,
         n8n_workflow_id
         
@@ -2705,6 +2708,9 @@ async function getBuyerCustomerAutomationsByOrderId(orderId) {
         credential_schema,
         developer_credential_requirements,
         runtime_type,
+        runtime_trigger_mode,
+        runtime_response_mode,
+        runtime_event_schema,
         runtime_webhook_url,
         n8n_workflow_id
       ),
@@ -2765,6 +2771,9 @@ async function getBuyerCustomerAutomationsByBundleId(bundleId) {
         credential_schema,
         developer_credential_requirements,
         runtime_type,
+        runtime_trigger_mode,
+        runtime_response_mode,
+        runtime_event_schema,
         runtime_webhook_url,
         n8n_workflow_id
       ),
@@ -2991,7 +3000,10 @@ async function listBuyerCustomerAutomations(userId) {
         color,
         short_description,
         category,
-        status
+        status,
+        runtime_trigger_mode,
+        runtime_response_mode,
+        runtime_event_schema
       ),
       developers(
         id,
@@ -3033,7 +3045,10 @@ async function listBuyerCustomerAutomations(userId) {
         color,
         short_description,
         category,
-        status
+        status,
+        runtime_trigger_mode,
+        runtime_response_mode,
+        runtime_event_schema
       ),
       developers(
         id,
