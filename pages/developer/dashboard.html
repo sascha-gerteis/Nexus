@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260718-python-editor-fix">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260813-runtime-streamline">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
   <title>Developer Dashboard | Nexus AI</title>
@@ -292,39 +292,33 @@
                     <option value="manual">Manual / Nexus fulfilled</option>
                   </select>
                 </div>
+                <input type="hidden" name="runtime_type" value="n8n_managed">
                 <div>
-                  <label>Automation mode</label>
-                  <select class="select" name="runtime_type">
-                    <option value="n8n_managed">Automatic with hosted n8n</option>
-                    <option value="python_runner">Automatic with hosted Python runner</option>
-                    <option value="manual">Manual / custom fulfillment</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Runtime behavior</label>
-                  <select class="select" name="runtime_trigger_mode">
+                  <label>When does it run?</label>
+                  <select class="select" name="runtime_trigger_mode" id="developerRuntimeTriggerMode">
                     <option value="setup_complete">Run after buyer setup</option>
-                    <option value="on_demand">On demand / question triggered</option>
-                    <option value="buyer_webhook">External buyer webhook request (usage metered)</option>
+                    <option value="on_demand">When the buyer asks</option>
+                    <option value="buyer_webhook">When the buyer's app sends a webhook</option>
                     <option value="scheduled_interval">Run on a schedule</option>
-                    <option value="subscription_monthly">Monthly output</option>
-                    <option value="manual">Manual delivery</option>
+                    <option value="subscription_monthly">Once each month</option>
+                    <option value="manual">Delivered manually</option>
                   </select>
+                  <small id="developerRuntimeTriggerHelp">Nexus runs the workflow once after the buyer completes setup.</small>
                 </div>
-                <div>
-                  <label>Run cadence</label>
+                <div id="developerRuntimeCadenceField" class="hidden">
+                  <label>How often?</label>
                   <select class="select" name="runtime_run_frequency">
-                    <option value="manual">Only when triggered</option>
-                    <option value="on_demand">On demand</option>
                     <option value="every_30_minutes">Every 30 minutes</option>
                     <option value="hourly">Hourly</option>
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
                     <option value="monthly">Monthly</option>
+                    <option value="manual">Only when triggered</option>
+                    <option value="on_demand">On demand</option>
                   </select>
                 </div>
-                <div>
-                  <label>No-change behavior</label>
+                <div id="developerNoChangeField" class="hidden">
+                  <label>When nothing changes</label>
                   <select class="select" name="runtime_no_change_policy">
                     <option value="no_output">No dashboard output unless something changed</option>
                     <option value="status_event">Log a status event only</option>
@@ -332,36 +326,24 @@
                   </select>
                 </div>
                 <div>
-                  <label>Customer response</label>
+                  <label>Buyer receives</label>
                   <select class="select" name="runtime_response_mode">
                     <option value="dashboard_output">Dashboard output</option>
                     <option value="instant_message">Instant answer/message</option>
                     <option value="alert_only">Alert only when triggered</option>
                     <option value="webhook_ack">Webhook acknowledgement</option>
                   </select>
-                  <small>Dashboard output requires visible content. Use alert/message/webhook modes for email bots or automations where the buyer sees the result somewhere else.</small>
+                  <small id="developerRuntimeResponseHelp">Choose where the buyer experiences the result.</small>
                 </div>
-                <div>
-                  <label>Included webhook runs / month</label>
-                  <input class="input" name="webhook_included_runs" type="number" min="0" step="1" value="0" placeholder="e.g. 10">
-                  <small>Used only when Runtime behavior is External buyer webhook request. All existing modes ignore this field.</small>
-                </div>
-                <div>
-                  <label>Runs in each additional pack</label>
-                  <input class="input" name="webhook_topup_runs" type="number" min="0" step="1" value="0" placeholder="e.g. 10">
-                  <small>Set this and the pack price to 0 if buyers cannot purchase extra runs.</small>
-                </div>
-                <div>
-                  <label id="developerWebhookTopupPriceLabel">Additional run-pack price</label>
-                  <input class="input" name="webhook_topup_price" type="number" min="0" step="0.01" value="0" placeholder="e.g. 19.00">
-                </div>
-                <div>
-                  <label>Usage enforcement</label>
-                  <div class="developer-generated-mapping-stats">
-                    <span class="good"><strong>Hard limit</strong>Requests stop at the allowance</span>
-                    <span><strong>Duplicates</strong>Same event ID never counts twice</span>
+                <div class="full runtime-config-summary" id="developerRuntimeSummary" aria-live="polite"></div>
+                <div class="full runtime-webhook-settings hidden" id="developerWebhookRuntimePanel">
+                  <div class="runtime-settings-head"><div><span class="eyebrow">Webhook usage</span><h3>Monthly request allowance</h3><p>These settings appear only for products triggered by the buyer's app.</p></div><span class="pill blue">Hard limit</span></div>
+                  <div class="developer-field-grid">
+                    <div><label>Included requests / month</label><input class="input" name="webhook_included_runs" type="number" min="0" step="1" value="0" placeholder="e.g. 10"></div>
+                    <div><label>Requests in each add-on pack</label><input class="input" name="webhook_topup_runs" type="number" min="0" step="1" value="0" placeholder="e.g. 10"></div>
+                    <div><label id="developerWebhookTopupPriceLabel">Add-on pack price</label><input class="input" name="webhook_topup_price" type="number" min="0" step="0.01" value="0" placeholder="e.g. 19.00"></div>
+                    <div class="runtime-enforcement-note"><strong>Protection is automatic</strong><span>Requests stop at the allowance. A duplicate event ID never counts twice. Add-on runs expire with the current billing period.</span></div>
                   </div>
-                  <small>Run packs last through the buyer's current subscription billing period.</small>
                 </div>
                 <div class="full developer-workflow-source-panel developer-workflow-source-make hidden">
                   <div class="make-import-assistant">
@@ -2100,6 +2082,66 @@ company_url = context["inputs"].get("company_url")
       return Number(product?.setup_fee_usd || product?.setup_fee || 0);
     }
 
+    function updateDeveloperRuntimeConfigurationUI(options = {}) {
+      const form = document.getElementById("developerProductForm");
+      if (!form) return;
+      const provider = normalizeWorkflowProvider(form.elements.workflow_provider?.value || "n8n");
+      const triggerField = form.elements.runtime_trigger_mode;
+      const cadenceField = form.elements.runtime_run_frequency;
+      const responseField = form.elements.runtime_response_mode;
+      const trigger = String(triggerField?.value || "setup_complete");
+      const scheduled = trigger === "scheduled_interval";
+      const recurring = scheduled || trigger === "subscription_monthly";
+      const webhook = trigger === "buyer_webhook";
+
+      if (form.elements.runtime_type) {
+        form.elements.runtime_type.value = provider === "manual"
+          ? "manual"
+          : provider === "python"
+            ? "python_runner"
+            : "n8n_managed";
+      }
+      if (options.normalize !== false && cadenceField) {
+        if (trigger === "on_demand") cadenceField.value = "on_demand";
+        else if (trigger === "subscription_monthly") cadenceField.value = "monthly";
+        else if (["setup_complete", "buyer_webhook", "manual"].includes(trigger)) cadenceField.value = "manual";
+        else if (scheduled && ["manual", "on_demand"].includes(cadenceField.value)) cadenceField.value = "daily";
+      }
+
+      if (options.normalize !== false && webhook && form.elements.pricing_type) {
+        form.elements.pricing_type.value = "monthly";
+      }
+      document.getElementById("developerRuntimeCadenceField")?.classList.toggle("hidden", !scheduled);
+      document.getElementById("developerNoChangeField")?.classList.toggle("hidden", !recurring);
+      document.getElementById("developerWebhookRuntimePanel")?.classList.toggle("hidden", !webhook);
+
+      const help = {
+        setup_complete: "Nexus runs the workflow once after the buyer completes setup.",
+        on_demand: "The buyer starts each run from Nexus when they need it.",
+        buyer_webhook: "The buyer receives a dedicated connection page to test, map and activate requests from their own app.",
+        scheduled_interval: "Nexus runs the workflow automatically on the cadence you choose.",
+        subscription_monthly: "Nexus creates one new run each subscription month.",
+        manual: "Nexus records the order, while delivery is completed manually."
+      };
+      const triggerHelp = document.getElementById("developerRuntimeTriggerHelp");
+      if (triggerHelp) triggerHelp.textContent = help[trigger] || help.setup_complete;
+      const responseHelp = document.getElementById("developerRuntimeResponseHelp");
+      if (responseHelp) responseHelp.textContent = responseField?.value === "dashboard_output"
+        ? "The workflow must return visible content for the buyer's output library."
+        : "Use this when the main result appears in a message, alert or connected system.";
+
+      const summary = document.getElementById("developerRuntimeSummary");
+      if (summary) {
+        const providerLabel = form.elements.workflow_provider?.selectedOptions?.[0]?.textContent || "Workflow";
+        const triggerLabel = triggerField?.selectedOptions?.[0]?.textContent || "Run after setup";
+        const responseLabel = responseField?.selectedOptions?.[0]?.textContent || "Dashboard output";
+        const monthlyWarning = webhook && String(form.elements.pricing_type?.value || "") !== "monthly"
+          ? '<span class="runtime-config-warning">Webhook products must use monthly pricing before review.</span>'
+          : "";
+        summary.innerHTML = `<strong>${NexusUI.escapeHtml(providerLabel)}</strong><span>${NexusUI.escapeHtml(triggerLabel)} ? ${NexusUI.escapeHtml(responseLabel)}</span>${monthlyWarning}`;
+      }
+    }
+
     function updateDeveloperWorkflowProviderUI() {
       const form = document.getElementById("developerProductForm");
       if (!form) return;
@@ -2108,6 +2150,7 @@ company_url = context["inputs"].get("company_url")
       if (form.elements.workflow_provider && form.elements.workflow_provider.value !== provider) {
         form.elements.workflow_provider.value = provider;
       }
+      updateDeveloperRuntimeConfigurationUI({ normalize: false });
       const sourceProvider = provider === "zapier" ? "zapier" : "make";
       const sourceLabel = sourceProvider === "zapier" ? "Zapier" : "Make.com";
       const sourceName = sourceProvider === "zapier" ? "Zapier workflow" : "Make blueprint";
@@ -7059,6 +7102,10 @@ company_url = context["inputs"].get("company_url")
       });
 
       document.querySelector("[name='workflow_provider']")?.addEventListener("change", updateDeveloperWorkflowProviderUI);
+      document.querySelector("[name='runtime_trigger_mode']")?.addEventListener("change", () => updateDeveloperRuntimeConfigurationUI());
+      document.querySelector("[name='runtime_response_mode']")?.addEventListener("change", () => updateDeveloperRuntimeConfigurationUI({ normalize: false }));
+      document.querySelector("#developerProductForm [name='pricing_type']")?.addEventListener("change", () => updateDeveloperRuntimeConfigurationUI({ normalize: false }));
+      updateDeveloperRuntimeConfigurationUI({ normalize: false });
       updateDeveloperWorkflowProviderUI();
       document.querySelector("#developerProductForm [name='currency']")?.addEventListener("change", updateDeveloperPricingLabels);
       updateDeveloperPricingLabels();

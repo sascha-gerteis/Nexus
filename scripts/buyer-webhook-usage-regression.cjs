@@ -60,7 +60,7 @@ for (const [source, marker, label] of [
   [developerProducts, 'triggerMode === "buyer_webhook"', "developer backend opt-in handling"],
   [developerPage, 'value="buyer_webhook"', "developer product option"],
   [adminPage, 'value="buyer_webhook"', "admin product option"],
-  [buyerPage, "Webhook request usage", "buyer usage UI"],
+  [buyerPage, "Request usage", "buyer usage UI"],
   [buyerPage, "purchaseUsageTopup", "buyer run-pack action"],
   [buyerDashboard, 'return triggerMode === "buyer_webhook"', "dashboard exact opt-in gate"],
   [buyerDashboard, 'attempt.attempt_kind || "setup_bundle"', "bundle setup attempt filter"],

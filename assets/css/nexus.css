@@ -17497,3 +17497,84 @@ iframe {
     width: 100%;
   }
 }
+/* Streamlined runtime configuration shared by admin and developer editors. */
+.runtime-config-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .45rem .75rem;
+  min-height: 52px;
+  padding: .9rem 1rem;
+  border: 1px solid #dce7f4;
+  border-radius: 14px;
+  background: #f7faff;
+  color: #5e718b;
+  font-size: .87rem;
+}
+
+.runtime-config-summary strong {
+  color: #173454;
+}
+
+.runtime-config-summary .runtime-config-warning {
+  flex-basis: 100%;
+  color: #a45112;
+  font-weight: 700;
+}
+
+.runtime-webhook-settings {
+  padding: 1.1rem;
+  border: 1px solid #cfe0f5;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #f8fbff, #eef6ff);
+}
+
+.runtime-webhook-settings > .form-grid,
+.runtime-webhook-settings > .developer-field-grid {
+  margin-top: 1rem;
+}
+
+.runtime-settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.runtime-settings-head h3 {
+  margin: .2rem 0 .3rem;
+  color: #163352;
+}
+
+.runtime-settings-head p {
+  margin: 0;
+  color: #647892;
+  font-size: .88rem;
+}
+
+.runtime-enforcement-note {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: .35rem;
+  padding: .9rem 1rem;
+  border: 1px solid #bddccb;
+  border-radius: 13px;
+  background: #f0fbf5;
+}
+
+.runtime-enforcement-note strong {
+  color: #17603f;
+}
+
+.runtime-enforcement-note span {
+  color: #557368;
+  font-size: .82rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .runtime-settings-head {
+    flex-direction: column;
+  }
+}

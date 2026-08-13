@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260810-output-library">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260813-webhook-workspace">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
   <title>Webhook Setup | Nexus</title>
@@ -93,6 +93,54 @@
       .webhook-mapping-intro, .webhook-mapping-row { grid-template-columns: 1fr; }
       .webhook-mapping-arrow { display: none; }
     }
+    .webhook-hero { grid-template-columns: minmax(0, 1fr) 290px; align-items: stretch; }
+    .webhook-hero-status { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .webhook-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 20px 0; }
+    .webhook-progress-step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: center; padding: 13px 14px; border: 1px solid #dce6f3; border-radius: 15px; background: #fff; color: #71829a; }
+    .webhook-progress-step span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: #eef3f9; color: #687b95; font-weight: 900; }
+    .webhook-progress-step strong, .webhook-progress-step small { display: block; }
+    .webhook-progress-step strong { color: #314762; font-size: 13px; }
+    .webhook-progress-step small { margin-top: 2px; font-size: 11px; }
+    .webhook-progress-step.active { border-color: #9fc1f5; background: #eef5ff; }
+    .webhook-progress-step.active span { background: #2563eb; color: #fff; }
+    .webhook-progress-step.complete { border-color: #b8dfcc; background: #f0fbf6; }
+    .webhook-progress-step.complete span { background: #198754; color: #fff; }
+    .webhook-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
+    .webhook-main-flow, .webhook-side-flow { display: grid; gap: 20px; }
+    .webhook-card.current-step { border-color: #9fc1f5; box-shadow: 0 18px 42px rgba(37,99,235,.11); }
+    .webhook-card.complete-step { border-color: #b8dfcc; }
+    .webhook-card.locked-step { opacity: .72; }
+    .webhook-credentials { display: grid; gap: 13px; padding: 15px; border: 1px solid #dce6f3; border-radius: 15px; background: #f8fbff; }
+    .webhook-tester { margin-top: 18px; padding: 18px; border: 1px solid #cdddf1; border-radius: 17px; background: linear-gradient(145deg, #f8fbff, #eef6ff); }
+    .webhook-tester-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+    .webhook-tester-head h3 { margin: 0 0 4px; color: #173453; font-size: 17px; }
+    .webhook-tester-head p { margin: 0; color: #697c95; font-size: 12px; line-height: 1.5; }
+    .webhook-payload { min-height: 190px; resize: vertical; font: 12px/1.55 Consolas, Monaco, monospace; }
+    .webhook-inline-note { display: flex; gap: 10px; margin-top: 12px; padding: 12px 13px; border-radius: 12px; background: #fff7df; color: #6f5318; font-size: 12px; line-height: 1.5; }
+    .webhook-checklist { display: grid; gap: 10px; margin: 0 0 18px; }
+    .webhook-check { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 9px; align-items: center; color: #62758f; font-size: 13px; }
+    .webhook-check span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: #edf2f8; color: #71839a; font-weight: 900; }
+    .webhook-check.done { color: #245f46; }
+    .webhook-check.done span { background: #dff5e8; color: #168255; }
+    .webhook-side-flow .webhook-usage { margin: 0; }
+    .webhook-side-card { padding: 20px; border: 1px solid #dce6f3; border-radius: 19px; background: #fff; box-shadow: 0 12px 34px rgba(30,63,111,.06); }
+    .webhook-side-card h2 { margin: 4px 0 7px; color: #173453; font-size: 18px; }
+    .webhook-side-card p { margin: 0; color: #687b94; font-size: 13px; line-height: 1.55; }
+    .webhook-side-card details { margin-top: 14px; }
+    .webhook-side-card summary { cursor: pointer; color: #28578b; font-weight: 800; font-size: 13px; }
+    .webhook-advanced { overflow: hidden; }
+    .webhook-advanced > summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; padding: 19px 21px; list-style: none; color: #29425f; font-weight: 800; }
+    .webhook-advanced > summary::-webkit-details-marker { display: none; }
+    .webhook-advanced[open] > summary { border-bottom: 1px solid #e7eef7; }
+    .webhook-advanced-body { padding: 20px 22px 24px; }
+    @media (max-width: 920px) {
+      .webhook-workspace { grid-template-columns: 1fr; }
+      .webhook-side-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      .webhook-progress, .webhook-side-flow { grid-template-columns: 1fr; }
+      .webhook-hero { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body data-page="buyer-webhook-setup">
@@ -142,7 +190,8 @@
       notice: null,
       usage: null,
       topupCheckoutAvailable: false,
-      liveRuntimeEnabled: false
+      liveRuntimeEnabled: false,
+      testPayloadText: ""
     };
 
     function escapeHtml(value) {
@@ -200,7 +249,7 @@
       return String(mapping?.source_path || "");
     }
 
-    function renderEventMapping(readOnly) {
+    function renderEventMappingLegacy(readOnly) {
       const meta = mappingStatusMeta(webhookState.config?.event_mapping_status);
       const sources = Array.isArray(webhookState.eventSourcePaths) ? webhookState.eventSourcePaths : [];
       const fields = Array.isArray(webhookState.setupFields) ? webhookState.setupFields : [];
@@ -280,27 +329,44 @@
       `;
     }
 
+    function defaultWebhookTestPayload() {
+      return JSON.stringify({
+        event: { type: "message.received" },
+        message: {
+          text: "Test request from the Nexus webhook setup page",
+          subject: "Example customer request"
+        },
+        customer: {
+          id: "customer-001",
+          email: "buyer@example.com",
+          name: "Example Buyer",
+          priority: "normal"
+        },
+        sent_at: new Date().toISOString(),
+        source: "nexus_browser_test"
+      }, null, 2);
+    }
+
     function inboundCurl() {
       const url = webhookState.config?.inbound_url || "WEBHOOK_URL";
       const secret = webhookState.newSecret || "YOUR_WEBHOOK_SECRET";
       return `curl -X POST "${url}" \\\n  -H "Content-Type: application/json" \\\n  -H "x-nexus-webhook-secret: ${secret}" \\\n  -H "x-nexus-event-id: your-unique-event-id" \\\n  -d '{"event":"test","message":"Hello from my system"}'`;
     }
 
-    function renderUsageCard(readOnly, runtimeReady) {
+    function renderUsageCard(readOnly) {
       const usage = webhookState.usage || {};
       const total = Math.max(0, Number(usage.total_units || 0));
       const used = Math.max(0, Number(usage.used_units || 0));
       const remaining = Math.max(0, Number(usage.remaining_units || 0));
       const percent = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
-      const live = webhookState.liveRuntimeEnabled || webhookState.config?.live_enabled === true;
       const canTopup = webhookState.topupCheckoutAvailable && Number(usage.topup_units || 0) > 0 && Number(usage.topup_price || 0) > 0;
       return `
         <section class="webhook-usage">
           <div class="webhook-usage-head">
             <div>
-              <span class="webhook-eyebrow">Current billing period</span>
-              <h2>Webhook request usage</h2>
-              <p>Only accepted, unique live requests consume a run. Tests, rejected payloads and duplicate event IDs do not.</p>
+              <span class="webhook-eyebrow">This billing period</span>
+              <h2>Request usage</h2>
+              <p>Only accepted, unique live requests use the allowance.</p>
             </div>
             <div class="webhook-usage-number">${formatNumber(remaining)} left</div>
           </div>
@@ -311,18 +377,12 @@
             <span>${formatNumber(usage.purchased_units)} added</span>
             <span>Renews ${escapeHtml(formatDate(usage.period_end))}</span>
           </div>
-          <div class="webhook-actions">
-            ${live
-              ? `<button class="btn btn-secondary" type="button" onclick="setWebhookRuntime(false)" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "deactivate" ? "Pausing..." : "Pause live requests"}</button>`
-              : `<button class="btn btn-primary" type="button" onclick="setWebhookRuntime(true)" ${readOnly || !runtimeReady || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "activate" ? "Activating..." : "Activate live requests"}</button>`}
-            ${canTopup ? `<button class="btn btn-secondary" type="button" onclick="purchaseUsageTopup()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "topup" ? "Opening checkout..." : `Add ${formatNumber(usage.topup_units)} runs for ${escapeHtml(formatMoney(usage.topup_price, usage.currency))}`}</button>` : ""}
-          </div>
-          ${!runtimeReady ? `<p class="webhook-help">Confirm the inbound connection and event mapping before live requests can be activated.</p>` : ""}
+          ${canTopup ? `<div class="webhook-actions"><button class="btn btn-secondary" type="button" onclick="purchaseUsageTopup()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "topup" ? "Opening checkout..." : `Add ${formatNumber(usage.topup_units)} requests for ${escapeHtml(formatMoney(usage.topup_price, usage.currency))}`}</button></div>` : ""}
         </section>
       `;
     }
 
-    function renderPage() {
+    function renderPageLegacy() {
       const root = document.getElementById("webhookRoot");
       const config = webhookState.config;
       if (!root || !config) return;
@@ -457,6 +517,113 @@
       `;
     }
 
+    function renderEventMapping(readOnly) {
+      const meta = mappingStatusMeta(webhookState.config?.event_mapping_status);
+      const sources = Array.isArray(webhookState.eventSourcePaths) ? webhookState.eventSourcePaths : [];
+      const fields = Array.isArray(webhookState.setupFields) ? webhookState.setupFields : [];
+      const savedKeys = new Set(webhookState.savedSetupKeys || []);
+      const canValidate = webhookState.config?.inbound_status === "confirmed" && Boolean(webhookState.config?.inbound_last_event_id);
+      const confirmed = webhookState.config?.event_mapping_status === "confirmed";
+      const preview = webhookState.runtimePreview || webhookState.config?.event_mapping_preview || null;
+      return `
+        <article class="webhook-card ${confirmed ? "complete-step" : canValidate ? "current-step" : "locked-step"}">
+          <div class="webhook-card-head">
+            <div><span class="webhook-eyebrow">Step 2</span><h2>Choose what changes per request</h2><p>Connect values from the sample request to workflow inputs. Saved setup answers stay in place unless you map over them.</p></div>
+            <span class="webhook-step">${confirmed ? "?" : "2"}</span>
+          </div>
+          <div class="webhook-card-body">
+            ${!canValidate ? `<div class="webhook-status-box waiting"><strong>Complete the connection test first</strong><p>Nexus needs one confirmed sample request before mapping its fields.</p></div>` : ""}
+            ${fields.length ? `<div class="webhook-mapping-list">${fields.map((field, index) => {
+              const selected = configuredSourceFor(field.name);
+              const savedText = savedKeys.has(field.name) ? "Keep saved setup value" : "Do not override from request";
+              return `<div class="webhook-mapping-row">
+                <div class="webhook-mapping-target"><strong>${escapeHtml(field.label || field.name)}</strong><small>Workflow input ? setup.${escapeHtml(field.name)}</small></div>
+                <div class="webhook-mapping-arrow">?</div>
+                <select class="webhook-input webhook-mapping-select" data-target="${escapeHtml(field.name)}" id="eventMapping${index}" ${readOnly || !canValidate ? "disabled" : ""}>
+                  <option value="">${escapeHtml(savedText)}</option>
+                  ${sources.map(source => `<option value="${escapeHtml(source.path)}" ${selected === source.path ? "selected" : ""}>${escapeHtml(source.path)} ? ${escapeHtml(typeof source.sample === "object" ? JSON.stringify(source.sample) : source.sample)}</option>`).join("")}
+                </select>
+              </div>`;
+            }).join("")}</div>` : canValidate ? `<div class="webhook-status-box"><strong>No mapping required</strong><p>The workflow can read the complete request from <code>event.data</code> and <code>request</code>.</p></div>` : ""}
+            <div class="webhook-actions">
+              ${fields.length ? `<button class="btn btn-secondary" type="button" onclick="autoMatchEventMapping()" ${readOnly || !sources.length || webhookState.busy ? "disabled" : ""}>Suggest mappings</button>` : ""}
+              <button class="btn btn-primary" type="button" onclick="finishEventMapping()" ${readOnly || !canValidate || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "finish-mapping" ? "Checking mapping..." : confirmed ? "Revalidate mapping" : "Validate and confirm mapping"}</button>
+            </div>
+            <div class="webhook-status-box ${meta.tone}"><strong>${escapeHtml(meta.label)}</strong><p>${escapeHtml(webhookState.config?.event_mapping_last_error || meta.help)}</p></div>
+            ${preview ? `<details class="webhook-runtime-preview"><summary>Preview exactly what the workflow receives</summary><pre class="webhook-curl">${escapeHtml(JSON.stringify(preview, null, 2))}</pre></details>` : ""}
+          </div>
+        </article>`;
+    }
+
+    function renderConnectionCard(readOnly) {
+      const config = webhookState.config;
+      const inbound = statusMeta(config.inbound_status, "Inbound");
+      const confirmed = config.inbound_status === "confirmed";
+      const secretText = webhookState.newSecret
+        ? (webhookState.secretVisible ? webhookState.newSecret : "********************************")
+        : `Secret hidden ? ends in ${config.inbound_secret_hint || "------"}`;
+      const payload = webhookState.testPayloadText || defaultWebhookTestPayload();
+      return `
+        <article class="webhook-card ${confirmed ? "complete-step" : "current-step"}">
+          <div class="webhook-card-head">
+            <div><span class="webhook-eyebrow">Step 1</span><h2>Connect and test your app</h2><p>Copy the connection details, edit the sample request, and let Nexus verify the complete path without using a paid run.</p></div>
+            <span class="webhook-step">${confirmed ? "?" : "1"}</span>
+          </div>
+          <div class="webhook-card-body">
+            <div class="webhook-credentials">
+              <div class="webhook-field"><label>Webhook URL</label><div class="webhook-code-row"><div class="webhook-code" title="${escapeHtml(config.inbound_url)}">${escapeHtml(config.inbound_url)}</div><button class="btn btn-secondary btn-small" type="button" onclick="copyWebhookValue('url')">Copy URL</button></div></div>
+              <div class="webhook-field"><label>Secret header ? x-nexus-webhook-secret</label><div class="webhook-code-row"><div class="webhook-code webhook-secret ${webhookState.secretVisible ? "revealed" : ""}">${escapeHtml(secretText)}</div><button class="btn btn-secondary btn-small" type="button" onclick="toggleWebhookSecret()">${webhookState.secretVisible ? "Hide" : "Reveal"}</button></div></div>
+              <div class="webhook-actions">${webhookState.newSecret ? `<button class="btn btn-secondary btn-small" type="button" onclick="copyWebhookValue('secret')">Copy secret</button>` : ""}<button class="btn btn-secondary btn-small" type="button" onclick="rotateWebhookSecret()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "rotate" ? "Creating..." : webhookState.newSecret ? "Replace secret" : "Create a new secret"}</button></div>
+            </div>
+            ${!webhookState.newSecret ? `<div class="webhook-inline-note"><strong>Why testing is locked:</strong><span>Nexus stores only a secure hash, so an older secret cannot be shown again. Create a new secret here, update your app, then run the test.</span></div>` : ""}
+            <div class="webhook-tester">
+              <div class="webhook-tester-head"><div><h3>Request tester</h3><p>Edit this JSON to match what your app will send. Tests do not consume the monthly allowance.</p></div><span class="pill blue">Free test</span></div>
+              <textarea class="webhook-input webhook-payload" id="webhookTestPayload" spellcheck="false" oninput="webhookState.testPayloadText=this.value" ${readOnly ? "disabled" : ""}>${escapeHtml(payload)}</textarea>
+              <div class="webhook-actions"><button class="btn btn-primary" type="button" onclick="sendBrowserWebhookTest()" ${readOnly || !webhookState.newSecret || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "inbound-test" ? "Testing connection..." : "Run connection test"}</button><button class="btn btn-secondary" type="button" onclick="loadWebhookSetup(true)" ${webhookState.busy ? "disabled" : ""}>Check for request from my app</button>${config.inbound_status === "test_received" ? `<button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('inbound')" ${webhookState.busy ? "disabled" : ""}>Confirm received request</button>` : ""}</div>
+            </div>
+            <div class="webhook-status-box ${inbound.tone}"><strong>${escapeHtml(inbound.label)}</strong><p>${escapeHtml(inbound.help)} Last request: ${escapeHtml(formatDate(config.inbound_last_received_at))}</p></div>
+            <details class="webhook-runtime-preview"><summary>Use cURL or another tool instead</summary><pre class="webhook-curl">${escapeHtml(inboundCurl())}</pre></details>
+            ${renderHistory("inbound")}
+          </div>
+        </article>`;
+    }
+
+    function renderActivationCard(readOnly) {
+      const config = webhookState.config;
+      const connectionDone = config.inbound_status === "confirmed";
+      const mappingDone = config.event_mapping_status === "confirmed";
+      const destinationDone = ["confirmed", "not_configured"].includes(config.outbound_status);
+      const ready = connectionDone && mappingDone && destinationDone;
+      const live = webhookState.liveRuntimeEnabled || config.live_enabled === true;
+      const check = (done, text) => `<div class="webhook-check ${done ? "done" : ""}"><span>${done ? "?" : "?"}</span><strong>${escapeHtml(text)}</strong></div>`;
+      return `<article class="webhook-card ${live ? "complete-step" : ready ? "current-step" : "locked-step"}">
+        <div class="webhook-card-head"><div><span class="webhook-eyebrow">Step 3</span><h2>${live ? "Live requests are active" : "Activate when ready"}</h2><p>${live ? "Authenticated unique requests now create metered automation runs." : "Nothing goes live until the required checks below are complete and you activate it."}</p></div><span class="webhook-step">${live ? "?" : "3"}</span></div>
+        <div class="webhook-card-body"><div class="webhook-checklist">${check(connectionDone,"Connection tested")}${check(mappingDone,"Request mapping confirmed")}${check(destinationDone,"Result delivery ready")}</div><div class="webhook-actions">${live ? `<button class="btn btn-secondary" type="button" onclick="setWebhookRuntime(false)" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "deactivate" ? "Pausing..." : "Pause live requests"}</button>` : `<button class="btn btn-primary" type="button" onclick="setWebhookRuntime(true)" ${readOnly || !ready || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "activate" ? "Activating..." : "Activate live requests"}</button>`}</div></div>
+      </article>`;
+    }
+
+    function renderOutboundAdvanced(readOnly) {
+      const config = webhookState.config;
+      const outbound = statusMeta(config.outbound_status, "Outbound");
+      return `<details class="webhook-card webhook-advanced"><summary><span>Optional ? send completed results to my app</span><span>${escapeHtml(outbound.label)}</span></summary><div class="webhook-advanced-body"><form onsubmit="event.preventDefault(); testOutboundWebhook();"><div class="webhook-field"><label for="outboundWebhookUrl">HTTPS destination URL</label><input class="webhook-input" id="outboundWebhookUrl" type="url" inputmode="url" autocomplete="url" value="${escapeHtml(config.outbound_url || "")}" placeholder="https://example.com/webhooks/nexus" ${readOnly ? "disabled" : ""}><p class="webhook-help">Leave empty when buyers use the Nexus dashboard. Private networks, localhost and embedded credentials are rejected.</p></div><div class="webhook-actions"><button class="btn btn-primary" type="submit" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "outbound-test" ? "Testing..." : "Save and test destination"}</button>${config.outbound_status === "test_succeeded" ? `<button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('outbound')">Confirm destination</button>` : ""}</div></form><div class="webhook-status-box ${outbound.tone}"><strong>${escapeHtml(outbound.label)}</strong><p>${escapeHtml(config.outbound_last_error || outbound.help)}</p></div>${renderHistory("outbound")}</div></details>`;
+    }
+
+    function renderPage() {
+      const root = document.getElementById("webhookRoot");
+      const config = webhookState.config;
+      if (!root || !config) return;
+      const connectionDone = config.inbound_status === "confirmed";
+      const mappingDone = config.event_mapping_status === "confirmed";
+      const live = webhookState.liveRuntimeEnabled || config.live_enabled === true;
+      const readOnly = /cancel|expired/i.test([webhookState.customerAutomation?.status, webhookState.order?.order_status, webhookState.order?.stripe_subscription_status].join(" "));
+      const stepClass = (done, active) => done ? "complete" : active ? "active" : "";
+      root.innerHTML = `
+        <section class="webhook-hero"><div><span class="webhook-eyebrow">Webhook connection</span><h1>${escapeHtml(productTitle())}</h1><p>Connect your app, prove one sample request, choose the event fields your workflow needs, then activate live usage.</p></div><div class="webhook-hero-status"><span>Status</span><strong>${live ? "Live and receiving requests" : mappingDone ? "Ready to activate" : connectionDone ? "Mapping required" : "Connection test required"}</strong></div></section>
+        <div class="webhook-progress" aria-label="Webhook setup progress"><div class="webhook-progress-step ${stepClass(connectionDone,!connectionDone)}"><span>${connectionDone ? "?" : "1"}</span><div><strong>Connect</strong><small>Send a free test</small></div></div><div class="webhook-progress-step ${stepClass(mappingDone,connectionDone&&!mappingDone)}"><span>${mappingDone ? "?" : "2"}</span><div><strong>Map</strong><small>Choose request fields</small></div></div><div class="webhook-progress-step ${stepClass(live,mappingDone&&!live)}"><span>${live ? "?" : "3"}</span><div><strong>Activate</strong><small>Start live usage</small></div></div></div>
+        ${webhookState.notice ? `<div class="webhook-status-box ${escapeHtml(webhookState.notice.tone || "")}"><strong>${escapeHtml(webhookState.notice.title)}</strong><p>${escapeHtml(webhookState.notice.message)}</p></div>` : ""}
+        <div class="webhook-workspace"><div class="webhook-main-flow">${renderConnectionCard(readOnly)}${renderEventMapping(readOnly)}${renderActivationCard(readOnly)}${renderOutboundAdvanced(readOnly)}</div><aside class="webhook-side-flow">${renderUsageCard(readOnly)}<section class="webhook-side-card"><span class="webhook-eyebrow">What to expect</span><h2>Safe until activation</h2><p>Connection tests, invalid payloads and duplicate event IDs never consume a run. Nexus blocks live requests automatically when the allowance reaches zero.</p><details><summary>Required request headers</summary><pre class="webhook-curl">Content-Type: application/json\nx-nexus-webhook-secret: YOUR_SECRET\nx-nexus-event-id: UNIQUE_EVENT_ID</pre></details></section></aside></div>`;
+    }
+
     function showNotice(title, message, tone = "") {
       webhookState.notice = { title, message, tone };
       renderPage();
@@ -546,7 +713,7 @@
       }
     }
 
-    async function sendBrowserWebhookTest() {
+    async function sendBrowserWebhookTestLegacy() {
       if (!webhookState.newSecret) {
         showNotice("Secret required", "Rotate the secret first so this browser can send an authenticated test.", "waiting");
         return;
@@ -583,6 +750,55 @@
         webhookState.notice = { title: "Inbound test received", message: "Nexus received the authenticated request. Confirm the connection to finish this step.", tone: "success" };
       } catch (error) {
         webhookState.notice = { title: "Inbound test failed", message: error.message || "Nexus could not receive the test request.", tone: "error" };
+      } finally {
+        webhookState.busy = "";
+        renderPage();
+      }
+    }
+
+    async function sendBrowserWebhookTest() {
+      const payloadField = document.getElementById("webhookTestPayload");
+      webhookState.testPayloadText = String(payloadField?.value || webhookState.testPayloadText || defaultWebhookTestPayload()).trim();
+      let payload;
+      try {
+        payload = JSON.parse(webhookState.testPayloadText);
+        if (!payload || Array.isArray(payload) || typeof payload !== "object") throw new Error("Use one JSON object as the request body.");
+      } catch (error) {
+        showNotice("Fix the sample JSON", error.message || "The request body must be valid JSON.", "error");
+        return;
+      }
+      if (!webhookState.newSecret) {
+        showNotice("Create a new secret first", "Nexus cannot reveal an older stored secret. Create a new one here, then run the test.", "waiting");
+        return;
+      }
+      webhookState.busy = "inbound-test";
+      renderPage();
+      try {
+        const eventId = `buyer-test-${Date.now()}`;
+        const response = await fetch(webhookState.config.inbound_url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-nexus-webhook-secret": webhookState.newSecret,
+            "x-nexus-event-id": eventId
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.ok === false) throw new Error(data.error || `Webhook test returned HTTP ${response.status}.`);
+        let refreshed = await callWebhookConfig({ action: "load" });
+        applyWebhookData(refreshed);
+        if (webhookState.config?.inbound_status === "test_received") {
+          refreshed = await callWebhookConfig({ action: "confirm", direction: "inbound" });
+          applyWebhookData(refreshed);
+        }
+        webhookState.notice = { title: "Connection test passed", message: "Nexus received and confirmed the sample request. Continue to request mapping below.", tone: "success" };
+      } catch (error) {
+        webhookState.notice = { title: "Connection test failed", message: error.message || "Nexus could not receive the sample request.", tone: "error" };
+        try {
+          const refreshed = await callWebhookConfig({ action: "load" });
+          applyWebhookData(refreshed);
+        } catch {}
       } finally {
         webhookState.busy = "";
         renderPage();
@@ -642,6 +858,33 @@
         if (match) select.value = match.path;
       });
       NexusUI.toast("Matching event fields selected. Review them before saving.");
+    }
+
+    async function finishEventMapping() {
+      const mappings = collectEventMappings();
+      webhookState.busy = "finish-mapping";
+      renderPage();
+      try {
+        let data = await callWebhookConfig({ action: "save_mapping", mappings });
+        applyWebhookData(data);
+        data = await callWebhookConfig({ action: "validate_mapping" });
+        applyWebhookData(data);
+        if (webhookState.config?.event_mapping_status !== "validated") {
+          throw new Error(webhookState.config?.event_mapping_last_error || "The latest request could not validate this mapping.");
+        }
+        data = await callWebhookConfig({ action: "confirm_mapping" });
+        applyWebhookData(data);
+        webhookState.notice = { title: "Request mapping confirmed", message: "Nexus verified the selected fields against the latest request. You can now activate live requests.", tone: "success" };
+      } catch (error) {
+        webhookState.notice = { title: "Mapping needs attention", message: error.message || "Review the selected request fields and try again.", tone: "error" };
+        try {
+          const refreshed = await callWebhookConfig({ action: "load" });
+          applyWebhookData(refreshed);
+        } catch {}
+      } finally {
+        webhookState.busy = "";
+        renderPage();
+      }
     }
 
     async function saveEventMapping() {
