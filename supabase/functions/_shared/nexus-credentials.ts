@@ -560,6 +560,17 @@ const PROVIDER_PRESETS = [
     ],
   },
   {
+    provider: "google_maps_api_key",
+    label: "Google Maps / Places API Key",
+    n8nCredentialType: "httpQueryAuth",
+    matches: ["maps.googleapis.com", "places.googleapis.com", "google places", "google maps api", "google_places_api_key"],
+    aliases: { api_key: "value", apiKey: "value", key: "value", token: "value", query_value: "value", name: "name", query_name: "name" },
+    defaults: { name: "key" },
+    setupHints: [
+      "Use a Google Maps Platform API key with the Places API enabled and restrict it to the required APIs and server IPs.",
+    ],
+  },
+  {
     provider: "google_service_account",
     label: "Google Service Account",
     n8nCredentialType: "googleApi",
@@ -824,6 +835,14 @@ const PROVIDER_PRESETS = [
     aliases: TOKEN_ALIASES,
   },
   {
+    provider: "query_api_key",
+    label: "Generic Query API Key",
+    n8nCredentialType: "httpQueryAuth",
+    matches: ["httpqueryauth", "http query", "query api key", "query parameter api key"],
+    aliases: { api_key: "value", apiKey: "value", key: "value", token: "value", query_value: "value", name: "name", query_name: "name" },
+    defaults: { name: "key" },
+  },
+  {
     provider: "webhook_api",
     label: "Generic API / Webhook",
     n8nCredentialType: "httpHeaderAuth",
@@ -866,6 +885,7 @@ const GENERIC_CREDENTIAL_PROVIDERS = new Set([
   "basic_auth",
   "bearer_token",
   "custom",
+  "query_api_key",
   "webhook_api",
 ]);
 
@@ -917,7 +937,11 @@ export function providerPreset(value: unknown) {
     return PROVIDER_PRESETS.find((preset) => preset.provider === "bearer_token") || null;
   }
 
-  if (raw === "httpheaderauth" || raw === "httpqueryauth" || raw === "httpcustomauth") {
+  if (raw === "httpqueryauth") {
+    return PROVIDER_PRESETS.find((preset) => preset.provider === "query_api_key") || null;
+  }
+
+  if (raw === "httpheaderauth" || raw === "httpcustomauth") {
     return PROVIDER_PRESETS.find((preset) => preset.provider === "webhook_api") || null;
   }
 

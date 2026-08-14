@@ -1272,6 +1272,7 @@ company_url = context["inputs"].get("company_url")
         ["perplexity", "Perplexity", "perplexityApi"]
       ]],
       ["Search, scraping, and browser data", [
+        ["google_maps_api_key", "Google Maps / Places API Key", "httpQueryAuth"],
         ["apify", "Apify", "httpBearerAuth"],
         ["firecrawl", "Firecrawl", "httpBearerAuth"],
         ["browserless", "Browserless", "browserlessApi"],
@@ -1350,6 +1351,7 @@ company_url = context["inputs"].get("company_url")
         ["make", "Make.com", "httpHeaderAuth"],
         ["zapier", "Zapier", "httpBearerAuth"],
         ["webhook_api", "Generic API / Webhook", "httpHeaderAuth"],
+        ["query_api_key", "Generic Query API Key", "httpQueryAuth"],
         ["bearer_token", "Generic Bearer Token", "httpBearerAuth"],
         ["basic_auth", "Generic Basic Auth", "httpBasicAuth"],
         ["custom", "Custom / Other", ""]
@@ -3483,6 +3485,7 @@ company_url = context["inputs"].get("company_url")
     function providerForCredentialType(type) {
       const cleanType = String(type || "").trim().toLowerCase();
       if (!cleanType) return "";
+      if (cleanType === "httpqueryauth") return "query_api_key";
 
       for (const [_groupLabel, options] of credentialProviderGroups) {
         const match = options.find(([provider, _label, n8nType]) => (

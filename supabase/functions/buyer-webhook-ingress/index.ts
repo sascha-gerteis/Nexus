@@ -247,7 +247,7 @@ Deno.serve(async (req) => {
     if (existingEventError) throw new Error(existingEventError.message);
     // Successful events are immutable idempotent duplicates. Failed events
     // continue below so a corrected payload or newly purchased quota can retry.
-    if (existingEvent?.status === "succeeded") {
+    if (existingEvent?.status === "succeeded" && config.live_enabled !== true) {
       return jsonResponse({
         ok: true,
         accepted: true,

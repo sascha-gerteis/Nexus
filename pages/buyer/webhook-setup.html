@@ -613,6 +613,7 @@
       const config = webhookState.config;
       const inbound = statusMeta(config.inbound_status, "Inbound");
       const confirmed = config.inbound_status === "confirmed";
+      const live = webhookState.liveRuntimeEnabled || config.live_enabled === true;
       const secretText = webhookState.newSecret
         ? (webhookState.secretVisible ? webhookState.newSecret : "********************************")
         : `Existing secret saved (ending in ${config.inbound_secret_hint || "------"})`;
@@ -620,7 +621,7 @@
       return `
         <article class="webhook-card ${confirmed ? "complete-step" : "current-step"}">
           <div class="webhook-card-head">
-            <div><span class="webhook-eyebrow">Step 1</span><h2>Connect and test your app</h2><p>Copy the connection details, edit the sample request, and let Nexus verify the complete path without using a paid run.</p></div>
+            <div><span class="webhook-eyebrow">Step 1</span><h2>Connect and test your app</h2><p>${live ? "Your connection is verified. A request sent now is a real metered workflow run." : "Copy the connection details, edit the sample request, and let Nexus verify the connection without using a paid run."}</p></div>
             <span class="webhook-step">${confirmed ? "&#10003;" : "1"}</span>
           </div>
           <div class="webhook-card-body">
@@ -631,9 +632,9 @@
             </div>
             ${!webhookState.newSecret ? `<div class="webhook-inline-note"><strong>Your existing secret still works.</strong><span>For security, Nexus cannot display it again. Send a test from your app and check the status below, or create a replacement secret to use this browser tester.</span></div>` : ""}
             <div class="webhook-tester">
-              <div class="webhook-tester-head"><div><h3>Request tester</h3><p>Edit this JSON to match what your app will send. Tests do not consume the monthly allowance.</p></div><span class="pill blue">Free test</span></div>
+              <div class="webhook-tester-head"><div><h3>${live ? "Live workflow tester" : "Request tester"}</h3><p>${live ? "This sends one real request through Nexus to n8n and consumes one included run." : "Edit this JSON to match what your app will send. Connection tests do not consume the monthly allowance."}</p></div><span class="pill ${live ? "orange" : "blue"}">${live ? "Uses 1 run" : "Free test"}</span></div>
               <textarea class="webhook-input webhook-payload" id="webhookTestPayload" spellcheck="false" oninput="webhookState.testPayloadText=this.value" ${readOnly ? "disabled" : ""}>${escapeHtml(payload)}</textarea>
-              <div class="webhook-actions">${webhookState.newSecret ? `<button class="btn btn-primary" type="button" onclick="sendBrowserWebhookTest()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "inbound-test" ? "Testing connection..." : "Run connection test"}</button>` : ""}<button class="btn btn-secondary" type="button" onclick="loadWebhookSetup(true)" ${webhookState.busy ? "disabled" : ""}>Check request status</button>${config.inbound_status === "test_received" ? `<button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('inbound')" ${webhookState.busy ? "disabled" : ""}>Confirm received request</button>` : ""}</div>
+              <div class="webhook-actions">${webhookState.newSecret ? `<button class="btn btn-primary" type="button" onclick="sendBrowserWebhookTest()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "inbound-test" ? (live ? "Sending live run..." : "Testing connection...") : (live ? "Send live workflow test" : "Run connection test")}</button>` : ""}<button class="btn btn-secondary" type="button" onclick="loadWebhookSetup(true)" ${webhookState.busy ? "disabled" : ""}>Check request status</button>${config.inbound_status === "test_received" ? `<button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('inbound')" ${webhookState.busy ? "disabled" : ""}>Confirm received request</button>` : ""}</div>
             </div>
             <div class="webhook-status-box ${inbound.tone}"><strong>${escapeHtml(inbound.label)}</strong><p>${escapeHtml(inbound.help)} Last request: ${escapeHtml(formatDate(config.inbound_last_received_at))}</p></div>
             <details class="webhook-runtime-preview"><summary>Use cURL or another tool instead</summary><pre class="webhook-curl">${escapeHtml(inboundCurl())}</pre></details>
@@ -651,7 +652,7 @@
       const live = webhookState.liveRuntimeEnabled || config.live_enabled === true;
       const check = (done, text) => `<div class="webhook-check ${done ? "done" : ""}"><span>${done ? "&#10003;" : "&middot;"}</span><strong>${escapeHtml(text)}</strong></div>`;
       return `<article class="webhook-card ${live ? "complete-step" : ready ? "current-step" : "locked-step"}">
-        <div class="webhook-card-head"><div><span class="webhook-eyebrow">Step 3</span><h2>${live ? "Live requests are active" : "Activate when ready"}</h2><p>${live ? "Authenticated unique requests now create metered automation runs." : "Nothing goes live until the required checks below are complete and you activate it."}</p></div><span class="webhook-step">${live ? "&#10003;" : "3"}</span></div>
+        <div class="webhook-card-head"><div><span class="webhook-eyebrow">Step 3</span><h2>${live ? "Live requests are active" : "Activate when ready"}</h2><p>${live ? "Authenticated unique requests now create metered automation runs. Use the live tester above or send a new request from your app; Nexus returns a run ID when it is queued." : "Nothing goes live until the required checks below are complete and you activate it."}</p></div><span class="webhook-step">${live ? "&#10003;" : "3"}</span></div>
         <div class="webhook-card-body"><div class="webhook-checklist">${check(connectionDone,"Connection tested")}${check(mappingDone,"Request mapping confirmed")}${check(destinationDone,"Result delivery ready")}</div><div class="webhook-actions">${live ? `<button class="btn btn-secondary" type="button" onclick="setWebhookRuntime(false)" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "deactivate" ? "Pausing..." : "Pause live requests"}</button>` : `<button class="btn btn-primary" type="button" onclick="setWebhookRuntime(true)" ${readOnly || !ready || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "activate" ? "Activating..." : "Activate live requests"}</button>`}</div></div>
       </article>`;
     }
@@ -811,6 +812,7 @@
     }
 
     async function sendBrowserWebhookTest() {
+      const liveRequest = webhookState.liveRuntimeEnabled || webhookState.config?.live_enabled === true;
       const payloadField = document.getElementById("webhookTestPayload");
       webhookState.testPayloadText = String(payloadField?.value || webhookState.testPayloadText || defaultWebhookTestPayload()).trim();
       let payload;
@@ -828,7 +830,7 @@
       webhookState.busy = "inbound-test";
       renderPage();
       try {
-        const eventId = `buyer-test-${Date.now()}`;
+        const eventId = `${liveRequest ? "buyer-live-test" : "buyer-test"}-${Date.now()}`;
         const response = await fetch(webhookState.config.inbound_url, {
           method: "POST",
           headers: {
@@ -842,13 +844,17 @@
         if (!response.ok || data.ok === false) throw new Error(data.error || `Webhook test returned HTTP ${response.status}.`);
         let refreshed = await callWebhookConfig({ action: "load" });
         applyWebhookData(refreshed);
-        if (webhookState.config?.inbound_status === "test_received") {
-          refreshed = await callWebhookConfig({ action: "confirm", direction: "inbound" });
-          applyWebhookData(refreshed);
+        if (liveRequest) {
+          webhookState.notice = { title: "Live workflow run queued", message: data.run_id ? `Nexus created run ${data.run_id}. It will appear in your outputs after n8n finishes.` : "Nexus accepted the live request and queued it for n8n.", tone: "success" };
+        } else {
+          if (webhookState.config?.inbound_status === "test_received") {
+            refreshed = await callWebhookConfig({ action: "confirm", direction: "inbound" });
+            applyWebhookData(refreshed);
+          }
+          webhookState.notice = { title: "Connection test passed", message: "Nexus received and confirmed the free sample request. Continue to request mapping below.", tone: "success" };
         }
-        webhookState.notice = { title: "Connection test passed", message: "Nexus received and confirmed the sample request. Continue to request mapping below.", tone: "success" };
       } catch (error) {
-        webhookState.notice = { title: "Connection test failed", message: error.message || "Nexus could not receive the sample request.", tone: "error" };
+        webhookState.notice = { title: liveRequest ? "Live workflow test failed" : "Connection test failed", message: error.message || "Nexus could not receive the request.", tone: "error" };
         try {
           const refreshed = await callWebhookConfig({ action: "load" });
           applyWebhookData(refreshed);

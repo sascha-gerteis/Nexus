@@ -46,7 +46,7 @@ for (const [source, marker, label] of [
   [buyerPage, "NexusDB.requireBuyer", "buyer authentication"],
   [buyerPage, "Confirm received request", "inbound confirmation control"],
   [buyerPage, "Save and test destination", "outbound test control"],
-  [buyerPage, "Tests do not consume the monthly allowance", "test-mode buyer disclosure"],
+  [buyerPage, "Connection tests do not consume the monthly allowance", "test-mode buyer disclosure"],
   [checkoutSuccess, 'runtimeTriggerMode === "buyer_webhook"', "checkout webhook route gate"],
   [checkoutSuccess, "/pages/buyer/webhook-setup.html?id=", "checkout webhook destination"],
   [buyerDashboard, "return getBuyerWebhookSetupUrl(item)", "primary dashboard webhook route"],

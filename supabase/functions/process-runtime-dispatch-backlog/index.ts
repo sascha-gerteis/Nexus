@@ -436,6 +436,16 @@ async function loadSetupSubmission(adminClient: any, queue: any) {
 
   const { data, error } = await query.maybeSingle();
   if (error) throw new Error(`Could not load saved setup: ${error.message}`);
+  if (!data && cleanString(queue.dispatch_origin).toLowerCase() === "buyer_webhook") {
+    return {
+      id: null,
+      customer_automation_id: queue.customer_automation_id,
+      answers: {},
+      setup_answers: {},
+      credential_keys_available: [],
+      created_at: queue.created_at || new Date().toISOString(),
+    };
+  }
   if (!data) throw new Error("The saved setup submission no longer exists.");
   return data;
 }
@@ -987,6 +997,95 @@ async function triggerDueSchedules(limit: number) {
     error: response.ok ? null : cleanString(data?.error || data?.message),
   };
 }
+async function reconcileStaleN8nRuns(adminClient: any, limit: number) {
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const candidateLimit = Math.max(50, Math.min(limit * 25, 250));
+  const { data: staleRuns, error } = await adminClient
+    .from("automation_runs")
+    .select("id,customer_automation_id,created_at,updated_at")
+    .eq("runtime_type", "n8n_managed")
+    .eq("status", "running")
+    .lt("updated_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(candidateLimit);
+
+  if (error) {
+    return { ok: false, checked: 0, error: cleanString(error.message), results: [] };
+  }
+
+  const customerAutomationIds = Array.from(new Set(
+    (staleRuns || []).map((run: any) => cleanString(run.customer_automation_id)).filter(Boolean),
+  ));
+  const latestLookups = await Promise.all(customerAutomationIds.map(async (customerAutomationId) => {
+    const { data, error: latestError } = await adminClient
+      .from("automation_runs")
+      .select("id,customer_automation_id,created_at")
+      .eq("customer_automation_id", customerAutomationId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return {
+      customer_automation_id: customerAutomationId,
+      run_id: cleanString(data?.id),
+      error: latestError ? cleanString(latestError.message) : "",
+    };
+  }));
+  const lookupErrors = latestLookups.filter((lookup) => lookup.error);
+  const latestRunIds = new Set(
+    latestLookups.filter((lookup) => !lookup.error && lookup.run_id).map((lookup) => lookup.run_id),
+  );
+  const latestStaleRuns = (staleRuns || [])
+    .filter((run: any) => latestRunIds.has(cleanString(run.id)))
+    .slice(0, limit);
+
+  const results = await Promise.all(latestStaleRuns.map(async (run: any) => {
+    try {
+      const response = await fetch(
+        `${cleanBaseUrl(SUPABASE_URL)}/functions/v1/check-n8n-execution`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            "x-nexus-runtime-secret": NEXUS_RUNTIME_SECRET,
+          },
+          body: JSON.stringify({
+            customer_automation_id: run.customer_automation_id,
+            run_id: run.id,
+          }),
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+      return {
+        run_id: run.id,
+        ok: response.ok && data?.ok !== false,
+        status: response.status,
+        result_status: cleanString(data?.status || data?.result?.status),
+        error: response.ok ? null : cleanString(data?.error || data?.message),
+      };
+    } catch (runError) {
+      return {
+        run_id: run.id,
+        ok: false,
+        status: 0,
+        result_status: "reconcile_error",
+        error: runError instanceof Error ? runError.message : cleanString(runError),
+      };
+    }
+  }));
+
+  return {
+    ok: lookupErrors.length === 0 && results.every((item: any) => item.ok),
+    checked: results.length,
+    candidates: (staleRuns || []).length,
+    superseded_skipped: Math.max(0, (staleRuns || []).length - latestStaleRuns.length),
+    lookup_errors: lookupErrors.length,
+    errors: results.filter((item: any) => !item.ok).length,
+    results,
+  };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1008,6 +1107,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const workerToken = cleanString(req.headers.get("x-nexus-dispatch-worker"));
   const limit = Math.max(1, Math.min(Number(body.limit || 25) || 25, 100));
+  const reconcileLimit = Math.max(1, Math.min(Number(body.reconcile_limit || 2) || 2, 5));
   const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   const { data: authorized, error: authError } = await adminClient.rpc(
@@ -1050,6 +1150,15 @@ Deno.serve(async (req) => {
       error: error instanceof Error ? error.message : cleanString(error),
     }))
     : null;
+  const reconciliation = body.run_due === true
+    ? await reconcileStaleN8nRuns(adminClient, reconcileLimit).catch((error) => ({
+      ok: false,
+      checked: 0,
+      errors: 1,
+      error: error instanceof Error ? error.message : cleanString(error),
+      results: [],
+    }))
+    : null;
 
   return jsonResponse({
     ok: true,
@@ -1060,6 +1169,7 @@ Deno.serve(async (req) => {
     cancelled: results.filter((result: any) => result.status === "cancelled").length,
     worker_errors: results.filter((result: any) => result.status === "worker_error").length,
     schedules,
+    reconciliation,
     results,
   });
 });
