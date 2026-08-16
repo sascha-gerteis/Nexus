@@ -454,7 +454,7 @@ function runtimeMappingPreview(config: any, customerAutomation: any, savedSetup:
   const automation = one(customerAutomation?.automations) || {};
   const order = one(customerAutomation?.orders) || {};
   const schemas = webhookSchemas(automation);
-  const mappings = normalizeEventMappings(config.event_mapping, schemas.eventFields);
+  const mappings = normalizeEventMappings(config.event_mapping, schemas.inputFields);
   return buildWebhookRuntimeEnvelope({
     customerAutomation,
     automation,

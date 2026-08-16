@@ -38,6 +38,8 @@ expect(config.includes("runtime_event_schema"), "Config service does not load th
 expect(config.includes("event_fields: schemas.eventFields"), "Config response does not separate event fields.");
 expect(config.includes("saved_setup: savedSetup"), "Config response does not return safe saved defaults.");
 expect(ingress.includes("eventSchema: eventFields"), "Live ingress does not normalize declared event fields.");
+expect(ingress.includes("normalizeEventMappings(config.event_mapping, inputFields)"), "Live ingress does not preserve already-confirmed legacy setup mappings during transition.");
+expect(config.includes("normalizeEventMappings(config.event_mapping, schemas.inputFields)"), "Config preview does not preserve already-confirmed legacy setup mappings during transition.");
 expect(importer.includes('runtimeContextPath("event.data", cleanKey)'), "n8n importer does not resolve event placeholders to normalized event data.");
 expect(page.includes("Set defaults and match request fields"), "Buyer page is missing the corrected Step 2 contract.");
 expect(page.includes("Saved once"), "Buyer page is missing stable setup defaults.");
@@ -60,5 +62,6 @@ console.log(JSON.stringify({
   stableSetupSeparatedFromEvents: true,
   savedFallbacksSupported: true,
   normalizedEventImportSupported: true,
+  existingMappingsRemainCompatible: true,
   pageSyntax: true,
 }));

@@ -348,7 +348,7 @@ Deno.serve(async (req) => {
       const savedSetup = await loadSavedSetup(adminClient, customerAutomation, automation);
       const eventFields = eventFieldDefinitions(automation.runtime_event_schema, automation.setup_schema);
       const inputFields = webhookInputFieldDefinitions(automation.setup_schema, automation.runtime_event_schema);
-      const mappings = normalizeEventMappings(config.event_mapping, eventFields);
+      const mappings = normalizeEventMappings(config.event_mapping, inputFields);
       const runtime = buildWebhookRuntimeEnvelope({
         customerAutomation,
         automation,
