@@ -82,6 +82,7 @@ function publicConfig(row: any) {
     inbound_url: endpointUrl(row.inbound_endpoint_id),
     inbound_secret_hint: row.inbound_secret_hint || "",
     inbound_status: row.inbound_status || "awaiting_test",
+    inbound_test_started_at: row.inbound_test_started_at || null,
     inbound_last_received_at: row.inbound_last_received_at || null,
     inbound_last_event_id: row.inbound_last_event_id || "",
     inbound_last_payload_preview: row.inbound_last_payload_preview || {},
@@ -494,7 +495,26 @@ Deno.serve(async (req) => {
       return errorResponse("This automation is cancelled or expired, so its webhook settings are read-only.", 409);
     }
 
-    if (action === "rotate_secret") {
+    if (action === "begin_inbound_test") {
+      if (config.live_enabled === true) {
+        return errorResponse("Pause live webhook requests before starting a new connection test.", 409);
+      }
+      config = await updateOwnedConfig(adminClient, config, auth.user.id, {
+        inbound_status: "awaiting_test",
+        inbound_test_started_at: nowIso(),
+        inbound_last_received_at: null,
+        inbound_last_event_id: null,
+        inbound_last_payload_preview: {},
+        inbound_confirmed_at: null,
+        event_mapping_status: "not_configured",
+        event_mapping_last_event_id: null,
+        event_mapping_last_validated_at: null,
+        event_mapping_last_error: null,
+        event_mapping_preview: {},
+        event_mapping_confirmed_at: null,
+        live_enabled: false,
+      });
+    } else if (action === "rotate_secret") {
       const secret = randomSecret();
       const { data, error } = await adminClient
         .from(CONFIG_TABLE)
@@ -502,6 +522,7 @@ Deno.serve(async (req) => {
           inbound_secret_hash: await sha256(secret),
           inbound_secret_hint: secret.slice(-6),
           inbound_status: "awaiting_test",
+          inbound_test_started_at: null,
           inbound_last_received_at: null,
           inbound_last_event_id: null,
           inbound_last_payload_preview: {},
@@ -670,6 +691,11 @@ Deno.serve(async (req) => {
       if (direction === "inbound") {
         if (!['test_received', 'confirmed'].includes(cleanString(config.inbound_status))) {
           return errorResponse("Send a successful inbound webhook test before confirming this connection.", 409);
+        }
+        const testStartedAt = Date.parse(cleanString(config.inbound_test_started_at));
+        const requestReceivedAt = Date.parse(cleanString(config.inbound_last_received_at));
+        if (!Number.isFinite(testStartedAt) || !Number.isFinite(requestReceivedAt) || requestReceivedAt < testStartedAt) {
+          return errorResponse("Start a new connection test, then send a fresh authenticated request from your app before confirming.", 409);
         }
         updates.inbound_status = "confirmed";
         updates.inbound_confirmed_at = config.inbound_confirmed_at || nowIso();

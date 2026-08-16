@@ -8,6 +8,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 
 const migration = read("supabase/migrations/20260812000100_buyer_webhook_setup.sql");
 const usageMigration = read("supabase/migrations/20260812000300_buyer_webhook_usage_metering.sql");
+const testWindowMigration = read("supabase/migrations/20260816000100_webhook_connection_test_windows.sql");
 const configFunction = read("supabase/functions/buyer-webhook-config/index.ts");
 const ingressFunction = read("supabase/functions/buyer-webhook-ingress/index.ts");
 const cors = read("supabase/functions/_shared/cors.ts");
@@ -25,12 +26,15 @@ for (const [source, marker, label] of [
   [migration, "enable row level security", "webhook RLS"],
   [migration, "revoke all on public.customer_automation_webhook_configs from anon, authenticated", "browser table access revoked"],
   [usageMigration, "reserve_buyer_webhook_runtime_dispatch", "atomic live reservation"],
+  [testWindowMigration, "inbound_test_started_at", "server-recorded inbound test window"],
   [usageMigration, "This product is not configured for buyer webhook requests", "database opt-in gate"],
   [configFunction, '.eq("buyer_id", buyerId)', "buyer ownership filter"],
   [configFunction, "inbound_secret_hash: await sha256(secret)", "hashed inbound secret"],
   [configFunction, "assertSafeOutboundUrl", "outbound SSRF validation"],
   [configFunction, 'redirect: "manual"', "redirect refusal"],
+  [configFunction, 'action === "begin_inbound_test"', "explicit inbound test start action"],
   [configFunction, 'action === "confirm"', "explicit confirmation action"],
+  [configFunction, "requestReceivedAt < testStartedAt", "fresh inbound receipt guard"],
   [configFunction, 'action === "activate"', "explicit live activation action"],
   [configFunction, 'toLowerCase() === "buyer_webhook"', "exact opt-in product gate"],
   [ingressFunction, "timingSafeEqual", "constant-time secret comparison"],
@@ -44,6 +48,9 @@ for (const [source, marker, label] of [
   [supabaseConfig, "[functions.create-usage-topup-checkout]", "usage top-up function declaration"],
   [buyerPage, '<meta name="robots" content="noindex,nofollow">', "private page indexing guard"],
   [buyerPage, "NexusDB.requireBuyer", "buyer authentication"],
+  [buyerPage, "Start connection test", "explicit external connection-test start"],
+  [buyerPage, "Nexus will not generate the request for you", "no browser-generated connection sample disclosure"],
+  [buyerPage, "hasFreshInboundTestReceipt", "fresh receipt polling guard"],
   [buyerPage, "Confirm received request", "inbound confirmation control"],
   [buyerPage, "Save and test destination", "outbound test control"],
   [buyerPage, "Connection tests do not consume the monthly allowance", "test-mode buyer disclosure"],
@@ -87,6 +94,9 @@ assert.ok(
 assert.match(configFunction, /privateIpv4|privateIpv6/, "Outbound destinations must reject private IP ranges.");
 assert.match(configFunction, /\["test_received", "confirmed"\]|\['test_received', 'confirmed'\]/, "Inbound confirmation must require a successful test.");
 assert.match(configFunction, /\["test_succeeded", "confirmed"\]|\['test_succeeded', 'confirmed'\]/, "Outbound confirmation must require a successful test.");
+assert.doesNotMatch(buyerPage, /Run connection test|Send browser test/, "Pre-live setup must not offer a Nexus-generated self-test.");
+assert.match(buyerPage, /if \(!liveRequest\) \{[\s\S]*?return;/, "Browser-generated requests must be blocked until the connection is already live.");
+assert.match(configFunction, /inbound_test_started_at[\s\S]*requestReceivedAt < testStartedAt/, "Inbound confirmation must require a receipt newer than the server-recorded test start.");
 
 for (const [page, filename] of [
   [buyerPage, "buyer-webhook-setup-inline.js"],
@@ -106,6 +116,7 @@ console.log(JSON.stringify({
   buyerOwnership: true,
   hashedSecret: true,
   safeTestMode: true,
+  freshExternalRequestRequired: true,
   liveRuntimeOptIn: true,
   meteredDispatch: true,
   outboundSsrfGuard: true,

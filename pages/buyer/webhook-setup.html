@@ -194,8 +194,10 @@
       usage: null,
       topupCheckoutAvailable: false,
       liveRuntimeEnabled: false,
-      testPayloadText: ""
+      testPayloadText: "",
+      waitingForInboundTest: false
     };
+    let inboundTestPollTimer = null;
 
     function escapeHtml(value) {
       return String(value || "")
@@ -333,21 +335,30 @@
 
     function renderHistory(direction) {
       const rows = testRows(direction);
-      if (!rows.length) return `<div class="webhook-history"><h3>Recent tests</h3><p class="webhook-help">No ${escapeHtml(direction)} tests yet.</p></div>`;
+      const startedAt = direction === "inbound" ? Date.parse(String(webhookState.config?.inbound_test_started_at || "")) : NaN;
+      const hasActiveWindow = Number.isFinite(startedAt);
+      const title = direction === "inbound" ? "Request history" : "Recent tests";
+      const context = direction === "inbound" && hasActiveWindow
+        ? `<p class="webhook-help">Current test started ${escapeHtml(formatDate(webhookState.config.inbound_test_started_at))}. Only a newer request can complete it; previous successes below do not count.</p>`
+        : "";
+      if (!rows.length) return `<div class="webhook-history"><h3>${title}</h3>${context}<p class="webhook-help">No ${escapeHtml(direction)} requests yet.</p></div>`;
       return `
         <div class="webhook-history">
-          <h3>Recent tests</h3>
-          ${rows.map(test => `
-            <div class="webhook-history-row">
-              <span class="pill ${test.status === "succeeded" ? "green" : "red"}">${escapeHtml(test.status)}</span>
+          <h3>${title}</h3>
+          ${context}
+          ${rows.map(test => {
+            const belongsToCurrentWindow = hasActiveWindow && Date.parse(String(test.created_at || "")) >= startedAt;
+            const label = direction === "inbound" && hasActiveWindow && !belongsToCurrentWindow ? "previous" : test.status;
+            const tone = belongsToCurrentWindow && test.status === "succeeded" ? "green" : test.status === "failed" ? "red" : "blue";
+            return `<div class="webhook-history-row">
+              <span class="pill ${tone}">${escapeHtml(label)}</span>
               <strong>${escapeHtml(test.event_id || `${direction} test`)}</strong>
               <time><small>${escapeHtml(formatDate(test.created_at))}</small></time>
-            </div>
-          `).join("")}
+            </div>`;
+          }).join("")}
         </div>
       `;
     }
-
     function fallbackWebhookTestPayload() {
       return JSON.stringify({
         event: { type: "message.received" },
@@ -428,141 +439,6 @@
       `;
     }
 
-    function renderPageLegacy() {
-      const root = document.getElementById("webhookRoot");
-      const config = webhookState.config;
-      if (!root || !config) return;
-
-      const inbound = statusMeta(config.inbound_status, "Inbound");
-      const outbound = statusMeta(config.outbound_status, "Outbound");
-      const inboundCanConfirm = config.inbound_status === "test_received";
-      const outboundCanConfirm = config.outbound_status === "test_succeeded";
-      const connectionsConfirmed = config.inbound_status === "confirmed" && ["confirmed", "not_configured"].includes(config.outbound_status);
-      const bothConfirmed = connectionsConfirmed && config.event_mapping_status === "confirmed";
-      const liveEnabled = webhookState.liveRuntimeEnabled || config.live_enabled === true;
-      const secretText = webhookState.newSecret
-        ? (webhookState.secretVisible ? webhookState.newSecret : "********************************")
-        : `Secret hidden · ends in ${config.inbound_secret_hint || "------"}`;
-      const readOnly = /cancel|expired/i.test([
-        webhookState.customerAutomation?.status,
-        webhookState.order?.order_status,
-        webhookState.order?.stripe_subscription_status
-      ].join(" "));
-
-      root.innerHTML = `
-        <section class="webhook-hero">
-          <div>
-            <span class="webhook-eyebrow">Buyer webhook setup</span>
-            <h1>${escapeHtml(productTitle())}</h1>
-            <p>Connect an external service to Nexus, prove that requests can be received, and optionally verify where completed results should be delivered.</p>
-          </div>
-          <div class="webhook-hero-status">
-            <span>Connection status</span>
-            <strong>${liveEnabled ? "Live" : (bothConfirmed ? "Ready to activate" : "Setup in progress")}</strong>
-          </div>
-        </section>
-
-        <div class="webhook-test-banner">
-          <div>🛡️</div>
-          <div>
-            <strong>${liveEnabled ? "Live requests are active" : "Safe test mode"}</strong>
-            ${liveEnabled ? "Authenticated requests now create metered automation runs. Nexus rejects duplicates without charging another run and pauses new requests at the monthly limit." : "Tests validate the connection and mapping without starting a paid workflow or consuming the monthly allowance."}
-          </div>
-        </div>
-
-        ${webhookState.notice ? `<div class="webhook-status-box ${escapeHtml(webhookState.notice.tone || "")}"><strong>${escapeHtml(webhookState.notice.title)}</strong><p>${escapeHtml(webhookState.notice.message)}</p></div>` : ""}
-        ${renderUsageCard(readOnly, bothConfirmed)}
-
-        <div class="webhook-grid">
-          <article class="webhook-card">
-            <div class="webhook-card-head">
-              <div>
-                <span class="webhook-eyebrow">Inbound trigger</span>
-                <h2>Receive a test request</h2>
-                <p>Use this URL and secret in the system that will send requests to Nexus.</p>
-              </div>
-              <span class="webhook-step">1</span>
-            </div>
-            <div class="webhook-card-body">
-              <div class="webhook-field">
-                <label>Webhook URL</label>
-                <div class="webhook-code-row">
-                  <div class="webhook-code" title="${escapeHtml(config.inbound_url)}">${escapeHtml(config.inbound_url)}</div>
-                  <button class="btn btn-secondary btn-small" type="button" onclick="copyWebhookValue('url')">Copy URL</button>
-                </div>
-              </div>
-
-              <div class="webhook-field">
-                <label>Webhook secret</label>
-                <div class="webhook-code-row">
-                  <div class="webhook-code webhook-secret ${webhookState.secretVisible ? "revealed" : ""}" id="webhookSecretValue">${escapeHtml(secretText)}</div>
-                  <button class="btn btn-secondary btn-small" type="button" onclick="toggleWebhookSecret()">${webhookState.secretVisible ? "Hide" : "Reveal"}</button>
-                </div>
-                <p class="webhook-help">${webhookState.newSecret ? "Copy this secret now. Nexus stores only its hash and cannot display it after you leave this page." : "For security, the existing secret cannot be revealed. Rotate it if you no longer have your copy."}</p>
-              </div>
-
-              <div class="webhook-actions">
-                ${webhookState.newSecret ? `<button class="btn btn-secondary btn-small" type="button" onclick="copyWebhookValue('secret')">Copy secret</button>` : ""}
-                <button class="btn btn-secondary btn-small" type="button" onclick="rotateWebhookSecret()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "rotate" ? "Rotating..." : "Rotate secret"}</button>
-                <button class="btn btn-primary btn-small" type="button" onclick="sendBrowserWebhookTest()" ${readOnly || !webhookState.newSecret || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "inbound-test" ? "Sending..." : "Send browser test"}</button>
-                <button class="btn btn-secondary btn-small" type="button" onclick="loadWebhookSetup(true)" ${webhookState.busy ? "disabled" : ""}>Refresh status</button>
-              </div>
-
-              <pre class="webhook-curl">${escapeHtml(inboundCurl())}</pre>
-
-              <div class="webhook-status-box ${inbound.tone}">
-                <strong>${escapeHtml(inbound.label)}</strong>
-                <p>${escapeHtml(inbound.help)} Last request: ${escapeHtml(formatDate(config.inbound_last_received_at))}</p>
-              </div>
-
-              ${inboundCanConfirm ? `<div class="webhook-actions"><button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('inbound')" ${webhookState.busy ? "disabled" : ""}>Confirm inbound connection</button></div>` : ""}
-              ${renderHistory("inbound")}
-            </div>
-          </article>
-
-          <article class="webhook-card">
-            <div class="webhook-card-head">
-              <div>
-                <span class="webhook-eyebrow">Result delivery</span>
-                <h2>Test your destination</h2>
-                <p>Optional. Nexus can later deliver completed results to your HTTPS endpoint.</p>
-              </div>
-              <span class="webhook-step">2</span>
-            </div>
-            <div class="webhook-card-body">
-              <form onsubmit="event.preventDefault(); testOutboundWebhook();">
-                <div class="webhook-field">
-                  <label for="outboundWebhookUrl">Destination URL</label>
-                  <input class="webhook-input" id="outboundWebhookUrl" type="url" inputmode="url" autocomplete="url" value="${escapeHtml(config.outbound_url || "")}" placeholder="https://example.com/webhooks/nexus" ${readOnly ? "disabled" : ""}>
-                  <p class="webhook-help">HTTPS only. Private networks, localhost, embedded credentials and unsafe ports are rejected.</p>
-                </div>
-                <div class="webhook-actions">
-                  <button class="btn btn-primary" type="submit" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "outbound-test" ? "Testing..." : "Save and send test"}</button>
-                </div>
-              </form>
-
-              <div class="webhook-status-box ${outbound.tone}">
-                <strong>${escapeHtml(outbound.label)}</strong>
-                <p>${escapeHtml(config.outbound_last_error || outbound.help)} Last test: ${escapeHtml(formatDate(config.outbound_last_tested_at))}${config.outbound_last_status_code ? ` · HTTP ${escapeHtml(config.outbound_last_status_code)}` : ""}</p>
-              </div>
-
-              ${outboundCanConfirm ? `<div class="webhook-actions"><button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('outbound')" ${webhookState.busy ? "disabled" : ""}>Confirm result destination</button></div>` : ""}
-              ${renderHistory("outbound")}
-            </div>
-          </article>
-        </div>
-
-        ${renderEventMapping(readOnly)}
-
-        ${bothConfirmed ? `
-          <section class="webhook-confirmation">
-            <h2>${liveEnabled ? "Webhook automation is live" : "Webhook runtime contract confirmed"}</h2>
-            <p>${liveEnabled ? "New authenticated events will be queued with exact purchase identity and counted against this billing period only after Nexus accepts them." : "Nexus verified the connection, event mapping and runtime envelope. Activate live requests when you are ready."}</p>
-          </section>
-        ` : ""}
-      `;
-    }
-
     function renderEventMapping(readOnly) {
       const meta = mappingStatusMeta(webhookState.config?.event_mapping_status);
       const sources = Array.isArray(webhookState.eventSourcePaths) ? webhookState.eventSourcePaths : [];
@@ -611,9 +487,12 @@
 
     function renderConnectionCard(readOnly) {
       const config = webhookState.config;
-      const inbound = statusMeta(config.inbound_status, "Inbound");
       const confirmed = config.inbound_status === "confirmed";
       const live = webhookState.liveRuntimeEnabled || config.live_enabled === true;
+      const testWindowOpen = !live && config.inbound_status === "awaiting_test" && Boolean(config.inbound_test_started_at);
+      const inbound = webhookState.waitingForInboundTest || testWindowOpen
+        ? { label: "Waiting for your request", tone: "waiting", help: "Send a new authenticated POST request from your app. This page will detect it automatically." }
+        : statusMeta(config.inbound_status, "Inbound");
       const secretText = webhookState.newSecret
         ? (webhookState.secretVisible ? webhookState.newSecret : "********************************")
         : `Existing secret saved (ending in ${config.inbound_secret_hint || "------"})`;
@@ -632,12 +511,22 @@
             </div>
             ${!webhookState.newSecret ? `<div class="webhook-inline-note"><strong>Your existing secret still works.</strong><span>For security, Nexus cannot display it again. Send a test from your app and check the status below, or create a replacement secret to use this browser tester.</span></div>` : ""}
             <div class="webhook-tester">
-              <div class="webhook-tester-head"><div><h3>${live ? "Live workflow tester" : "Request tester"}</h3><p>${live ? "This sends one real request through Nexus to n8n and consumes one included run." : "Edit this JSON to match what your app will send. Connection tests do not consume the monthly allowance."}</p></div><span class="pill ${live ? "orange" : "blue"}">${live ? "Uses 1 run" : "Free test"}</span></div>
-              <textarea class="webhook-input webhook-payload" id="webhookTestPayload" spellcheck="false" oninput="webhookState.testPayloadText=this.value" ${readOnly ? "disabled" : ""}>${escapeHtml(payload)}</textarea>
-              <div class="webhook-actions">${webhookState.newSecret ? `<button class="btn btn-primary" type="button" onclick="sendBrowserWebhookTest()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "inbound-test" ? (live ? "Sending live run..." : "Testing connection...") : (live ? "Send live workflow test" : "Run connection test")}</button>` : ""}<button class="btn btn-secondary" type="button" onclick="loadWebhookSetup(true)" ${webhookState.busy ? "disabled" : ""}>Check request status</button>${config.inbound_status === "test_received" ? `<button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('inbound')" ${webhookState.busy ? "disabled" : ""}>Confirm received request</button>` : ""}</div>
+              ${live ? `
+                <div class="webhook-tester-head"><div><h3>Live workflow tester</h3><p>This sends one real request through Nexus to n8n and consumes one included run.</p></div><span class="pill orange">Uses 1 run</span></div>
+                <textarea class="webhook-input webhook-payload" id="webhookTestPayload" spellcheck="false" oninput="webhookState.testPayloadText=this.value" ${readOnly ? "disabled" : ""}>${escapeHtml(payload)}</textarea>
+                <div class="webhook-actions"><button class="btn btn-primary" type="button" onclick="sendBrowserWebhookTest()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "inbound-test" ? "Sending live run..." : "Send live workflow test"}</button></div>
+              ` : `
+                <div class="webhook-tester-head"><div><h3>Verify a request from your app</h3><p>Start the test, then send a request from your own app, n8n, Postman or the cURL example below. Nexus will not generate the request for you. Connection tests do not consume the monthly allowance.</p></div><span class="pill blue">Free test</span></div>
+                <div class="webhook-inline-note"><strong>How verification works</strong><span>Only a new authenticated request received after you start this test can pass. Older requests and Nexus-generated samples do not count.</span></div>
+                <div class="webhook-actions">
+                  ${!confirmed ? `<button class="btn btn-primary" type="button" onclick="startInboundConnectionTest()" ${readOnly || webhookState.busy || webhookState.waitingForInboundTest ? "disabled" : ""}>${webhookState.busy === "begin-inbound-test" ? "Starting..." : webhookState.waitingForInboundTest ? "Waiting for request..." : "Start connection test"}</button>` : ""}
+                  <button class="btn btn-secondary" type="button" onclick="checkInboundRequestStatus()" ${webhookState.busy ? "disabled" : ""}>${webhookState.busy === "check-inbound" ? "Checking..." : "Check for request"}</button>
+                  ${config.inbound_status === "test_received" && config.inbound_test_started_at ? `<button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('inbound')" ${webhookState.busy ? "disabled" : ""}>Confirm received request</button>` : ""}
+                </div>
+              `}
             </div>
-            <div class="webhook-status-box ${inbound.tone}"><strong>${escapeHtml(inbound.label)}</strong><p>${escapeHtml(inbound.help)} Last request: ${escapeHtml(formatDate(config.inbound_last_received_at))}</p></div>
-            <details class="webhook-runtime-preview"><summary>Use cURL or another tool instead</summary><pre class="webhook-curl">${escapeHtml(inboundCurl())}</pre></details>
+            <div class="webhook-status-box ${inbound.tone}"><strong>${escapeHtml(inbound.label)}</strong><p>${escapeHtml(inbound.help)} ${testWindowOpen ? `Test started: ${escapeHtml(formatDate(config.inbound_test_started_at))}.` : ""} Last new request: ${escapeHtml(formatDate(config.inbound_last_received_at))}</p></div>
+            <details class="webhook-runtime-preview" ${testWindowOpen || webhookState.waitingForInboundTest ? "open" : ""}><summary>Send the request with cURL or another tool</summary><pre class="webhook-curl">${escapeHtml(inboundCurl())}</pre></details>
             ${renderHistory("inbound")}
           </div>
         </article>`;
@@ -768,51 +657,119 @@
       }
     }
 
-    async function sendBrowserWebhookTestLegacy() {
-      if (!webhookState.newSecret) {
-        showNotice("Secret required", "Rotate the secret first so this browser can send an authenticated test.", "waiting");
+    function hasFreshInboundTestReceipt() {
+      const config = webhookState.config || {};
+      const startedAt = Date.parse(String(config.inbound_test_started_at || ""));
+      const receivedAt = Date.parse(String(config.inbound_last_received_at || ""));
+      return config.inbound_status === "test_received" &&
+        Boolean(config.inbound_last_event_id) &&
+        Number.isFinite(startedAt) &&
+        Number.isFinite(receivedAt) &&
+        receivedAt >= startedAt;
+    }
+
+    function stopInboundTestPolling() {
+      if (inboundTestPollTimer) clearTimeout(inboundTestPollTimer);
+      inboundTestPollTimer = null;
+    }
+
+    function scheduleInboundTestPoll(attemptsLeft = 40) {
+      stopInboundTestPolling();
+      if (!webhookState.waitingForInboundTest || attemptsLeft < 1) return;
+      inboundTestPollTimer = setTimeout(() => pollInboundConnectionTest(attemptsLeft), 3000);
+    }
+
+    async function pollInboundConnectionTest(attemptsLeft = 40) {
+      if (!webhookState.waitingForInboundTest) return;
+      try {
+        const data = await callWebhookConfig({ action: "load" });
+        applyWebhookData(data);
+        if (hasFreshInboundTestReceipt()) {
+          webhookState.waitingForInboundTest = false;
+          stopInboundTestPolling();
+          webhookState.notice = {
+            title: "Request received",
+            message: "Nexus received a new authenticated request from your connection. Review it, then confirm the received request.",
+            tone: "success"
+          };
+          renderPage();
+          return;
+        }
+      } catch (error) {
+        if (attemptsLeft <= 1) {
+          webhookState.waitingForInboundTest = false;
+          webhookState.notice = { title: "Status check paused", message: error.message || "Nexus could not refresh the request status.", tone: "error" };
+          renderPage();
+          return;
+        }
+      }
+      if (attemptsLeft <= 1) {
+        webhookState.waitingForInboundTest = false;
+        webhookState.notice = {
+          title: "Still waiting for your request",
+          message: "No new authenticated request arrived during this check. Send it from your app, then press Check for request.",
+          tone: "waiting"
+        };
+        renderPage();
         return;
       }
-      webhookState.busy = "inbound-test";
+      scheduleInboundTestPoll(attemptsLeft - 1);
+    }
+
+    async function startInboundConnectionTest() {
+      stopInboundTestPolling();
+      webhookState.busy = "begin-inbound-test";
       renderPage();
       try {
-        const eventId = `buyer-test-${Date.now()}`;
-        const response = await fetch(webhookState.config.inbound_url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-nexus-webhook-secret": webhookState.newSecret,
-            "x-nexus-event-id": eventId
-          },
-          body: JSON.stringify({
-            event: { type: "message.received" },
-            message: {
-              text: "Test request from the Nexus buyer webhook setup page",
-              subject: "Example customer request"
-            },
-            customer: {
-              email: "buyer@example.com",
-              name: "Example Buyer"
-            },
-            sent_at: new Date().toISOString(),
-            source: "nexus_browser_test"
-          })
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.ok === false) throw new Error(data.error || `Webhook test returned HTTP ${response.status}.`);
-        const refreshed = await callWebhookConfig({ action: "load" });
-        applyWebhookData(refreshed);
-        webhookState.notice = { title: "Inbound test received", message: "Nexus received the authenticated request. Confirm the connection to finish this step.", tone: "success" };
+        const data = await callWebhookConfig({ action: "begin_inbound_test" });
+        applyWebhookData(data);
+        webhookState.waitingForInboundTest = true;
+        webhookState.notice = {
+          title: "Waiting for your request",
+          message: "Now send a new authenticated POST request from your app. Nexus will update this page automatically when it arrives.",
+          tone: "waiting"
+        };
       } catch (error) {
-        webhookState.notice = { title: "Inbound test failed", message: error.message || "Nexus could not receive the test request.", tone: "error" };
+        webhookState.waitingForInboundTest = false;
+        webhookState.notice = { title: "Connection test could not start", message: error.message || "Try again shortly.", tone: "error" };
+      } finally {
+        webhookState.busy = "";
+        renderPage();
+      }
+      if (webhookState.waitingForInboundTest) scheduleInboundTestPoll();
+    }
+
+    async function checkInboundRequestStatus() {
+      webhookState.busy = "check-inbound";
+      renderPage();
+      try {
+        const data = await callWebhookConfig({ action: "load" });
+        applyWebhookData(data);
+        if (hasFreshInboundTestReceipt()) {
+          webhookState.waitingForInboundTest = false;
+          stopInboundTestPolling();
+          webhookState.notice = { title: "Request received", message: "A new authenticated request arrived after this test started. Confirm it to continue.", tone: "success" };
+        } else if (!webhookState.config?.inbound_test_started_at) {
+          webhookState.notice = { title: "Start the test first", message: "Press Start connection test, then send a request from your app.", tone: "waiting" };
+        } else {
+          webhookState.waitingForInboundTest = true;
+          webhookState.notice = { title: "No new request yet", message: "Nexus is still waiting. Send an authenticated request from your app using the URL and secret above.", tone: "waiting" };
+          scheduleInboundTestPoll();
+        }
+        if (window.NexusUI?.toast && webhookState.notice?.message) NexusUI.toast(webhookState.notice.message);
+      } catch (error) {
+        webhookState.notice = { title: "Status check failed", message: error.message || "Could not refresh the request status.", tone: "error" };
       } finally {
         webhookState.busy = "";
         renderPage();
       }
     }
-
     async function sendBrowserWebhookTest() {
       const liveRequest = webhookState.liveRuntimeEnabled || webhookState.config?.live_enabled === true;
+      if (!liveRequest) {
+        showNotice("Send the request from your app", "Connection verification only accepts a fresh request from your real integration. Start the connection test first.", "waiting");
+        return;
+      }
       const payloadField = document.getElementById("webhookTestPayload");
       webhookState.testPayloadText = String(payloadField?.value || webhookState.testPayloadText || defaultWebhookTestPayload()).trim();
       let payload;
@@ -891,6 +848,10 @@
       try {
         const data = await callWebhookConfig({ action: "confirm", direction });
         applyWebhookData(data);
+        if (direction === "inbound") {
+          webhookState.waitingForInboundTest = false;
+          stopInboundTestPolling();
+        }
         webhookState.notice = { title: "Connection confirmed", message: `${direction === "inbound" ? "Inbound webhook" : "Result destination"} confirmed successfully.`, tone: "success" };
       } catch (error) {
         webhookState.notice = { title: "Confirmation failed", message: error.message || "Run a successful test before confirming.", tone: "error" };
@@ -1070,6 +1031,11 @@
       if (!buyer) return;
       const topupNotice = await verifyUsageTopupReturn();
       await loadWebhookSetup();
+      if (webhookState.config?.inbound_status === "awaiting_test" && webhookState.config?.inbound_test_started_at) {
+        webhookState.waitingForInboundTest = true;
+        renderPage();
+        scheduleInboundTestPoll();
+      }
       if (topupNotice) {
         webhookState.notice = topupNotice;
         renderPage();
