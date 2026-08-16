@@ -100,6 +100,10 @@ function contextPathForMapping(source: string, key: string) {
     return runtimeContextPath("setup", cleanKey);
   }
 
+  if (["event", "runtime_event", "trigger"].includes(cleanSource)) {
+    return runtimeContextPath("event.data", cleanKey);
+  }
+
   if (
     cleanSource === "secret" ||
     cleanSource === "secrets" ||
@@ -4049,7 +4053,7 @@ Deno.serve(async (req) => {
       throw new Error("n8n did not return a workflow ID.");
     }
 
-    const shouldKeepActiveAfterImport = ["active", "published"].includes(cleanString(product.status).toLowerCase());
+    const shouldKeepActiveAfterImport = ["active", "published", "live"].includes(cleanString(product.status).toLowerCase());
     const postImportWorkflowState = shouldKeepActiveAfterImport
       ? await activateWorkflow(n8nBaseUrl, n8nApiKey, workflowId)
       : await deactivateWorkflow(n8nBaseUrl, n8nApiKey, workflowId);

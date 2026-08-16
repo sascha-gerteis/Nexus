@@ -1,15 +1,20 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { safeEnqueueEmail } from "../_shared/nexus-email.ts";
+
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 import {
   buildWebhookRuntimeEnvelope,
+  eventFieldDefinitions,
   mappingObject,
   normalizeEventMappings,
   setupFieldDefinitions,
+  webhookInputFieldDefinitions,
 } from "../_shared/webhook-event-mapping.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const NEXUS_RUNTIME_SECRET = Deno.env.get("NEXUS_RUNTIME_SECRET") || "";
 const CONFIG_TABLE = "customer_automation_webhook_configs";
 const TEST_TABLE = "customer_automation_webhook_tests";
 const MAX_BODY_BYTES = 64 * 1024;
@@ -61,6 +66,27 @@ function bytesFromHex(value: string) {
   return output;
 }
 
+function wakeRuntimeDispatchBacklog() {
+  if (!SUPABASE_URL || !NEXUS_RUNTIME_SECRET) {
+    console.error("Could not wake the runtime dispatcher: internal runtime configuration is missing.");
+    return;
+  }
+  const task = fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/process-runtime-dispatch-backlog`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nexus-runtime-secret": NEXUS_RUNTIME_SECRET,
+    },
+    body: JSON.stringify({ limit: 10, reconcile_limit: 1, run_due: false }),
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`Runtime dispatcher wake-up returned HTTP ${response.status}.`);
+  }).catch((error) => {
+    // The durable one-minute backlog worker remains the recovery path.
+    console.error("Could not immediately wake the runtime dispatcher:", error instanceof Error ? error.message : error);
+  });
+  EdgeRuntime.waitUntil(task);
+}
+
 function sensitiveKey(value: string) {
   return /token|secret|password|authorization|cookie|credential|api[_-]?key|private[_-]?key/i.test(value);
 }
@@ -86,7 +112,7 @@ async function loadRuntimeContext(adminClient: any, config: any) {
     .select(`
       *,
       automations(
-        id, title, runtime_type, runtime_trigger_mode, setup_schema,
+        id, title, runtime_type, runtime_trigger_mode, setup_schema, runtime_event_schema,
         webhook_included_runs, webhook_topup_runs, webhook_topup_price, currency
       ),
       orders(
@@ -116,7 +142,8 @@ async function loadSavedSetup(adminClient: any, customerAutomation: any, automat
   const preferred = mappingObject(data?.setup_answers);
   const answers = Object.keys(preferred).length ? preferred : mappingObject(data?.answers);
   const safe: Record<string, unknown> = {};
-  for (const field of setupFieldDefinitions(automation.setup_schema)) {
+  const inputFields = webhookInputFieldDefinitions(automation.setup_schema, automation.runtime_event_schema);
+  for (const field of inputFields) {
     if (Object.prototype.hasOwnProperty.call(answers, field.name)) safe[field.name] = answers[field.name];
   }
   return safe;
@@ -164,6 +191,23 @@ async function recordInboundHistory(adminClient: any, config: any, params: {
   if (error && !/duplicate|unique/i.test(cleanString(error.message))) throw new Error(error.message);
 }
 
+async function recordConnectionTestFailure(adminClient: any, config: any, eventId: string, message: string, responseStatus: number, attemptedAt: string) {
+  const preview = { connection_test_error: message, attempted_at: attemptedAt };
+  const { error } = await adminClient.from(CONFIG_TABLE).update({
+    inbound_status: "test_failed",
+    inbound_last_received_at: null,
+    inbound_last_payload_preview: preview,
+    updated_at: attemptedAt,
+  }).eq("id", config.id).eq("inbound_last_event_id", eventId);
+  if (error) throw new Error(error.message);
+  await recordInboundHistory(adminClient, config, {
+    status: "failed",
+    eventId,
+    responseStatus,
+    preview,
+    errorMessage: message,
+  });
+}
 async function sendUsageAlert(adminClient: any, context: any, reservation: any) {
   if (!["warning", "exhausted"].includes(cleanString(reservation?.notification))) return;
   const order = one(context.orders) || {};
@@ -225,21 +269,29 @@ Deno.serve(async (req) => {
     if (!config) return errorResponse("Webhook endpoint was not found.", 404);
     if (config.inbound_status === "disabled") return errorResponse("Webhook endpoint is disabled.", 410);
 
-    const secret = suppliedSecret(req);
-    if (!secret) return errorResponse("Webhook secret is required.", 401);
-    const suppliedHash = await sha256(secret);
-    const storedHash = bytesFromHex(config.inbound_secret_hash);
-    if (!storedHash.length || !timingSafeEqual(suppliedHash, storedHash)) {
-      return errorResponse("Webhook secret is invalid.", 401);
-    }
-
     const now = nowIso();
     const suppliedEventId = cleanString(req.headers.get("x-nexus-event-id"));
     if (suppliedEventId.length > 200) return errorResponse("Webhook event ID is too long.", 400);
     const eventId = suppliedEventId || crypto.randomUUID();
+    const expectedTestEventId = cleanString(config.inbound_last_event_id);
+    const activeConnectionTest = config.live_enabled !== true &&
+      Boolean(config.inbound_test_started_at) &&
+      ["awaiting_test", "test_failed"].includes(cleanString(config.inbound_status));
+
+    const secret = suppliedSecret(req);
+    if (!secret) {
+      if (activeConnectionTest && eventId === expectedTestEventId) await recordConnectionTestFailure(adminClient, config, eventId, "Webhook secret is required.", 401, now);
+      return errorResponse("Webhook secret is required.", 401);
+    }
+    const suppliedHash = await sha256(secret);
+    const storedHash = bytesFromHex(config.inbound_secret_hash);
+    if (!storedHash.length || !timingSafeEqual(suppliedHash, storedHash)) {
+      if (activeConnectionTest && eventId === expectedTestEventId) await recordConnectionTestFailure(adminClient, config, eventId, "Webhook secret is invalid. Create a replacement secret in Nexus or use the secret already saved in your app.", 401, now);
+      return errorResponse("Webhook secret is invalid.", 401);
+    }
     const { data: existingEvent, error: existingEventError } = await adminClient
       .from(TEST_TABLE)
-      .select("id, status, response_status, error_message, created_at")
+      .select("id, status, response_status, error_message, payload_preview, created_at")
       .eq("webhook_config_id", config.id)
       .eq("direction", "inbound")
       .eq("event_id", eventId)
@@ -248,15 +300,38 @@ Deno.serve(async (req) => {
     // Successful events are immutable idempotent duplicates. Failed events
     // continue below so a corrected payload or newly purchased quota can retry.
     if (existingEvent?.status === "succeeded" && config.live_enabled !== true) {
+      const testStartedAt = Date.parse(cleanString(config.inbound_test_started_at));
+      const existingReceivedAt = Date.parse(cleanString(existingEvent.created_at));
+      const belongsToCurrentTest = Number.isFinite(testStartedAt) &&
+        Number.isFinite(existingReceivedAt) &&
+        existingReceivedAt >= testStartedAt;
+      if (!belongsToCurrentTest) {
+        return errorResponse(
+          "This webhook event ID was already used before the current connection test. Send the request again with a new unique x-nexus-event-id value.",
+          409,
+          { code: "WEBHOOK_EVENT_ID_ALREADY_USED", duplicate: true, event_id: eventId },
+        );
+      }
+      if (cleanString(config.inbound_status) !== "confirmed") {
+        const { error: duplicateUpdateError } = await adminClient.from(CONFIG_TABLE).update({
+          inbound_status: "confirmed",
+          inbound_confirmed_at: config.inbound_confirmed_at || now,
+          inbound_last_received_at: existingEvent.created_at,
+          inbound_last_event_id: eventId,
+          inbound_last_payload_preview: existingEvent.payload_preview || {},
+          updated_at: now,
+        }).eq("id", config.id);
+        if (duplicateUpdateError) throw new Error(duplicateUpdateError.message);
+      }
       return jsonResponse({
         ok: true,
         accepted: true,
         duplicate: true,
-        test_only: config.live_enabled !== true,
-        live_runtime_enabled: config.live_enabled === true,
+        test_only: true,
+        live_runtime_enabled: false,
         event_id: eventId,
         received_at: existingEvent.created_at,
-        message: "This webhook event was already received and was not counted twice.",
+        message: "This connection-test request was already received during the current test and was not counted twice.",
       }, 200);
     }
 
@@ -271,7 +346,9 @@ Deno.serve(async (req) => {
       }
 
       const savedSetup = await loadSavedSetup(adminClient, customerAutomation, automation);
-      const mappings = normalizeEventMappings(config.event_mapping, automation.setup_schema);
+      const eventFields = eventFieldDefinitions(automation.runtime_event_schema, automation.setup_schema);
+      const inputFields = webhookInputFieldDefinitions(automation.setup_schema, automation.runtime_event_schema);
+      const mappings = normalizeEventMappings(config.event_mapping, eventFields);
       const runtime = buildWebhookRuntimeEnvelope({
         customerAutomation,
         automation,
@@ -281,7 +358,8 @@ Deno.serve(async (req) => {
         receivedAt: now,
         mappings,
         savedSetup,
-        setupSchema: automation.setup_schema,
+        setupSchema: inputFields,
+        eventSchema: eventFields,
       });
       if (!runtime.ok) {
         const message = runtime.errors.join(" ") || "Webhook event mapping is invalid.";
@@ -342,6 +420,8 @@ Deno.serve(async (req) => {
         });
       }
 
+      if (reservation.duplicate !== true) wakeRuntimeDispatchBacklog();
+
       return jsonResponse({
         ok: true,
         accepted: true,
@@ -360,9 +440,12 @@ Deno.serve(async (req) => {
       }, reservation.duplicate ? 200 : 202);
     }
 
-    const nextStatus = config.inbound_status === "confirmed" ? "confirmed" : "test_received";
+    await recordInboundHistory(adminClient, config, {
+      status: "succeeded", eventId, responseStatus: 202, preview,
+    });
     const { error: updateError } = await adminClient.from(CONFIG_TABLE).update({
-      inbound_status: nextStatus,
+      inbound_status: "confirmed",
+      inbound_confirmed_at: config.inbound_confirmed_at || now,
       inbound_last_received_at: now,
       inbound_last_event_id: eventId,
       inbound_last_payload_preview: preview,
@@ -376,9 +459,6 @@ Deno.serve(async (req) => {
       updated_at: now,
     }).eq("id", config.id);
     if (updateError) throw new Error(updateError.message);
-    await recordInboundHistory(adminClient, config, {
-      status: "succeeded", eventId, responseStatus: 202, preview,
-    });
 
     return jsonResponse({
       ok: true,
@@ -387,7 +467,7 @@ Deno.serve(async (req) => {
       live_runtime_enabled: false,
       event_id: eventId,
       received_at: now,
-      message: "Webhook test received. Return to Nexus to confirm the connection.",
+      message: "Webhook test received and connection confirmed.",
     }, 202);
   } catch (error) {
     console.error("buyer-webhook-ingress failed:", error);

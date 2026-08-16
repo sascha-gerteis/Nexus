@@ -2,20 +2,26 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import {
   buildWebhookRuntimeEnvelope,
+  eventFieldDefinitions,
   flattenEventPaths,
   mappingObject,
   normalizeEventMappings,
   setupFieldDefinitions,
+  webhookInputFieldDefinitions,
 } from "../_shared/webhook-event-mapping.ts";
+
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const NEXUS_RUNTIME_SECRET = Deno.env.get("NEXUS_RUNTIME_SECRET") || "";
 
 const CONFIG_TABLE = "customer_automation_webhook_configs";
 const TEST_TABLE = "customer_automation_webhook_tests";
 const OUTBOUND_TIMEOUT_MS = 8000;
 const MAX_OUTBOUND_URL_LENGTH = 2048;
+const INBOUND_TEST_TIMEOUT_MS = 2 * 60 * 1000;
 
 function nowIso() {
   return new Date().toISOString();
@@ -23,6 +29,23 @@ function nowIso() {
 
 function cleanString(value: unknown) {
   return String(value || "").trim();
+}
+
+function wakeDueRuntimeDispatches() {
+  if (!SUPABASE_URL || !NEXUS_RUNTIME_SECRET) return;
+  const task = fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/process-runtime-dispatch-backlog`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-nexus-runtime-secret": NEXUS_RUNTIME_SECRET,
+    },
+    body: JSON.stringify({ limit: 10, reconcile_limit: 1, run_due: false }),
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`Runtime dispatcher recovery returned HTTP ${response.status}.`);
+  }).catch((error) => {
+    console.error("Could not wake due webhook runtime dispatches:", error instanceof Error ? error.message : error);
+  });
+  EdgeRuntime.waitUntil(task);
 }
 
 function one(value: any) {
@@ -122,6 +145,7 @@ async function loadOwnedAutomation(adminClient: any, customerAutomationId: strin
         runtime_trigger_mode,
         runtime_response_mode,
         setup_schema,
+        runtime_event_schema,
         pricing_type,
         currency,
         webhook_included_runs,
@@ -223,6 +247,92 @@ async function loadRecentTests(adminClient: any, configId: string, buyerId: stri
   return data || [];
 }
 
+async function expireTimedOutInboundTest(adminClient: any, config: any, buyerId: string) {
+  const startedAt = Date.parse(cleanString(config?.inbound_test_started_at));
+  const shouldExpire = config?.live_enabled !== true &&
+    cleanString(config?.inbound_status) === "awaiting_test" &&
+    Number.isFinite(startedAt) &&
+    Date.now() - startedAt >= INBOUND_TEST_TIMEOUT_MS;
+  if (!shouldExpire) return config;
+
+  const timedOutAt = nowIso();
+  const message = "No authenticated request arrived within two minutes.";
+  const preview = { connection_test_error: message, timed_out_at: timedOutAt };
+  const { data: expired, error: expireError } = await adminClient
+    .from(CONFIG_TABLE)
+    .update({
+      inbound_status: "test_failed",
+      inbound_last_received_at: null,
+      inbound_last_payload_preview: preview,
+      updated_at: timedOutAt,
+    })
+    .eq("id", config.id)
+    .eq("buyer_id", buyerId)
+    .eq("inbound_status", "awaiting_test")
+    .select("*")
+    .maybeSingle();
+  if (expireError) throw new Error(expireError.message);
+  if (!expired) return await loadConfig(adminClient, config.customer_automation_id, buyerId) || config;
+
+  const { error: historyError } = await adminClient
+    .from(TEST_TABLE)
+    .update({ status: "failed", error_message: message, payload_preview: preview })
+    .eq("webhook_config_id", config.id)
+    .eq("buyer_id", buyerId)
+    .eq("direction", "inbound")
+    .eq("event_id", config.inbound_last_event_id)
+    .eq("status", "pending");
+  if (historyError) throw new Error(historyError.message);
+  return expired;
+}
+
+async function reconcileReceivedInboundTest(adminClient: any, config: any, buyerId: string) {
+  const status = cleanString(config?.inbound_status);
+  const eventId = cleanString(config?.inbound_last_event_id);
+  const receivedAt = Date.parse(cleanString(config?.inbound_last_received_at));
+  const startedAt = Date.parse(cleanString(config?.inbound_test_started_at));
+  const hasFreshReceipt = ["test_received", "confirmed"].includes(status) &&
+    Boolean(eventId) &&
+    Number.isFinite(receivedAt) &&
+    Number.isFinite(startedAt) &&
+    receivedAt >= startedAt;
+  if (!hasFreshReceipt) return config;
+
+  // The ingress writes the receipt before it finalizes request history. A fast
+  // browser poll can otherwise show "Test passed" beside a stale pending row.
+  const { error: historyError } = await adminClient
+    .from(TEST_TABLE)
+    .update({
+      status: "succeeded",
+      response_status: 202,
+      error_message: null,
+      payload_preview: config.inbound_last_payload_preview || {},
+    })
+    .eq("webhook_config_id", config.id)
+    .eq("buyer_id", buyerId)
+    .eq("direction", "inbound")
+    .eq("event_id", eventId)
+    .eq("status", "pending");
+  if (historyError) throw new Error(historyError.message);
+
+  if (status === "confirmed") return config;
+  const { data: confirmed, error: confirmError } = await adminClient
+    .from(CONFIG_TABLE)
+    .update({
+      inbound_status: "confirmed",
+      inbound_confirmed_at: config.inbound_confirmed_at || nowIso(),
+      live_enabled: false,
+      updated_at: nowIso(),
+    })
+    .eq("id", config.id)
+    .eq("buyer_id", buyerId)
+    .eq("inbound_status", "test_received")
+    .select("*")
+    .maybeSingle();
+  if (confirmError) throw new Error(confirmError.message);
+  return confirmed || await loadConfig(adminClient, config.customer_automation_id, buyerId) || config;
+}
+
 async function loadSavedSetup(adminClient: any, customerAutomationId: string, buyerId: string, setupSchema: unknown) {
   const { data, error } = await adminClient
     .from("automation_setup_submissions")
@@ -243,6 +353,90 @@ async function loadSavedSetup(adminClient: any, customerAutomationId: string, bu
   return safe;
 }
 
+function webhookSchemas(automation: any) {
+  const eventFields = eventFieldDefinitions(automation?.runtime_event_schema, automation?.setup_schema);
+  const inputFields = webhookInputFieldDefinitions(automation?.setup_schema, automation?.runtime_event_schema);
+  const eventNames = new Set(eventFields.map((field) => field.name.toLowerCase()));
+  const setupFields = setupFieldDefinitions(automation?.setup_schema)
+    .filter((field) => !eventNames.has(field.name.toLowerCase()));
+  return { setupFields, eventFields, inputFields };
+}
+
+function sanitizeWebhookSetupValues(value: unknown, fields: any[], existing: Record<string, unknown>) {
+  const incoming = mappingObject(value);
+  const safe = { ...mappingObject(existing) };
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(incoming, field.name)) continue;
+    const candidate = incoming[field.name];
+    const empty = candidate === null || candidate === undefined ||
+      (typeof candidate === "string" && !candidate.trim()) ||
+      (Array.isArray(candidate) && candidate.length === 0);
+    if (empty) {
+      delete safe[field.name];
+      continue;
+    }
+    if (typeof candidate === "string") {
+      safe[field.name] = candidate.trim().slice(0, 5000);
+    } else if (["number", "boolean"].includes(typeof candidate)) {
+      safe[field.name] = candidate;
+    } else if (Array.isArray(candidate)) {
+      safe[field.name] = candidate.slice(0, 100);
+    } else {
+      const encoded = JSON.stringify(candidate);
+      if (encoded.length > 20000) throw new Error(field.label + " is too large.");
+      safe[field.name] = candidate;
+    }
+  }
+  return safe;
+}
+
+async function saveWebhookSetupValues(
+  adminClient: any,
+  customerAutomation: any,
+  buyerId: string,
+  fields: any[],
+  values: Record<string, unknown>,
+) {
+  const now = nowIso();
+  const { data: latestSubmission, error: latestSubmissionError } = await adminClient
+    .from("automation_setup_submissions")
+    .select("credential_keys_available")
+    .eq("customer_automation_id", customerAutomation.id)
+    .eq("buyer_id", buyerId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latestSubmissionError) throw new Error(latestSubmissionError.message);
+  const credentialKeysAvailable = Array.isArray(latestSubmission?.credential_keys_available)
+    ? latestSubmission.credential_keys_available.map(cleanString).filter(Boolean)
+    : [];
+  const payload = {
+    customer_automation_id: customerAutomation.id,
+    buyer_id: buyerId,
+    automation_id: customerAutomation.automation_id || null,
+    order_id: customerAutomation.order_id || null,
+    answers: values,
+    setup_answers: values,
+    credential_keys_available: credentialKeysAvailable,
+    status: "submitted",
+    submitted_at: now,
+    created_at: now,
+    updated_at: now,
+  };
+  let result = await adminClient.from("automation_setup_submissions").insert(payload);
+  if (!result.error) return;
+  const fallback = {
+    customer_automation_id: customerAutomation.id,
+    buyer_id: buyerId,
+    automation_id: customerAutomation.automation_id || null,
+    order_id: customerAutomation.order_id || null,
+    answers: values,
+    status: "submitted",
+    created_at: now,
+  };
+  result = await adminClient.from("automation_setup_submissions").insert(fallback);
+  if (result.error) throw new Error(result.error.message);
+}
 async function loadUsageSummary(adminClient: any, customerAutomationId: string) {
   const { data, error } = await adminClient.rpc("ensure_customer_automation_usage_entitlement", {
     p_customer_automation_id: customerAutomationId,
@@ -259,7 +453,8 @@ function runtimeMappingPreview(config: any, customerAutomation: any, savedSetup:
   if (!config?.inbound_last_received_at || !config?.inbound_last_event_id) return null;
   const automation = one(customerAutomation?.automations) || {};
   const order = one(customerAutomation?.orders) || {};
-  const mappings = normalizeEventMappings(config.event_mapping, automation.setup_schema);
+  const schemas = webhookSchemas(automation);
+  const mappings = normalizeEventMappings(config.event_mapping, schemas.eventFields);
   return buildWebhookRuntimeEnvelope({
     customerAutomation,
     automation,
@@ -269,7 +464,8 @@ function runtimeMappingPreview(config: any, customerAutomation: any, savedSetup:
     receivedAt: cleanString(config.inbound_last_received_at),
     mappings,
     savedSetup,
-    setupSchema: automation.setup_schema,
+    setupSchema: schemas.inputFields,
+    eventSchema: schemas.eventFields,
   });
 }
 
@@ -489,7 +685,8 @@ Deno.serve(async (req) => {
       return errorResponse("Webhook runtime setup is available only for products explicitly configured as Buyer webhook request products.", 409);
     }
     const ensured = await ensureConfig(adminClient, customerAutomationId, auth.user.id);
-    let config = ensured.config;
+    let config = await expireTimedOutInboundTest(adminClient, ensured.config, auth.user.id);
+    config = await reconcileReceivedInboundTest(adminClient, config, auth.user.id);
 
     if (action !== "load" && mutationBlocked(customerAutomation)) {
       return errorResponse("This automation is cancelled or expired, so its webhook settings are read-only.", 409);
@@ -499,11 +696,16 @@ Deno.serve(async (req) => {
       if (config.live_enabled === true) {
         return errorResponse("Pause live webhook requests before starting a new connection test.", 409);
       }
+      const requestedTestEventId = cleanString(body.event_id || body.eventId);
+      if (requestedTestEventId.length < 8 || requestedTestEventId.length > 200) {
+        return errorResponse("Start the connection test with a unique event ID between 8 and 200 characters.", 400);
+      }
+      const testStartedAt = nowIso();
       config = await updateOwnedConfig(adminClient, config, auth.user.id, {
         inbound_status: "awaiting_test",
-        inbound_test_started_at: nowIso(),
+        inbound_test_started_at: testStartedAt,
         inbound_last_received_at: null,
-        inbound_last_event_id: null,
+        inbound_last_event_id: requestedTestEventId,
         inbound_last_payload_preview: {},
         inbound_confirmed_at: null,
         event_mapping_status: "not_configured",
@@ -514,6 +716,26 @@ Deno.serve(async (req) => {
         event_mapping_confirmed_at: null,
         live_enabled: false,
       });
+      const { error: supersedeError } = await adminClient
+        .from(TEST_TABLE)
+        .update({ status: "failed", error_message: "Replaced by a newer connection test." })
+        .eq("webhook_config_id", config.id)
+        .eq("direction", "inbound")
+        .eq("status", "pending");
+      if (supersedeError) throw new Error(supersedeError.message);
+      const { error: pendingError } = await adminClient.from(TEST_TABLE).insert({
+        webhook_config_id: config.id,
+        customer_automation_id: customerAutomationId,
+        buyer_id: auth.user.id,
+        direction: "inbound",
+        status: "pending",
+        event_id: requestedTestEventId,
+        response_status: null,
+        error_message: "Waiting for an authenticated request.",
+        payload_preview: { connection_test_pending: true, started_at: testStartedAt },
+        created_at: testStartedAt,
+      });
+      if (pendingError) throw new Error(pendingError.message);
     } else if (action === "rotate_secret") {
       const secret = randomSecret();
       const { data, error } = await adminClient
@@ -545,7 +767,13 @@ Deno.serve(async (req) => {
       ensured.newSecret = secret;
     } else if (action === "save_mapping") {
       const automation = one(customerAutomation.automations) || {};
-      const mappings = normalizeEventMappings(body.mappings || body.event_mapping, automation.setup_schema);
+      const schemas = webhookSchemas(automation);
+      if (body.setup_values !== undefined) {
+        const existingSetup = await loadSavedSetup(adminClient, customerAutomation.id, auth.user.id, schemas.inputFields);
+        const savedValues = sanitizeWebhookSetupValues(body.setup_values, schemas.inputFields, existingSetup);
+        await saveWebhookSetupValues(adminClient, customerAutomation, auth.user.id, schemas.inputFields, savedValues);
+      }
+      const mappings = normalizeEventMappings(body.mappings || body.event_mapping, schemas.eventFields);
       config = await updateOwnedConfig(adminClient, config, auth.user.id, {
         event_mapping: mappings,
         event_mapping_status: config.inbound_last_received_at ? "awaiting_validation" : "not_configured",
@@ -560,7 +788,8 @@ Deno.serve(async (req) => {
         return errorResponse("Send an inbound webhook test before validating event mapping.", 409);
       }
       const automation = one(customerAutomation.automations) || {};
-      const savedSetup = await loadSavedSetup(adminClient, customerAutomation.id, auth.user.id, automation.setup_schema);
+      const schemas = webhookSchemas(automation);
+      const savedSetup = await loadSavedSetup(adminClient, customerAutomation.id, auth.user.id, schemas.inputFields);
       let preview: any;
       try {
         preview = runtimeMappingPreview(config, customerAutomation, savedSetup);
@@ -640,6 +869,20 @@ Deno.serve(async (req) => {
         .single();
       if (error) throw new Error(error.message);
       config = data;
+      const { error: stateError } = await adminClient
+        .from("customer_automations")
+        .update({
+          setup_status: "completed",
+          status: "active",
+          runtime_status: "ready",
+          updated_at: nowIso(),
+        })
+        .eq("id", customerAutomation.id)
+        .eq("buyer_id", auth.user.id);
+      if (stateError) throw new Error(stateError.message);
+      customerAutomation.setup_status = "completed";
+      customerAutomation.status = "active";
+      customerAutomation.runtime_status = "ready";
     } else if (action === "deactivate") {
       const { data, error } = await adminClient
         .from(CONFIG_TABLE)
@@ -650,6 +893,14 @@ Deno.serve(async (req) => {
         .single();
       if (error) throw new Error(error.message);
       config = data;
+      const { error: stateError } = await adminClient
+        .from("customer_automations")
+        .update({ setup_status: "completed", runtime_status: "paused", updated_at: nowIso() })
+        .eq("id", customerAutomation.id)
+        .eq("buyer_id", auth.user.id);
+      if (stateError) throw new Error(stateError.message);
+      customerAutomation.setup_status = "completed";
+      customerAutomation.runtime_status = "paused";
     } else if (action === "save_outbound") {
       const destination = await assertSafeOutboundUrl(body.outbound_url || body.url);
       const { data, error } = await adminClient
@@ -722,13 +973,24 @@ Deno.serve(async (req) => {
       return errorResponse("Unknown webhook configuration action.", 400);
     }
 
+    if (config.live_enabled === true && !["completed", "complete"].includes(cleanString(customerAutomation.setup_status).toLowerCase())) {
+      const { error: setupStateError } = await adminClient
+        .from("customer_automations")
+        .update({ setup_status: "completed", updated_at: nowIso() })
+        .eq("id", customerAutomation.id)
+        .eq("buyer_id", auth.user.id);
+      if (setupStateError) throw new Error(setupStateError.message);
+      customerAutomation.setup_status = "completed";
+    }
     const automation = one(customerAutomation.automations) || {};
-    const savedSetup = await loadSavedSetup(adminClient, customerAutomation.id, auth.user.id, automation.setup_schema);
+    const schemas = webhookSchemas(automation);
+    const savedSetup = await loadSavedSetup(adminClient, customerAutomation.id, auth.user.id, schemas.inputFields);
     const tests = await loadRecentTests(adminClient, config.id, auth.user.id);
     const runtimePreview = config.event_mapping_preview && Object.keys(mappingObject(config.event_mapping_preview)).length > 0
       ? config.event_mapping_preview
       : null;
     const usage = await loadUsageSummary(adminClient, customerAutomation.id);
+    if (action === "load" && config.live_enabled === true) wakeDueRuntimeDispatches();
     return jsonResponse({
       ok: true,
       test_only: config.live_enabled !== true,
@@ -745,7 +1007,9 @@ Deno.serve(async (req) => {
       order: one(customerAutomation.orders),
       config: publicConfig(config),
       tests,
-      setup_fields: setupFieldDefinitions(automation.setup_schema),
+      setup_fields: schemas.setupFields,
+      event_fields: schemas.eventFields,
+      saved_setup: savedSetup,
       saved_setup_keys: Object.keys(savedSetup),
       event_source_paths: flattenEventPaths(config.inbound_last_payload_preview || {}),
       runtime_preview: runtimePreview,

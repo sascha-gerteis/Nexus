@@ -463,7 +463,7 @@
                   <div class="sheet-node-list" id="developerSheetNodeList"></div>
                 </div>
                 <div class="full"><label>Buyer setup schema JSON</label><textarea class="textarea code-textarea" name="setup_schema" rows="7" placeholder='[{"name":"company_url","label":"Company website","type":"url","required":true}]'></textarea></div>
-                <div class="full"><label>On-demand request schema JSON</label><textarea class="textarea code-textarea" name="runtime_event_schema" rows="5" placeholder='[{"name":"question","label":"Question","type":"textarea","required":true}]'></textarea></div>
+                <div class="full"><label>Per-request schema JSON (on-demand or buyer webhook)</label><textarea class="textarea code-textarea" name="runtime_event_schema" rows="5" placeholder='[{"name":"question","label":"Question","type":"textarea","required":true}]'></textarea><small>List only values sent with each request. Put stable buyer answers in the setup schema.</small></div>
                 <div class="full"><label>Credential schema JSON</label><textarea class="textarea code-textarea" name="credential_schema" rows="6" placeholder='[{"name":"api_key","label":"API key","type":"secret","required":true}]'></textarea></div>
                 <div class="full"><label>Workflow placeholder mappings JSON</label><textarea class="textarea code-textarea" name="workflow_placeholder_mappings" rows="7" placeholder='[{"placeholder":"[[CompanyWebsite]]","source":"setup","key":"company_url"}]'></textarea></div>
                 <div class="full">

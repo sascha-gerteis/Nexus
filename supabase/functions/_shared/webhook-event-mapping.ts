@@ -11,6 +11,9 @@ const RESERVED_TARGETS = new Set([
   "secrets",
   "credentials",
   "customer_automation_id",
+  "customer_id",
+  "external_customer_id",
+  "nexus_customer_id",
   "automation_id",
   "order_id",
   "buyer_id",
@@ -20,6 +23,12 @@ const RESERVED_TARGETS = new Set([
   "bundle_order_id",
   "bundle_run_attempt_id",
   "bundle_run_item_id",
+]);
+const NEXUS_GENERATED_SETUP_TARGETS = new Set([
+  "customer_id",
+  "external_customer_id",
+  "nexus_customer_id",
+  "customer_automation_id",
 ]);
 
 export function cleanMappingString(value: unknown) {
@@ -41,6 +50,7 @@ export function normalizeSetupSchema(value: unknown): any[] {
       return [];
     }
   }
+  if (!value || typeof value !== "object") return [];
   const object = mappingObject(value);
   for (const candidate of [object.fields, object.setup_fields, object.setupFields, object.questions, object.schema, object.items]) {
     const fields = normalizeSetupSchema(candidate);
@@ -66,7 +76,37 @@ export function setupFieldDefinitions(value: unknown) {
       description: cleanMappingString(field?.description),
       required: field?.required === true,
       type: fieldType || "text",
+      placeholder: cleanMappingString(field?.placeholder),
+      options: Array.isArray(field?.options) ? field.options : [],
+      default_value: field?.default_value ?? field?.defaultValue ?? field?.default ?? "",
     }];
+  });
+}
+
+function perRequestFieldHint(field: any) {
+  const name = cleanMappingString(field?.name || field?.key);
+  const scope = cleanMappingString(field?.scope || field?.source || field?.usage).toLowerCase();
+  return field?.per_request === true || field?.runtime_event === true || field?.event_field === true ||
+    ["event", "request", "per_request", "runtime_event", "webhook"].includes(scope) ||
+    /^(event|request|message|payload|prompt|question|query|command|input|content|text)(_|$)/i.test(name);
+}
+
+export function eventFieldDefinitions(runtimeEventSchema: unknown, setupSchema: unknown = []) {
+  const explicit = setupFieldDefinitions(runtimeEventSchema);
+  if (explicit.length) return explicit;
+  return normalizeSetupSchema(setupSchema)
+    .filter((field: any) => perRequestFieldHint(field))
+    .flatMap((field: any) => setupFieldDefinitions([field]));
+}
+
+export function webhookInputFieldDefinitions(setupSchema: unknown, runtimeEventSchema: unknown = []) {
+  const fields = [...setupFieldDefinitions(setupSchema), ...eventFieldDefinitions(runtimeEventSchema, setupSchema)];
+  const seen = new Set<string>();
+  return fields.filter((field) => {
+    const canonical = field.name.toLowerCase();
+    if (seen.has(canonical)) return false;
+    seen.add(canonical);
+    return true;
   });
 }
 
@@ -132,7 +172,11 @@ export function normalizeEventMappings(value: unknown, setupSchema: unknown): Ev
     const requestedTarget = cleanMappingString(object.target || object.target_field);
     const sourcePath = cleanMappingString(object.source_path || object.source);
     if (!requestedTarget && !sourcePath) continue;
-    const target = allowedTargets.get(requestedTarget.toLowerCase());
+    const requestedCanonical = requestedTarget.toLowerCase();
+    const target = allowedTargets.get(requestedCanonical);
+    // Older webhook configurations may have asked the buyer to supply Nexus
+    // identity. Ignore those legacy mappings now that Nexus generates them.
+    if (!target && NEXUS_GENERATED_SETUP_TARGETS.has(requestedCanonical)) continue;
     if (!target) throw new Error(`Event mapping target is not part of this product's setup schema: ${requestedTarget || "unknown"}.`);
     if (!parseSourcePath(sourcePath).length) throw new Error(`Invalid event source path for ${target}.`);
     if (seen.has(target.toLowerCase())) throw new Error(`Event field ${target} is mapped more than once.`);
@@ -146,14 +190,22 @@ export function applyEventMappings(params: {
   payload: unknown;
   mappings: EventMappingItem[];
   savedSetup?: Record<string, unknown>;
+  optionalTargets?: string[];
 }) {
   const setup = { ...mappingObject(params.savedSetup) };
+  const optionalTargets = new Set((params.optionalTargets || []).map((target) => cleanMappingString(target).toLowerCase()));
   const errors: string[] = [];
   const resolved: Array<{ target: string; source_path: string; value: unknown }> = [];
   for (const mapping of params.mappings) {
     const result = valueAtEventPath(params.payload, mapping.source_path);
     if (!result.found) {
-      errors.push(`${mapping.target} could not be read from ${mapping.source_path}.`);
+      const fallback = setup[mapping.target];
+      const hasFallback = fallback !== null && fallback !== undefined &&
+        !(typeof fallback === "string" && !fallback.trim()) &&
+        !(Array.isArray(fallback) && fallback.length === 0);
+      if (!hasFallback && !optionalTargets.has(mapping.target.toLowerCase())) {
+        errors.push(mapping.target + " could not be read from " + mapping.source_path + " and has no saved fallback.");
+      }
       continue;
     }
     const empty = result.value === null || result.value === undefined ||
@@ -161,7 +213,13 @@ export function applyEventMappings(params: {
       (Array.isArray(result.value) && result.value.length === 0) ||
       (typeof result.value === "object" && !Array.isArray(result.value) && Object.keys(mappingObject(result.value)).length === 0);
     if (empty) {
-      errors.push(`${mapping.target} resolved from ${mapping.source_path}, but the value was empty.`);
+      const fallback = setup[mapping.target];
+      const hasFallback = fallback !== null && fallback !== undefined &&
+        !(typeof fallback === "string" && !fallback.trim()) &&
+        !(Array.isArray(fallback) && fallback.length === 0);
+      if (!hasFallback && !optionalTargets.has(mapping.target.toLowerCase())) {
+        errors.push(mapping.target + " resolved from " + mapping.source_path + ", but the value and saved fallback were empty.");
+      }
       continue;
     }
     setup[mapping.target] = result.value;
@@ -169,7 +227,6 @@ export function applyEventMappings(params: {
   }
   return { ok: errors.length === 0, setup, resolved, errors };
 }
-
 function firstEventValue(payload: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const result = valueAtEventPath(payload, key);
@@ -203,22 +260,8 @@ export function buildWebhookRuntimeEnvelope(params: {
   mappings: EventMappingItem[];
   savedSetup?: Record<string, unknown>;
   setupSchema?: unknown;
+  eventSchema?: unknown;
 }) {
-  const mapped = applyEventMappings({
-    payload: params.payload,
-    mappings: params.mappings,
-    savedSetup: params.savedSetup,
-  });
-  const requiredErrors = setupFieldDefinitions(params.setupSchema)
-    .filter((field) => field.required)
-    .flatMap((field) => {
-      const value = mapped.setup[field.name];
-      const missing = value === null || value === undefined ||
-        (typeof value === "string" && !value.trim()) ||
-        (Array.isArray(value) && value.length === 0);
-      return missing ? [`Required runtime input ${field.label || field.name} is missing from both saved setup and the event mapping.`] : [];
-    });
-  const mappingErrors = [...mapped.errors, ...requiredErrors];
   const customerAutomation = params.customerAutomation || {};
   const automation = params.automation || {};
   const order = params.order || {};
@@ -235,14 +278,51 @@ export function buildWebhookRuntimeEnvelope(params: {
     bundle_run_attempt_id: bundleId ? "assigned_at_dispatch" : "",
     bundle_run_item_id: bundleId ? "assigned_at_dispatch" : "",
   };
+  const mapped = applyEventMappings({
+    payload: params.payload,
+    mappings: params.mappings,
+    savedSetup: params.savedSetup,
+    optionalTargets: setupFieldDefinitions(params.eventSchema).filter((field) => !field.required).map((field) => field.name),
+  });
+  // Nexus owns purchase/runtime identity. Keep legacy setup aliases populated so
+  // existing workflows continue to work without asking the buyer for IDs.
+  const setup = {
+    ...mapped.setup,
+    customer_id: identity.buyer_id,
+    external_customer_id: identity.buyer_id,
+    nexus_customer_id: identity.buyer_id,
+    customer_automation_id: identity.customer_automation_id,
+    automation_id: identity.automation_id,
+    order_id: identity.order_id,
+    buyer_id: identity.buyer_id,
+  };
+  const requiredErrors = setupFieldDefinitions(params.setupSchema)
+    .filter((field) => field.required)
+    .flatMap((field) => {
+      const value = setup[field.name];
+      const missing = value === null || value === undefined ||
+        (typeof value === "string" && !value.trim()) ||
+        (Array.isArray(value) && value.length === 0);
+      return missing ? [`Required runtime input ${field.label || field.name} is missing from both saved setup and the event mapping.`] : [];
+    });
+  const mappingErrors = [...mapped.errors, ...requiredErrors];
   const event = canonicalWebhookEvent(params.payload, params.eventId, params.receivedAt);
+  const normalizedEventData = { ...mappingObject(event.data) };
+  for (const field of setupFieldDefinitions(params.eventSchema)) {
+    const value = setup[field.name];
+    const useful = value !== null && value !== undefined &&
+      !(typeof value === "string" && !value.trim()) &&
+      !(Array.isArray(value) && value.length === 0);
+    if (useful) normalizedEventData[field.name] = value;
+  }
+  event.data = normalizedEventData;
   return {
     ok: mappingErrors.length === 0,
     errors: mappingErrors,
     resolved: mapped.resolved,
     envelope: {
       ...identity,
-      setup: mapped.setup,
+      setup,
       event,
       request: mappingObject(params.payload),
       customer: {

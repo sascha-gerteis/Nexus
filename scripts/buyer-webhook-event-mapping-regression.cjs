@@ -13,6 +13,7 @@ const migration = read("supabase/migrations/20260812000200_buyer_webhook_event_m
 const shared = read("supabase/functions/_shared/webhook-event-mapping.ts");
 const config = read("supabase/functions/buyer-webhook-config/index.ts");
 const ingress = read("supabase/functions/buyer-webhook-ingress/index.ts");
+const importer = read("supabase/functions/import-n8n-workflow/index.ts");
 const page = read("pages/buyer/webhook-setup.html");
 
 expect(migration.includes("event_mapping jsonb"), "Missing buyer-owned event mapping storage.");
@@ -31,9 +32,18 @@ expect(config.includes("buildWebhookRuntimeEnvelope"), "Config service must use 
 expect(ingress.includes('event_mapping_status: "awaiting_validation"'), "A new test event must require mapping revalidation.");
 expect(!/automation_runs[\s\S]{0,180}insert/.test(ingress), "Test ingress must not create runtime runs.");
 expect(!/runtime_dispatch_queue[\s\S]{0,180}insert/.test(ingress), "Test ingress must not dispatch queued work.");
-expect(page.includes("Map event data"), "Buyer page is missing event mapping UI.");
-expect(page.includes("validateEventMapping"), "Buyer page is missing mapping validation control.");
-expect(page.includes("confirmEventMapping"), "Buyer page is missing explicit mapping confirmation.");
+expect(shared.includes("eventFieldDefinitions"), "Missing explicit per-request field isolation.");
+expect(shared.includes("webhookInputFieldDefinitions"), "Missing combined runtime input schema.");
+expect(config.includes("runtime_event_schema"), "Config service does not load the product event schema.");
+expect(config.includes("event_fields: schemas.eventFields"), "Config response does not separate event fields.");
+expect(config.includes("saved_setup: savedSetup"), "Config response does not return safe saved defaults.");
+expect(ingress.includes("eventSchema: eventFields"), "Live ingress does not normalize declared event fields.");
+expect(importer.includes('runtimeContextPath("event.data", cleanKey)'), "n8n importer does not resolve event placeholders to normalized event data.");
+expect(page.includes("Set defaults and match request fields"), "Buyer page is missing the corrected Step 2 contract.");
+expect(page.includes("Saved once"), "Buyer page is missing stable setup defaults.");
+expect(page.includes("Per-request fields"), "Buyer page is missing isolated request fields.");
+expect(page.includes("Fallback if missing"), "Buyer page is missing request fallbacks.");
+expect(page.includes("finishEventMapping"), "Buyer page is missing mapping validation and confirmation.");
 
 const scripts = [...page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
   .map(match => match[1])
@@ -47,5 +57,8 @@ console.log(JSON.stringify({
   canonicalEventContract: true,
   validationAndConfirmation: true,
   liveDispatchGated: true,
+  stableSetupSeparatedFromEvents: true,
+  savedFallbacksSupported: true,
+  normalizedEventImportSupported: true,
   pageSyntax: true,
 }));

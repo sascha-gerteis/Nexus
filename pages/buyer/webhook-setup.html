@@ -68,6 +68,18 @@
     .webhook-mapping-target strong { color: #233a58; font-size: 13px; }
     .webhook-mapping-target small { margin-top: 3px; color: #718198; }
     .webhook-mapping-arrow { color: #7d8da4; text-align: center; font-weight: 900; }
+    .webhook-field-section + .webhook-field-section { margin-top: 22px; padding-top: 22px; border-top: 1px solid #e5edf6; }
+    .webhook-section-heading { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+    .webhook-section-heading strong, .webhook-section-heading p { display: block; margin: 0; }
+    .webhook-section-heading strong { color: #203754; font-size: 15px; }
+    .webhook-section-heading p { margin-top: 4px; color: #708198; font-size: 12px; line-height: 1.5; }
+    .webhook-setup-list { display: grid; gap: 11px; margin-top: 14px; }
+    .webhook-saved-row { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(240px, 1.2fr); gap: 16px; align-items: center; padding: 14px; border: 1px solid #dce7f3; border-radius: 14px; background: #f8fbff; }
+    .webhook-saved-row strong, .webhook-saved-row small { display: block; }
+    .webhook-saved-row strong { color: #243b58; font-size: 13px; }
+    .webhook-saved-row small { margin-top: 3px; color: #718198; font-size: 11px; line-height: 1.4; }
+    .webhook-mapping-controls { display: grid; gap: 10px; }
+    .webhook-mapping-controls label > span { display: block; margin-bottom: 5px; color: #60738d; font-size: 11px; font-weight: 800; }
     .webhook-locked-summary { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 13px; align-items: start; padding: 16px; border: 1px dashed #cbd8e8; border-radius: 14px; background: #f8fbff; }
     .webhook-locked-summary span { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: #eaf1fa; color: #647a96; font-weight: 900; }
     .webhook-locked-summary strong, .webhook-locked-summary p { display: block; margin: 0; }
@@ -93,7 +105,7 @@
       .webhook-code-row .btn { width: 100%; }
       .webhook-history-row { grid-template-columns: auto 1fr; }
       .webhook-history-row time { grid-column: 2; }
-      .webhook-mapping-intro, .webhook-mapping-row { grid-template-columns: 1fr; }
+      .webhook-mapping-intro, .webhook-mapping-row, .webhook-saved-row { grid-template-columns: 1fr; }
       .webhook-mapping-arrow { display: none; }
     }
     .webhook-hero { grid-template-columns: minmax(0, 1fr) 290px; align-items: stretch; }
@@ -184,6 +196,8 @@
       config: null,
       tests: [],
       setupFields: [],
+      eventFields: [],
+      savedSetup: {},
       savedSetupKeys: [],
       eventSourcePaths: [],
       runtimePreview: null,
@@ -195,9 +209,14 @@
       topupCheckoutAvailable: false,
       liveRuntimeEnabled: false,
       testPayloadText: "",
-      waitingForInboundTest: false
+      waitingForInboundTest: false,
+      connectionTestEventId: ""
     };
     let inboundTestPollTimer = null;
+
+    function cleanString(value) {
+      return typeof value === "string" ? value.trim() : "";
+    }
 
     function escapeHtml(value) {
       return String(value || "")
@@ -229,7 +248,8 @@
     function statusMeta(status, direction) {
       const value = String(status || "").toLowerCase();
       if (value === "confirmed") return { label: "Confirmed", tone: "success", help: `${direction} connection tested and confirmed.` };
-      if (["test_received", "test_succeeded"].includes(value)) return { label: "Test passed", tone: "success", help: "The test succeeded. Confirm the connection to finish setup." };
+      if (value === "test_received") return { label: "Test passed", tone: "success", help: "The authenticated test request was received. Nexus is confirming it automatically." };
+      if (value === "test_succeeded") return { label: "Test passed", tone: "success", help: "The destination test succeeded. Confirm it to save the destination." };
       if (value === "test_failed") return { label: "Test failed", tone: "error", help: "Nexus could not verify this destination. Review the error and try again." };
       if (value === "disabled") return { label: "Disabled", tone: "error", help: "This webhook connection is disabled." };
       if (value === "not_configured") return { label: "Optional", tone: "", help: "Add a destination only if results should be sent to your system." };
@@ -348,7 +368,7 @@
           ${context}
           ${rows.map(test => {
             const belongsToCurrentWindow = hasActiveWindow && Date.parse(String(test.created_at || "")) >= startedAt;
-            const label = direction === "inbound" && hasActiveWindow && !belongsToCurrentWindow ? "previous" : test.status;
+            const label = direction === "inbound" && hasActiveWindow && !belongsToCurrentWindow ? "previous" : test.status === "pending" ? "waiting for request" : test.status;
             const tone = belongsToCurrentWindow && test.status === "succeeded" ? "green" : test.status === "failed" ? "red" : "blue";
             return `<div class="webhook-history-row">
               <span class="pill ${tone}">${escapeHtml(label)}</span>
@@ -378,7 +398,7 @@
     }
 
     function defaultWebhookTestPayload() {
-      const fields = Array.isArray(webhookState.setupFields) ? webhookState.setupFields : [];
+      const fields = Array.isArray(webhookState.eventFields) ? webhookState.eventFields : [];
       if (!fields.length) return fallbackWebhookTestPayload();
 
       const requestValues = {};
@@ -404,12 +424,28 @@
       return JSON.stringify({ event: { type: "request.received" }, ...requestValues, sent_at: new Date().toISOString(), source: "nexus_browser_test" }, null, 2);
     }
 
+    function createConnectionTestEventId() {
+      const suffix = globalThis.crypto?.randomUUID
+        ? crypto.randomUUID().slice(0, 12)
+        : Math.random().toString(36).slice(2, 14);
+      return `nexus-connect-${Date.now()}-${suffix}`;
+    }
+
+    function connectionTestEventId() {
+      if (!webhookState.connectionTestEventId) webhookState.connectionTestEventId = createConnectionTestEventId();
+      return webhookState.connectionTestEventId;
+    }
+
     function inboundCurl() {
       const url = webhookState.config?.inbound_url || "WEBHOOK_URL";
       const secret = webhookState.newSecret || "YOUR_WEBHOOK_SECRET";
-      return `curl -X POST "${url}" \\\n  -H "Content-Type: application/json" \\\n  -H "x-nexus-webhook-secret: ${secret}" \\\n  -H "x-nexus-event-id: your-unique-event-id" \\\n  -d '{"event":"test","message":"Hello from my system"}'`;
+      const eventId = connectionTestEventId();
+      let requestBody = "{}";
+      try {
+        requestBody = JSON.stringify(JSON.parse(defaultWebhookTestPayload())).replaceAll("'", "'\"'\"'");
+      } catch {}
+      return `curl -X POST "${url}" \\\n  -H "Content-Type: application/json" \\\n  -H "x-nexus-webhook-secret: ${secret}" \\\n  -H "x-nexus-event-id: ${eventId}" \\\n  -d '${requestBody}'`;
     }
-
     function renderUsageCard(readOnly) {
       const usage = webhookState.usage || {};
       const total = Math.max(0, Number(usage.total_units || 0));
@@ -439,11 +475,35 @@
       `;
     }
 
+    function savedSetupValue(field) {
+      const saved = webhookState.savedSetup || {};
+      if (Object.prototype.hasOwnProperty.call(saved, field.name)) return saved[field.name];
+      return field.default_value ?? "";
+    }
+
+    function savedSetupInput(field, className, readOnly) {
+      const value = savedSetupValue(field);
+      const type = String(field.type || "text").toLowerCase();
+      const common = `class="webhook-input ${className}" data-target="${escapeHtml(field.name)}" data-value-type="${escapeHtml(type)}" ${readOnly ? "disabled" : ""}`;
+      if (type === "textarea" || type === "long_text") {
+        return `<textarea ${common} placeholder="${escapeHtml(field.placeholder || "")}">${escapeHtml(value)}</textarea>`;
+      }
+      if ((type === "select" || type === "dropdown") && Array.isArray(field.options) && field.options.length) {
+        return `<select ${common}><option value="">Choose an option</option>${field.options.map(option => {
+          const optionValue = typeof option === "object" ? String(option.value ?? option.label ?? "") : String(option);
+          const optionLabel = typeof option === "object" ? String(option.label ?? option.value ?? "") : String(option);
+          return `<option value="${escapeHtml(optionValue)}" ${String(value) === optionValue ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`;
+        }).join("")}</select>`;
+      }
+      const inputType = ["url", "email", "number", "date"].includes(type) ? type : "text";
+      return `<input ${common} type="${inputType}" value="${escapeHtml(value)}" placeholder="${escapeHtml(field.placeholder || "")}">`;
+    }
+
     function renderEventMapping(readOnly) {
       const meta = mappingStatusMeta(webhookState.config?.event_mapping_status);
       const sources = Array.isArray(webhookState.eventSourcePaths) ? webhookState.eventSourcePaths : [];
-      const fields = Array.isArray(webhookState.setupFields) ? webhookState.setupFields : [];
-      const savedKeys = new Set(webhookState.savedSetupKeys || []);
+      const setupFields = Array.isArray(webhookState.setupFields) ? webhookState.setupFields : [];
+      const eventFields = Array.isArray(webhookState.eventFields) ? webhookState.eventFields : [];
       const canValidate = webhookState.config?.inbound_status === "confirmed" && Boolean(webhookState.config?.inbound_last_event_id);
       const confirmed = webhookState.config?.event_mapping_status === "confirmed";
       const preview = webhookState.runtimePreview || webhookState.config?.event_mapping_preview || null;
@@ -451,47 +511,57 @@
       if (!canValidate) {
         return `<article class="webhook-card locked-step">
           <div class="webhook-card-head">
-            <div><span class="webhook-eyebrow">Step 2</span><h2>Match request fields</h2><p>This step unlocks after Nexus receives and confirms one sample request.</p></div>
+            <div><span class="webhook-eyebrow">Step 2</span><h2>Set defaults and match request fields</h2><p>Nexus separates values saved once from values supplied with every webhook request.</p></div>
             <span class="webhook-step">2</span>
           </div>
-          <div class="webhook-card-body"><div class="webhook-locked-summary"><span>2</span><div><strong>Finish the connection test first</strong><p>Then Nexus will suggest the field matches automatically. You will only need to review and confirm them.</p></div></div></div>
+          <div class="webhook-card-body"><div class="webhook-locked-summary"><span>2</span><div><strong>Finish the connection test first</strong><p>Then Nexus will show only the workflow's real per-request fields and suggest matches from your sample.</p></div></div></div>
         </article>`;
       }
+
       return `
-        <article class="webhook-card ${confirmed ? "complete-step" : canValidate ? "current-step" : "locked-step"}">
+        <article class="webhook-card ${confirmed ? "complete-step" : "current-step"}">
           <div class="webhook-card-head">
-            <div><span class="webhook-eyebrow">Step 2</span><h2>Match request fields</h2><p>Nexus suggested where each automation input appears in your test request. Review the matches, then confirm once.</p></div>
+            <div><span class="webhook-eyebrow">Step 2</span><h2>Set defaults and match request fields</h2><p>Save stable values once. Match only the values your sender provides on each request.</p></div>
             <span class="webhook-step">${confirmed ? "&#10003;" : "2"}</span>
           </div>
           <div class="webhook-card-body">
-            ${fields.length ? `<div class="webhook-mapping-list">${fields.map((field, index) => {
-              const selected = suggestedSourceFor(field.name, sources);
-              const savedText = savedKeys.has(field.name) ? "Use saved value" : "Not provided by this request";
-              return `<div class="webhook-mapping-row">
-                <div class="webhook-mapping-target"><strong>${escapeHtml(field.label || field.name)}</strong><small>Automation input: ${escapeHtml(field.name)}</small></div>
-                <select class="webhook-input webhook-mapping-select" data-target="${escapeHtml(field.name)}" id="eventMapping${index}" ${readOnly || !canValidate ? "disabled" : ""}>
-                  <option value="">${escapeHtml(savedText)}</option>
-                  ${sources.map(source => `<option value="${escapeHtml(source.path)}" ${selected === source.path ? "selected" : ""}>${escapeHtml(source.path)} &mdash; ${escapeHtml(typeof source.sample === "object" ? JSON.stringify(source.sample) : source.sample)}</option>`).join("")}
-                </select>
-              </div>`;
-            }).join("")}</div>` : canValidate ? `<div class="webhook-status-box"><strong>No mapping required</strong><p>The workflow can read the complete request from <code>event.data</code> and <code>request</code>.</p></div>` : ""}
+            ${setupFields.length ? `<section class="webhook-field-section"><div class="webhook-section-heading"><div><strong>Saved once</strong><p>These stay the same for every run and are not expected from the sender.</p></div><span class="pill blue">${setupFields.length} setup</span></div><div class="webhook-setup-list">${setupFields.map(field => `<label class="webhook-saved-row"><span><strong>${escapeHtml(field.label || field.name)}${field.required ? " *" : ""}</strong><small>${escapeHtml(field.description || "Used as a saved workflow default.")}</small></span>${savedSetupInput(field, "webhook-saved-input", readOnly)}</label>`).join("")}</div></section>` : ""}
+            <section class="webhook-field-section">
+              <div class="webhook-section-heading"><div><strong>Per-request fields</strong><p>Only these values may change with each webhook call. The full raw payload remains available as <code>event.data</code> and <code>request</code>.</p></div><span class="pill orange">${eventFields.length} request</span></div>
+              ${eventFields.length ? `<div class="webhook-mapping-list">${eventFields.map((field, index) => {
+                const selected = configuredSourceFor(field.name) || suggestedSourceFor(field.name, sources);
+                const isRequired = field.required === true;
+                return `<div class="webhook-mapping-row">
+                  <div class="webhook-mapping-target"><strong>${escapeHtml(field.label || field.name)} <span class="pill ${isRequired ? "orange" : "blue"}">${isRequired ? "Required" : "Optional"}</span></strong><small>Workflow input: event.data.${escapeHtml(field.name)}</small></div>
+                  <div class="webhook-mapping-controls">
+                    <label><span>Request field</span><select class="webhook-input webhook-mapping-select" data-target="${escapeHtml(field.name)}" id="eventMapping${index}" ${readOnly ? "disabled" : ""}>
+                      <option value="">${isRequired ? "Use saved fallback only" : "Leave unmapped"}</option>
+                      ${sources.map(source => `<option value="${escapeHtml(source.path)}" ${selected === source.path ? "selected" : ""}>${escapeHtml(source.path)} &mdash; ${escapeHtml(typeof source.sample === "object" ? JSON.stringify(source.sample) : source.sample)}</option>`).join("")}
+                    </select></label>
+                    <label><span>Fallback if missing ${isRequired ? "(required if unmapped)" : "(optional)"}</span>${savedSetupInput(field, "webhook-event-fallback", readOnly)}</label>
+                  </div>
+                </div>`;
+              }).join("")}</div>` : `<div class="webhook-status-box"><strong>No named request fields</strong><p>This workflow reads the complete payload directly from <code>event.data</code> or <code>request</code>; no field matching is needed.</p></div>`}
+            </section>
+            <div class="webhook-inline-note"><strong>If a sender omits a value</strong><span>Nexus uses the saved fallback. Optional values may stay empty. Required values need either a request match or a fallback so the workflow can run safely.</span></div>
             <div class="webhook-actions">
-              ${fields.length ? `<button class="btn btn-secondary" type="button" onclick="autoMatchEventMapping()" ${readOnly || !sources.length || webhookState.busy ? "disabled" : ""}>Suggest field matches</button>` : ""}
-              <button class="btn btn-primary" type="button" onclick="finishEventMapping()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "finish-mapping" ? "Confirming fields..." : confirmed ? "Check field matches again" : "Confirm field matches"}</button>
+              ${eventFields.length ? `<button class="btn btn-secondary" type="button" onclick="autoMatchEventMapping()" ${readOnly || !sources.length || webhookState.busy ? "disabled" : ""}>Suggest field matches</button>` : ""}
+              <button class="btn btn-primary" type="button" onclick="finishEventMapping()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "finish-mapping" ? "Confirming fields..." : confirmed ? "Check field matches again" : "Save and confirm fields"}</button>
             </div>
-            ${confirmed || meta.tone === "error" ? `<div class="webhook-status-box ${meta.tone}"><strong>${escapeHtml(confirmed ? "Field matches confirmed" : meta.label)}</strong><p>${escapeHtml(webhookState.config?.event_mapping_last_error || meta.help)}</p></div>` : ""}
+            ${confirmed || meta.tone === "error" ? `<div class="webhook-status-box ${meta.tone}"><strong>${escapeHtml(confirmed ? "Field setup confirmed" : meta.label)}</strong><p>${escapeHtml(webhookState.config?.event_mapping_last_error || meta.help)}</p></div>` : ""}
             ${preview ? `<details class="webhook-runtime-preview"><summary>View technical request preview</summary><pre class="webhook-curl">${escapeHtml(JSON.stringify(preview, null, 2))}</pre></details>` : ""}
           </div>
         </article>`;
-    }
-
-    function renderConnectionCard(readOnly) {
+    }    function renderConnectionCard(readOnly) {
       const config = webhookState.config;
       const confirmed = config.inbound_status === "confirmed";
       const live = webhookState.liveRuntimeEnabled || config.live_enabled === true;
-      const testWindowOpen = !live && config.inbound_status === "awaiting_test" && Boolean(config.inbound_test_started_at);
-      const inbound = webhookState.waitingForInboundTest || testWindowOpen
-        ? { label: "Waiting for your request", tone: "waiting", help: "Send a new authenticated POST request from your app. This page will detect it automatically." }
+      const testWindowOpen = !live && ["awaiting_test", "test_failed"].includes(config.inbound_status) && Boolean(config.inbound_test_started_at);
+      const testFailure = connectionTestFailureMessage();
+      const inbound = testFailure
+        ? { label: "Request rejected", tone: "error", help: testFailure }
+        : webhookState.waitingForInboundTest || testWindowOpen
+        ? { label: "Waiting for your request", tone: "waiting", help: "Send a new authenticated POST request from your app. This page will detect it automatically and stop waiting after two minutes." }
         : statusMeta(config.inbound_status, "Inbound");
       const secretText = webhookState.newSecret
         ? (webhookState.secretVisible ? webhookState.newSecret : "********************************")
@@ -509,7 +579,7 @@
               <div class="webhook-field"><label>Secret header: x-nexus-webhook-secret</label><div class="webhook-code-row"><div class="webhook-code webhook-secret ${webhookState.newSecret && webhookState.secretVisible ? "revealed" : ""}">${escapeHtml(secretText)}</div>${webhookState.newSecret ? `<button class="btn btn-secondary btn-small" type="button" onclick="toggleWebhookSecret()">${webhookState.secretVisible ? "Hide" : "Show"}</button>` : `<span class="pill blue">Stored securely</span>`}</div></div>
               <div class="webhook-actions">${webhookState.newSecret ? `<button class="btn btn-secondary btn-small" type="button" onclick="copyWebhookValue('secret')">Copy secret</button>` : ""}<button class="btn btn-secondary btn-small" type="button" onclick="rotateWebhookSecret()" ${readOnly || webhookState.busy ? "disabled" : ""}>${webhookState.busy === "rotate" ? "Creating..." : webhookState.newSecret ? "Replace secret" : "Create replacement secret"}</button></div>
             </div>
-            ${!webhookState.newSecret ? `<div class="webhook-inline-note"><strong>Your existing secret still works.</strong><span>For security, Nexus cannot display it again. Send a test from your app and check the status below, or create a replacement secret to use this browser tester.</span></div>` : ""}
+            ${!webhookState.newSecret ? `<div class="webhook-inline-note"><strong>Do not send the YOUR_WEBHOOK_SECRET placeholder.</strong><span>Nexus cannot display your saved secret again. Use the secret already stored in your app, or create a replacement secret above and copy it before testing.</span></div>` : ""}
             <div class="webhook-tester">
               ${live ? `
                 <div class="webhook-tester-head"><div><h3>Live workflow tester</h3><p>This sends one real request through Nexus to n8n and consumes one included run.</p></div><span class="pill orange">Uses 1 run</span></div>
@@ -519,13 +589,12 @@
                 <div class="webhook-tester-head"><div><h3>Verify a request from your app</h3><p>Start the test, then send a request from your own app, n8n, Postman or the cURL example below. Nexus will not generate the request for you. Connection tests do not consume the monthly allowance.</p></div><span class="pill blue">Free test</span></div>
                 <div class="webhook-inline-note"><strong>How verification works</strong><span>Only a new authenticated request received after you start this test can pass. Older requests and Nexus-generated samples do not count.</span></div>
                 <div class="webhook-actions">
-                  ${!confirmed ? `<button class="btn btn-primary" type="button" onclick="startInboundConnectionTest()" ${readOnly || webhookState.busy || webhookState.waitingForInboundTest ? "disabled" : ""}>${webhookState.busy === "begin-inbound-test" ? "Starting..." : webhookState.waitingForInboundTest ? "Waiting for request..." : "Start connection test"}</button>` : ""}
+                  ${!confirmed ? `<button class="btn btn-primary" id="startInboundConnectionTestButton" data-nexus-action="start-inbound-test" type="button" ${readOnly || webhookState.busy || webhookState.waitingForInboundTest ? "disabled" : ""}>${webhookState.busy === "begin-inbound-test" ? "Starting..." : webhookState.waitingForInboundTest ? "Waiting for request..." : config.inbound_status === "test_failed" ? "Try connection test again" : "Start connection test"}</button>` : ""}
                   <button class="btn btn-secondary" type="button" onclick="checkInboundRequestStatus()" ${webhookState.busy ? "disabled" : ""}>${webhookState.busy === "check-inbound" ? "Checking..." : "Check for request"}</button>
-                  ${config.inbound_status === "test_received" && config.inbound_test_started_at ? `<button class="btn btn-primary" type="button" onclick="confirmWebhookDirection('inbound')" ${webhookState.busy ? "disabled" : ""}>Confirm received request</button>` : ""}
                 </div>
               `}
             </div>
-            <div class="webhook-status-box ${inbound.tone}"><strong>${escapeHtml(inbound.label)}</strong><p>${escapeHtml(inbound.help)} ${testWindowOpen ? `Test started: ${escapeHtml(formatDate(config.inbound_test_started_at))}.` : ""} Last new request: ${escapeHtml(formatDate(config.inbound_last_received_at))}</p></div>
+            <div class="webhook-status-box ${inbound.tone}" id="inboundConnectionStatus"><strong>${escapeHtml(inbound.label)}</strong><p>${escapeHtml(inbound.help)} ${testWindowOpen ? `Test started: ${escapeHtml(formatDate(config.inbound_test_started_at))}. Use event ID ${escapeHtml(connectionTestEventId())}.` : ""} Last new request: ${escapeHtml(formatDate(config.inbound_last_received_at))}</p></div>
             <details class="webhook-runtime-preview" ${testWindowOpen || webhookState.waitingForInboundTest ? "open" : ""}><summary>Send the request with cURL or another tool</summary><pre class="webhook-curl">${escapeHtml(inboundCurl())}</pre></details>
             ${renderHistory("inbound")}
           </div>
@@ -593,7 +662,9 @@
       webhookState.topupCheckoutAvailable = data.topup_checkout_available === true;
       webhookState.liveRuntimeEnabled = data.live_runtime_enabled === true;
       webhookState.setupFields = Array.isArray(data.setup_fields) ? data.setup_fields : webhookState.setupFields;
-      webhookState.savedSetupKeys = Array.isArray(data.saved_setup_keys) ? data.saved_setup_keys : webhookState.savedSetupKeys;
+      webhookState.eventFields = Array.isArray(data.event_fields) ? data.event_fields : webhookState.eventFields;
+      webhookState.savedSetup = data.saved_setup && typeof data.saved_setup === "object" ? data.saved_setup : webhookState.savedSetup;
+      webhookState.savedSetupKeys = Array.isArray(data.saved_setup_keys) ? data.saved_setup_keys : Object.keys(webhookState.savedSetup || {});
       webhookState.eventSourcePaths = Array.isArray(data.event_source_paths) ? data.event_source_paths : webhookState.eventSourcePaths;
       webhookState.runtimePreview = data.runtime_preview || null;
       if (data.new_secret) webhookState.newSecret = data.new_secret;
@@ -647,8 +718,11 @@
       try {
         const data = await callWebhookConfig({ action: "rotate_secret" });
         applyWebhookData(data, false);
+        webhookState.waitingForInboundTest = false;
+        webhookState.connectionTestEventId = "";
+        stopInboundTestPolling();
         webhookState.secretVisible = true;
-        showNotice("New secret created", "Copy the new secret now, then send another test request.", "success");
+        showNotice("New secret created", "Copy the new secret now, then start a new connection test.", "success");
       } catch (error) {
         showNotice("Secret rotation failed", error.message || "Could not rotate the webhook secret.", "error");
       } finally {
@@ -657,11 +731,17 @@
       }
     }
 
+    function connectionTestFailureMessage() {
+      const config = webhookState.config || {};
+      if (config.inbound_status !== "test_failed") return "";
+      return cleanString(config.inbound_last_payload_preview?.connection_test_error) || "Nexus rejected the test request. Check the request response, secret, and event ID.";
+    }
+
     function hasFreshInboundTestReceipt() {
       const config = webhookState.config || {};
       const startedAt = Date.parse(String(config.inbound_test_started_at || ""));
       const receivedAt = Date.parse(String(config.inbound_last_received_at || ""));
-      return config.inbound_status === "test_received" &&
+      return ["test_received", "confirmed"].includes(config.inbound_status) &&
         Boolean(config.inbound_last_event_id) &&
         Number.isFinite(startedAt) &&
         Number.isFinite(receivedAt) &&
@@ -673,23 +753,31 @@
       inboundTestPollTimer = null;
     }
 
-    function scheduleInboundTestPoll(attemptsLeft = 40) {
+    function scheduleInboundTestPoll(attemptsLeft = 45) {
       stopInboundTestPolling();
       if (!webhookState.waitingForInboundTest || attemptsLeft < 1) return;
       inboundTestPollTimer = setTimeout(() => pollInboundConnectionTest(attemptsLeft), 3000);
     }
 
-    async function pollInboundConnectionTest(attemptsLeft = 40) {
+    async function pollInboundConnectionTest(attemptsLeft = 45) {
       if (!webhookState.waitingForInboundTest) return;
       try {
         const data = await callWebhookConfig({ action: "load" });
         applyWebhookData(data);
+        const testFailure = connectionTestFailureMessage();
+        if (testFailure) {
+          webhookState.waitingForInboundTest = false;
+          stopInboundTestPolling();
+          webhookState.notice = { title: "Request rejected", message: testFailure, tone: "error" };
+          renderPage();
+          return;
+        }
         if (hasFreshInboundTestReceipt()) {
           webhookState.waitingForInboundTest = false;
           stopInboundTestPolling();
           webhookState.notice = {
             title: "Request received",
-            message: "Nexus received a new authenticated request from your connection. Review it, then confirm the received request.",
+            message: "Nexus received the authenticated request and confirmed the connection automatically.",
             tone: "success"
           };
           renderPage();
@@ -716,13 +804,28 @@
       scheduleInboundTestPoll(attemptsLeft - 1);
     }
 
-    async function startInboundConnectionTest() {
+    function showImmediateInboundStatus(title, message, tone = "waiting") {
+      const status = document.getElementById("inboundConnectionStatus");
+      if (!status) return;
+      status.className = `webhook-status-box ${tone}`;
+      status.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p>`;
+    }
+
+    async function startInboundConnectionTest(event) {
+      const trigger = event?.currentTarget || document.getElementById("startInboundConnectionTestButton");
+      if (trigger) {
+        trigger.disabled = true;
+        trigger.textContent = "Starting...";
+      }
       stopInboundTestPolling();
       webhookState.busy = "begin-inbound-test";
-      renderPage();
+      let startFailure = "";
+      showImmediateInboundStatus("Starting connection test", "Nexus is opening a fresh test window...");
       try {
-        const data = await callWebhookConfig({ action: "begin_inbound_test" });
+        const eventId = createConnectionTestEventId();
+        const data = await callWebhookConfig({ action: "begin_inbound_test", event_id: eventId });
         applyWebhookData(data);
+        webhookState.connectionTestEventId = cleanString(data.config?.inbound_last_event_id) || eventId;
         webhookState.waitingForInboundTest = true;
         webhookState.notice = {
           title: "Waiting for your request",
@@ -731,10 +834,26 @@
         };
       } catch (error) {
         webhookState.waitingForInboundTest = false;
-        webhookState.notice = { title: "Connection test could not start", message: error.message || "Try again shortly.", tone: "error" };
+        startFailure = error?.message || "Nexus could not start the connection test.";
+        webhookState.notice = { title: "Connection test could not start", message: startFailure, tone: "error" };
       } finally {
         webhookState.busy = "";
-        renderPage();
+        try {
+          renderPage();
+        } catch (renderError) {
+          webhookState.waitingForInboundTest = false;
+          if (trigger) {
+            trigger.disabled = false;
+            trigger.textContent = "Start connection test";
+          }
+          showImmediateInboundStatus("Connection test display failed", renderError?.message || "Reload this page and try again.", "error");
+          console.error("Could not render connection test state:", renderError);
+        }
+      }
+      if (startFailure) {
+        showImmediateInboundStatus("Connection test could not start", startFailure, "error");
+        if (window.NexusUI?.toast) NexusUI.toast(startFailure);
+        return;
       }
       if (webhookState.waitingForInboundTest) scheduleInboundTestPoll();
     }
@@ -745,10 +864,18 @@
       try {
         const data = await callWebhookConfig({ action: "load" });
         applyWebhookData(data);
+        const testFailure = connectionTestFailureMessage();
+        if (testFailure) {
+          webhookState.waitingForInboundTest = false;
+          stopInboundTestPolling();
+          webhookState.notice = { title: "Request rejected", message: testFailure, tone: "error" };
+          renderPage();
+          return;
+        }
         if (hasFreshInboundTestReceipt()) {
           webhookState.waitingForInboundTest = false;
           stopInboundTestPolling();
-          webhookState.notice = { title: "Request received", message: "A new authenticated request arrived after this test started. Confirm it to continue.", tone: "success" };
+          webhookState.notice = { title: "Connection confirmed", message: "A new authenticated request arrived and Nexus confirmed the connection automatically.", tone: "success" };
         } else if (!webhookState.config?.inbound_test_started_at) {
           webhookState.notice = { title: "Start the test first", message: "Press Start connection test, then send a request from your app.", tone: "waiting" };
         } else {
@@ -804,10 +931,6 @@
         if (liveRequest) {
           webhookState.notice = { title: "Live workflow run queued", message: data.run_id ? `Nexus created run ${data.run_id}. It will appear in your outputs after n8n finishes.` : "Nexus accepted the live request and queued it for n8n.", tone: "success" };
         } else {
-          if (webhookState.config?.inbound_status === "test_received") {
-            refreshed = await callWebhookConfig({ action: "confirm", direction: "inbound" });
-            applyWebhookData(refreshed);
-          }
           webhookState.notice = { title: "Connection test passed", message: "Nexus received and confirmed the free sample request. Continue to request mapping below.", tone: "success" };
         }
       } catch (error) {
@@ -867,6 +990,18 @@
         .filter(mapping => mapping.target && mapping.source_path);
     }
 
+    function collectWebhookSetupValues() {
+      const values = {};
+      document.querySelectorAll(".webhook-saved-input, .webhook-event-fallback").forEach(input => {
+        const target = String(input.dataset.target || "").trim();
+        if (!target) return;
+        let value = input.type === "checkbox" ? input.checked : input.value;
+        if (input.dataset.valueType === "number" && String(value).trim()) value = Number(value);
+        values[target] = value;
+      });
+      return values;
+    }
+
     function autoMatchEventMapping() {
       const sources = webhookState.eventSourcePaths || [];
       document.querySelectorAll(".webhook-mapping-select").forEach(select => {
@@ -883,10 +1018,11 @@
 
     async function finishEventMapping() {
       const mappings = collectEventMappings();
+      const setupValues = collectWebhookSetupValues();
       webhookState.busy = "finish-mapping";
       renderPage();
       try {
-        let data = await callWebhookConfig({ action: "save_mapping", mappings });
+        let data = await callWebhookConfig({ action: "save_mapping", mappings, setup_values: setupValues });
         applyWebhookData(data);
         data = await callWebhookConfig({ action: "validate_mapping" });
         applyWebhookData(data);
@@ -910,10 +1046,11 @@
 
     async function saveEventMapping() {
       const mappings = collectEventMappings();
+      const setupValues = collectWebhookSetupValues();
       webhookState.busy = "save-mapping";
       renderPage();
       try {
-        const data = await callWebhookConfig({ action: "save_mapping", mappings });
+        const data = await callWebhookConfig({ action: "save_mapping", mappings, setup_values: setupValues });
         applyWebhookData(data);
         webhookState.notice = { title: "Event mapping saved", message: "Now validate it against the latest authenticated test event.", tone: "success" };
       } catch (error) {
@@ -926,10 +1063,11 @@
 
     async function validateEventMapping() {
       const mappings = collectEventMappings();
+      const setupValues = collectWebhookSetupValues();
       webhookState.busy = "validate-mapping";
       renderPage();
       try {
-        let data = await callWebhookConfig({ action: "save_mapping", mappings });
+        let data = await callWebhookConfig({ action: "save_mapping", mappings, setup_values: setupValues });
         applyWebhookData(data);
         data = await callWebhookConfig({ action: "validate_mapping" });
         applyWebhookData(data);
@@ -1016,6 +1154,13 @@
         : { title: "Payment is still processing", message: "Nexus will apply the run pack as soon as Stripe confirms payment.", tone: "waiting" };
     }
 
+    document.addEventListener("click", (event) => {
+      const trigger = event.target?.closest?.('[data-nexus-action="start-inbound-test"]');
+      if (!trigger || trigger.disabled) return;
+      event.preventDefault();
+      void startInboundConnectionTest({ currentTarget: trigger });
+    });
+
     document.addEventListener("DOMContentLoaded", async () => {
       if (!webhookState.customerAutomationId) {
         document.getElementById("webhookRoot").innerHTML = `
@@ -1031,10 +1176,11 @@
       if (!buyer) return;
       const topupNotice = await verifyUsageTopupReturn();
       await loadWebhookSetup();
-      if (webhookState.config?.inbound_status === "awaiting_test" && webhookState.config?.inbound_test_started_at) {
-        webhookState.waitingForInboundTest = true;
+      if (["awaiting_test", "test_failed"].includes(webhookState.config?.inbound_status) && webhookState.config?.inbound_test_started_at) {
+        webhookState.connectionTestEventId = cleanString(webhookState.config?.inbound_last_event_id) || createConnectionTestEventId();
+        webhookState.waitingForInboundTest = webhookState.config?.inbound_status === "awaiting_test";
         renderPage();
-        scheduleInboundTestPoll();
+        if (webhookState.waitingForInboundTest) scheduleInboundTestPoll();
       }
       if (topupNotice) {
         webhookState.notice = topupNotice;
