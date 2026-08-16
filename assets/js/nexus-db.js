@@ -2003,6 +2003,10 @@ async function callNexusFunction(functionName, payload = {}, options = {}) {
           data: null,
           error: {
             message: friendlyMessage,
+            code: data.code || `HTTP_${response.status}`,
+            status: response.status,
+            retryable: data.retryable === true,
+            credentials_preserved: data.credentials_preserved === true,
             details: data,
           },
         };

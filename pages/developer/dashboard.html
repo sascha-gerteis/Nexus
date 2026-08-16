@@ -489,7 +489,7 @@
                       </button>
                     </div>
                     <div id="developerN8nImportResult" class="runtime-import-result">
-                      Upload/paste a workflow JSON, then save, import, and test before submitting for review.
+                      Upload/paste a workflow JSON, then save, import, and test before submitting for review. If the workflow has several final branches, name the exact buyer-facing result node NEXUS_FINAL_OUTPUT before importing; Nexus only auto-selects when the result is unambiguous.
                     </div>
                   </div>
                 </div>
@@ -4623,12 +4623,42 @@ company_url = context["inputs"].get("company_url")
         });
     }
 
+    function isRetryableN8nIssue(value = {}) {
+      const error = value?.error || value || {};
+      const details = error?.details || {};
+      const code = String(error?.code || details?.code || "").toUpperCase();
+      const message = String(error?.message || details?.error || details?.message || "");
+      return error?.retryable === true || details?.retryable === true ||
+        code === "N8N_TEMPORARILY_UNAVAILABLE" ||
+        /n8n.+temporarily unavailable|n8n.+\b50[234]\b|n8n api failed \(50[234]\)|bad gateway/i.test(message);
+    }
+
+    function renderTemporaryN8nIssue(root, value, retryAction, retryLabel = "Try again") {
+      if (!root) return;
+      const error = value?.error || value || {};
+      const details = error?.details || {};
+      const message = error?.message || details?.error || details?.message || "n8n is restarting or temporarily unreachable.";
+      root.innerHTML = `
+        <div class="credential-gate warning">
+          <div>
+            <strong>n8n temporarily unavailable</strong>
+            <p>${NexusUI.escapeHtml(message)} Your saved credentials and confirmed workflow bindings were preserved.</p>
+          </div>
+          <button class="btn btn-secondary btn-small" type="button" onclick="${retryAction}">${NexusUI.escapeHtml(retryLabel)}</button>
+        </div>
+      `;
+    }
+
     function workflowRunGuidance(message, slots, bindings) {
       const text = String(message || "");
       if (!text) return "";
       const lowerText = text.toLowerCase();
       const providers = credentialRequirementNames(slots);
       const boundProviders = Array.from(new Set((bindings || []).map((binding) => binding.provider_label || binding.provider || binding.n8n_credential_type).filter(Boolean)));
+
+      if (/n8n.+temporarily unavailable|n8n.+\b50[234]\b|n8n api failed \(50[234]\)|bad gateway/i.test(lowerText)) {
+        return "The hosted n8n service is restarting or temporarily unreachable. Nexus preserved the workflow and credential bindings. Wait a moment, then retry the technical check.";
+      }
 
       if (lowerText.includes("credential with id") && lowerText.includes("does not exist")) {
         const gmailFailure = lowerText.includes("gmailoauth2") || providers.some((provider) => String(provider).toLowerCase().includes("gmail"));
@@ -4882,7 +4912,11 @@ company_url = context["inputs"].get("company_url")
 
       const { data, error } = await NexusDB.scanAutomationCredentials(automationId);
       if (error) {
-        if (root) root.innerHTML = `<div class="error">${NexusUI.escapeHtml(error.message || "Could not scan product.")}</div>`;
+        if (isRetryableN8nIssue(error)) {
+          renderTemporaryN8nIssue(root, error, "scanCurrentProductCredentials()", "Retry credential scan");
+        } else if (root) {
+          root.innerHTML = `<div class="error">${NexusUI.escapeHtml(error.message || "Could not scan product.")}</div>`;
+        }
         return;
       }
 
@@ -4907,7 +4941,13 @@ company_url = context["inputs"].get("company_url")
         preserve_hosted_workflow: true,
         reason: "credential_update"
       });
-      if (started.error) throw new Error(started.error.message || "Workflow test failed to start.");
+      if (started.error) {
+        const startError = new Error(started.error.message || "Workflow test failed to start.");
+        startError.code = started.error.code || started.error.details?.code || "";
+        startError.retryable = isRetryableN8nIssue(started.error);
+        startError.details = started.error.details || {};
+        throw startError;
+      }
 
       const result = await pollWorkflowTestToCompletion({
         automationId,
@@ -4919,6 +4959,13 @@ company_url = context["inputs"].get("company_url")
       });
 
       if (isPassingTestStatus(result.status)) return result;
+      if (isRetryableN8nIssue(result)) {
+        const retryError = new Error(result.error_message || result.message || "n8n is temporarily unavailable.");
+        retryError.code = result.code || "N8N_TEMPORARILY_UNAVAILABLE";
+        retryError.retryable = true;
+        retryError.result = result;
+        throw retryError;
+      }
       if (String(result.status || "").toLowerCase() === "running") {
         const runningError = new Error("Workflow test is still running. Check the product test status again in a moment.");
         runningError.result = result;
@@ -4944,7 +4991,12 @@ company_url = context["inputs"].get("company_url")
 
       const { data, error } = await NexusDB.applyAutomationCredentials(automationId);
       if (error) {
-        if (root) root.innerHTML = `<div class="error">${NexusUI.escapeHtml(error.message || "Could not apply credentials.")}</div>`;
+        if (isRetryableN8nIssue(error)) {
+          renderTemporaryN8nIssue(root, error, "applyCurrentProductCredentials()", "Retry credentials & check");
+          NexusUI.toast("n8n is temporarily unavailable. Nexus preserved the workflow and credentials.");
+        } else if (root) {
+          root.innerHTML = `<div class="error">${NexusUI.escapeHtml(error.message || "Could not apply credentials.")}</div>`;
+        }
         return;
       }
 
@@ -4969,12 +5021,18 @@ company_url = context["inputs"].get("company_url")
           message: testError.message || "Credential update test failed.",
           error_message: testError.message || "Credential update test failed."
         };
-        updateLocalWorkflowRun(automationId, failedResult);
+        const retryable = testError.retryable === true || isRetryableN8nIssue(failedResult);
+        if (!retryable) updateLocalWorkflowRun(automationId, failedResult);
         const guidance = workflowRunGuidance(
           failedResult.error_message || failedResult.message || testError.message,
           data?.slots || data?.requirements || [],
           data?.bindings || []
         );
+        if (retryable) {
+          renderTemporaryN8nIssue(root, testError, "applyCurrentProductCredentials()", "Retry technical check");
+          NexusUI.toast(guidance || "n8n is temporarily unavailable. Nexus preserved the workflow and credentials.");
+          return;
+        }
         NexusUI.toast(guidance || "Credential run check failed. Fix the account or workflow, then run the check again.");
         await scanCurrentProductCredentials();
         return;
@@ -5944,6 +6002,21 @@ company_url = context["inputs"].get("company_url")
             test_run_id: result.test_run_id,
             automation_id: id
           });
+          if (checked.error && isRetryableN8nIssue(checked.error)) {
+            const waitingResult = {
+              ...result,
+              status: "running",
+              retryable: true,
+              code: checked.error.code || "N8N_TEMPORARILY_UNAVAILABLE",
+              message: checked.error.message || "n8n is restarting. Nexus will keep checking this same test."
+            };
+            refreshWorkflowRunUi(id, waitingResult, waitingResult.message);
+            scheduleWorkflowStatusRefresh(id, waitingResult, {
+              attemptsLeft: attemptsLeft - 1,
+              intervalMs: 10000
+            });
+            return;
+          }
           if (checked.error) throw new Error(checked.error.message || "Could not refresh workflow test.");
           const nextResult = checked.data || result;
           const status = String(nextResult.status || "").toLowerCase();
@@ -5981,6 +6054,17 @@ company_url = context["inputs"].get("company_url")
           test_run_id: result.test_run_id,
           automation_id: automationId
         });
+        if (checked.error && isRetryableN8nIssue(checked.error)) {
+          result = {
+            ...result,
+            status: "running",
+            retryable: true,
+            code: checked.error.code || "N8N_TEMPORARILY_UNAVAILABLE",
+            message: checked.error.message || "n8n is restarting. Nexus will keep checking this same test."
+          };
+          refreshWorkflowRunUi(automationId, result, result.message);
+          continue;
+        }
         if (checked.error) throw new Error(checked.error.message || checkErrorMessage);
         result = checked.data || result;
         refreshWorkflowRunUi(automationId, result, String(result.status || "").toLowerCase() === "running" ? `${progressMessage}...` : workflowTestFailureMessage(result, "Workflow test finished."));
