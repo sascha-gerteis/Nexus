@@ -5,6 +5,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const NEXUS_RUNTIME_SECRET = Deno.env.get("NEXUS_RUNTIME_SECRET") || "";
 const N8N_BASE_URL = Deno.env.get("N8N_BASE_URL") || "";
+const N8N_API_KEY = Deno.env.get("N8N_API_KEY") || "";
 
 function cleanString(value: unknown) {
   return String(value ?? "").trim();
@@ -582,6 +583,48 @@ async function postRuntime(url: string, payload: any) {
   return { status: response.status, data };
 }
 
+async function activateN8nWorkflow(workflowId: string) {
+  const id = cleanString(workflowId);
+  const baseUrl = cleanBaseUrl(N8N_BASE_URL);
+  if (!id) throw new Error("Cannot recover the buyer webhook because its n8n workflow ID is missing.");
+  if (!baseUrl || !N8N_API_KEY) {
+    throw new Error("Cannot recover the buyer webhook because the n8n API is not configured.");
+  }
+
+  const response = await fetch(baseUrl + "/api/v1/workflows/" + encodeURIComponent(id) + "/activate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-N8N-API-KEY": N8N_API_KEY,
+    },
+    body: JSON.stringify({}),
+  });
+  const text = await response.text();
+
+  if (!response.ok) {
+    const alreadyActive = response.status === 400 && text.toLowerCase().includes("active");
+    if (!alreadyActive) {
+      throw new Error("n8n workflow activation failed (" + response.status + "): " + (text || "Unknown n8n error"));
+    }
+  }
+
+  return { ok: true, already_active: !response.ok };
+}
+
+function isBuyerWebhookRuntime(automation: any, customerAutomation: any, order: any) {
+  return cleanString(
+    automation?.runtime_trigger_mode ||
+      customerAutomation?.runtime_trigger_mode ||
+      order?.runtime_trigger_mode,
+  ).toLowerCase() === "buyer_webhook";
+}
+
+function isWebhookNotRegisteredError(error: unknown) {
+  const message = (error instanceof Error ? error.message : cleanString(error)).toLowerCase();
+  return message.includes("webhook") &&
+    (message.includes("not registered") || message.includes("requested webhook"));
+}
+
 async function dispatchRuntime(params: {
   customerAutomation: any;
   automation: any;
@@ -620,14 +663,24 @@ async function dispatchRuntime(params: {
   try {
     return await postRuntime(webhookUrl, payload);
   } catch (error) {
-    const message = error instanceof Error ? error.message : cleanString(error);
-    const webhookNotRegistered = message.toLowerCase().includes("webhook") &&
-      (
-        message.toLowerCase().includes("not registered") ||
-        message.toLowerCase().includes("requested webhook")
-      );
+    const webhookNotRegistered = isWebhookNotRegisteredError(error);
 
-    if (!webhookNotRegistered || !useClone) throw error;
+    if (!webhookNotRegistered) throw error;
+
+    /*
+      Buyer-webhook products do not pass through submit-automation-setup, so a
+      draft workflow that was temporarily activated for its technical test can
+      still be inactive when the first live event arrives. Recover only this
+      explicit runtime mode. Existing setup, schedule and on-demand products
+      keep their current dispatch lifecycle unchanged.
+    */
+    if (!useClone && isBuyerWebhookRuntime(automation, customerAutomation, order)) {
+      await activateN8nWorkflow(runtimeWorkflowId(customerAutomation, automation, order));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      return await postRuntime(webhookUrl, payload);
+    }
+
+    if (!useClone) throw error;
 
     const provisioned = await provisionCustomerWorkflow(customerAutomation.id);
     if (provisioned?.customer_automation) {
@@ -1106,19 +1159,23 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
   const workerToken = cleanString(req.headers.get("x-nexus-dispatch-worker"));
+  const suppliedRuntimeSecret = cleanString(req.headers.get("x-nexus-runtime-secret"));
   const limit = Math.max(1, Math.min(Number(body.limit || 25) || 25, 100));
   const reconcileLimit = Math.max(1, Math.min(Number(body.reconcile_limit || 2) || 2, 5));
   const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  const { data: authorized, error: authError } = await adminClient.rpc(
-    "authorize_runtime_dispatch_worker",
-    { p_token: workerToken },
-  );
-
-  if (authError || authorized !== true) {
-    return errorResponse("Unauthorized dispatch worker.", 401);
+  let authorized = Boolean(NEXUS_RUNTIME_SECRET) && suppliedRuntimeSecret === NEXUS_RUNTIME_SECRET;
+  if (!authorized) {
+    const { data: workerAuthorized, error: authError } = await adminClient.rpc(
+      "authorize_runtime_dispatch_worker",
+      { p_token: workerToken },
+    );
+    authorized = !authError && workerAuthorized === true;
   }
 
+  if (!authorized) {
+    return errorResponse("Unauthorized dispatch worker.", 401);
+  }
   const workerId = crypto.randomUUID();
   const { data: queueRows, error: claimError } = await adminClient.rpc(
     "claim_runtime_dispatch_queue",

@@ -620,7 +620,7 @@ function humanizeSetupStatus(item) {
       }
 
       if (buyerWebhookSetupAvailable(item)) {
-        return "Connect webhook";
+        return ["completed", "complete"].includes(setupStatus) ? "Manage webhook" : "Connect webhook";
       }
 
       if (isGuidedInstall(item)) {
@@ -811,6 +811,9 @@ function humanizeSetupStatus(item) {
       const runtimeStatus = String(item.runtime_status || "not_started").toLowerCase();
       const healthStatus = String(item.health_status || "not_configured").toLowerCase();
       const status = String(item.status || "").toLowerCase();
+      const webhookProduct = buyerWebhookSetupAvailable(item);
+      const webhookConfigured = webhookProduct && ["completed", "complete"].includes(setupStatus);
+      const webhookDispatchError = String(item?.last_error_details?.admin_error || "").trim();
 
       if ([status, setupStatus, runtimeStatus, healthStatus].some(value => value === "cancelled" || value === "canceled")) {
         return {
@@ -849,6 +852,16 @@ function humanizeSetupStatus(item) {
       }
 
       const latestRunStatus = runStatusText(latestRun).replace(/[\s-]+/g, "_");
+      if (webhookConfigured && (latestRunStatus === "queued" || runtimeStatus === "queued" || status === "queued")) {
+        return {
+          label: webhookDispatchError ? "Webhook retrying" : "Webhook live",
+          tone: "orange",
+          description: webhookDispatchError
+            ? "The connection is active, but the latest request has not reached n8n yet. Nexus is retrying it without charging another run."
+            : "The webhook is connected. The latest request is queued for processing.",
+          primaryAction: "Manage webhook"
+        };
+      }
       if (
         latestRunStatus === "queued" ||
         runtimeStatus === "queued" ||
@@ -942,6 +955,24 @@ function humanizeSetupStatus(item) {
           tone: "blue",
           description: "Nexus is completing setup and will publish the report here. You do not need to provide anything.",
           primaryAction: "No action needed"
+        };
+      }
+
+      if (webhookConfigured && runtimeStatus === "paused") {
+        return {
+          label: "Webhook paused",
+          tone: "blue",
+          description: "The connection is configured, but new requests are currently paused.",
+          primaryAction: "Manage webhook"
+        };
+      }
+
+      if (webhookConfigured && !latestOutput) {
+        return {
+          label: "Webhook live",
+          tone: "green",
+          description: "The webhook connection is configured and ready for authenticated requests.",
+          primaryAction: "Manage webhook"
         };
       }
 
