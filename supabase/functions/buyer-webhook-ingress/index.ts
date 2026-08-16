@@ -272,7 +272,18 @@ Deno.serve(async (req) => {
     const now = nowIso();
     const suppliedEventId = cleanString(req.headers.get("x-nexus-event-id"));
     if (suppliedEventId.length > 200) return errorResponse("Webhook event ID is too long.", 400);
-    const eventId = suppliedEventId || crypto.randomUUID();
+    const confirmedSetupEventId = cleanString(config.event_mapping_last_event_id);
+    // The setup cURL contains Nexus's confirmed connection-test ID. Once the
+    // webhook is live, keep that sample reusable by assigning each replay a
+    // fresh runtime identity. IDs supplied by real applications remain stable
+    // and retain normal idempotent duplicate protection.
+    const reusableSetupSample = config.live_enabled === true &&
+      Boolean(suppliedEventId) &&
+      Boolean(confirmedSetupEventId) &&
+      suppliedEventId === confirmedSetupEventId;
+    const eventId = reusableSetupSample
+      ? "nexus-live-" + crypto.randomUUID()
+      : suppliedEventId || crypto.randomUUID();
     const expectedTestEventId = cleanString(config.inbound_last_event_id);
     const activeConnectionTest = config.live_enabled !== true &&
       Boolean(config.inbound_test_started_at) &&
@@ -430,6 +441,7 @@ Deno.serve(async (req) => {
         test_only: false,
         live_runtime_enabled: true,
         event_id: eventId,
+        setup_sample_replayed: reusableSetupSample,
         run_id: reservation.run_id,
         remaining_runs: reservation.remaining_units,
         total_runs: reservation.total_units,

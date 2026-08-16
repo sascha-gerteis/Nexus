@@ -53,6 +53,9 @@ for (const [source, marker, label] of [
   [ingressFunction, "MAX_BODY_BYTES", "payload size limit"],
   [ingressFunction, "safePreview", "redacted payload preview"],
   [ingressFunction, "WEBHOOK_EVENT_ID_ALREADY_USED", "clear stale duplicate event error"],
+  [ingressFunction, "reusableSetupSample", "confirmed setup cURL remains reusable after activation"],
+  [ingressFunction, "suppliedEventId === confirmedSetupEventId", "only the exact confirmed Nexus setup ID is translated"],
+  [ingressFunction, "setup_sample_replayed: reusableSetupSample", "live response discloses setup sample translation"],
 
   [ingressFunction, "recordConnectionTestFailure", "visible connection-test authentication failure"],
   [ingressFunction, "live_runtime_enabled: false", "ingress test-mode response"],
