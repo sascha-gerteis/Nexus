@@ -398,6 +398,11 @@
     }
 
     function defaultWebhookTestPayload() {
+      const latestPayload = webhookState.config?.inbound_last_payload_preview;
+      if (latestPayload && typeof latestPayload === "object" && !Array.isArray(latestPayload) &&
+          Object.keys(latestPayload).length && !latestPayload.connection_test_pending && !latestPayload.connection_test_error) {
+        return JSON.stringify(latestPayload, null, 2);
+      }
       const fields = Array.isArray(webhookState.eventFields) ? webhookState.eventFields : [];
       if (!fields.length) return fallbackWebhookTestPayload();
 
@@ -439,12 +444,13 @@
     function inboundCurl() {
       const url = webhookState.config?.inbound_url || "WEBHOOK_URL";
       const secret = webhookState.newSecret || "YOUR_WEBHOOK_SECRET";
-      const eventId = connectionTestEventId();
+      const live = webhookState.liveRuntimeEnabled || webhookState.config?.live_enabled === true;
+      const eventHeader = live ? "" : ` \\\n  -H "x-nexus-event-id: ${connectionTestEventId()}"`;
       let requestBody = "{}";
       try {
         requestBody = JSON.stringify(JSON.parse(defaultWebhookTestPayload())).replaceAll("'", "'\"'\"'");
       } catch {}
-      return `curl -X POST "${url}" \\\n  -H "Content-Type: application/json" \\\n  -H "x-nexus-webhook-secret: ${secret}" \\\n  -H "x-nexus-event-id: ${eventId}" \\\n  -d '${requestBody}'`;
+      return `curl -X POST "${url}" \\\n  -H "Content-Type: application/json" \\\n  -H "x-nexus-webhook-secret: ${secret}"${eventHeader} \\\n  -d '${requestBody}'`;
     }
     function renderUsageCard(readOnly) {
       const usage = webhookState.usage || {};
@@ -595,8 +601,11 @@
               `}
             </div>
             <div class="webhook-status-box ${inbound.tone}" id="inboundConnectionStatus"><strong>${escapeHtml(inbound.label)}</strong><p>${escapeHtml(inbound.help)} ${testWindowOpen ? `Test started: ${escapeHtml(formatDate(config.inbound_test_started_at))}. Use event ID ${escapeHtml(connectionTestEventId())}.` : ""} Last new request: ${escapeHtml(formatDate(config.inbound_last_received_at))}</p></div>
-            <details class="webhook-runtime-preview" ${testWindowOpen || webhookState.waitingForInboundTest ? "open" : ""}><summary>Send the request with cURL or another tool</summary><pre class="webhook-curl">${escapeHtml(inboundCurl())}</pre></details>
-            ${renderHistory("inbound")}
+            <details class="webhook-runtime-preview" ${testWindowOpen || webhookState.waitingForInboundTest ? "open" : ""}><summary>${live ? "Send another live request with cURL" : "Send the request with cURL or another tool"}</summary>
+              ${live ? `<div class="webhook-inline-note"><strong>Every request will receive a new Nexus event ID</strong><span>This live example omits <code>x-nexus-event-id</code>, so Nexus generates a fresh ID each time. If your own app supplies that header, use a different value for every real event; reusing an ID is intentionally treated as a duplicate and will not consume another run.</span></div>` : ""}
+              <div class="webhook-actions"><button class="btn btn-secondary btn-small" type="button" onclick="copyText(inboundCurl(), 'cURL command')">Copy cURL</button></div>
+              <pre class="webhook-curl">${escapeHtml(inboundCurl())}</pre>
+            </details>${renderHistory("inbound")}
           </div>
         </article>`;
     }
@@ -634,7 +643,7 @@
         <section class="webhook-hero"><div><span class="webhook-eyebrow">Webhook connection</span><h1>${escapeHtml(productTitle())}</h1><p>Connect your app, prove one sample request, choose the event fields your workflow needs, then activate live usage.</p></div><div class="webhook-hero-status"><span>Status</span><strong>${live ? "Live and receiving requests" : mappingDone ? "Ready to activate" : connectionDone ? "Mapping required" : "Connection test required"}</strong></div></section>
         <div class="webhook-progress" aria-label="Webhook setup progress"><div class="webhook-progress-step ${stepClass(connectionDone,!connectionDone)}"><span>${connectionDone ? "&#10003;" : "1"}</span><div><strong>Connect</strong><small>Send a free test</small></div></div><div class="webhook-progress-step ${stepClass(mappingDone,connectionDone&&!mappingDone)}"><span>${mappingDone ? "&#10003;" : "2"}</span><div><strong>Match</strong><small>Review field matches</small></div></div><div class="webhook-progress-step ${stepClass(live,mappingDone&&!live)}"><span>${live ? "&#10003;" : "3"}</span><div><strong>Activate</strong><small>Start live usage</small></div></div></div>
         ${webhookState.notice ? `<div class="webhook-status-box ${escapeHtml(webhookState.notice.tone || "")}"><strong>${escapeHtml(webhookState.notice.title)}</strong><p>${escapeHtml(webhookState.notice.message)}</p></div>` : ""}
-        <div class="webhook-workspace"><div class="webhook-main-flow">${renderConnectionCard(readOnly)}${renderEventMapping(readOnly)}${renderActivationCard(readOnly)}${renderOutboundAdvanced(readOnly)}</div><aside class="webhook-side-flow">${renderUsageCard(readOnly)}<section class="webhook-side-card"><span class="webhook-eyebrow">What to expect</span><h2>Safe until activation</h2><p>Connection tests, invalid payloads and duplicate event IDs never consume a run. Nexus blocks live requests automatically when the allowance reaches zero.</p><details><summary>Required request headers</summary><pre class="webhook-curl">Content-Type: application/json\nx-nexus-webhook-secret: YOUR_SECRET\nx-nexus-event-id: UNIQUE_EVENT_ID</pre></details></section></aside></div>`;
+        <div class="webhook-workspace"><div class="webhook-main-flow">${renderConnectionCard(readOnly)}${renderEventMapping(readOnly)}${renderActivationCard(readOnly)}${renderOutboundAdvanced(readOnly)}</div><aside class="webhook-side-flow">${renderUsageCard(readOnly)}<section class="webhook-side-card"><span class="webhook-eyebrow">What to expect</span><h2>Safe until activation</h2><p>Connection tests, invalid payloads and duplicate event IDs never consume a run. Nexus blocks live requests automatically when the allowance reaches zero.</p><details><summary>Required request headers</summary><pre class="webhook-curl">Required:\nContent-Type: application/json\nx-nexus-webhook-secret: YOUR_SECRET\n\nOptional retry protection:\nx-nexus-event-id: UNIQUE_PER_REAL_EVENT</pre></details></section></aside></div>`;
     }
 
     function showNotice(title, message, tone = "") {
