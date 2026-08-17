@@ -536,10 +536,21 @@ function humanizeSetupStatus(item) {
     }
 
     function getLatestOutputForAutomation(outputs, customerAutomationId, orderId = "", latestRun = null, item = {}) {
+      const webhookProduct = buyerWebhookSetupAvailable(item);
+      const webhookRuns = webhookProduct
+        ? runsForAutomation(customerAutomationId, orderId, item)
+        : [];
+
       return (outputs || []).find(output => {
         if (output.customer_automation_id !== customerAutomationId) return false;
         if (orderId && !outputBelongsToOrder(output, orderId, item)) return false;
-        return outputIsFreshForAutomation(output, item, latestRun);
+        if (!webhookProduct) return outputIsFreshForAutomation(output, item, latestRun);
+
+        const runtimeMeta = outputRuntimeMeta(output);
+        const linkedRun = runtimeMeta.runId || runtimeMeta.runKey
+          ? webhookRuns.find(run => outputMatchesRun(output, run)) || null
+          : latestRun;
+        return outputIsFreshForAutomation(output, item, linkedRun);
       }) || null;
     }
 
@@ -3154,7 +3165,7 @@ function openAutomationDetail(customerAutomationId) {
       const primaryButton = getAutomationActionButton(item, latestOutput, state);
       const primaryActionKind = getAutomationPrimaryActionKind(item, latestOutput, state);
       const automationOutputs = outputsForAutomation(item.id, orderId, item);
-      const currentAutomationOutputs = automationOutputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
+      const currentAutomationOutputs = automationOutputs;
       const automationRuns = runsForAutomation(item.id, orderId);
       const recurring = isRecurringAutomation(item);
       const canCancelSubscription = canRequestSubscriptionCancellation(item);
@@ -3332,7 +3343,7 @@ function openAutomationDetail(customerAutomationId) {
       const latestRun = runs[0] || null;
       const latestOutput = getLatestOutputForAutomation(dashboardData.outputs, item.id, orderId, latestRun, item);
       const outputs = outputsForAutomation(item.id, orderId, item);
-      const currentOutputs = outputs.filter(output => outputIsFreshForAutomation(output, item, latestRun));
+      const currentOutputs = outputs;
       const state = automationState(item, latestOutput, latestRun);
       const setupUrl = getBuyerSetupUrl(item);
       const setupLabel = getBuyerSetupActionLabel(item);
@@ -3679,7 +3690,16 @@ function openAutomationDetail(customerAutomationId) {
       if (!expectedOrderId && outputOrderId) return false;
 
       const latestRun = latestRunForAutomation(output.customer_automation_id, expectedOrderId, customerAutomation);
-      return outputIsFreshForAutomation(output, customerAutomation, latestRun);
+      if (!buyerWebhookSetupAvailable(customerAutomation)) {
+        return outputIsFreshForAutomation(output, customerAutomation, latestRun);
+      }
+
+      const runtimeMeta = outputRuntimeMeta(output);
+      const matchingRuns = runsForAutomation(output.customer_automation_id, expectedOrderId, customerAutomation);
+      const linkedRun = runtimeMeta.runId || runtimeMeta.runKey
+        ? matchingRuns.find(run => outputMatchesRun(output, run)) || null
+        : latestRun;
+      return outputIsFreshForAutomation(output, customerAutomation, linkedRun);
     }
     function groupOutputsByAutomation(outputs, automations = [], bundleRows = []) {
       return (outputs || []).reduce((groups, output) => {
