@@ -3111,6 +3111,60 @@ async function listBuyerCustomerAutomations(userId) {
   };
 }
 
+function normalizeManagedDeliverableRow(row = {}) {
+  const collection = Array.isArray(row.buyer_output_collections)
+    ? row.buyer_output_collections[0] || {}
+    : row.buyer_output_collections || {};
+  return {
+    id: row.id,
+    buyer_id: row.buyer_id,
+    customer_automation_id: null,
+    automation_id: null,
+    order_id: null,
+    automation_run_id: null,
+    bundle_run_attempt_id: null,
+    bundle_run_item_id: null,
+    output_type: row.output_type || "file",
+    status: row.status || "published",
+    title: row.title || row.file_name || "Nexus delivery",
+    summary: row.summary || "",
+    content_text: row.summary || "",
+    content_html: "",
+    content_json: { nexus_admin_delivery: { source: "admin_manual", collection_id: row.collection_id, bucket: row.bucket, storage_path: row.storage_path, file_name: row.file_name, file_type: row.file_type, file_size: row.file_size, delivered_at: row.created_at } },
+    file_url: "",
+    storage_path: row.storage_path,
+    created_by: "admin",
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    managed_collection: collection,
+    buyer_output_collections: collection,
+    automations: { id: null, title: collection.name || "Nexus delivery", slug: "", icon: collection.icon || "PR", color: collection.color || "purple", category: "Nexus delivery" },
+    customer_automations: null,
+    __managed_delivery: true
+  };
+}
+
+async function listBuyerManagedDeliverables() {
+  const { data: user } = await getUser();
+  if (!user) return { data: [], error: { message: "Login required." } };
+  const { data, error } = await supabase.from("buyer_managed_deliverables").select(`*, buyer_output_collections(id, buyer_id, name, description, icon, color)`).eq("buyer_id", user.id).eq("status", "published").order("created_at", { ascending: false }).limit(200);
+  return { data: error ? [] : (data || []).map(normalizeManagedDeliverableRow), error };
+}
+
+async function listBuyerManagedDeliverablesForCollection(collectionId) {
+  const { data: user } = await getUser();
+  if (!user) return { data: [], error: { message: "Login required." } };
+  const { data, error } = await supabase.from("buyer_managed_deliverables").select(`*, buyer_output_collections(id, buyer_id, name, description, icon, color)`).eq("buyer_id", user.id).eq("collection_id", collectionId).eq("status", "published").order("created_at", { ascending: false }).limit(200);
+  return { data: error ? [] : (data || []).map(normalizeManagedDeliverableRow), error };
+}
+
+async function getBuyerManagedDeliverable(outputId) {
+  const { data: user } = await getUser();
+  if (!user) return { data: null, error: { message: "Login required." } };
+  const { data, error } = await supabase.from("buyer_managed_deliverables").select(`*, buyer_output_collections(id, buyer_id, name, description, icon, color)`).eq("id", outputId).eq("buyer_id", user.id).eq("status", "published").maybeSingle();
+  return { data: data ? normalizeManagedDeliverableRow(data) : null, error };
+}
+
 async function listBuyerAutomationOutputs() {
   const { data: user } = await getUser();
 
@@ -3419,46 +3473,20 @@ async function listBuyerAutomationRunsByCustomerAutomationIds(customerAutomation
 
 async function getBuyerAutomationOutput(outputId) {
   const { data: user } = await getUser();
-
-  if (!user) {
-    return {
-      data: null,
-      error: { message: "Login required." }
-    };
-  }
-
-  return supabase
+  if (!user) return { data: null, error: { message: "Login required." } };
+  const automationResult = await supabase
     .from("automation_outputs")
     .select(`
       *,
-      automations(
-        id,
-        title,
-        slug,
-        icon,
-        color,
-        category
-      ),
-      customer_automations(
-        id,
-        name,
-        status,
-        setup_status,
-        runtime_status,
-        health_status,
-        developers(
-          id,
-          display_name,
-          handle,
-          avatar_letter
-        )
-      )
+      automations(id, title, slug, icon, color, category),
+      customer_automations(id, name, status, setup_status, runtime_status, health_status, developers(id, display_name, handle, avatar_letter))
     `)
     .eq("id", outputId)
     .eq("buyer_id", user.id)
     .maybeSingle();
+  if (automationResult.error || automationResult.data) return automationResult;
+  return getBuyerManagedDeliverable(outputId);
 }
-
 async function submitAutomationSetup(payload) {
   return callNexusFunction("submit-automation-setup", payload);
 }
@@ -3854,14 +3882,18 @@ async function listAdminManagedDeliverables() {
   return callNexusFunction("managed-deliverables", { action: "list" });
 }
 
-async function createAdminManagedDeliverableUpload(customerAutomationId, file) {
+async function createAdminManagedDeliverableCollection(payload = {}) {
+  return callNexusFunction("managed-deliverables", { action: "create_collection", ...payload });
+}
+
+async function createAdminManagedDeliverableUpload(collectionId, file) {
   if (!file) {
     return { data: null, error: { message: "Choose a file first." } };
   }
 
   const { data, error } = await callNexusFunction("managed-deliverables", {
     action: "create_upload",
-    customer_automation_id: customerAutomationId,
+    collection_id: collectionId,
     file_name: file.name || "deliverable",
     file_type: file.type || "application/octet-stream",
     file_size: file.size || 0
@@ -4146,6 +4178,9 @@ getAutomationTestProfile,
 saveAutomationTestProfile,
 listBuyerCustomerAutomations,
 listBuyerAutomationOutputs,
+listBuyerManagedDeliverables,
+listBuyerManagedDeliverablesForCollection,
+getBuyerManagedDeliverable,
 listBuyerAutomationRuns,
 listBuyerBundleRunAttempts,
 listBuyerAutomationOutputsByCustomerAutomationIds,
@@ -4175,6 +4210,7 @@ listAdminOrders,
 listAdminPilotGrants,
 createAdminPilotGrant,
 listAdminManagedDeliverables,
+createAdminManagedDeliverableCollection,
 createAdminManagedDeliverableUpload,
 publishAdminManagedDeliverable,
 signManagedDeliverableOutput,

@@ -183,8 +183,8 @@
             <div class="buyer-tab-header">
               <div>
                 <span class="eyebrow">Outputs</span>
-                <h2>Automation outputs</h2>
-                <p>Reports, generated files, and workflow results from your automations.</p>
+                <h2>Your outputs</h2>
+                <p>Reports, presentations, files, and workflow results available to your account.</p>
               </div>
             </div>
 
@@ -388,7 +388,7 @@
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
 <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
-<script src="/assets/js/nexus-db.js?v=20260813-webhook-routing"></script>
+<script src="/assets/js/nexus-db.js?v=20260819-managed-collections"></script>
 <script src="/assets/js/nexus-app.js?v=20260713-code-stability"></script>
 
   <script>
@@ -1254,6 +1254,11 @@ function outputIsAdminDelivered(output = {}) {
     ? content.nexus_admin_delivery
     : {};
   return String(meta.source || "") === "admin_manual";
+}
+
+function outputManagedCollection(output = {}) {
+  const collection = output?.managed_collection || output?.buyer_output_collections || {};
+  return Array.isArray(collection) ? collection[0] || {} : collection || {};
 }
 
 function outputMatchesRun(output = {}, run = {}) {
@@ -2497,6 +2502,7 @@ function openAutomationDetail(customerAutomationId) {
         { data: automations },
         { data: events },
         { data: outputs },
+        { data: managedOutputs, error: managedOutputsError },
         { data: runs },
         { data: bundleAttempts, error: bundleAttemptsError },
         { data: bundles },
@@ -2509,7 +2515,9 @@ function openAutomationDetail(customerAutomationId) {
         NexusDB.listBuyerAutomationOutputs
           ? NexusDB.listBuyerAutomationOutputs()
           : Promise.resolve({ data: [] }),
-        NexusDB.listBuyerAutomationRuns
+        NexusDB.listBuyerManagedDeliverables
+          ? NexusDB.listBuyerManagedDeliverables()
+          : Promise.resolve({ data: [] }),        NexusDB.listBuyerAutomationRuns
           ? NexusDB.listBuyerAutomationRuns(user.id)
           : Promise.resolve({ data: [] }),
         NexusDB.listBuyerBundleRunAttempts
@@ -2527,7 +2535,12 @@ function openAutomationDetail(customerAutomationId) {
         console.warn("Exact bundle run history is temporarily unavailable:", bundleAttemptsError);
       }
 
-      let mergedOutputs = outputs || [];
+      if (managedOutputsError) {
+        console.warn("Managed buyer output collections are temporarily unavailable:", managedOutputsError);
+      }
+
+      let mergedOutputs = [...(outputs || []), ...(managedOutputs || [])]
+        .sort((a, b) => timestampMs(b.created_at || b.updated_at) - timestampMs(a.created_at || a.updated_at));
       const customerAutomationIds = (automations || []).map(item => item?.id).filter(Boolean);
       if (customerAutomationIds.length && typeof NexusDB.listBuyerAutomationOutputsByCustomerAutomationIds === "function") {
         const { data: scopedOutputs, error: scopedOutputsError } = await NexusDB.listBuyerAutomationOutputsByCustomerAutomationIds(customerAutomationIds);
@@ -3577,7 +3590,7 @@ function openAutomationDetail(customerAutomationId) {
 
           <div class="buyer-output-stats">
             <article><span>Total outputs</span><strong>${displayOutputCount}</strong></article>
-            <article><span>Automations with results</span><strong>${outputAutomations}</strong></article>
+            <article><span>Output groups</span><strong>${outputAutomations}</strong></article>
             <article><span>Awaiting first result</span><strong>${awaitingCount}</strong></article>
           </div>
 
@@ -3633,6 +3646,18 @@ function openAutomationDetail(customerAutomationId) {
     }
 
     function outputAutomationContext(output, automations = [], bundleRows = []) {
+      const managedCollection = outputManagedCollection(output);
+      if (outputIsAdminDelivered(output) && managedCollection.id) {
+        return {
+          title: managedCollection.name || "Nexus delivery",
+          category: "Nexus collection",
+          developerName: "Nexus",
+          color: managedCollection.color || "purple",
+          itemColor: managedCollection.color || "purple",
+          groupKey: `managed-collection:${managedCollection.id}`,
+          description: managedCollection.description || "Private files and presentations delivered by Nexus."
+        };
+      }
       const bundleRow = bundleRowForOutput(output, bundleRows);
       if (bundleRow) {
         const child = (bundleRow.included || []).find(item => item.id === output?.customer_automation_id) || {};
@@ -3682,6 +3707,7 @@ function openAutomationDetail(customerAutomationId) {
     }
 
     function outputIsCurrentForDashboard(output = {}, automations = [], bundleRows = []) {
+      if (outputIsAdminDelivered(output) && outputManagedCollection(output).id) return true;
       const bundleRow = bundleRowForOutput(output, bundleRows);
 
       if (bundleRow) {

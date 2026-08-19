@@ -36,6 +36,13 @@
       margin: 0;
     }
 
+    .managed-file-preview { width: 100%; overflow: hidden; border: 1px solid rgba(37, 99, 255, 0.18); border-radius: 18px; background: #fff; }
+    .managed-file-preview-frame { display: block; width: 100%; min-height: min(72vh, 820px); border: 0; background: #fff; }
+    .managed-file-preview-image { display: block; width: 100%; max-height: 78vh; object-fit: contain; background: #f3f6fb; }
+    .managed-file-preview video, .managed-file-preview audio { display: block; width: 100%; background: #101828; }
+    .managed-file-preview-note { padding: 12px 16px; color: var(--text-muted, #596579); font-size: .85rem; border-top: 1px solid #e8edf6; background: #f8faff; }
+    .managed-office-consent { display: grid; gap: 12px; justify-items: start; padding: 22px; }
+
     .managed-file-delivery-name {
       color: var(--text-muted, #596579);
       overflow-wrap: anywhere;
@@ -74,7 +81,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260819-managed-deliverables"></script>
+  <script src="/assets/js/nexus-db.js?v=20260819-managed-collections"></script>
 
   <script>
     function getParam(name) {
@@ -121,6 +128,39 @@
       return String(adminDeliveryMeta(output)?.file_name || "Customer deliverable");
     }
 
+    let managedOfficeViewUrl = "";
+
+    function managedFileExtension(output) {
+      const name = managedFileName(output).toLowerCase();
+      return name.match(/\.([a-z0-9]+)$/)?.[1] || "";
+    }
+
+    function enableOfficePreview() {
+      if (!managedOfficeViewUrl) return;
+      const approved = window.confirm("PowerPoint, Word, and Excel previews are provided by Microsoft Office. Continuing shares a temporary 15-minute private file link with Microsoft. Continue?");
+      if (!approved) return;
+      const frame = document.getElementById("managedOfficePreviewFrame");
+      const consent = document.getElementById("managedOfficeConsent");
+      if (!frame) return;
+      frame.src = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(managedOfficeViewUrl)}`;
+      frame.hidden = false;
+      if (consent) consent.hidden = true;
+    }
+
+    function renderManagedFilePreview(output, viewUrl = "") {
+      if (!viewUrl) return `<div class="managed-file-preview-note">The secure preview is temporarily unavailable. Reload this page to request a new link.</div>`;
+      const extension = managedFileExtension(output);
+      const mime = String(adminDeliveryMeta(output)?.file_type || "").toLowerCase();
+      const safeUrl = escapeHtml(viewUrl);
+      if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension) || mime.startsWith("image/")) return `<div class="managed-file-preview"><img class="managed-file-preview-image" src="${safeUrl}" alt="${escapeHtml(output.title || managedFileName(output))}"></div>`;
+      if (extension === "pdf" || mime === "application/pdf") return `<div class="managed-file-preview"><iframe class="managed-file-preview-frame" src="${safeUrl}#toolbar=1&navpanes=0" title="PDF preview" referrerpolicy="no-referrer"></iframe></div>`;
+      if (["ppt", "pptx", "doc", "docx", "xls", "xlsx"].includes(extension)) return `<div class="managed-file-preview"><div class="managed-office-consent" id="managedOfficeConsent"><strong>Preview this Office file</strong><p>Microsoft Office can render this file after you approve sharing a temporary 15-minute private link.</p><button class="btn btn-secondary" type="button" onclick="enableOfficePreview()">Preview with Microsoft Office</button></div><iframe class="managed-file-preview-frame" id="managedOfficePreviewFrame" title="Microsoft Office file preview" referrerpolicy="no-referrer" allowfullscreen hidden></iframe></div>`;
+      if (["mp4", "webm", "mov"].includes(extension) || mime.startsWith("video/")) return `<div class="managed-file-preview"><video controls preload="metadata" src="${safeUrl}">Your browser cannot preview this video.</video></div>`;
+      if (["mp3", "wav", "m4a"].includes(extension) || mime.startsWith("audio/")) return `<div class="managed-file-preview"><audio controls preload="metadata" src="${safeUrl}">Your browser cannot preview this audio.</audio></div>`;
+      if (["txt", "md", "csv"].includes(extension) || mime.startsWith("text/")) return `<div class="managed-file-preview"><iframe class="managed-file-preview-frame" src="${safeUrl}" title="Text file preview" referrerpolicy="no-referrer"></iframe></div>`;
+      return `<div class="managed-file-preview-note">This file format does not have a browser preview. Use Download original below.</div>`;
+    }
+
     function developerName(output) {
       if (isAdminDeliveredOutput(output)) return "Nexus";
       const nested = output?.customer_automations?.developers || {};
@@ -163,7 +203,7 @@
       return `<!DOCTYPE html>\n${parsed.documentElement.outerHTML}`;
     }
 
-    function renderOutputBody(output, downloadUrl = "") {
+    function renderOutputBody(output, downloadUrl = "", viewUrl = "") {
       if (isAdminDeliveredOutput(output)) {
         const fileName = managedFileName(output);
         return `
@@ -171,10 +211,11 @@
             <span class="eyebrow">Private Nexus delivery</span>
             <h3>${escapeHtml(output.title || fileName)}</h3>
             <p>${escapeHtml(output.summary || "A file has been delivered securely to your Nexus account.")}</p>
+            ${renderManagedFilePreview(output, viewUrl)}
             <p class="managed-file-delivery-name">${escapeHtml(fileName)}</p>
             ${
               downloadUrl
-                ? `<a class="btn btn-primary" href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener">Open or download file</a>`
+                ? `<a class="btn btn-primary" href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener">Download original</a>`
                 : `<p>The secure download link is temporarily unavailable. Reload this page to request a new link.</p>`
             }
           </div>
@@ -207,7 +248,7 @@
         .slice(0, 8);
 
       if (!history.length) {
-        return `<div class="buyer-output-history-empty">No previous outputs for this automation yet.</div>`;
+        return `<div class="buyer-output-history-empty">No previous outputs in this collection yet.</div>`;
       }
 
       return history.map(item => `
@@ -255,16 +296,22 @@
       const customerAutomation = output.customer_automations || {};
       const builder = developerName(output);
       const createdDate = dateLabel(output.created_at);
-      const { data: outputHistory } = output.customer_automation_id
-        ? await NexusDB.listOutputsForCustomerAutomation(output.customer_automation_id)
-        : { data: [] };
+      const collectionId = String(adminDeliveryMeta(output)?.collection_id || "");
+      const historyResult = collectionId
+        ? await NexusDB.listBuyerManagedDeliverablesForCollection(collectionId)
+        : output.customer_automation_id
+          ? await NexusDB.listOutputsForCustomerAutomation(output.customer_automation_id)
+          : { data: [] };
+      const outputHistory = historyResult?.data || [];
       const adminDelivered = isAdminDeliveredOutput(output);
       let outputFileUrl = String(output.file_url || "").trim();
-      if (adminDelivered && !outputFileUrl && adminDeliveryMeta(output)?.storage_path) {
+      let outputViewUrl = outputFileUrl;
+      if (adminDelivered && adminDeliveryMeta(output)?.storage_path) {
         const { data: signedFile } = await NexusDB.signManagedDeliverableOutput(output.id);
-        outputFileUrl = String(signedFile?.download_url || signedFile?.signed_url || signedFile?.signedUrl || "").trim();
+        outputFileUrl = String(signedFile?.download_url || outputFileUrl || "").trim();
+        outputViewUrl = String(signedFile?.view_url || outputViewUrl || "").trim();
+        managedOfficeViewUrl = outputViewUrl;
       }
-
       root.innerHTML = `
         <div class="buyer-output-reader">
           <div class="buyer-output-reader-toolbar">
@@ -278,7 +325,7 @@
               </a>
               ${
                 outputFileUrl
-                  ? `<a class="btn btn-primary btn-small" href="${escapeHtml(outputFileUrl)}" target="_blank" rel="noopener">Open file</a>`
+                  ? `<a class="btn btn-primary btn-small" href="${escapeHtml(outputFileUrl)}" target="_blank" rel="noopener">${adminDelivered ? "Download file" : "Open file"}</a>`
                   : ""
               }
             </div>
@@ -310,11 +357,11 @@
                 <span class="eyebrow">Output details</span>
                 <div class="buyer-output-detail-list">
                   <div>
-                    <span>Automation</span>
+                    <span>${adminDelivered && collectionId ? "Collection" : "Automation"}</span>
                     <strong>${escapeHtml(product.title || customerAutomation.name || "Automation")}</strong>
                   </div>
                   <div>
-                    <span>Builder</span>
+                    <span>${adminDelivered ? "Delivered by" : "Builder"}</span>
                     <strong>${escapeHtml(builder)}</strong>
                   </div>
                   <div>
@@ -343,13 +390,13 @@
             <section class="buyer-output-report-panel">
               <div class="buyer-output-report-head">
                 <div>
-                  <span class="eyebrow">Automation result</span>
+                  <span class="eyebrow">${adminDelivered ? "Delivered file" : "Automation result"}</span>
                   <h2>${escapeHtml(output.title || "Output")}</h2>
                 </div>
                 <span>${escapeHtml(outputFormatLabel(output))}</span>
               </div>
 
-              ${renderOutputBody(output, outputFileUrl)}
+              ${renderOutputBody(output, outputFileUrl, outputViewUrl)}
             </section>
           </div>
         </div>
