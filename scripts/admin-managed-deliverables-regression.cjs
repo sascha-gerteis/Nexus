@@ -43,7 +43,12 @@ includesAll(endpoint, [
   'action === "publish"',
   '.from("buyer_output_collections")',
   '.from("buyer_managed_deliverables")',
-  'const expectedPrefix = `${collection.buyer_id}/collections/${collection.id}/`',
+  '.from("customer_automations")',
+  'async function publishCollectionDelivery(',
+  'async function publishProductDelivery(',
+  'const expectedPrefix = `${customerAutomation.buyer_id}/${customerAutomation.id}/`',
+  '.from("automation_outputs")',
+  '.from("automation_events")',  'const expectedPrefix = `${collection.buyer_id}/collections/${collection.id}/`',
   "createSignedUploadUrl(path)",
   "safeEnqueueOutputReadyEmail",
   "view_url: urls.viewUrl",
@@ -51,11 +56,23 @@ includesAll(endpoint, [
   "Backward compatibility for files delivered before independent collections existed.",
 ], "managed-deliverables function");
 
-assert(!/getPublicUrl|public:\s*true/.test(endpoint), "private files must never use public URLs or a public bucket");
+assert(!/getPublicUrl|public:s*true/.test(endpoint), "private files must never use public URLs or a public bucket");
 assert(!/stripe|checkout|refund|subscription_id/i.test(endpoint), "admin delivery must not enter payment or Stripe logic");
-assert(!/\.from\("(?:orders|customer_automations|automations|automation_runs|bundle_run_attempts|bundle_run_items)"\)/.test(endpoint), "collection delivery must not read or mutate product, order, workflow, run, or bundle records");
-assert(!/\.from\("automation_outputs"\)[\s\S]{0,200}\.(?:insert|update|upsert|delete)\(/.test(endpoint), "legacy automation outputs must be read-only compatibility data");
-
+const collectionPublish = endpoint.slice(endpoint.indexOf("async function publishCollectionDelivery"), endpoint.indexOf("async function publishProductDelivery"));
+const productPublish = endpoint.slice(endpoint.indexOf("async function publishProductDelivery"), endpoint.indexOf("async function publishDelivery"));
+assert(!collectionPublish.includes('.from("automation_outputs")'), "standalone collection delivery must stay isolated from product outputs");
+assert(productPublish.includes('.from("automation_outputs")') && productPublish.includes(".insert(outputPayload)"), "existing-product delivery must append a real product output");
+assert(productPublish.includes('.from("automation_events")'), "existing-product delivery must add a buyer-visible product event");
+for (const table of ["customer_automations", "orders", "automations"]) {
+  const marker = `.from("${table}")`;
+  let cursor = endpoint.indexOf(marker);
+  while (cursor >= 0) {
+    const accessWindow = endpoint.slice(cursor, cursor + 240);
+    assert(![".insert(", ".update(", ".upsert(", ".delete("].some((mutation) => accessWindow.includes(mutation)), `${table} must stay read-only in file delivery`);
+    cursor = endpoint.indexOf(marker, cursor + marker.length);
+  }
+}
+assert(!/automation_runs|bundle_run_attempts|bundle_run_items/.test(endpoint), "file delivery must not enter workflow or bundle runtime records");
 includesAll(bucketMigration, ["'buyer-deliverables'", "false, 52428800", "set public = false"], "private storage migration");
 includesAll(collectionMigration, [
   "create table if not exists public.buyer_output_collections",
@@ -76,8 +93,10 @@ includesAll(nexusDb, [
   "async function getBuyerManagedDeliverable(outputId)",
   "return getBuyerManagedDeliverable(outputId);",
   "async function createAdminManagedDeliverableCollection(payload = {})",
-  "async function createAdminManagedDeliverableUpload(collectionId, file)",
-  "collection_id: collectionId",
+  "async function createAdminManagedDeliverableUpload(target = {}, file)",
+  'collection_id: target?.collection_id || ""',
+  'customer_automation_id: target?.customer_automation_id || ""',
+  "Choose exactly one output destination.",
   ".uploadToSignedUrl(upload.path, upload.token, file",
   "createAdminManagedDeliverableCollection,",
   "listBuyerManagedDeliverables,",
@@ -87,14 +106,17 @@ includesAll(adminPage, [
   'data-admin-page="deliverables"',
   "NexusDB.requireAdmin()",
   "NexusDB.createAdminManagedDeliverableCollection",
-  "NexusDB.createAdminManagedDeliverableUpload(collection.id,file)",
+  "NexusDB.createAdminManagedDeliverableUpload(target,file)",
+  "customer_automation_id:automation.id",
   "collection_id:collection.id",
+  'value="product" checked',
+  'value="collection"',
+  "Existing product",
+  "Standalone collection",
   "+ Create a new output collection",
-  "It is not a marketplace product, purchase, automation, or workflow.",
-  "No platform side effects",
-], "admin delivery page");
+  "No runtime side effects",], "admin delivery page");
 assert(!/NexusDB\.(?:createStripeCheckoutSession|requestAutomationCancellation|runScheduledAutomation|submitAutomationSetup|provisionCustomerWorkflow)/.test(adminPage), "admin page must not call payment, setup, provisioning, or runtime APIs");
-assert(!/deliverableAutomation|customer_automation_id/.test(adminPage), "admin page must not require or submit a customer automation");
+assert(adminPage.includes("deliverableAutomation") && adminPage.includes("deliverableCollection"), "admin page must expose both product and collection destinations");
 
 includesAll(buyerOutput, [
   "function renderManagedFilePreview(output, viewUrl = \"\")",

@@ -28,6 +28,10 @@ function lowerString(value: unknown) {
   return cleanString(value).toLowerCase();
 }
 
+function one(value: any) {
+  return Array.isArray(value) ? value[0] || {} : value || {};
+}
+
 function safeFileName(value: unknown) {
   const raw = cleanString(value) || "deliverable";
   return raw
@@ -161,21 +165,38 @@ async function loadCollections(adminClient: any) {
   return data || [];
 }
 
-async function loadRecentDeliveries(adminClient: any) {
+async function loadCustomerAutomations(adminClient: any) {
   const { data, error } = await adminClient
-    .from("buyer_managed_deliverables")
-    .select(`
-      id, collection_id, buyer_id, output_type, title, summary,
-      bucket, storage_path, file_name, file_type, file_size, created_at,
-      buyer_output_collections(id, name, description, icon, color)
-    `)
-    .eq("status", "published")
+    .from("customer_automations")
+    .select("id, buyer_id, automation_id, order_id, name, status, automations(id, title, slug, icon, color, category), orders(id, automation_title, buyer_name, buyer_email, order_type, bundle_id, payment_status, order_status)")
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(2000);
   if (error) throw new Error(error.message);
   return data || [];
 }
 
+async function loadRecentCollectionDeliveries(adminClient: any) {
+  const { data, error } = await adminClient
+    .from("buyer_managed_deliverables")
+    .select("id, collection_id, buyer_id, output_type, title, summary, bucket, storage_path, file_name, file_type, file_size, created_at, buyer_output_collections(id, name, description, icon, color)")
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return (data || []).map((item: any) => ({ ...item, delivery_target: "collection" }));
+}
+
+async function loadRecentProductDeliveries(adminClient: any) {
+  const { data, error } = await adminClient
+    .from("automation_outputs")
+    .select("id, buyer_id, customer_automation_id, automation_id, order_id, output_type, title, summary, content_json, storage_path, created_at")
+    .eq("status", "published")
+    .contains("content_json", { nexus_admin_delivery: { source: "admin_manual" } })
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return (data || []).map((item: any) => ({ ...item, delivery_target: "product" }));
+}
 async function loadCollection(adminClient: any, collectionId: string) {
   if (!collectionId) return null;
   const { data, error } = await adminClient
@@ -188,15 +209,30 @@ async function loadCollection(adminClient: any, collectionId: string) {
   return data || null;
 }
 
-async function listAdminData(adminClient: any) {
-  const [buyers, collections, deliveries] = await Promise.all([
-    loadBuyers(adminClient),
-    loadCollections(adminClient),
-    loadRecentDeliveries(adminClient),
-  ]);
-  return { data: { buyers, collections, deliveries }, status: 200 };
+async function loadCustomerAutomation(adminClient: any, customerAutomationId: string) {
+  if (!customerAutomationId) return null;
+  const { data, error } = await adminClient
+    .from("customer_automations")
+    .select("id, buyer_id, automation_id, order_id, name, status, automations(id, title, slug, icon, color, category), orders(id, automation_title, buyer_name, buyer_email, order_type, bundle_id, payment_status, order_status)")
+    .eq("id", customerAutomationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
 }
 
+async function listAdminData(adminClient: any) {
+  const [buyers, collections, customerAutomations, collectionDeliveries, productDeliveries] = await Promise.all([
+    loadBuyers(adminClient),
+    loadCollections(adminClient),
+    loadCustomerAutomations(adminClient),
+    loadRecentCollectionDeliveries(adminClient),
+    loadRecentProductDeliveries(adminClient),
+  ]);
+  const deliveries = [...collectionDeliveries, ...productDeliveries]
+    .sort((left: any, right: any) => String(right.created_at || "").localeCompare(String(left.created_at || "")))
+    .slice(0, 50);
+  return { data: { buyers, collections, customer_automations: customerAutomations, deliveries }, status: 200 };
+}
 async function createCollection(adminClient: any, actor: any, body: Record<string, unknown>) {
   const buyerId = cleanString(body.buyer_id || body.buyerId);
   const name = cleanString(body.name).slice(0, 120);
@@ -236,8 +272,15 @@ async function createCollection(adminClient: any, actor: any, body: Record<strin
 
 async function createUpload(adminClient: any, body: Record<string, unknown>) {
   const collectionId = cleanString(body.collection_id || body.collectionId);
-  const collection = await loadCollection(adminClient, collectionId);
-  if (!collection) return { error: "Select a valid output collection.", status: 404 };
+  const customerAutomationId = cleanString(body.customer_automation_id || body.customerAutomationId);
+  if ((!collectionId && !customerAutomationId) || (collectionId && customerAutomationId)) {
+    return { error: "Choose exactly one destination: an output collection or an existing buyer product.", status: 400 };
+  }
+
+  const collection = collectionId ? await loadCollection(adminClient, collectionId) : null;
+  const customerAutomation = customerAutomationId ? await loadCustomerAutomation(adminClient, customerAutomationId) : null;
+  if (collectionId && !collection) return { error: "Select a valid output collection.", status: 404 };
+  if (customerAutomationId && !customerAutomation) return { error: "Select a valid buyer product.", status: 404 };
 
   const fileName = safeFileName(body.file_name || body.fileName);
   const fileType = lowerString(body.file_type || body.fileType) || "application/octet-stream";
@@ -249,7 +292,9 @@ async function createUpload(adminClient: any, body: Record<string, unknown>) {
   }
 
   await ensureBucket(adminClient);
-  const path = `${collection.buyer_id}/collections/${collection.id}/${crypto.randomUUID()}/${fileName}`;
+  const path = collection
+    ? `${collection.buyer_id}/collections/${collection.id}/${crypto.randomUUID()}/${fileName}`
+    : `${customerAutomation.buyer_id}/${customerAutomation.id}/${crypto.randomUUID()}/${fileName}`;
   const { data, error } = await adminClient.storage.from(BUCKET).createSignedUploadUrl(path);
   if (error) throw new Error(error.message);
   return {
@@ -267,7 +312,6 @@ async function createUpload(adminClient: any, body: Record<string, unknown>) {
     status: 200,
   };
 }
-
 async function storageObject(adminClient: any, storagePath: string) {
   const parts = storagePath.split("/").filter(Boolean);
   const fileName = parts.pop() || "";
@@ -278,11 +322,7 @@ async function storageObject(adminClient: any, storagePath: string) {
   return (data || []).find((item: any) => item.name === fileName) || null;
 }
 
-async function publishDelivery(adminClient: any, actor: any, body: Record<string, unknown>) {
-  const collectionId = cleanString(body.collection_id || body.collectionId);
-  const collection = await loadCollection(adminClient, collectionId);
-  if (!collection) return { error: "Select a valid output collection.", status: 404 };
-
+async function publishCollectionDelivery(adminClient: any, actor: any, body: Record<string, unknown>, collection: any) {
   const storagePath = cleanString(body.storage_path || body.storagePath);
   const expectedPrefix = `${collection.buyer_id}/collections/${collection.id}/`;
   if (!storagePath.startsWith(expectedPrefix) || storagePath.includes("..")) {
@@ -341,6 +381,117 @@ async function publishDelivery(adminClient: any, actor: any, body: Record<string
   return { data: { delivery, message: `${title} was added to ${collection.name} in the buyer's Outputs section.` }, status: 200 };
 }
 
+async function publishProductDelivery(adminClient: any, actor: any, body: Record<string, unknown>, customerAutomation: any) {
+  const storagePath = cleanString(body.storage_path || body.storagePath);
+  const expectedPrefix = `${customerAutomation.buyer_id}/${customerAutomation.id}/`;
+  if (!storagePath.startsWith(expectedPrefix) || storagePath.includes("..")) {
+    return { error: "The uploaded file does not belong to this buyer and product.", status: 409 };
+  }
+
+  const fileName = safeFileName(body.file_name || body.fileName || storagePath.split("/").pop());
+  const fileType = lowerString(body.file_type || body.fileType) || "application/octet-stream";
+  const fileSize = Number(body.file_size || body.fileSize || 0);
+  if (!safeFileType(fileName, fileType) || !Number.isFinite(fileSize) || fileSize <= 0 || fileSize > MAX_FILE_SIZE) {
+    return { error: "The uploaded file metadata is invalid.", status: 400 };
+  }
+  if (!await storageObject(adminClient, storagePath)) {
+    return { error: "The file upload did not finish. Upload it again before publishing.", status: 409 };
+  }
+
+  const title = cleanString(body.title).slice(0, 240);
+  const summary = cleanString(body.summary).slice(0, 2000);
+  if (!title) return { error: "Add a buyer-facing title.", status: 400 };
+
+  const now = new Date().toISOString();
+  const product = one(customerAutomation.automations);
+  const order = one(customerAutomation.orders);
+  const outputType = outputTypeForFile(fileName, body.output_type || body.outputType);
+  const outputPayload = {
+    customer_automation_id: customerAutomation.id,
+    order_id: customerAutomation.order_id || order.id || null,
+    buyer_id: customerAutomation.buyer_id,
+    automation_id: customerAutomation.automation_id || product.id || null,
+    automation_run_id: null,
+    bundle_run_attempt_id: null,
+    bundle_run_item_id: null,
+    output_type: outputType,
+    status: "published",
+    title,
+    summary,
+    content_text: summary,
+    content_html: "",
+    content_json: {
+      nexus_admin_delivery: {
+        source: "admin_manual",
+        bucket: BUCKET,
+        storage_path: storagePath,
+        file_name: fileName,
+        file_type: fileType,
+        file_size: fileSize,
+        delivered_by: actor.user.id,
+        delivered_at: now,
+      },
+    },
+    file_url: "",
+    storage_path: storagePath,
+    created_by: "admin",
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { data: output, error: outputError } = await adminClient
+    .from("automation_outputs")
+    .insert(outputPayload)
+    .select()
+    .single();
+  if (outputError || !output) {
+    await adminClient.storage.from(BUCKET).remove([storagePath]);
+    throw new Error(outputError?.message || "Could not publish the file.");
+  }
+
+  const { error: eventError } = await adminClient.from("automation_events").insert({
+    customer_automation_id: customerAutomation.id,
+    buyer_id: customerAutomation.buyer_id,
+    automation_id: customerAutomation.automation_id || product.id || null,
+    order_id: customerAutomation.order_id || order.id || null,
+    event_type: "admin_deliverable_published",
+    title: "New file delivered by Nexus",
+    message: JSON.stringify({ output_id: output.id, output_type: outputType, title, file_name: fileName }),
+    created_by: "admin",
+    created_at: now,
+  });
+  if (eventError) console.warn("Could not record admin delivery event:", eventError.message);
+
+  if (body.notify_buyer !== false && body.notifyBuyer !== false) {
+    await safeEnqueueOutputReadyEmail(adminClient, {
+      outputId: output.id,
+      buyerId: customerAutomation.buyer_id,
+      orderId: customerAutomation.order_id || order.id || null,
+      automationId: customerAutomation.automation_id || product.id || null,
+      customerAutomationId: customerAutomation.id,
+      productTitle: product.title || customerAutomation.name || order.automation_title,
+      outputTitle: title,
+    });
+  }
+
+  return { data: { output, message: `${title} was added to the buyer's ${product.title || customerAutomation.name || "product"} output history.` }, status: 200 };
+}
+
+async function publishDelivery(adminClient: any, actor: any, body: Record<string, unknown>) {
+  const collectionId = cleanString(body.collection_id || body.collectionId);
+  const customerAutomationId = cleanString(body.customer_automation_id || body.customerAutomationId);
+  if ((!collectionId && !customerAutomationId) || (collectionId && customerAutomationId)) {
+    return { error: "Choose exactly one destination: an output collection or an existing buyer product.", status: 400 };
+  }
+  if (collectionId) {
+    const collection = await loadCollection(adminClient, collectionId);
+    if (!collection) return { error: "Select a valid output collection.", status: 404 };
+    return publishCollectionDelivery(adminClient, actor, body, collection);
+  }
+  const customerAutomation = await loadCustomerAutomation(adminClient, customerAutomationId);
+  if (!customerAutomation) return { error: "Select a valid buyer product.", status: 404 };
+  return publishProductDelivery(adminClient, actor, body, customerAutomation);
+}
 async function signedUrls(adminClient: any, storagePath: string, fileName: string) {
   const [viewResult, downloadResult] = await Promise.all([
     adminClient.storage.from(BUCKET).createSignedUrl(storagePath, VIEW_TTL_SECONDS),

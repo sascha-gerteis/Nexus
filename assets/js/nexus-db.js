@@ -3886,14 +3886,25 @@ async function createAdminManagedDeliverableCollection(payload = {}) {
   return callNexusFunction("managed-deliverables", { action: "create_collection", ...payload });
 }
 
-async function createAdminManagedDeliverableUpload(collectionId, file) {
+async function createAdminManagedDeliverableUpload(target = {}, file) {
   if (!file) {
     return { data: null, error: { message: "Choose a file first." } };
   }
 
+  const targetPayload = typeof target === "string"
+    ? { collection_id: target }
+    : {
+        collection_id: target?.collection_id || "",
+        customer_automation_id: target?.customer_automation_id || ""
+      };
+  const selectedTargets = [targetPayload.collection_id, targetPayload.customer_automation_id].filter(Boolean);
+  if (selectedTargets.length !== 1) {
+    return { data: null, error: { message: "Choose exactly one output destination." } };
+  }
+
   const { data, error } = await callNexusFunction("managed-deliverables", {
     action: "create_upload",
-    collection_id: collectionId,
+    ...targetPayload,
     file_name: file.name || "deliverable",
     file_type: file.type || "application/octet-stream",
     file_size: file.size || 0
@@ -3924,7 +3935,6 @@ async function createAdminManagedDeliverableUpload(collectionId, file) {
     error: null
   };
 }
-
 async function publishAdminManagedDeliverable(payload = {}) {
   return callNexusFunction("managed-deliverables", {
     action: "publish",
