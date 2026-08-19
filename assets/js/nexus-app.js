@@ -6,6 +6,8 @@ const NexusApp = (() => {
   let checkoutBundleSelection = new Set();
   let selectedCustomizationName = "";
   let marketplaceDrawTimer = null;
+  let marketplaceClickRanking = new Map();
+  const NICHE_BOTTOM_PRODUCT_SLUGS = new Set(["tech-sales-job-alerts"]);
   const compareSlugs = new Set();
   const savedAutomationIds = new Set();
   const MAX_COMPARE_PRODUCTS = 3;
@@ -562,15 +564,60 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     applyTranslationsIfNeeded(root);
   }
 
+  function marketplaceRankingKeys(item = {}) {
+    const type = item.is_bundle ? "bundle" : "product";
+    return [
+      item.id ? `${type}:id:${item.id}` : "",
+      item.slug ? `${type}:slug:${String(item.slug).toLowerCase()}` : ""
+    ].filter(Boolean);
+  }
+
+  function marketplaceRankingFor(item = {}) {
+    for (const key of marketplaceRankingKeys(item)) {
+      if (marketplaceClickRanking.has(key)) return marketplaceClickRanking.get(key);
+    }
+    return { unique_clicks_30: 0, clicks_30: 0, unique_clicks_90: 0, clicks_90: 0 };
+  }
+
+  function rankMarketplaceItems(items = []) {
+    return items.slice().sort((left, right) => {
+      const leftNiche = NICHE_BOTTOM_PRODUCT_SLUGS.has(String(left?.slug || "").toLowerCase());
+      const rightNiche = NICHE_BOTTOM_PRODUCT_SLUGS.has(String(right?.slug || "").toLowerCase());
+      if (leftNiche !== rightNiche) return leftNiche ? 1 : -1;
+
+      const leftRank = marketplaceRankingFor(left);
+      const rightRank = marketplaceRankingFor(right);
+      for (const metric of ["unique_clicks_30", "clicks_30", "unique_clicks_90", "clicks_90"]) {
+        const difference = Number(rightRank?.[metric] || 0) - Number(leftRank?.[metric] || 0);
+        if (difference) return difference;
+      }
+
+      const featuredDifference = Number(Boolean(right?.featured)) - Number(Boolean(left?.featured));
+      if (featuredDifference) return featuredDifference;
+      return 0;
+    });
+  }
+
+  function loadMarketplaceClickRanking(result = {}) {
+    marketplaceClickRanking = new Map();
+    for (const row of result?.data?.ranking || []) {
+      const type = row.listing_type === "bundle" ? "bundle" : "product";
+      if (row.listing_id) marketplaceClickRanking.set(`${type}:id:${row.listing_id}`, row);
+      if (row.listing_slug) marketplaceClickRanking.set(`${type}:slug:${String(row.listing_slug).toLowerCase()}`, row);
+    }
+  }
   async function renderMarketplace() {
-    const [{ data, error }, bundleResult, savedResult] = await Promise.all([
+    const [{ data, error }, bundleResult, savedResult, rankingResult] = await Promise.all([
       NexusDB.listLiveAutomations(),
       typeof NexusDB.listLiveBundles === "function"
         ? NexusDB.listLiveBundles()
         : Promise.resolve({ data: [], error: null }),
       typeof NexusDB.listSavedProductIds === "function"
         ? NexusDB.listSavedProductIds()
-        : Promise.resolve({ data: [], error: null })
+        : Promise.resolve({ data: [], error: null }),
+      typeof NexusDB.getMarketplaceProductRanking === "function"
+        ? NexusDB.getMarketplaceProductRanking()
+        : Promise.resolve({ data: { ranking: [] }, error: null })
     ]);
     const grid = document.getElementById("marketplaceGrid");
 
@@ -584,9 +631,11 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
 
     liveAutomations = data || [];
     liveBundles = bundleResult?.data || [];
+    loadMarketplaceClickRanking(rankingResult);
+    if (rankingResult?.error) console.warn("Marketplace click ranking unavailable; preserving the safe fallback order.", rankingResult.error);
     savedAutomationIds.clear();
     (savedResult?.data || []).forEach((id) => savedAutomationIds.add(String(id)));
-    window.NexusMarketplaceProducts = [...liveBundles, ...liveAutomations];
+    window.NexusMarketplaceProducts = rankMarketplaceItems([...liveBundles, ...liveAutomations]);
 
     const currency = document.getElementById("marketCurrency");
     if (currency) currency.innerHTML = NexusUI.currencySwitch();
@@ -648,6 +697,8 @@ if (typeof NexusUI.refreshUsdToThbRate === "function") {
     if (price !== "all") {
       items = items.filter((product) => product.pricing_type === price);
     }
+
+    items = rankMarketplaceItems(items);
 
     grid.innerHTML =
       items

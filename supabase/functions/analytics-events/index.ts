@@ -726,6 +726,26 @@ async function developerSummary(req: Request, adminClient: any, body: any) {
   };
 }
 
+async function marketplaceRanking(adminClient: any) {
+  const { data, error } = await adminClient.rpc("get_marketplace_product_ranking", {
+    p_days: 90,
+  });
+  if (error) throw new Error(error.message || "Could not calculate marketplace ranking.");
+  return {
+    ranking: (data || []).map((item: any) => ({
+      listing_type: cleanString(item.listing_type, 20),
+      listing_id: cleanString(item.listing_id, 100),
+      listing_slug: cleanString(item.listing_slug, 200),
+      clicks_30: numberValue(item.clicks_30),
+      unique_clicks_30: numberValue(item.unique_clicks_30),
+      clicks_90: numberValue(item.clicks_90),
+      unique_clicks_90: numberValue(item.unique_clicks_90),
+      last_clicked_at: cleanString(item.last_clicked_at, 80),
+    })),
+    window_days: 90,
+    recent_window_days: 30,
+  };
+}
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -757,6 +777,8 @@ Deno.serve(async (req) => {
     let result;
     if (action === "track") {
       result = await trackEvent(req, adminClient, body);
+    } else if (action === "marketplace_ranking") {
+      result = await marketplaceRanking(adminClient);
     } else if (action === "admin_summary") {
       result = await adminSummary(req, adminClient, body);
     } else if (action === "developer_summary") {

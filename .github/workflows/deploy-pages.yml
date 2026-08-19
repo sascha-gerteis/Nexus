@@ -49,6 +49,9 @@ jobs:
       - name: Verify admin analytics insights
         run: node scripts/admin-analytics-insights-regression.cjs
 
+      - name: Verify marketplace click ranking
+        run: node scripts/marketplace-ranking-regression.cjs
+
       - name: Verify credential integrity safeguards
         run: node scripts/credential-integrity-regression.cjs
 

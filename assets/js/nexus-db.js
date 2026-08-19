@@ -3671,6 +3671,11 @@ async function trackAnalyticsEvent(eventName, payload = {}) {
   });
 }
 
+async function getMarketplaceProductRanking() {
+  return cachedQuery("marketplace:click-ranking:v1", () => callNexusFunction("analytics-events", {
+    action: "marketplace_ranking"
+  }), 5 * 60 * 1000);
+}
 function trackPageView() {
   window.setTimeout(() => {
     trackAnalyticsEvent("page_view").catch((error) => {
@@ -4099,6 +4104,7 @@ async function listMakeImportMappings(payload = {}) {
     listMakeImportSupportRequests,
     listMakeImportMappings,
     trackAnalyticsEvent,
+    getMarketplaceProductRanking,
     getAdminAnalytics,
     getDeveloperAnalytics,
     functionsBaseUrl: getFunctionsBaseUrl,
