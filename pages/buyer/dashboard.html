@@ -1248,6 +1248,14 @@ function outputRuntimeMeta(output = {}) {
   };
 }
 
+function outputIsAdminDelivered(output = {}) {
+  const content = output?.content_json && typeof output.content_json === "object" ? output.content_json : {};
+  const meta = content.nexus_admin_delivery && typeof content.nexus_admin_delivery === "object"
+    ? content.nexus_admin_delivery
+    : {};
+  return String(meta.source || "") === "admin_manual";
+}
+
 function outputMatchesRun(output = {}, run = {}) {
   if (!run) return false;
   const meta = outputRuntimeMeta(output);
@@ -1259,6 +1267,7 @@ function outputMatchesRun(output = {}, run = {}) {
 
 function outputIsFreshForAutomation(output = {}, item = {}, latestRun = null) {
   if (!output) return false;
+  if (outputIsAdminDelivered(output)) return true;
   const runtimeMeta = outputRuntimeMeta(output);
   const hasRuntimeIdentity = Boolean(runtimeMeta.runId || runtimeMeta.runKey);
 
@@ -3663,7 +3672,7 @@ function openAutomationDetail(customerAutomationId) {
       return {
         title,
         category: output?.output_type || product.category || customerAutomation.automations?.category || "Output",
-        developerName: developerDisplayNameOptional(customerAutomation) || developerDisplayNameOptional(output) || "Nexus",
+        developerName: outputIsAdminDelivered(output) ? "Nexus" : developerDisplayNameOptional(customerAutomation) || developerDisplayNameOptional(output) || "Nexus",
         color: product.color || customerAutomation.automations?.color || "",
         itemColor: product.color || customerAutomation.automations?.color || "",
         groupKey: customerAutomationOrderId
@@ -3719,7 +3728,7 @@ function openAutomationDetail(customerAutomationId) {
         }
         const preparedOutput = { ...output, __context: context };
 
-        if (context.category === "Bundle output" && output.customer_automation_id) {
+        if (context.category === "Bundle output" && output.customer_automation_id && !outputIsAdminDelivered(output)) {
           const existingIndex = groups[key].items.findIndex(item => item.customer_automation_id === output.customer_automation_id);
 
           if (existingIndex >= 0) {

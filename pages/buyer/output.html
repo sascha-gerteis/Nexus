@@ -20,6 +20,27 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#2563ff">
+  <style>
+    .managed-file-delivery {
+      display: grid;
+      gap: 18px;
+      place-items: start;
+      padding: clamp(22px, 4vw, 38px);
+      border: 1px solid rgba(37, 99, 255, 0.2);
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(37, 99, 255, 0.08), rgba(255, 255, 255, 0.96));
+    }
+
+    .managed-file-delivery h3,
+    .managed-file-delivery p {
+      margin: 0;
+    }
+
+    .managed-file-delivery-name {
+      color: var(--text-muted, #596579);
+      overflow-wrap: anywhere;
+    }
+  </style>
 </head>
 
 <body data-page="buyer-output">
@@ -53,7 +74,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260801-analytics-insights"></script>
+  <script src="/assets/js/nexus-db.js?v=20260819-managed-deliverables"></script>
 
   <script>
     function getParam(name) {
@@ -82,14 +103,33 @@
         .replace(/\b\w/g, char => char.toUpperCase());
     }
 
+    function adminDeliveryMeta(output) {
+      const content = output?.content_json && typeof output.content_json === "object"
+        ? output.content_json
+        : {};
+      const meta = content.nexus_admin_delivery;
+      return meta && typeof meta === "object" && String(meta.source || "") === "admin_manual"
+        ? meta
+        : null;
+    }
+
+    function isAdminDeliveredOutput(output) {
+      return Boolean(adminDeliveryMeta(output));
+    }
+
+    function managedFileName(output) {
+      return String(adminDeliveryMeta(output)?.file_name || "Customer deliverable");
+    }
+
     function developerName(output) {
+      if (isAdminDeliveredOutput(output)) return "Nexus";
       const nested = output?.customer_automations?.developers || {};
       const direct = output?.developers || {};
       return nested.display_name || direct.display_name || "Nexus";
     }
 
     function outputFormatLabel(output) {
-      if (output.file_url) return "File";
+      if (output.file_url || adminDeliveryMeta(output)?.storage_path) return "File";
       if (output.content_html) return "HTML report";
       if (output.content_text) return "Text report";
       return "Structured data";
@@ -123,7 +163,24 @@
       return `<!DOCTYPE html>\n${parsed.documentElement.outerHTML}`;
     }
 
-    function renderOutputBody(output) {
+    function renderOutputBody(output, downloadUrl = "") {
+      if (isAdminDeliveredOutput(output)) {
+        const fileName = managedFileName(output);
+        return `
+          <div class="managed-file-delivery">
+            <span class="eyebrow">Private Nexus delivery</span>
+            <h3>${escapeHtml(output.title || fileName)}</h3>
+            <p>${escapeHtml(output.summary || "A file has been delivered securely to your Nexus account.")}</p>
+            <p class="managed-file-delivery-name">${escapeHtml(fileName)}</p>
+            ${
+              downloadUrl
+                ? `<a class="btn btn-primary" href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener">Open or download file</a>`
+                : `<p>The secure download link is temporarily unavailable. Reload this page to request a new link.</p>`
+            }
+          </div>
+        `;
+      }
+
       if (output.content_html) {
         return `
           <div class="output-frame-shell">
@@ -201,6 +258,12 @@
       const { data: outputHistory } = output.customer_automation_id
         ? await NexusDB.listOutputsForCustomerAutomation(output.customer_automation_id)
         : { data: [] };
+      const adminDelivered = isAdminDeliveredOutput(output);
+      let outputFileUrl = String(output.file_url || "").trim();
+      if (adminDelivered && !outputFileUrl && adminDeliveryMeta(output)?.storage_path) {
+        const { data: signedFile } = await NexusDB.signManagedDeliverableOutput(output.id);
+        outputFileUrl = String(signedFile?.download_url || signedFile?.signed_url || signedFile?.signedUrl || "").trim();
+      }
 
       root.innerHTML = `
         <div class="buyer-output-reader">
@@ -214,8 +277,8 @@
                 My automations
               </a>
               ${
-                output.file_url
-                  ? `<a class="btn btn-primary btn-small" href="${escapeHtml(output.file_url)}" target="_blank" rel="noopener">Open file</a>`
+                outputFileUrl
+                  ? `<a class="btn btn-primary btn-small" href="${escapeHtml(outputFileUrl)}" target="_blank" rel="noopener">Open file</a>`
                   : ""
               }
             </div>
@@ -235,7 +298,7 @@
 
               <div class="buyer-output-reader-meta">
                 <span>${escapeHtml(product.title || customerAutomation.name || "Automation")}</span>
-                <span>Built by ${escapeHtml(builder)}</span>
+                <span>${adminDelivered ? "Delivered by" : "Built by"} ${escapeHtml(builder)}</span>
                 <span>${escapeHtml(createdDate)}</span>
               </div>
             </div>
@@ -286,7 +349,7 @@
                 <span>${escapeHtml(outputFormatLabel(output))}</span>
               </div>
 
-              ${renderOutputBody(output)}
+              ${renderOutputBody(output, outputFileUrl)}
             </section>
           </div>
         </div>

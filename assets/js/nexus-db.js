@@ -3850,6 +3850,63 @@ async function createAdminPilotGrant(payload = {}) {
   });
 }
 
+async function listAdminManagedDeliverables() {
+  return callNexusFunction("managed-deliverables", { action: "list" });
+}
+
+async function createAdminManagedDeliverableUpload(customerAutomationId, file) {
+  if (!file) {
+    return { data: null, error: { message: "Choose a file first." } };
+  }
+
+  const { data, error } = await callNexusFunction("managed-deliverables", {
+    action: "create_upload",
+    customer_automation_id: customerAutomationId,
+    file_name: file.name || "deliverable",
+    file_type: file.type || "application/octet-stream",
+    file_size: file.size || 0
+  });
+  if (error) return { data: null, error };
+
+  const upload = data?.upload || data;
+  if (!upload?.bucket || !upload?.path || !upload?.token) {
+    return { data: null, error: { message: "Could not prepare the private file upload." } };
+  }
+
+  const uploadResult = await supabase.storage
+    .from(upload.bucket)
+    .uploadToSignedUrl(upload.path, upload.token, file, {
+      contentType: file.type || "application/octet-stream",
+      upsert: false
+    });
+  if (uploadResult.error) return { data: null, error: uploadResult.error };
+
+  return {
+    data: {
+      bucket: upload.bucket,
+      storage_path: upload.path,
+      file_name: upload.file_name || file.name,
+      file_type: upload.file_type || file.type || "application/octet-stream",
+      file_size: upload.file_size || file.size || 0
+    },
+    error: null
+  };
+}
+
+async function publishAdminManagedDeliverable(payload = {}) {
+  return callNexusFunction("managed-deliverables", {
+    action: "publish",
+    ...payload
+  });
+}
+
+async function signManagedDeliverableOutput(outputId) {
+  return callNexusFunction("managed-deliverables", {
+    action: "sign_output_file",
+    output_id: outputId
+  });
+}
+
 async function updateAdminInstallRequest(payload) {
   return callNexusFunction("nexus-install-request", {
     action: "admin_update",
@@ -4117,6 +4174,10 @@ submitNexusInstallRequest,
 listAdminOrders,
 listAdminPilotGrants,
 createAdminPilotGrant,
+listAdminManagedDeliverables,
+createAdminManagedDeliverableUpload,
+publishAdminManagedDeliverable,
+signManagedDeliverableOutput,
 updateAdminInstallRequest,
 listDeveloperInstallRequests,
 updateDeveloperInstallRequest,

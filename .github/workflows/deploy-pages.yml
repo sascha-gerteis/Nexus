@@ -40,6 +40,9 @@ jobs:
       - name: Verify admin pilot grant safeguards
         run: node scripts/admin-pilot-grant-regression.cjs
 
+      - name: Verify private admin buyer file delivery
+        run: node scripts/admin-managed-deliverables-regression.cjs
+
       - name: Verify legal, indexing, and founder trust safeguards
         run: node scripts/legal-trust-launch-regression.cjs
 

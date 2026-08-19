@@ -70,3 +70,6 @@ verify_jwt = false
 
 [functions.create-usage-topup-checkout]
 verify_jwt = false
+
+[functions.managed-deliverables]
+verify_jwt = false

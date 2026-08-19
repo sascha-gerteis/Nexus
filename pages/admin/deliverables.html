@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260713-code-stability">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js?v=20260713-code-stability"></script>
+  <title>Deliver Buyer Files | Nexus Admin</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png">
+  <meta name="theme-color" content="#2563ff">
+  <style>
+    .deliverable-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:1rem;align-items:start}
+    .deliverable-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:1.25rem;box-shadow:0 12px 32px rgba(24,36,72,.06)}
+    .deliverable-card h3{margin:0 0 .35rem}.deliverable-card>p{margin:.2rem 0 1rem;color:var(--muted);line-height:1.55}
+    .deliverable-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.deliverable-field.full{grid-column:1/-1}
+    .deliverable-field label{display:block;margin-bottom:.45rem;font-weight:800;color:var(--ink)}
+    .deliverable-field small{display:block;margin-top:.4rem;color:var(--muted);line-height:1.45}
+    .deliverable-file{border:1px dashed #abc7ee;background:#f7fbff;border-radius:16px;padding:1rem}
+    .deliverable-file input{width:100%}.deliverable-safety{display:grid;gap:.75rem;margin-top:1rem}
+    .deliverable-safety article{display:grid;grid-template-columns:32px 1fr;gap:.7rem;align-items:start;padding:.85rem;border-radius:14px;background:#f7f9fe;border:1px solid #e0e8f7}
+    .deliverable-safety b{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#e0edff;color:#1465d8}
+    .deliverable-safety strong,.deliverable-safety span{display:block}.deliverable-safety span{margin-top:.18rem;color:var(--muted);font-size:.9rem;line-height:1.45}
+    .deliverable-result{display:none;margin-top:1rem;padding:1rem;border-radius:14px}.deliverable-result.show{display:block}.deliverable-result.success{background:#effaf4;border:1px solid #9bdfb9;color:#12653a}.deliverable-result.error{background:#fff4f4;border:1px solid #efb0b0;color:#9b2929}
+    .deliverable-list{display:grid;gap:.7rem}.deliverable-row{display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;padding:.95rem;border:1px solid var(--line);border-radius:14px;background:#fff}
+    .deliverable-row h4,.deliverable-row p{margin:0}.deliverable-row p{margin-top:.28rem;color:var(--muted);font-size:.9rem}.deliverable-row small{color:var(--muted);text-align:right}
+    .deliverable-empty{padding:1.2rem;text-align:center;border:1px dashed var(--line);border-radius:14px;color:var(--muted)}
+    .deliverable-check{display:flex;gap:.65rem;align-items:flex-start;padding:.8rem;border-radius:13px;background:#f8faff;border:1px solid #e1e8f5}.deliverable-check input{margin-top:.2rem}.deliverable-check strong,.deliverable-check span{display:block}.deliverable-check span{margin-top:.18rem;color:var(--muted);font-size:.88rem}
+    @media(max-width:900px){.deliverable-layout,.deliverable-grid{grid-template-columns:1fr}.deliverable-field.full{grid-column:auto}.deliverable-row{grid-template-columns:1fr}.deliverable-row small{text-align:left}}
+  </style>
+</head>
+<body data-admin="true" data-admin-page="deliverables">
+  <header class="site-header" id="globalNav" data-active="admin"></header>
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="sidebar-title">Nexus Admin</div>
+      <a href="/pages/admin/dashboard.html">Overview</a>
+      <a href="/pages/admin/orders.html">Orders</a>
+      <a href="/pages/admin/pilot-grants.html">Pilot Grants</a>
+      <a class="active" href="/pages/admin/deliverables.html">Deliver Files</a>
+      <a href="/pages/admin/automations.html">Products</a>
+      <a href="/pages/marketplace">View Marketplace</a>
+      <a href="#" onclick="NexusDB.signOut()">Logout</a>
+    </aside>
+    <main class="main">
+      <div class="section-head left">
+        <span class="eyebrow">Private admin delivery</span>
+        <h2>Add a presentation or file to a buyer dashboard.</h2>
+        <p>Select an existing buyer and product access. Nexus stores the file privately and adds a new entry to that buyer's Outputs section without running or changing the automation.</p>
+      </div>
+
+      <div class="deliverable-layout">
+        <section class="deliverable-card">
+          <h3>Deliver a new file</h3>
+          <p>Each upload becomes a separate output. Existing reports and files are never replaced.</p>
+          <form id="deliverableForm" onsubmit="submitDeliverable(event)">
+            <div class="deliverable-grid">
+              <div class="deliverable-field">
+                <label for="buyerSearch">Find buyer</label>
+                <input class="input" id="buyerSearch" type="search" placeholder="Search name, email or company" oninput="renderBuyerOptions()">
+              </div>
+              <div class="deliverable-field">
+                <label for="deliverableBuyer">Buyer account</label>
+                <select class="input" id="deliverableBuyer" required onchange="renderAutomationOptions()">
+                  <option value="">Loading buyers...</option>
+                </select>
+              </div>
+              <div class="deliverable-field full">
+                <label for="deliverableAutomation">Place in this product's output history</label>
+                <select class="input" id="deliverableAutomation" required onchange="updateDeliverySummary()">
+                  <option value="">Select a buyer first</option>
+                </select>
+                <small>This categorizes the file in the buyer dashboard. It does not run, edit, or reconfigure the product.</small>
+              </div>
+              <div class="deliverable-field full deliverable-file">
+                <label for="deliverableFile">Presentation or business file</label>
+                <input id="deliverableFile" type="file" required accept=".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,.zip" onchange="handleFileSelection()">
+                <small>PDF, PowerPoint, Word, Excel, CSV, text, image, or ZIP · maximum 50 MB.</small>
+              </div>
+              <div class="deliverable-field">
+                <label for="deliverableType">Output type</label>
+                <select class="input" id="deliverableType">
+                  <option value="presentation">Presentation</option>
+                  <option value="document">Document</option>
+                  <option value="spreadsheet">Spreadsheet</option>
+                  <option value="report">Report</option>
+                  <option value="file">Other file</option>
+                </select>
+              </div>
+              <div class="deliverable-field">
+                <label for="deliverableTitle">Buyer-facing title</label>
+                <input class="input" id="deliverableTitle" maxlength="240" required placeholder="Q3 2026 executive presentation">
+              </div>
+              <div class="deliverable-field full">
+                <label for="deliverableSummary">Buyer-facing summary</label>
+                <textarea class="textarea" id="deliverableSummary" maxlength="2000" rows="4" placeholder="Quarterly presentation prepared for the Thundercranes leadership team."></textarea>
+              </div>
+              <div class="deliverable-field full">
+                <label class="deliverable-check">
+                  <input id="notifyBuyer" type="checkbox" checked>
+                  <span><strong>Email the buyer when published</strong><span>The normal Nexus output-ready email will link directly to this file output.</span></span>
+                </label>
+              </div>
+            </div>
+            <div id="deliverySummary" class="deliverable-empty" style="margin-top:1rem">Select a buyer, product, and file.</div>
+            <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-top:1rem">
+              <button class="btn btn-primary" id="publishDeliverableButton" type="submit">Upload and publish</button>
+              <span style="color:var(--muted);font-size:.9rem">Admin only · private file · no workflow run</span>
+            </div>
+            <div class="deliverable-result" id="deliverableResult" role="status" aria-live="polite"></div>
+          </form>
+        </section>
+
+        <aside class="deliverable-card">
+          <h3>Isolation safeguards</h3>
+          <p>This special delivery path is intentionally separate from every product and runtime operation.</p>
+          <div class="deliverable-safety">
+            <article><b>1</b><div><strong>No automation changes</strong><span>The workflow, credentials, setup, cadence, and runtime status are untouched.</span></div></article>
+            <article><b>2</b><div><strong>No payment changes</strong><span>No checkout, Stripe charge, refund, subscription, or developer payout is created.</span></div></article>
+            <article><b>3</b><div><strong>Private buyer access</strong><span>The file is private. Nexus generates a short-lived download only for the owning buyer.</span></div></article>
+            <article><b>4</b><div><strong>History is additive</strong><span>Every delivery creates a new output and never replaces an earlier result.</span></div></article>
+          </div>
+        </aside>
+      </div>
+
+      <section class="deliverable-card" style="margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+          <div><h3>Recent admin deliveries</h3><p style="margin:0;color:var(--muted)">The latest files manually published through this admin-only page.</p></div>
+          <button class="btn btn-secondary btn-small" type="button" onclick="loadDeliverableData()">Refresh</button>
+        </div>
+        <div class="deliverable-list" id="deliverableList"><div class="deliverable-empty">Loading deliveries...</div></div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="/assets/js/nexus-ui.js?v=20260819-managed-deliverables"></script>
+  <script src="/assets/js/nexus-db.js?v=20260819-managed-deliverables"></script>
+  <script src="/assets/js/nexus-notice.js?v=20260713-code-stability"></script>
+  <script>
+    let deliverableBuyers = [];
+    let deliverableAutomations = [];
+    let recentDeliveries = [];
+
+    function escapeHtml(value) {
+      return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+    }
+    function escapeAttribute(value) { return escapeHtml(value).replaceAll("`", "&#096;"); }
+    function safeLower(value) { return String(value || "").trim().toLowerCase(); }
+    function one(value) { return Array.isArray(value) ? value[0] || {} : value || {}; }
+    function dateLabel(value) { return value ? new Date(value).toLocaleString() : "Unknown date"; }
+    function fileStem(name) { return String(name || "").replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim(); }
+    function buyerLabel(buyer) {
+      const identity = buyer.name || buyer.email || "Buyer";
+      const details = [buyer.email, buyer.company].filter(Boolean).filter(value => value !== identity);
+      return details.length ? `${identity} · ${details.join(" · ")}` : identity;
+    }
+    function productTitle(item) {
+      const product = one(item.automations);
+      const order = one(item.orders);
+      return product.title || item.name || order.automation_title || "Customer product";
+    }
+    function selectedBuyer() { return deliverableBuyers.find(item => item.id === document.getElementById("deliverableBuyer")?.value) || null; }
+    function selectedAutomation() { return deliverableAutomations.find(item => item.id === document.getElementById("deliverableAutomation")?.value) || null; }
+
+    function showResult(type, message) {
+      const root = document.getElementById("deliverableResult");
+      root.className = `deliverable-result show ${type}`;
+      root.innerHTML = `<strong>${type === "success" ? "File published" : "Could not publish file"}</strong><div style="margin-top:.3rem">${escapeHtml(message)}</div>`;
+    }
+
+    function renderBuyerOptions() {
+      const select = document.getElementById("deliverableBuyer");
+      const selected = select.value;
+      const query = safeLower(document.getElementById("buyerSearch")?.value);
+      const matches = deliverableBuyers.filter(buyer => [buyer.name, buyer.email, buyer.company].some(value => safeLower(value).includes(query)));
+      select.innerHTML = `<option value="">Select buyer account</option>${matches.map(buyer => `<option value="${escapeAttribute(buyer.id)}">${escapeHtml(buyerLabel(buyer))}</option>`).join("")}`;
+      if (matches.some(buyer => buyer.id === selected)) select.value = selected;
+      renderAutomationOptions();
+    }
+
+    function renderAutomationOptions() {
+      const buyerId = document.getElementById("deliverableBuyer")?.value || "";
+      const select = document.getElementById("deliverableAutomation");
+      const selected = select.value;
+      const matches = deliverableAutomations.filter(item => item.buyer_id === buyerId);
+      select.innerHTML = buyerId
+        ? `<option value="">Select dashboard product</option>${matches.map(item => `<option value="${escapeAttribute(item.id)}">${escapeHtml(productTitle(item))}</option>`).join("")}`
+        : `<option value="">Select a buyer first</option>`;
+      if (matches.some(item => item.id === selected)) select.value = selected;
+      updateDeliverySummary();
+    }
+
+    function handleFileSelection() {
+      const file = document.getElementById("deliverableFile")?.files?.[0];
+      if (!file) return updateDeliverySummary();
+      const extension = String(file.name.split(".").pop() || "").toLowerCase();
+      const type = document.getElementById("deliverableType");
+      if (["ppt", "pptx"].includes(extension)) type.value = "presentation";
+      else if (["xls", "xlsx", "csv"].includes(extension)) type.value = "spreadsheet";
+      else if (["pdf", "doc", "docx", "txt"].includes(extension)) type.value = "document";
+      else type.value = "file";
+      const title = document.getElementById("deliverableTitle");
+      if (!title.value.trim()) title.value = fileStem(file.name);
+      updateDeliverySummary();
+    }
+
+    function updateDeliverySummary() {
+      const buyer = selectedBuyer();
+      const automation = selectedAutomation();
+      const file = document.getElementById("deliverableFile")?.files?.[0];
+      const root = document.getElementById("deliverySummary");
+      if (!buyer || !automation || !file) {
+        root.innerHTML = "Select a buyer, product, and file.";
+        return;
+      }
+      root.innerHTML = `<strong>${escapeHtml(file.name)}</strong><div style="margin-top:.3rem">Will be added to ${escapeHtml(buyerLabel(buyer))} under ${escapeHtml(productTitle(automation))}. Existing outputs remain unchanged.</div>`;
+    }
+
+    function renderRecentDeliveries() {
+      const root = document.getElementById("deliverableList");
+      if (!recentDeliveries.length) {
+        root.innerHTML = `<div class="deliverable-empty">No admin-delivered files yet.</div>`;
+        return;
+      }
+      root.innerHTML = recentDeliveries.map(output => {
+        const buyer = deliverableBuyers.find(item => item.id === output.buyer_id) || {};
+        const automation = deliverableAutomations.find(item => item.id === output.customer_automation_id) || {};
+        const meta = output.content_json?.nexus_admin_delivery || {};
+        return `<article class="deliverable-row"><div><span class="pill blue">${escapeHtml(output.output_type || "File")}</span><h4>${escapeHtml(output.title || meta.file_name || "Delivered file")}</h4><p>${escapeHtml(buyerLabel(buyer))} · ${escapeHtml(productTitle(automation))}</p></div><small>${escapeHtml(dateLabel(output.created_at))}<br>${escapeHtml(meta.file_name || "")}</small></article>`;
+      }).join("");
+    }
+
+    async function loadDeliverableData() {
+      const root = document.getElementById("deliverableList");
+      if (root) root.innerHTML = `<div class="deliverable-empty">Loading deliveries...</div>`;
+      const selectedBuyerId = document.getElementById("deliverableBuyer")?.value || "";
+      const { data, error } = await NexusDB.listAdminManagedDeliverables();
+      if (error) {
+        showResult("error", error.message || "Could not load buyers and deliveries.");
+        if (root) root.innerHTML = `<div class="deliverable-empty">${escapeHtml(error.message || "Could not load deliveries.")}</div>`;
+        return;
+      }
+      deliverableBuyers = data?.buyers || [];
+      deliverableAutomations = data?.customer_automations || [];
+      recentDeliveries = data?.deliveries || [];
+      renderBuyerOptions();
+      if (deliverableBuyers.some(item => item.id === selectedBuyerId)) {
+        document.getElementById("deliverableBuyer").value = selectedBuyerId;
+        renderAutomationOptions();
+      }
+      renderRecentDeliveries();
+    }
+
+    async function submitDeliverable(event) {
+      event.preventDefault();
+      const buyer = selectedBuyer();
+      const automation = selectedAutomation();
+      const file = document.getElementById("deliverableFile")?.files?.[0];
+      const title = document.getElementById("deliverableTitle")?.value.trim() || "";
+      const summary = document.getElementById("deliverableSummary")?.value.trim() || "";
+      if (!buyer || !automation || !file || !title) {
+        showResult("error", "Select a buyer and product, choose a file, and add a title.");
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        showResult("error", "The file is larger than the 50 MB limit.");
+        return;
+      }
+      const confirmed = window.confirm(`Publish ${file.name} to ${buyer.name || buyer.email} under ${productTitle(automation)}?\n\nThis creates a new buyer output and does not replace an existing result.`);
+      if (!confirmed) return;
+
+      const button = document.getElementById("publishDeliverableButton");
+      button.disabled = true;
+      button.textContent = "Uploading private file...";
+      try {
+        const upload = await NexusDB.createAdminManagedDeliverableUpload(automation.id, file);
+        if (upload.error) {
+          showResult("error", upload.error.message || "The private upload failed.");
+          return;
+        }
+        button.textContent = "Publishing to dashboard...";
+        const { data, error } = await NexusDB.publishAdminManagedDeliverable({
+          customer_automation_id: automation.id,
+          storage_path: upload.data.storage_path,
+          file_name: upload.data.file_name,
+          file_type: upload.data.file_type,
+          file_size: upload.data.file_size,
+          output_type: document.getElementById("deliverableType").value,
+          title,
+          summary,
+          notify_buyer: document.getElementById("notifyBuyer").checked
+        });
+        if (error) {
+          showResult("error", error.message || "The file uploaded but could not be published.");
+          return;
+        }
+        showResult("success", data?.message || `${title} was added to the buyer's Outputs section.`);
+        document.getElementById("deliverableFile").value = "";
+        document.getElementById("deliverableTitle").value = "";
+        document.getElementById("deliverableSummary").value = "";
+        updateDeliverySummary();
+        await loadDeliverableData();
+      } catch (error) {
+        showResult("error", error?.message || "Could not upload and publish the file.");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Upload and publish";
+      }
+    }
+
+    async function initDeliverablesPage() {
+      if (typeof NexusUI !== "undefined" && typeof NexusUI.mountGlobalNav === "function") await NexusUI.mountGlobalNav();
+      const profile = await NexusDB.requireAdmin();
+      if (!profile) return;
+      await loadDeliverableData();
+    }
+    document.addEventListener("DOMContentLoaded", initDeliverablesPage);
+  </script>
+</body>
+</html>
