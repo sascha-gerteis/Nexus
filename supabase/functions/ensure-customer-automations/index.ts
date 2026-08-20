@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { automationRequiresBuyerOAuthClone } from "../_shared/buyer-oauth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
@@ -140,6 +141,7 @@ function normalizeWorkflowCloneMode(...values: unknown[]) {
 }
 
 function shouldUseCustomerWorkflowClone(product: any, order: any = null, existing: any = null) {
+  if (automationRequiresBuyerOAuthClone(product)) return true;
   return normalizeWorkflowCloneMode(
     existing?.runtime_workflow_mode,
     existing?.n8n_workflow_mode,

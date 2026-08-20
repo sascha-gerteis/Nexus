@@ -1280,6 +1280,9 @@ async function setRuntimeCredentialOwner(adminClient: any, operator: any, body: 
   const matchedSlots = currentSlots.filter((slot: any) => requestedKeys.has(slotKey(slot)));
   if (!matchedSlots.length) throw new Error("The selected credential nodes are no longer present. Scan the workflow again.");
   if (owner === "buyer") {
+    if (lower(product.runtime_trigger_mode) === "buyer_webhook") {
+      throw new Error("Buyer OAuth is not yet available on the separate webhook-connection page. Keep the product account for this webhook product until that setup path is supported.");
+    }
     const unsupported = matchedSlots.filter((slot: any) => !supportsBuyerGoogleOAuth(slot));
     if (unsupported.length) {
       throw new Error("Buyer sign-in is currently supported for Gmail and native Google OAuth nodes only. API keys and service accounts keep their existing setup path.");

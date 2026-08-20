@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { decryptCredentialPayload } from "../_shared/nexus-credentials.ts";
+import { automationRequiresBuyerOAuthClone } from "../_shared/buyer-oauth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -780,6 +781,7 @@ function normalizeWorkflowCloneMode(...values: unknown[]) {
 }
 
 function shouldUseCustomerWorkflowClone(automation: any, order: any = null, customerAutomation: any = null) {
+  if (automationRequiresBuyerOAuthClone(automation)) return true;
   return normalizeWorkflowCloneMode(
     customerAutomation?.runtime_workflow_mode,
     customerAutomation?.n8n_workflow_mode,

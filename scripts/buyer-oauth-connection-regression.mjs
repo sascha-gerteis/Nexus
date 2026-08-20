@@ -9,6 +9,9 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const migration = read("supabase", "migrations", "20260820000100_buyer_oauth_connections.sql");
 const oauthFunction = read("supabase", "functions", "oauth-connections", "index.ts");
 const credentialFunction = read("supabase", "functions", "developer-credentials", "index.ts");
+const ensureFunction = read("supabase", "functions", "ensure-customer-automations", "index.ts");
+const backlogFunction = read("supabase", "functions", "process-runtime-dispatch-backlog", "index.ts");
+const scheduledFunction = read("supabase", "functions", "run-scheduled-automations", "index.ts");
 const provisionFunction = read("supabase", "functions", "provision-customer-workflow", "index.ts");
 const submitFunction = read("supabase", "functions", "submit-automation-setup", "index.ts");
 const buyerSetup = read("pages", "buyer", "setup.html");
@@ -32,6 +35,7 @@ for (const marker of [
 
 assert.ok(credentialFunction.includes('action === "set_runtime_credential_owner"'));
 assert.ok(credentialFunction.includes("preserveRuntimeCredentialOwnership"), "Credential rescans must preserve buyer ownership");
+assert.ok(credentialFunction.includes("Buyer OAuth is not yet available on the separate webhook-connection page"));
 assert.ok(developerDashboard.includes("Require buyer sign-in"), "Shared admin/developer upload must expose ownership");
 assert.ok(nexusDb.includes("setAutomationCredentialRuntimeOwner"));
 
@@ -45,6 +49,34 @@ assert.ok(
 assert.ok(provisionFunction.includes("bindBuyerOAuthCredentials"));
 assert.ok(provisionFunction.includes("workflowNodeHasCredential"), "Provisioning must verify the exact node binding");
 assert.ok(provisionFunction.includes("developer_credential_requirements,"), "Provisioning must load ownership metadata");
+
+for (const [label, source] of [
+  ["purchase creation", ensureFunction],
+  ["setup submit", submitFunction],
+  ["dispatch backlog", backlogFunction],
+  ["scheduled runner", scheduledFunction],
+]) {
+  assert.ok(source.includes("automationRequiresBuyerOAuthClone"), `${label} must force an isolated clone for buyer OAuth`);
+}
+
+const { automationRequiresBuyerOAuthClone } = await import(pathToFileURL(path.join(
+  root,
+  "supabase/functions/_shared/buyer-oauth.ts",
+)).href);
+assert.equal(automationRequiresBuyerOAuthClone({ developer_credential_requirements: [] }), false);
+assert.equal(automationRequiresBuyerOAuthClone({
+  developer_credential_requirements: [{
+    provider: "gmail",
+    n8n_credential_type: "gmailOAuth2",
+    runtime_credential_owner: "buyer",
+  }],
+}), true);
+assert.equal(automationRequiresBuyerOAuthClone({
+  developer_credential_requirements: [{
+    provider: "gmail",
+    n8n_credential_type: "gmailOAuth2",
+  }],
+}), false, "Legacy Gmail products must remain shared unless explicitly changed");
 
 for (const marker of [
   "Secure account connection",
