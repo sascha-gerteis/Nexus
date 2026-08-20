@@ -100,6 +100,16 @@ function getNested(obj: any, path: string) {
 function classifyRuntimeError(errorMessage: string, rawError: Record<string, unknown>) {
   const rawText = stringifySafe(rawError);
   const combined = `${errorMessage || ""} ${rawText || ""}`.toLowerCase();
+  const memorySignals = [
+    "heap out of memory",
+    "allocation failed",
+    "out of memory",
+    "ran out of memory",
+    "not enough memory",
+    "enomem",
+    "compute resources",
+    "execution stopped at this node",
+  ];
 
   const customerCredentialSignals = [
     "invalid token",
@@ -185,7 +195,18 @@ function classifyRuntimeError(errorMessage: string, rawError: Record<string, unk
     "temporarily unavailable",
     "is_transient",
     "transient",
+    "no n8n execution matched",
+    "did not produce a matching execution",
   ];
+  if (memorySignals.some((signal) => combined.includes(signal))) {
+    return {
+      error_type: "runtime_capacity_error",
+      error_code: "N8N_OUT_OF_MEMORY",
+      needs_customer_action: false,
+      customer_message:
+        "This automation exceeded the workflow runtime capacity. Nexus has stopped the stuck run and notified the operator.",
+    };
+  }
 
   if (customerCredentialSignals.some((signal) => combined.includes(signal))) {
     return {
@@ -1509,6 +1530,86 @@ Deno.serve(async (req) => {
         const message = rejectedStoredExecutionId
           ? "The stored n8n execution belonged to a different Nexus run. Waiting for the exact execution."
           : "No n8n execution matched this exact Nexus run yet.";
+        const configuredTimeout = Number(env("N8N_MISSING_EXECUTION_TIMEOUT_MINUTES") || "45");
+        const timeoutMinutes = Math.max(
+          10,
+          Math.min(Number.isFinite(configuredTimeout) ? configuredTimeout : 45, 240),
+        );
+        const runStartedAt = new Date(
+          latestRun?.started_at || latestRun?.created_at || 0,
+        ).getTime();
+        const missingExecutionTimedOut = Boolean(
+          runStartedAt && Date.now() - runStartedAt >= timeoutMinutes * 60 * 1000,
+        );
+
+        if (missingExecutionTimedOut) {
+          let existingOutputQuery = adminClient
+            .from("automation_outputs")
+            .select("id,title,created_at")
+            .eq("customer_automation_id", customerAutomation.id)
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          if (cleanString(latestRun?.bundle_run_item_id)) {
+            existingOutputQuery = existingOutputQuery.eq(
+              "bundle_run_item_id",
+              latestRun.bundle_run_item_id,
+            );
+          } else {
+            existingOutputQuery = existingOutputQuery.eq("automation_run_id", latestRun.id);
+          }
+
+          const { data: existingOutputs, error: existingOutputError } = await existingOutputQuery;
+          if (existingOutputError) {
+            console.warn("stale n8n run output lookup failed:", existingOutputError.message);
+          }
+
+          const existingOutput = Array.isArray(existingOutputs) ? existingOutputs[0] : null;
+          if (existingOutput?.id) {
+            const recovered = await applyExecutionSuccess(
+              adminClient,
+              customerAutomation,
+              {
+                id: cleanString(latestRun?.n8n_execution_id),
+                status: "success",
+                stoppedAt: existingOutput.created_at || now,
+              },
+              { runContext: latestRun },
+            );
+
+            return jsonResponse({
+              ok: true,
+              status: "success_recovered_from_existing_output",
+              customer_automation_id: customerAutomationId,
+              output_id: existingOutput.id,
+              result: recovered,
+            });
+          }
+
+          const timeoutMessage =
+            `n8n did not produce a matching execution within ${timeoutMinutes} minutes after Nexus accepted the run. ` +
+            "The runtime stopped before Nexus could verify the execution.";
+          const failed = await applyExecutionFailure(
+            adminClient,
+            customerAutomation,
+            {
+              id: cleanString(latestRun?.n8n_execution_id),
+              status: "crashed",
+              stoppedAt: now,
+              error: { message: timeoutMessage },
+              data: { resultData: { error: { message: timeoutMessage } } },
+            },
+            { runContext: latestRun },
+          );
+
+          return jsonResponse({
+            ok: true,
+            status: "missing_execution_timeout_recorded",
+            customer_automation_id: customerAutomationId,
+            timeout_minutes: timeoutMinutes,
+            result: failed,
+          });
+        }
 
         await runUpdateQuery(
           adminClient,

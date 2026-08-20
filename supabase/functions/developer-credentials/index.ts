@@ -13,6 +13,10 @@ import {
   sanitizeWorkflowCredentialReferences,
 } from "../_shared/nexus-credentials.ts";
 import { isLegacyNexusProduct } from "../_shared/legacy-nexus-products.ts";
+import {
+  fetchN8nWithRetry,
+  isN8nUnavailableError,
+} from "../_shared/n8n-resilience.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -104,13 +108,21 @@ async function fetchLiveN8nWorkflow(workflowId: string) {
   const apiKey = cleanString(env("N8N_API_KEY"));
   const id = cleanString(workflowId);
 
-  if (!baseUrl || !apiKey || !id) return null;
+  if (!id) return null;
+  if (!baseUrl || !apiKey) {
+    throw new Error("Missing N8N_BASE_URL or N8N_API_KEY.");
+  }
 
-  const response = await fetch(`${baseUrl}/api/v1/workflows/${encodeURIComponent(id)}`, {
+  const response = await fetchN8nWithRetry(`${baseUrl}/api/v1/workflows/${encodeURIComponent(id)}`, {
     headers: {
       Accept: "application/json",
       "X-N8N-API-KEY": apiKey,
     },
+  }, {
+    attempts: 3,
+    timeoutMs: 6000,
+    retryMethods: ["GET"],
+    label: "n8n workflow API",
   });
 
   const text = await response.text();
@@ -123,11 +135,8 @@ async function fetchLiveN8nWorkflow(workflowId: string) {
   }
 
   if (!response.ok) {
-    console.warn(
-      "Could not fetch live n8n workflow for credential scan:",
-      data?.message || data?.error || text || response.status,
-    );
-    return null;
+    const message = data?.message || data?.error || text || `HTTP ${response.status}`;
+    throw new Error(`Could not read hosted n8n workflow ${id} (${response.status}): ${message}`);
   }
 
   return data?.data && typeof data.data === "object" ? data.data : data;
@@ -192,6 +201,48 @@ function slotKey(slot: any) {
   const nodeName = cleanString(slot?.node_name);
   const credentialKey = cleanString(slot?.credential_key || slot?.n8n_credential_type);
   return `${nodeName}:${credentialKey}`;
+}
+
+function runtimeCredentialOwner(slot: any) {
+  const owner = lower(
+    slot?.runtime_credential_owner ||
+    slot?.runtimeCredentialOwner ||
+    slot?.credential_owner ||
+    slot?.owner,
+  );
+  if (slot?.buyer_owned === true || slot?.customer_owned === true || slot?.customer_connect === true) {
+    return "buyer";
+  }
+  return ["buyer", "customer", "customer_oauth"].includes(owner) ? "buyer" : "developer";
+}
+
+function supportsBuyerGoogleOAuth(slot: any) {
+  const type = lower(slot?.n8n_credential_type || slot?.credential_key);
+  const provider = lower(slot?.provider || slot?.provider_label);
+  if (!type.includes("oauth")) return false;
+  return (
+    type === "gmailoauth2" ||
+    type.startsWith("google") ||
+    type.includes("youtube") ||
+    provider === "gmail" ||
+    provider.startsWith("google") ||
+    provider === "youtube"
+  );
+}
+
+function preserveRuntimeCredentialOwnership(slot: any, previousSlot: any) {
+  if (runtimeCredentialOwner(previousSlot) !== "buyer" || !supportsBuyerGoogleOAuth(slot)) return slot;
+  return {
+    ...slot,
+    runtime_credential_owner: "buyer",
+    buyer_owned: true,
+    customer_connect: true,
+    oauth_provider: "google",
+    required: previousSlot?.required !== false,
+    ...(Array.isArray(previousSlot?.runtime_oauth_scopes)
+      ? { runtime_oauth_scopes: previousSlot.runtime_oauth_scopes }
+      : {}),
+  };
 }
 
 function bindingMatchesSlot(binding: any, slot: any) {
@@ -1107,7 +1158,15 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
     || product.n8n_normalized_workflow_json
     || product.n8n_workflow_json;
   const workflow = sanitizeWorkflowCredentialReferences(sourceWorkflow);
-  const slots = detectWorkflowCredentialSlots(workflow);
+  const previouslyDeclaredSlots = Array.isArray(product.developer_credential_requirements)
+    ? product.developer_credential_requirements.map(asObject)
+    : [];
+  const previousSlotsByKey = new Map(
+    previouslyDeclaredSlots.map((slot: any) => [slotKey(slot), slot]),
+  );
+  const slots = detectWorkflowCredentialSlots(workflow).map((slot: any) =>
+    preserveRuntimeCredentialOwnership(slot, previousSlotsByKey.get(slotKey(slot)))
+  );
   const slotKeys = new Set(
     slots.map((slot: any) => slotKey(slot)),
   );
@@ -1202,6 +1261,73 @@ async function scanAutomation(adminClient: any, operator: any, body: any) {
   return { product: updatedProduct, slots, bindings, errors };
 }
 
+async function setRuntimeCredentialOwner(adminClient: any, operator: any, body: any) {
+  const product = await getAutomation(adminClient, operator, cleanString(body.automation_id));
+  const owner = lower(body.runtime_credential_owner || body.owner);
+  if (!["developer", "buyer"].includes(owner)) {
+    throw new Error("runtime_credential_owner must be developer or buyer.");
+  }
+
+  const currentSlots = Array.isArray(product.developer_credential_requirements)
+    ? product.developer_credential_requirements.map(asObject)
+    : [];
+  const submittedSlots = Array.isArray(body.slots)
+    ? body.slots.map(asObject).filter((slot: any) => cleanString(slot.node_name))
+    : [];
+  const requestedKeys = new Set(submittedSlots.map(slotKey).filter((key) => key !== ":"));
+  if (!requestedKeys.size) throw new Error("Choose at least one workflow credential node.");
+
+  const matchedSlots = currentSlots.filter((slot: any) => requestedKeys.has(slotKey(slot)));
+  if (!matchedSlots.length) throw new Error("The selected credential nodes are no longer present. Scan the workflow again.");
+  if (owner === "buyer") {
+    const unsupported = matchedSlots.filter((slot: any) => !supportsBuyerGoogleOAuth(slot));
+    if (unsupported.length) {
+      throw new Error("Buyer sign-in is currently supported for Gmail and native Google OAuth nodes only. API keys and service accounts keep their existing setup path.");
+    }
+  }
+
+  const nextSlots = currentSlots.map((slot: any) => {
+    if (!requestedKeys.has(slotKey(slot))) return slot;
+    if (owner === "buyer") {
+      return {
+        ...slot,
+        runtime_credential_owner: "buyer",
+        buyer_owned: true,
+        customer_connect: true,
+        oauth_provider: "google",
+        required: body.required !== false,
+      };
+    }
+
+    const next = { ...slot, runtime_credential_owner: "developer" };
+    delete next.buyer_owned;
+    delete next.customer_owned;
+    delete next.customer_connect;
+    delete next.oauth_provider;
+    delete next.runtime_oauth_scopes;
+    return next;
+  });
+
+  const { data: updatedProduct, error } = await adminClient
+    .from("automations")
+    .update({
+      developer_credential_requirements: nextSlots,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", product.id)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+
+  return {
+    product: updatedProduct || { ...product, developer_credential_requirements: nextSlots },
+    slots: nextSlots,
+    bindings: Array.isArray(product.n8n_credential_bindings) ? product.n8n_credential_bindings : [],
+    errors: Array.isArray(product.credential_binding_errors) ? product.credential_binding_errors : [],
+    owner,
+  };
+}
+
 function productRuntimeSummary(product: any) {
   return {
     id: product?.id || null,
@@ -1217,6 +1343,9 @@ function productRuntimeSummary(product: any) {
     n8n_last_tested_at: product?.n8n_last_tested_at || null,
     credential_binding_status: product?.credential_binding_status || "",
     n8n_last_credential_bound_at: product?.n8n_last_credential_bound_at || null,
+    developer_credential_requirements: Array.isArray(product?.developer_credential_requirements)
+      ? product.developer_credential_requirements
+      : [],
   };
 }
 
@@ -1392,6 +1521,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "set_runtime_credential_owner") {
+      const result = await setRuntimeCredentialOwner(adminClient, operator, body);
+      return jsonResponse({
+        ok: true,
+        product_id: result.product.id,
+        product: productRuntimeSummary(result.product),
+        slots: result.slots,
+        bindings: result.bindings,
+        errors: result.errors,
+        runtime_credential_owner: result.owner,
+        message: result.owner === "buyer"
+          ? "Buyers will connect this Google account during setup. The master workflow credential remains available for technical testing."
+          : "This workflow will keep using the product's developer/Nexus credential for customer runs.",
+      });
+    }
+
     if (action === "apply_to_automation") {
       const result = await applyAutomation(adminClient, operator, body);
       return jsonResponse({
@@ -1410,6 +1555,15 @@ Deno.serve(async (req) => {
     return errorResponse(`Unknown action: ${action}`, 400);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not manage credentials.";
+
+    if (isN8nUnavailableError(error)) {
+      return errorResponse(message, 503, {
+        code: error.code,
+        retryable: true,
+        upstream_status: error.status || null,
+        credentials_preserved: true,
+      });
+    }
 
     if (isSchemaMissingError(error)) {
       return errorResponse(

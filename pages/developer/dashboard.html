@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260813-runtime-streamline">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260820-buyer-oauth">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
   <title>Developer Dashboard | Nexus AI</title>
@@ -1186,7 +1186,7 @@ company_url = context["inputs"].get("company_url")
 
   <div class="toast" id="toast"></div>
   <script src="/assets/js/nexus-ui.js?v=20260806-admin-developer-messages"></script>
-<script src="/assets/js/nexus-db.js?v=20260801-analytics-insights"></script>
+<script src="/assets/js/nexus-db.js?v=20260820-buyer-oauth"></script>
   <script>
     const state = { account: null, products: [], wallet: null, credentials: [], installs: [], analytics: null, selectedProductId: "", makeImport: null, lastCredentialScan: null, pendingCredentialSlot: null, testProfile: null, revealedCredentials: {}, workflowPollers: {} };
 
@@ -4442,6 +4442,26 @@ company_url = context["inputs"].get("company_url")
       return Array.from(groups.values());
     }
 
+    function credentialRuntimeOwner(slot = {}) {
+      const owner = String(
+        slot.runtime_credential_owner ||
+        slot.runtimeCredentialOwner ||
+        slot.credential_owner ||
+        slot.owner ||
+        ""
+      ).trim().toLowerCase();
+      if (slot.buyer_owned === true || slot.customer_owned === true || slot.customer_connect === true) return "buyer";
+      return ["buyer", "customer", "customer_oauth"].includes(owner) ? "buyer" : "developer";
+    }
+
+    function supportsBuyerGoogleSignIn(slot = {}) {
+      const type = String(slot.n8n_credential_type || slot.credential_key || "").trim().toLowerCase();
+      const provider = String(slot.provider || slot.provider_label || "").trim().toLowerCase();
+      if (!type.includes("oauth")) return false;
+      return type === "gmailoauth2" || type.startsWith("google") || type.includes("youtube") ||
+        provider === "gmail" || provider.startsWith("google") || provider === "youtube";
+    }
+
     function currentCredentialProduct(result = {}) {
       const selectedId = state.selectedProductId || result.product_id || "";
       const fullProduct = state.products.find((product) => String(product.id || "") === String(selectedId)) || {};
@@ -4699,6 +4719,25 @@ company_url = context["inputs"].get("company_url")
           : "";
         const savedMatches = matchingCredentialsForGroup(group);
         const selectedCredentialId = group.bindings.map((binding) => binding.developer_credential_id).find(Boolean) || "";
+        const buyerSignInSupported = group.slots.length > 0 && group.slots.every(supportsBuyerGoogleSignIn);
+        const buyerConnectedAtRuntime = group.slots.some((slot) => credentialRuntimeOwner(slot) === "buyer");
+        const runtimeAccountPanel = buyerSignInSupported
+          ? `
+            <div class="credential-runtime-owner ${buyerConnectedAtRuntime ? "is-buyer" : ""}">
+              <div>
+                <strong>${buyerConnectedAtRuntime ? "Buyer connects their account" : "Product account used for buyers"}</strong>
+                <p>${
+                  buyerConnectedAtRuntime
+                    ? "Each buyer must sign in to Google during setup. Nexus binds that account only to their private workflow copy; this master credential stays in place for your technical tests."
+                    : "Customer runs use the credential configured on this product. Choose buyer sign-in when the automation must work inside each buyer's own Gmail or Google account."
+                }</p>
+              </div>
+              <button class="btn btn-secondary btn-small" type="button" data-runtime-credential-owner="${index}" data-next-owner="${buyerConnectedAtRuntime ? "developer" : "buyer"}">
+                ${buyerConnectedAtRuntime ? "Use product account" : "Require buyer sign-in"}
+              </button>
+            </div>
+          `
+          : "";
         const savedCredentialPicker = savedMatches.length
           ? `
             <div class="credential-saved-picker">
@@ -4757,6 +4796,7 @@ company_url = context["inputs"].get("company_url")
             ${setupHints ? `<p class="muted">${NexusUI.escapeHtml(setupHints)}</p>` : ""}
             ${firstError ? `<p class="error">${NexusUI.escapeHtml(firstError)}</p>` : ""}
             ${editorFallbackCopy ? `<p class="muted">${NexusUI.escapeHtml(editorFallbackCopy)}</p>` : ""}
+            ${runtimeAccountPanel}
             ${savedCredentialPicker}
             ${credentialActionRow}
           </article>
@@ -4876,6 +4916,38 @@ company_url = context["inputs"].get("company_url")
             bindings: preferred.data?.bindings || bindings,
             errors: preferred.data?.errors || errors,
             message: "Saved credential selected. Add any remaining credentials, then press Apply credentials & run check."
+          });
+        });
+      });
+      root.querySelectorAll("[data-runtime-credential-owner]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const groupIndex = Number(button.dataset.runtimeCredentialOwner);
+          const group = groups[groupIndex];
+          const nextOwner = button.dataset.nextOwner || "developer";
+          const automationId = state.selectedProductId || result.product_id || "";
+          if (!automationId || !group?.slots?.length) {
+            NexusUI.toast("Scan the workflow again before changing account ownership.");
+            return;
+          }
+
+          button.disabled = true;
+          button.textContent = "Saving...";
+          const updated = await NexusDB.setAutomationCredentialRuntimeOwner(automationId, nextOwner, group.slots);
+          if (updated.error) {
+            NexusUI.toast(updated.error.message || "Could not update the runtime account setting.");
+            button.disabled = false;
+            button.textContent = nextOwner === "buyer" ? "Require buyer sign-in" : "Use product account";
+            return;
+          }
+
+          updateLocalProductSummary(updated.data?.product);
+          NexusUI.toast(updated.data?.message || "Runtime account setting saved.");
+          renderCredentialSlots({
+            ...result,
+            ...updated.data,
+            slots: updated.data?.slots || slots,
+            bindings: updated.data?.bindings || bindings,
+            errors: updated.data?.errors || errors
           });
         });
       });

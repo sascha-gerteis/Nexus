@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { buildBuyerOutputBodyParameters, nexusRuntimeValueExpression, selectBuyerOutputNode } from "../_shared/nexus-output-selection.ts";
+import { applyCredentialToWorkflow, workflowNodeHasCredential } from "../_shared/nexus-credentials.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -185,6 +186,88 @@ function asObject(value: unknown) {
   }
 
   return value as Record<string, unknown>;
+}
+
+function normalizedRequirementPart(value: unknown) {
+  return cleanString(value).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function buyerRuntimeCredentialOwner(slot: any) {
+  const owner = cleanString(
+    slot?.runtime_credential_owner ||
+    slot?.runtimeCredentialOwner ||
+    slot?.credential_owner ||
+    slot?.owner,
+  ).toLowerCase();
+  if (slot?.buyer_owned === true || slot?.customer_owned === true || slot?.customer_connect === true) return "buyer";
+  return ["buyer", "customer", "customer_oauth"].includes(owner) ? "buyer" : "developer";
+}
+
+function supportedBuyerGoogleOAuthSlot(slot: any) {
+  if (buyerRuntimeCredentialOwner(slot) !== "buyer") return false;
+  const type = cleanString(slot?.n8n_credential_type || slot?.credential_key).toLowerCase();
+  const provider = cleanString(slot?.provider || slot?.provider_label).toLowerCase();
+  if (!type.includes("oauth")) return false;
+  return type === "gmailoauth2" || type.startsWith("google") || type.includes("youtube") ||
+    provider === "gmail" || provider.startsWith("google") || provider === "youtube";
+}
+
+function buyerOAuthRequirementKey(slot: any) {
+  const provider = normalizedRequirementPart(slot?.provider || slot?.provider_label || "google");
+  const credentialType = normalizedRequirementPart(slot?.n8n_credential_type || slot?.credential_key || "oauth");
+  return `${provider || "google"}:${credentialType || "oauth"}`;
+}
+
+function buyerOAuthSlots(product: any) {
+  return (Array.isArray(product?.developer_credential_requirements)
+    ? product.developer_credential_requirements
+    : [])
+    .map(asObject)
+    .filter(supportedBuyerGoogleOAuthSlot);
+}
+
+async function bindBuyerOAuthCredentials(adminClient: any, customerAutomation: any, product: any, workflowInput: any) {
+  const slots = buyerOAuthSlots(product);
+  if (!slots.length) return { workflow: workflowInput, applied: [], requirements: [] };
+
+  const requirementKeys = [...new Set(slots.map(buyerOAuthRequirementKey))];
+  const { data: connections, error } = await adminClient
+    .from("buyer_oauth_connections")
+    .select("id,requirement_key,provider,provider_label,status,n8n_credential_type,n8n_credential_id,n8n_credential_name,last_error")
+    .eq("buyer_id", customerAutomation.buyer_id)
+    .eq("customer_automation_id", customerAutomation.id)
+    .in("requirement_key", requirementKeys)
+    .neq("status", "revoked");
+  if (error) throw new Error(`Could not load connected buyer accounts: ${error.message}`);
+
+  const activeByRequirement = new Map(
+    (connections || [])
+      .filter((connection: any) => connection.status === "active" && cleanString(connection.n8n_credential_id))
+      .map((connection: any) => [cleanString(connection.requirement_key), connection]),
+  );
+  const missingRequirements = requirementKeys.filter((key) => !activeByRequirement.has(key));
+  if (missingRequirements.length) {
+    throw new Error("Connect the required Google account in buyer setup before this automation can run.");
+  }
+
+  let workflow = workflowInput;
+  const applied: any[] = [];
+  for (const slot of slots) {
+    const requirementKey = buyerOAuthRequirementKey(slot);
+    const connection = activeByRequirement.get(requirementKey);
+    const credentialKey = cleanString(slot.credential_key || slot.n8n_credential_type || connection?.n8n_credential_type);
+    workflow = applyCredentialToWorkflow(workflow, slot, connection);
+    if (!workflowNodeHasCredential(workflow, slot, credentialKey, cleanString(connection?.n8n_credential_id))) {
+      throw new Error(`Nexus could not bind the buyer's connected account to workflow node "${cleanString(slot.node_name)}".`);
+    }
+    applied.push({
+      requirement_key: requirementKey,
+      node_name: cleanString(slot.node_name),
+      n8n_credential_type: credentialKey,
+    });
+  }
+
+  return { workflow, applied, requirements: requirementKeys };
 }
 
 function assignIfUseful(target: Record<string, unknown>, key: string, value: unknown) {
@@ -1583,6 +1666,7 @@ Deno.serve(async (req) => {
   developer_id,
   setup_schema,
   credential_schema,
+  developer_credential_requirements,
   workflow_placeholder_mappings,
   n8n_workflow_id,
   n8n_workflow_name,
@@ -1769,6 +1853,14 @@ const workflowPlaceholderMappings = mergeMappings(
       workflowPlaceholderMappings,
     );
 
+    const buyerOAuthBinding = await bindBuyerOAuthCredentials(
+      adminClient,
+      customerAutomation,
+      product,
+      workflow,
+    );
+    workflow = buyerOAuthBinding.workflow;
+
     const remainingCustomerValueReferences = collectWorkflowStringMatches(workflow, [
   "meta_access_token",
   "facebook_page_id",
@@ -1940,6 +2032,8 @@ const workflowPlaceholderMappings = mergeMappings(
       inserted_setup_keys: Object.keys(setupValues),
       inserted_secret_keys: Object.keys(secretValues),
       mapping_count: workflowPlaceholderMappings.length,
+      buyer_oauth_bindings_applied: buyerOAuthBinding.applied.length,
+      buyer_oauth_requirements: buyerOAuthBinding.requirements,
       remaining_dynamic_references: remainingDynamicReferences,
       remaining_customer_value_references: remainingCustomerValueReferences,
     });

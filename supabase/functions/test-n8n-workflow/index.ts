@@ -1,6 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { bindAutomationCredentials } from "../_shared/nexus-credentials.ts";
+import {
+  fetchN8nWithRetry,
+  isN8nUnavailableError,
+} from "../_shared/n8n-resilience.ts";
 
 function env(name: string) {
   return Deno.env.get(name) || "";
@@ -699,7 +703,7 @@ async function n8nFetch(path: string, options: RequestInit = {}) {
     throw new Error("Missing N8N_BASE_URL or N8N_API_KEY Supabase secrets.");
   }
 
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetchN8nWithRetry(`${baseUrl}${path}`, {
     ...options,
     headers: {
       Accept: "application/json",
@@ -707,6 +711,11 @@ async function n8nFetch(path: string, options: RequestInit = {}) {
       "X-N8N-API-KEY": apiKey,
       ...(options.headers || {}),
     },
+  }, {
+    attempts: 3,
+    timeoutMs: 6000,
+    retryMethods: ["GET", "HEAD", "PUT", "PATCH"],
+    label: "n8n technical-test API",
   });
 
   const text = await response.text();
@@ -736,24 +745,17 @@ async function fetchLiveN8nWorkflow(workflowId: string) {
   const id = cleanString(workflowId);
   if (!id) return null;
 
-  try {
-    const data = await n8nFetch(`/api/v1/workflows/${encodeURIComponent(id)}`, {
-      method: "GET",
-    });
+  const data = await n8nFetch(`/api/v1/workflows/${encodeURIComponent(id)}`, {
+    method: "GET",
+  });
 
-    return data?.data && typeof data.data === "object" ? data.data : data;
-  } catch (error) {
-    console.warn(
-      "Could not fetch live n8n workflow before technical test:",
-      error instanceof Error ? error.message : String(error || ""),
-    );
-    return null;
-  }
+  return data?.data && typeof data.data === "object" ? data.data : data;
 }
 
-async function getExecutionById(executionId: string) {
+async function getExecutionById(executionId: string, includeData = false) {
   if (!executionId) return null;
-  return await n8nFetch(`/api/v1/executions/${encodeURIComponent(executionId)}?includeData=true`);
+  const dataQuery = includeData ? "?includeData=true" : "";
+  return await n8nFetch(`/api/v1/executions/${encodeURIComponent(executionId)}${dataQuery}`);
 }
 
 async function activateWorkflow(workflowId: string) {
@@ -773,7 +775,7 @@ async function deactivateWorkflow(workflowId: string) {
 }
 
 function shouldDeactivateAfterTechnicalTest(automation: any) {
-  return !["active", "published"].includes(cleanString(automation?.status).toLowerCase());
+  return !["active", "published", "live"].includes(cleanString(automation?.status).toLowerCase());
 }
 
 async function listRecentExecutions(workflowId: string) {
@@ -1313,13 +1315,18 @@ async function triggerWorkflow(webhookUrl: string, automation: any, testRun: any
     },
   };
 
-  const response = await fetch(webhookUrl, {
+  const response = await fetchN8nWithRetry(webhookUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-nexus-runtime-secret": runtimeSecret,
     },
     body: JSON.stringify(payload),
+  }, {
+    attempts: 1,
+    timeoutMs: 20000,
+    retryMethods: [],
+    label: "n8n technical-test webhook",
   });
 
   const text = await response.text();
@@ -1350,8 +1357,15 @@ async function triggerWorkflow(webhookUrl: string, automation: any, testRun: any
 
 async function findExecutionForTestRun(testRun: any) {
   if (testRun.n8n_execution_id) {
-    const byId = await getExecutionById(testRun.n8n_execution_id).catch(() => null);
-    if (byId) return byId;
+    const byId = await getExecutionById(testRun.n8n_execution_id);
+    if (byId) {
+      const status = executionStatusOf(byId);
+      if (!["error", "failed", "crashed", "canceled", "cancelled", "timeout"].includes(status)) {
+        return byId;
+      }
+
+      return await getExecutionById(testRun.n8n_execution_id, true);
+    }
   }
 
   const workflowId = cleanString(testRun.n8n_workflow_id);
@@ -1365,30 +1379,36 @@ async function findExecutionForTestRun(testRun: any) {
   const candidates = recent
     .filter((execution: any) => {
       const ts = executionTimestamp(execution);
-      return !ts || ts >= startedAtMs - 20_000;
+      return !ts || (ts >= startedAtMs - 20_000 && ts <= startedAtMs + 120_000);
     })
-    .sort((a: any, b: any) => executionTimestamp(b) - executionTimestamp(a));
+    .sort((a: any, b: any) => {
+      const aDistance = Math.abs(executionTimestamp(a) - startedAtMs);
+      const bDistance = Math.abs(executionTimestamp(b) - startedAtMs);
+      return aDistance - bDistance;
+    });
 
   if (!candidates.length) return null;
 
-  /*
-    Fetch details. Prefer executions whose full data includes this test_id.
-    This is important when multiple tests/customers run the same workflow.
-  */
-  const detailed: any[] = [];
-
-  for (const candidate of candidates.slice(0, 8)) {
-    const id = executionIdOf(candidate);
-    const full = id ? await getExecutionById(id).catch(() => candidate) : candidate;
-    detailed.push(full);
-  }
-
-  const exactMatch = detailed.find((execution) => {
+  const exactMetadataMatch = candidates.find((execution) => {
     const raw = stringifySafe(execution);
     return raw.includes(testRun.test_id) || raw.includes(testRun.id);
   });
+  const selected = exactMetadataMatch || candidates[0];
+  const selectedStatus = executionStatusOf(selected);
 
-  return exactMatch || detailed[0] || candidates[0];
+  /*
+    Successful/running execution metadata is sufficient for technical status.
+    Loading includeData=true for every recent execution can make n8n parse and
+    serialize several large lead/report payloads at once, exhausting small
+    self-hosted servers. Fetch full data only once, and only when a failed run
+    needs its node-level error details.
+  */
+  if (!["error", "failed", "crashed", "canceled", "cancelled", "timeout"].includes(selectedStatus)) {
+    return selected;
+  }
+
+  const selectedId = executionIdOf(selected);
+  return selectedId ? await getExecutionById(selectedId, true) : selected;
 }
 
 function isPassingWorkflowTestStatus(status: unknown) {
@@ -2082,6 +2102,11 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
     }
   }
 
+  // A hosted workflow must be read successfully before Nexus creates a test run.
+  // Never fall back to stored JSON during an outage: that can revive stale auth
+  // types and overwrite a developer's confirmed live bindings.
+  const liveWorkflow = await fetchLiveN8nWorkflow(workflowId);
+
   if (!preserveHostedWorkflow) {
     /*
       Import/apply-credential flows may intentionally bind credentials before a
@@ -2089,11 +2114,8 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
       developers may have selected native n8n OAuth accounts manually, and
       rebinding here can overwrite that working state with stale saved JSON.
     */
-    const liveWorkflow = await fetchLiveN8nWorkflow(workflowId);
-    const workflowInput = liveWorkflow || automation.n8n_normalized_workflow_json || automation.n8n_workflow_json;
-    const workflowJsonColumn = liveWorkflow || automation.n8n_normalized_workflow_json
-      ? "n8n_normalized_workflow_json"
-      : "n8n_workflow_json";
+    const workflowInput = liveWorkflow;
+    const workflowJsonColumn = "n8n_normalized_workflow_json";
     const credentialBinding = await bindAutomationCredentials({
       adminClient,
       product: automation,
@@ -2202,8 +2224,9 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
     return startResult;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const infrastructureError = isN8nUnavailableError(error) ? error : null;
 
-    if (deactivateAfterTest) {
+    if (deactivateAfterTest && !infrastructureError) {
       try {
         deactivationResult = await deactivateWorkflow(workflowId);
       } catch (deactivationError) {
@@ -2231,9 +2254,19 @@ async function startTestRun(adminClient: any, automation: any, userId: string, o
       ok: false,
       status: "failed",
       message,
+      ...(infrastructureError
+        ? {
+            code: infrastructureError.code,
+            retryable: true,
+            infrastructure_failure: true,
+            credentials_preserved: true,
+          }
+        : {}),
     });
 
-    await updateAutomationTestResult(adminClient, automation.id, result);
+    if (!infrastructureError) {
+      await updateAutomationTestResult(adminClient, automation.id, result);
+    }
 
     return result;
   }
@@ -2421,6 +2454,15 @@ Deno.serve(async (req) => {
     return errorResponse("Unsupported mode. Use start, check, or latest.", 400);
   } catch (error) {
     console.error("test-n8n-workflow failed:", error);
+
+    if (isN8nUnavailableError(error)) {
+      return errorResponse(error.message, 503, {
+        code: error.code,
+        retryable: true,
+        upstream_status: error.status || null,
+        credentials_preserved: true,
+      });
+    }
 
     return errorResponse(
       error instanceof Error ? error.message : "Could not test n8n workflow.",

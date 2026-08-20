@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260728-setup-guidance">
+  <link rel="stylesheet" href="/assets/css/nexus.css?v=20260820-buyer-oauth">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js?v=20260713-code-stability"></script>
@@ -53,7 +53,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/assets/js/nexus-ui.js?v=20260713-code-stability"></script>
-  <script src="/assets/js/nexus-db.js?v=20260813-webhook-routing"></script>
+  <script src="/assets/js/nexus-db.js?v=20260820-buyer-oauth"></script>
 
   <script>
     let activeCustomerAutomation = null;
@@ -67,6 +67,10 @@
       latestAttempt: null,
       attemptsLoaded: false,
       attemptsError: null
+    };
+    let buyerOAuthSetup = {
+      byCustomerAutomation: new Map(),
+      loading: false
     };
     let setupProcessingTimer = null;
     let setupProcessingPollTimer = null;
@@ -136,6 +140,234 @@
 
     function getParam(name) {
       return new URLSearchParams(location.search).get(name);
+    }
+
+    function buyerRuntimeCredentialOwner(slot = {}) {
+      const owner = String(
+        slot.runtime_credential_owner ||
+        slot.runtimeCredentialOwner ||
+        slot.credential_owner ||
+        slot.owner ||
+        ""
+      ).trim().toLowerCase();
+      if (slot.buyer_owned === true || slot.customer_owned === true || slot.customer_connect === true) return "buyer";
+      return ["buyer", "customer", "customer_oauth"].includes(owner) ? "buyer" : "developer";
+    }
+
+    function productNeedsBuyerOAuth(product = {}) {
+      const slots = Array.isArray(product.developer_credential_requirements)
+        ? product.developer_credential_requirements
+        : [];
+      return slots.some((slot) => {
+        const type = String(slot?.n8n_credential_type || slot?.credential_key || "").toLowerCase();
+        const provider = String(slot?.provider || slot?.provider_label || "").toLowerCase();
+        return buyerRuntimeCredentialOwner(slot) === "buyer" && type.includes("oauth") && (
+          type === "gmailoauth2" || type.startsWith("google") || type.includes("youtube") ||
+          provider === "gmail" || provider.startsWith("google") || provider === "youtube"
+        );
+      });
+    }
+
+    function buyerOAuthTargets() {
+      const bundleSetup = activeBundleSetup?.is_bundle_setup ? activeBundleSetup : null;
+      const targets = bundleSetup
+        ? (bundleSetup.entries || []).map((entry) => ({
+            customerAutomationId: bundleEntryRuntimeId(entry),
+            title: bundleEntryTitle(entry),
+            product: entry.product || {}
+          }))
+        : [{
+            customerAutomationId: String(activeCustomerAutomation?.id || ""),
+            title: activeProduct?.title || activeCustomerAutomation?.name || "Automation",
+            product: activeProduct || {}
+          }];
+      return targets.filter((target) => target.customerAutomationId && productNeedsBuyerOAuth(target.product));
+    }
+
+    function connectionForBuyerOAuthRequirement(entry = {}, requirement = {}) {
+      return (entry.connections || []).find((connection) =>
+        String(connection.requirement_key || "") === String(requirement.requirement_key || "") &&
+        String(connection.status || "") !== "revoked"
+      ) || null;
+    }
+
+    function buyerOAuthBlockingProblems() {
+      const problems = [];
+      for (const target of buyerOAuthTargets()) {
+        const entry = buyerOAuthSetup.byCustomerAutomation.get(String(target.customerAutomationId));
+        if (!entry || entry.loading || entry.error) {
+          problems.push(`${target.title}: connected-account status could not be verified`);
+          continue;
+        }
+        for (const requirement of entry.requirements || []) {
+          if (requirement.required === false) continue;
+          const connection = connectionForBuyerOAuthRequirement(entry, requirement);
+          if (!connection || connection.status !== "active") {
+            problems.push(`${target.title}: connect ${requirement.provider_label || "Google"}`);
+          }
+        }
+      }
+      return problems;
+    }
+
+    function renderBuyerOAuthConnections() {
+      const targets = buyerOAuthTargets();
+      if (!targets.length) return "";
+
+      const cards = targets.flatMap((target) => {
+        const entry = buyerOAuthSetup.byCustomerAutomation.get(String(target.customerAutomationId));
+        if (buyerOAuthSetup.loading || entry?.loading) {
+          return [`<article class="buyer-oauth-card"><div><strong>${escapeHtml(target.title)}</strong><p>Checking connected accounts...</p></div></article>`];
+        }
+        if (!entry || entry.error) {
+          return [`
+            <article class="buyer-oauth-card has-error">
+              <div>
+                <strong>${escapeHtml(target.title)}</strong>
+                <p>${escapeHtml(entry?.error || "Connected-account status is unavailable.")}</p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-small" data-refresh-buyer-oauth>Try again</button>
+            </article>
+          `];
+        }
+
+        return (entry.requirements || []).map((requirement) => {
+          const connection = connectionForBuyerOAuthRequirement(entry, requirement);
+          const isActive = connection?.status === "active";
+          const needsAttention = connection?.status === "needs_attention";
+          const nodes = (requirement.nodes || []).map((node) => node.node_name).filter(Boolean);
+          const accountLabel = connection?.provider_account_email || connection?.label || "Google account";
+          return `
+            <article class="buyer-oauth-card ${isActive ? "is-connected" : needsAttention ? "has-error" : ""}">
+              <div class="buyer-oauth-icon" aria-hidden="true">G</div>
+              <div class="buyer-oauth-copy">
+                <span class="buyer-oauth-product">${escapeHtml(target.title)}</span>
+                <strong>${escapeHtml(requirement.provider_label || "Google account")}${requirement.required === false ? " (optional)" : ""}</strong>
+                <p>${
+                  isActive
+                    ? `Connected as ${escapeHtml(accountLabel)}. This account is used only by your private copy of this automation.`
+                    : needsAttention
+                      ? escapeHtml(connection?.last_error || "Reconnect this account before the automation can run.")
+                      : "Sign in securely with Google. Nexus never asks you to paste a Gmail password or OAuth token."
+                }</p>
+                ${nodes.length ? `<small>Used by: ${escapeHtml(nodes.join(", "))}</small>` : ""}
+              </div>
+              <div class="buyer-oauth-actions">
+                <span class="${isActive ? "pill green" : needsAttention ? "pill red" : "pill orange"}">${isActive ? "Connected" : needsAttention ? "Reconnect" : "Required"}</span>
+                <button type="button" class="btn ${isActive ? "btn-secondary" : "btn-primary"} btn-small" data-connect-buyer-oauth data-customer-automation-id="${escapeHtml(target.customerAutomationId)}" data-requirement-key="${escapeHtml(requirement.requirement_key)}">
+                  ${isActive ? "Change account" : "Connect Google"}
+                </button>
+              </div>
+            </article>
+          `;
+        });
+      }).join("");
+
+      return `
+        <section class="buyer-oauth-section" aria-labelledby="buyerOAuthHeading">
+          <div class="buyer-oauth-heading">
+            <div>
+              <span class="eyebrow">Secure account connection</span>
+              <h3 id="buyerOAuthHeading">Connect the account this automation will use</h3>
+              <p>Google handles the sign-in and consent. Nexus attaches the connection only to your purchased automation.</p>
+            </div>
+          </div>
+          <div class="buyer-oauth-list">${cards}</div>
+        </section>
+      `;
+    }
+
+    function updateBuyerOAuthContainer() {
+      const container = document.getElementById("buyerOAuthConnections");
+      if (container) container.innerHTML = renderBuyerOAuthConnections();
+      mountBuyerOAuthControls();
+      const submitButton = document.querySelector("#buyerSetupForm button[type='submit']");
+      if (submitButton) {
+        const baseDisabled = submitButton.dataset.baseDisabled === "true";
+        submitButton.disabled = baseDisabled || buyerOAuthBlockingProblems().length > 0;
+      }
+    }
+
+    async function loadBuyerOAuthConnections(options = {}) {
+      const targets = buyerOAuthTargets();
+      buyerOAuthSetup.loading = true;
+      for (const target of targets) {
+        buyerOAuthSetup.byCustomerAutomation.set(String(target.customerAutomationId), {
+          title: target.title,
+          requirements: [],
+          connections: [],
+          loading: true,
+          error: ""
+        });
+      }
+      if (options.updateDom) updateBuyerOAuthContainer();
+
+      await Promise.all(targets.map(async (target) => {
+        const id = String(target.customerAutomationId);
+        if (typeof NexusDB.listBuyerOAuthConnections !== "function") {
+          buyerOAuthSetup.byCustomerAutomation.set(id, {
+            title: target.title,
+            requirements: [],
+            connections: [],
+            loading: false,
+            error: "Connected-account support is not loaded. Refresh the page."
+          });
+          return;
+        }
+        const { data, error } = await NexusDB.listBuyerOAuthConnections(id);
+        buyerOAuthSetup.byCustomerAutomation.set(id, {
+          title: target.title,
+          requirements: data?.requirements || [],
+          connections: data?.connections || [],
+          loading: false,
+          error: error?.message || ""
+        });
+      }));
+
+      buyerOAuthSetup.loading = false;
+      if (options.updateDom) updateBuyerOAuthContainer();
+    }
+
+    async function connectBuyerOAuth(button) {
+      const customerAutomationId = button.dataset.customerAutomationId || "";
+      const requirementKey = button.dataset.requirementKey || "";
+      const popup = window.open("about:blank", "nexusBuyerGoogleOAuth", "popup=yes,width=620,height=760");
+      if (!popup) {
+        NexusUI.toast("Allow popups for Nexus, then press Connect Google again.");
+        return;
+      }
+
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = "Opening Google...";
+      const { data, error } = await NexusDB.startBuyerGoogleOAuthConnection({
+        customer_automation_id: customerAutomationId,
+        requirement_key: requirementKey,
+        return_url: location.href
+      });
+      if (error || !data?.auth_url) {
+        popup.close();
+        NexusUI.toast(error?.message || "Could not start Google sign-in.");
+        button.disabled = false;
+        button.textContent = originalText;
+        return;
+      }
+      popup.location.replace(data.auth_url);
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+
+    function mountBuyerOAuthControls() {
+      document.querySelectorAll("[data-connect-buyer-oauth]").forEach((button) => {
+        if (button.dataset.bound === "true") return;
+        button.dataset.bound = "true";
+        button.addEventListener("click", () => connectBuyerOAuth(button));
+      });
+      document.querySelectorAll("[data-refresh-buyer-oauth]").forEach((button) => {
+        if (button.dataset.bound === "true") return;
+        button.dataset.bound = "true";
+        button.addEventListener("click", () => loadBuyerOAuthConnections({ updateDom: true }));
+      });
     }
 
     function escapeHtml(value) {
@@ -2307,6 +2539,7 @@ async function resolveProductFromCustomerAutomation(automation) {
           activeProduct = bundleContext.primaryProduct;
           latestSubmission = bundleContext.primarySubmission;
           activeBundleSetup = bundleContext.model;
+          await loadBuyerOAuthConnections();
           renderSetupForm(root);
           return;
         }
@@ -2389,6 +2622,7 @@ async function resolveProductFromCustomerAutomation(automation) {
       }
       activeBundleSetup = await loadBundleSetupContext(automation, activeProduct, latestSubmission);
 
+      await loadBuyerOAuthConnections();
       renderSetupForm(root);
     }
 
@@ -2641,6 +2875,10 @@ async function resolveProductFromCustomerAutomation(automation) {
                 : ""
             }
 
+            <div id="buyerOAuthConnections">
+              ${renderBuyerOAuthConnections()}
+            </div>
+
             <form id="buyerSetupForm" novalidate>
               <div class="form-grid">
                 ${formFields}
@@ -2673,7 +2911,7 @@ async function resolveProductFromCustomerAutomation(automation) {
                 }
               </div>
 
-              <button type="submit" class="btn btn-primary" style="margin-top:1rem" ${bundleSetup && bundleSubmitDisabled ? "disabled" : ""}>
+              <button type="submit" class="btn btn-primary" style="margin-top:1rem" data-base-disabled="${bundleSetup && bundleSubmitDisabled ? "true" : "false"}" ${(bundleSetup && bundleSubmitDisabled) || buyerOAuthBlockingProblems().length ? "disabled" : ""}>
                 ${
                   bundleSetup
                     ? bundleSubmitLabel
@@ -2688,6 +2926,7 @@ async function resolveProductFromCustomerAutomation(automation) {
       `;
 
       document.getElementById("buyerSetupForm").onsubmit = submitSetupForm;
+      mountBuyerOAuthControls();
       mountSetupSkipControls(root);
       if (shouldShowProcessing) {
         startSetupProcessing(currentSetupProcessingContext());
@@ -3047,6 +3286,20 @@ async function resolveProductFromCustomerAutomation(automation) {
         return;
       }
 
+      const oauthProblems = buyerOAuthBlockingProblems();
+      if (oauthProblems.length) {
+        const message = `Connect the required account before submitting setup: ${oauthProblems.join("; ")}.`;
+        NexusUI.toast(message);
+        document.getElementById("setupSubmitResult").innerHTML = `
+          <div class="error" style="margin-top:1rem">
+            <strong>Account connection required.</strong><br>
+            ${escapeHtml(message)}
+          </div>
+        `;
+        document.getElementById("buyerOAuthConnections")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+
       form.dataset.submitting = "true";
       button.disabled = true;
       button.textContent = "Submitting setup...";
@@ -3180,12 +3433,23 @@ async function resolveProductFromCustomerAutomation(automation) {
         void pollSetupProcessing();
       }
     });
+    window.addEventListener("message", async (event) => {
+      let allowedOrigin = "";
+      try {
+        allowedOrigin = new URL(window.NEXUS_CONFIG?.SUPABASE_URL || "").origin;
+      } catch (_error) {}
+      if (!allowedOrigin || event.origin !== allowedOrigin) return;
+      if (event.data?.type !== "nexus:buyer-google-oauth-complete") return;
+
+      if (event.data?.ok === false) {
+        NexusUI.toast(event.data?.error || "Google account connection failed.");
+      } else {
+        NexusUI.toast(event.data?.message || "Google account connected.");
+      }
+      await loadBuyerOAuthConnections({ updateDom: true });
+    });
     window.addEventListener("beforeunload", () => stopSetupProcessing());
     document.addEventListener("DOMContentLoaded", initSetupPage);
   </script>
 </body>
 </html>
-
-
-
-

@@ -118,6 +118,54 @@ async function checkRuntimeBacklog(adminClient: any) {
     return result("runtime_backlog", "Runtime dispatch backlog", "error", error instanceof Error ? error.message : "Could not inspect runtime backlog.");
   }
 }
+async function checkStaleN8nRuns(adminClient: any) {
+  const staleCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const recentCutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+  try {
+    const [staleRuns, recentMemoryFailures] = await Promise.all([
+      exactCount(
+        adminClient
+          .from("automation_runs")
+          .select("id", { count: "exact", head: true })
+          .eq("runtime_type", "n8n_managed")
+          .eq("status", "running")
+          .lt("updated_at", staleCutoff),
+      ),
+      exactCount(
+        adminClient
+          .from("automation_run_errors")
+          .select("id", { count: "exact", head: true })
+          .eq("error_code", "N8N_OUT_OF_MEMORY")
+          .gte("created_at", recentCutoff),
+      ),
+    ]);
+
+    if (staleRuns || recentMemoryFailures) {
+      return result(
+        "n8n_executions",
+        "n8n execution completion",
+        "error",
+        `${staleRuns} n8n runs are stale and ${recentMemoryFailures} memory-capacity failures were recorded in the last 30 minutes.`,
+        { stale_runs: staleRuns, recent_memory_failures: recentMemoryFailures },
+      );
+    }
+
+    return result(
+      "n8n_executions",
+      "n8n execution completion",
+      "ok",
+      "No stale n8n runs or recent memory-capacity failures.",
+    );
+  } catch (error) {
+    return result(
+      "n8n_executions",
+      "n8n execution completion",
+      "error",
+      error instanceof Error ? error.message : "Could not inspect n8n execution completion.",
+    );
+  }
+}
 
 async function checkEmailBacklog(adminClient: any) {
   const stalePendingCutoff = new Date(Date.now() - 20 * 60 * 1000).toISOString();
@@ -219,6 +267,7 @@ Deno.serve(async (req) => {
     checkN8n(),
     checkStripe(),
     checkRuntimeBacklog(adminClient),
+    checkStaleN8nRuns(adminClient),
     checkEmailBacklog(adminClient),
   ]);
   const errors = checks.filter((item) => item.status === "error");

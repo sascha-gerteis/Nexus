@@ -606,6 +606,74 @@ function missingRequiredBuyerCredentials(
     .map((field: any) => cleanString(field?.label || credentialFieldName(field)).replace(/_/g, " "));
 }
 
+function normalizedOAuthRequirementPart(value: unknown) {
+  return lowerString(value).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function buyerRuntimeCredentialOwner(slot: any) {
+  const owner = lowerString(
+    slot?.runtime_credential_owner ||
+    slot?.runtimeCredentialOwner ||
+    slot?.credential_owner ||
+    slot?.owner,
+  );
+  if (slot?.buyer_owned === true || slot?.customer_owned === true || slot?.customer_connect === true) return "buyer";
+  return ["buyer", "customer", "customer_oauth"].includes(owner) ? "buyer" : "developer";
+}
+
+function supportedBuyerGoogleOAuthSlot(slot: any) {
+  if (buyerRuntimeCredentialOwner(slot) !== "buyer") return false;
+  const type = lowerString(slot?.n8n_credential_type || slot?.credential_key);
+  const provider = lowerString(slot?.provider || slot?.provider_label);
+  if (!type.includes("oauth")) return false;
+  return type === "gmailoauth2" || type.startsWith("google") || type.includes("youtube") ||
+    provider === "gmail" || provider.startsWith("google") || provider === "youtube";
+}
+
+function buyerOAuthRequirementKey(slot: any) {
+  const provider = normalizedOAuthRequirementPart(slot?.provider || slot?.provider_label || "google");
+  const credentialType = normalizedOAuthRequirementPart(slot?.n8n_credential_type || slot?.credential_key || "oauth");
+  return `${provider || "google"}:${credentialType || "oauth"}`;
+}
+
+function buyerOAuthRequirements(automation: any) {
+  const slots = normalizeJsonArray(automation?.developer_credential_requirements)
+    .filter(supportedBuyerGoogleOAuthSlot);
+  const groups = new Map<string, any[]>();
+  for (const slot of slots) {
+    const key = buyerOAuthRequirementKey(slot);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)?.push(slot);
+  }
+  return Array.from(groups.entries()).map(([requirementKey, groupedSlots]) => ({
+    requirement_key: requirementKey,
+    provider_label: cleanString(groupedSlots[0]?.provider_label || groupedSlots[0]?.provider || "Google"),
+    required: groupedSlots.some((slot: any) => slot?.required !== false),
+  }));
+}
+
+async function missingRequiredBuyerOAuthConnections(adminClient: any, automation: any, customerAutomation: any) {
+  const requirements = buyerOAuthRequirements(automation).filter((requirement) => requirement.required);
+  if (!requirements.length) return [];
+
+  const requirementKeys = requirements.map((requirement) => requirement.requirement_key);
+  const { data, error } = await adminClient
+    .from("buyer_oauth_connections")
+    .select("requirement_key,status,n8n_credential_id,last_error")
+    .eq("buyer_id", customerAutomation.buyer_id)
+    .eq("customer_automation_id", customerAutomation.id)
+    .in("requirement_key", requirementKeys)
+    .neq("status", "revoked");
+  if (error) throw new Error(`Could not verify connected accounts: ${error.message}`);
+
+  const activeKeys = new Set(
+    (data || [])
+      .filter((connection: any) => connection.status === "active" && cleanString(connection.n8n_credential_id))
+      .map((connection: any) => cleanString(connection.requirement_key)),
+  );
+  return requirements.filter((requirement) => !activeKeys.has(requirement.requirement_key));
+}
+
 function getCredentialFieldNames(credentialSchema: any[]) {
   return credentialSchema
     .map(credentialFieldName)
@@ -3052,6 +3120,19 @@ Deno.serve(async (req) => {
           missing_required_credentials: missingRequiredCredentials,
         });
       }
+
+      const missingOAuthConnections = await missingRequiredBuyerOAuthConnections(
+        adminClient,
+        automation,
+        customerAutomation,
+      );
+      if (missingOAuthConnections.length) {
+        const labels = missingOAuthConnections.map((requirement) => requirement.provider_label || "Google");
+        return errorResponse(`Connect the required account${labels.length === 1 ? "" : "s"} before submitting setup: ${labels.join(", ")}.`, 400, {
+          status: "customer_action_required",
+          missing_oauth_connections: missingOAuthConnections,
+        });
+      }
     }
 
     if (retryFailedBundleWorkflow) {
@@ -3305,9 +3386,10 @@ Deno.serve(async (req) => {
 
     const customerRuntimeExists = hasOwnCustomerRuntimeTarget(customerAutomation, automation, order);
     const productMasterWorkflowId = pickFirstString(automation?.n8n_workflow_id, order?.n8n_workflow_id);
+    const hasBuyerOAuthRequirements = buyerOAuthRequirements(automation).length > 0;
     const shouldProvisionCustomerWorkflow =
       useCustomerWorkflowClone &&
-      !customerRuntimeExists &&
+      (!customerRuntimeExists || hasBuyerOAuthRequirements) &&
       !isPythonRuntime &&
       Boolean(productMasterWorkflowId) &&
       (runtimeType === "n8n_managed" || hasManagedWorkflowTemplate);

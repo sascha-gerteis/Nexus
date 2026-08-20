@@ -2211,6 +2211,15 @@ async function preferAutomationCredential(automationId, credentialId, slots = []
   });
 }
 
+async function setAutomationCredentialRuntimeOwner(automationId, owner, slots = []) {
+  return callDeveloperCredentials({
+    action: "set_runtime_credential_owner",
+    automation_id: automationId,
+    runtime_credential_owner: owner,
+    slots
+  });
+}
+
 async function startGoogleOAuthConnection(payload = {}) {
   return callNexusFunction("oauth-connections", {
     action: "start_google",
@@ -2222,6 +2231,28 @@ async function listOAuthConnections(payload = {}) {
   return callNexusFunction("oauth-connections", {
     action: "list",
     ...payload
+  });
+}
+
+async function listBuyerOAuthConnections(customerAutomationId) {
+  return callNexusFunction("oauth-connections", {
+    action: "list_buyer",
+    customer_automation_id: customerAutomationId
+  });
+}
+
+async function startBuyerGoogleOAuthConnection(payload = {}) {
+  return callNexusFunction("oauth-connections", {
+    action: "start_buyer_google",
+    ...payload
+  });
+}
+
+async function disconnectBuyerOAuthConnection(customerAutomationId, requirementKey) {
+  return callNexusFunction("oauth-connections", {
+    action: "disconnect_buyer",
+    customer_automation_id: customerAutomationId,
+    requirement_key: requirementKey
   });
 }
 
@@ -4077,8 +4108,12 @@ async function listMakeImportMappings(payload = {}) {
     scanAutomationCredentials,
     applyAutomationCredentials,
     preferAutomationCredential,
+    setAutomationCredentialRuntimeOwner,
     startGoogleOAuthConnection,
     listOAuthConnections,
+    listBuyerOAuthConnections,
+    startBuyerGoogleOAuthConnection,
+    disconnectBuyerOAuthConnection,
     listCredentialProviders,
     getDeveloperStripeStatus,
     refreshDeveloperStripeAccount,
@@ -4237,6 +4272,5 @@ ensureCustomerAutomations,
   };
 })();
 window.NexusDB = NexusDB;
-
 
 

@@ -1,5 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import {
+  fetchN8nWithRetry,
+  isN8nUnavailableError,
+} from "../_shared/n8n-resilience.ts";
 
 type SessionRow = {
   id: string;
@@ -128,27 +132,28 @@ async function loginToN8n() {
     throw new Error("Missing N8N_BASE_URL, N8N_EDITOR_EMAIL, or N8N_EDITOR_PASSWORD.");
   }
 
-  let response = await fetch(`${baseUrl}/rest/login`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ emailOrLdapLoginId: email, password }),
-  });
-
-  let text = await response.text().catch(() => "");
-
-  if (!response.ok && /email/i.test(text) && /emailOrLdapLoginId/i.test(text)) {
-    response = await fetch(`${baseUrl}/rest/login`, {
+  const login = async (body: Record<string, string>) => {
+    const response = await fetchN8nWithRetry(`${baseUrl}/rest/login`, {
       method: "POST",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(body),
+    }, {
+      attempts: 3,
+      timeoutMs: 5000,
+      retryMethods: ["POST"],
+      label: "n8n editor login",
     });
-    text = await response.text().catch(() => "");
+    const text = await response.text().catch(() => "");
+    return { response, text };
+  };
+
+  let { response, text } = await login({ emailOrLdapLoginId: email, password });
+
+  if (!response.ok && /email/i.test(text) && /emailOrLdapLoginId/i.test(text)) {
+    ({ response, text } = await login({ email, password }));
   }
 
   const setCookie = response.headers.get("set-cookie") || response.headers.get("Set-Cookie") || "";
@@ -173,7 +178,7 @@ async function n8nApi(path: string, options: RequestInit = {}) {
     throw new Error("Missing N8N_BASE_URL or N8N_API_KEY.");
   }
 
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetchN8nWithRetry(`${baseUrl}${path}`, {
     ...options,
     headers: {
       Accept: "application/json",
@@ -181,6 +186,11 @@ async function n8nApi(path: string, options: RequestInit = {}) {
       "X-N8N-API-KEY": apiKey,
       ...(options.headers || {}),
     },
+  }, {
+    attempts: 3,
+    timeoutMs: 6000,
+    retryMethods: ["GET", "HEAD", "PUT", "PATCH"],
+    label: "n8n API",
   });
 
   const text = await response.text();
@@ -435,6 +445,13 @@ async function createEditorSession(req: Request, body: any) {
       expires_at: session.expires_at,
     });
   } catch (error) {
+    if (isN8nUnavailableError(error)) {
+      return errorResponse(error.message, 503, {
+        code: error.code,
+        retryable: true,
+        upstream_status: error.status || null,
+      });
+    }
     return errorResponse(error instanceof Error ? error.message : "Could not create editor session.", 403);
   }
 }
@@ -525,6 +542,13 @@ async function syncWorkflow(req: Request, body: any) {
       message: "Workflow synced from n8n. Run a fresh technical check before submitting or approving.",
     });
   } catch (error) {
+    if (isN8nUnavailableError(error)) {
+      return errorResponse(error.message, 503, {
+        code: error.code,
+        retryable: true,
+        upstream_status: error.status || null,
+      });
+    }
     return errorResponse(error instanceof Error ? error.message : "Could not sync workflow.", 500);
   }
 }
@@ -1222,11 +1246,16 @@ async function proxyRequest(req: Request) {
       upstreamHeaders["Content-Type"] = incomingContentType || "application/json";
     }
 
-    const upstream = await fetch(targetUrl, {
+    const upstream = await fetchN8nWithRetry(targetUrl, {
       method: req.method,
       headers: upstreamHeaders,
       body,
       redirect: "manual",
+    }, {
+      attempts: 3,
+      timeoutMs: 6000,
+      retryMethods: ["GET", "HEAD"],
+      label: "n8n editor",
     });
 
     await adminClient
@@ -1298,7 +1327,10 @@ async function proxyRequest(req: Request) {
     return editorJsonResponse(req, {
       ok: false,
       error: error instanceof Error ? error.message : "Editor gateway failed.",
-    }, 403);
+      ...(isN8nUnavailableError(error)
+        ? { code: error.code, retryable: true, upstream_status: error.status || null }
+        : {}),
+    }, isN8nUnavailableError(error) ? 503 : 403);
   }
 }
 

@@ -17586,3 +17586,157 @@ iframe {
     flex-direction: column;
   }
 }
+
+/* Buyer-owned OAuth connections */
+.buyer-oauth-section {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 24px;
+  background: linear-gradient(145deg, #f8fbff 0%, #eef6ff 100%);
+}
+
+.buyer-oauth-heading h3 {
+  margin: .25rem 0 .35rem;
+  color: var(--navy, #061b3a);
+  font-size: 1.2rem;
+  letter-spacing: -.035em;
+}
+
+.buyer-oauth-heading p,
+.buyer-oauth-card p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+}
+
+.buyer-oauth-list {
+  display: grid;
+  gap: .7rem;
+  margin-top: .85rem;
+}
+
+.buyer-oauth-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: .8rem;
+  align-items: center;
+  padding: .85rem;
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.buyer-oauth-card.is-connected {
+  border-color: #bbf7d0;
+  background: linear-gradient(145deg, #fff, #f0fdf4);
+}
+
+.buyer-oauth-card.has-error {
+  border-color: #fecaca;
+  background: #fffafa;
+}
+
+.buyer-oauth-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #dbeafe;
+  border-radius: 13px;
+  background: #fff;
+  color: #2563eb;
+  font-weight: 950;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, .09);
+}
+
+.buyer-oauth-copy {
+  min-width: 0;
+}
+
+.buyer-oauth-copy strong {
+  display: block;
+  color: var(--navy, #061b3a);
+  margin: .12rem 0 .2rem;
+}
+
+.buyer-oauth-copy small {
+  margin-top: .28rem;
+}
+
+.buyer-oauth-product {
+  display: block;
+  color: #2563eb;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.buyer-oauth-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .42rem;
+}
+
+.buyer-oauth-disconnect {
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 800;
+  padding: .15rem .25rem;
+}
+
+.buyer-oauth-disconnect:hover {
+  color: #b91c1c;
+}
+
+.credential-runtime-owner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .7rem;
+  margin-top: .75rem;
+  padding: .72rem;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.credential-runtime-owner.is-buyer {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.credential-runtime-owner strong {
+  display: block;
+  font-size: .86rem;
+}
+
+.credential-runtime-owner p {
+  margin-top: .2rem;
+  font-size: .8rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .buyer-oauth-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .buyer-oauth-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .credential-runtime-owner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

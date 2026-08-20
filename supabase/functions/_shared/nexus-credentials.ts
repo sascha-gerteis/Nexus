@@ -1,4 +1,8 @@
 import { isLegacyNexusProduct } from "./legacy-nexus-products.ts";
+import {
+  fetchN8nWithRetry,
+  isN8nUnavailableError,
+} from "./n8n-resilience.ts";
 
 type SupabaseAdminClient = any;
 
@@ -2403,7 +2407,7 @@ async function n8nRequest(
   options: RequestInit = {},
   context: Record<string, unknown> = {},
 ) {
-  const response = await fetch(`${cleanBaseUrl(n8nBaseUrl)}${path}`, {
+  const response = await fetchN8nWithRetry(`${cleanBaseUrl(n8nBaseUrl)}${path}`, {
     ...options,
     headers: {
       accept: "application/json",
@@ -2411,6 +2415,11 @@ async function n8nRequest(
       "X-N8N-API-KEY": n8nApiKey,
       ...(options.headers || {}),
     },
+  }, {
+    attempts: 3,
+    timeoutMs: 6000,
+    retryMethods: ["GET", "HEAD", "PUT", "PATCH"],
+    label: "n8n credential/workflow API",
   });
 
   const text = await response.text();
@@ -2458,6 +2467,8 @@ export async function syncCredentialToN8n(options: {
   credentialType?: string;
   credentialName?: string;
   slot?: any;
+  persistenceTable?: "developer_credentials" | "buyer_oauth_connections";
+  forceSyncNativeCredential?: boolean;
 }) {
   const {
     adminClient,
@@ -2468,6 +2479,8 @@ export async function syncCredentialToN8n(options: {
     credentialType: explicitCredentialType,
     credentialName: explicitCredentialName,
     slot,
+    persistenceTable = "developer_credentials",
+    forceSyncNativeCredential = false,
   } = options;
   const normalizedSlot = coerceNativeCredentialSlot(slot);
   const rawFields = await decryptCredentialPayload(credential.encrypted_payload, credentialSecret);
@@ -2503,6 +2516,7 @@ export async function syncCredentialToN8n(options: {
     cleanString(credential.n8n_credential_type) === credentialType;
 
   if (
+    !forceSyncNativeCredential &&
     existingCredentialMatchesType &&
     isNativeN8nCredentialSlot(normalizedSlot, credentialType) &&
     requiresNativeAccountSetup(normalizedSlot, credentialType)
@@ -2558,6 +2572,7 @@ export async function syncCredentialToN8n(options: {
             requestContext,
           );
         } catch (error) {
+          if (isN8nUnavailableError(error)) throw error;
           lastSyncError = error instanceof Error ? error : new Error(String(error));
           synced = null;
         }
@@ -2574,6 +2589,7 @@ export async function syncCredentialToN8n(options: {
         }, requestContext);
         if (synced) break;
       } catch (error) {
+        if (isN8nUnavailableError(error)) throw error;
         lastSyncError = error instanceof Error ? error : new Error(String(error));
         synced = null;
       }
@@ -2598,7 +2614,7 @@ export async function syncCredentialToN8n(options: {
   }
 
   const { data: updated, error } = await adminClient
-    .from("developer_credentials")
+    .from(persistenceTable)
     .update({
       n8n_credential_id: n8nId,
       n8n_credential_name: n8nName,
@@ -2968,7 +2984,7 @@ function scrubCredentialCarrierAssignments(parameters: any, slot: any) {
   return scrub(parameters);
 }
 
-function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: any) {
+export function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: any) {
   const normalizedSlot = coerceNativeCredentialSlot(slot);
   const workflow = normalizeWorkflowObject(workflowInput);
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
@@ -3060,7 +3076,7 @@ function applyCredentialToWorkflow(workflowInput: any, slot: any, credential: an
   return workflow;
 }
 
-function workflowNodeHasCredential(workflowInput: any, slot: any, credentialKey: string, credentialId = "") {
+export function workflowNodeHasCredential(workflowInput: any, slot: any, credentialKey: string, credentialId = "") {
   const normalizedSlot = coerceNativeCredentialSlot(slot);
   const workflow = normalizeWorkflowObject(workflowInput);
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
@@ -3389,6 +3405,7 @@ export async function bindAutomationCredentials(options: {
     try {
       liveN8nCredentialSummaries = await listN8nCredentialSummaries(n8nBaseUrl, n8nApiKey);
     } catch (error) {
+      if (isN8nUnavailableError(error)) throw error;
       liveN8nCredentialLookupFailed = true;
       console.warn("Could not list n8n credentials:", error instanceof Error ? error.message : error);
       liveN8nCredentialSummaries = [];
@@ -3558,6 +3575,7 @@ export async function bindAutomationCredentials(options: {
           slot,
         });
       } catch (error) {
+        if (isN8nUnavailableError(error)) throw error;
         await adminClient
           .from("developer_credentials")
           .update({
@@ -3823,6 +3841,7 @@ export async function bindAutomationCredentials(options: {
         product.n8n_workflow_name || product.title || product.slug || "Nexus Workflow",
       );
     } catch (error) {
+      if (isN8nUnavailableError(error)) throw error;
       hostedUpdateError = error instanceof Error ? error.message : String(error);
       errors.push({
         node_name: "Hosted n8n workflow",

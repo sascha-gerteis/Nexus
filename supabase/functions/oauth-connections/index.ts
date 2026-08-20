@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import {
   credentialFingerprint,
+  decryptCredentialPayload,
   encryptCredentialPayload,
   lastFourFromSecretPayload,
   providerPreset,
@@ -34,6 +35,17 @@ function randomToken() {
   return Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function base64Url(bytes: Uint8Array) {
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function pkceChallenge(verifier: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return base64Url(new Uint8Array(digest));
 }
 
 function googleRedirectUri() {
@@ -77,7 +89,9 @@ function callbackHtml(payload: Record<string, unknown>) {
     const payload = ${safePayload};
     try {
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: "nexus:google-oauth-complete", ...payload }, "*");
+        const eventType = payload.event_type || "nexus:google-oauth-complete";
+        const targetOrigin = payload.target_origin || ${JSON.stringify(nexusSiteUrl())};
+        window.opener.postMessage({ type: eventType, ...payload }, targetOrigin);
         setTimeout(() => window.close(), 900);
       }
     } catch (_error) {}
@@ -132,7 +146,7 @@ async function getOperatorContext(adminClient: any, userId: string) {
   return { profile, developer };
 }
 
-function scopesForGoogleCredential(provider: string, credentialType: string, requestedScope: string) {
+function scopesForGoogleCredential(provider: string, credentialType: string, requestedScope: string, includeDefaults = true) {
   const scopes = new Set<string>();
   const addMany = (value: string) => {
     cleanString(value)
@@ -148,6 +162,10 @@ function scopesForGoogleCredential(provider: string, credentialType: string, req
   const cleanProvider = lower(provider);
   const cleanType = lower(credentialType);
 
+  if (!includeDefaults) {
+    return Array.from(scopes).join(" ");
+  }
+
   if (cleanProvider === "gmail" || cleanType === "gmailoauth2") {
     addMany("https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify");
   } else if (cleanProvider === "google_drive" || cleanType === "googledriveoauth2api") {
@@ -160,6 +178,8 @@ function scopesForGoogleCredential(provider: string, credentialType: string, req
     addMany("https://www.googleapis.com/auth/analytics.readonly");
   } else if (cleanProvider === "google_ads" || cleanType === "googleadsoauth2api") {
     addMany("https://www.googleapis.com/auth/adwords");
+  } else if (cleanProvider === "youtube" || cleanType.includes("youtube")) {
+    addMany("https://www.googleapis.com/auth/youtube.readonly");
   } else {
     addMany("https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file");
   }
@@ -194,9 +214,14 @@ function friendlySetupError(message: string) {
   if (
     lowerMessage.includes("oauth_connections") ||
     lowerMessage.includes("oauth_connection_states") ||
+    lowerMessage.includes("buyer_oauth_connections") ||
+    lowerMessage.includes("buyer_oauth_connection_states") ||
     lowerMessage.includes("schema cache")
   ) {
-    return `${message} Run supabase/oauth_connections_install_or_patch.sql in the Supabase SQL editor, then deploy oauth-connections.`;
+    const patchFile = lowerMessage.includes("buyer_oauth_")
+      ? "supabase/buyer_oauth_connections_install_or_patch.sql"
+      : "supabase/oauth_connections_install_or_patch.sql";
+    return `${message} Run ${patchFile} in the Supabase SQL editor, then deploy oauth-connections.`;
   }
   return message;
 }
@@ -214,6 +239,312 @@ function normalizedProvider(provider: string, credentialType: string) {
 
 function normalizedCredentialType(provider: string, credentialType: string) {
   return cleanString(credentialType || providerPreset(provider)?.n8nCredentialType || "gmailOAuth2");
+}
+
+function normalizedRequirementPart(value: unknown) {
+  return lower(value).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function buyerRuntimeCredentialOwner(slot: any) {
+  const owner = lower(
+    slot?.runtime_credential_owner ||
+    slot?.runtimeCredentialOwner ||
+    slot?.credential_owner ||
+    slot?.owner,
+  );
+  if (slot?.buyer_owned === true || slot?.customer_owned === true || slot?.customer_connect === true) return "buyer";
+  return ["buyer", "customer", "customer_oauth"].includes(owner) ? "buyer" : "developer";
+}
+
+function supportedBuyerGoogleOAuthSlot(slot: any) {
+  if (buyerRuntimeCredentialOwner(slot) !== "buyer") return false;
+  const type = lower(slot?.n8n_credential_type || slot?.credential_key);
+  const provider = lower(slot?.provider || slot?.provider_label);
+  if (!type.includes("oauth")) return false;
+  return (
+    type === "gmailoauth2" ||
+    type.startsWith("google") ||
+    type.includes("youtube") ||
+    provider === "gmail" ||
+    provider.startsWith("google") ||
+    provider === "youtube"
+  );
+}
+
+function buyerOAuthRequirementKey(slot: any) {
+  const provider = normalizedRequirementPart(slot?.provider || slot?.provider_label || "google");
+  const credentialType = normalizedRequirementPart(slot?.n8n_credential_type || slot?.credential_key || "oauth");
+  return `${provider || "google"}:${credentialType || "oauth"}`;
+}
+
+function explicitSlotScopes(slot: any) {
+  const raw = slot?.runtime_oauth_scopes || slot?.oauth_scopes || slot?.scopes || slot?.scope || "";
+  return (Array.isArray(raw) ? raw : cleanString(raw).split(/[\s,]+/))
+    .map((value: unknown) => cleanString(value))
+    .filter(Boolean);
+}
+
+function exactBuyerGoogleScopes(slots: any[]) {
+  const scopes = new Set<string>(["openid", "email", "profile"]);
+  const add = (value: string) => scopes.add(value);
+  const types = slots.map((slot) => lower(slot?.n8n_credential_type || slot?.credential_key));
+
+  slots.flatMap(explicitSlotScopes).forEach(add);
+
+  if (types.some((type) => type === "gmailoauth2")) {
+    const operationText = lower(slots.map((slot) => [slot?.node_name, slot?.summary?.operation, slot?.summary?.title].filter(Boolean).join(" ")).join(" "));
+    if (/\b(send|draft|compose|reply)\b/.test(operationText) && !/\b(read|label|organize|search|get|list|watch|modify|delete|archive)\b/.test(operationText)) {
+      add("https://www.googleapis.com/auth/gmail.send");
+    } else {
+      add("https://www.googleapis.com/auth/gmail.modify");
+    }
+  }
+  if (types.some((type) => type === "googlesheetsoauth2api")) {
+    add("https://www.googleapis.com/auth/spreadsheets");
+    add("https://www.googleapis.com/auth/drive.file");
+  }
+  if (types.some((type) => type === "googledriveoauth2api")) add("https://www.googleapis.com/auth/drive");
+  if (types.some((type) => type === "googlecalendaroauth2api")) add("https://www.googleapis.com/auth/calendar");
+  if (types.some((type) => type === "googledocsoauth2api")) {
+    add("https://www.googleapis.com/auth/documents");
+    add("https://www.googleapis.com/auth/drive.file");
+  }
+  if (types.some((type) => type === "googleanalyticsoauth2api")) add("https://www.googleapis.com/auth/analytics.readonly");
+  if (types.some((type) => type === "googleadsoauth2api")) add("https://www.googleapis.com/auth/adwords");
+  if (types.some((type) => type.includes("youtube"))) add("https://www.googleapis.com/auth/youtube.readonly");
+
+  return Array.from(scopes).join(" ");
+}
+
+function buyerOAuthRequirements(product: any) {
+  const slots = Array.isArray(product?.developer_credential_requirements)
+    ? product.developer_credential_requirements.map(asObject).filter(supportedBuyerGoogleOAuthSlot)
+    : [];
+  const groups = new Map<string, any[]>();
+
+  for (const slot of slots) {
+    const key = buyerOAuthRequirementKey(slot);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)?.push(slot);
+  }
+
+  return Array.from(groups.entries()).map(([requirementKey, groupedSlots]) => {
+    const first = groupedSlots[0] || {};
+    const credentialType = cleanString(first.n8n_credential_type || first.credential_key);
+    const provider = normalizedProvider(cleanString(first.provider || "google"), credentialType);
+    return {
+      requirement_key: requirementKey,
+      provider,
+      provider_label: providerLabel(provider, credentialType),
+      n8n_credential_type: credentialType,
+      required: first.required !== false,
+      scopes: exactBuyerGoogleScopes(groupedSlots),
+      nodes: groupedSlots.map((slot) => ({
+        node_name: cleanString(slot.node_name),
+        node_type: cleanString(slot.node_type),
+        credential_key: cleanString(slot.credential_key || slot.n8n_credential_type),
+        n8n_credential_type: cleanString(slot.n8n_credential_type || slot.credential_key),
+      })),
+      slot: first,
+    };
+  });
+}
+
+async function loadBuyerOAuthTarget(adminClient: any, buyerId: string, customerAutomationId: string) {
+  if (!customerAutomationId) throw new Error("customer_automation_id is required.");
+  const { data: customerAutomation, error } = await adminClient
+    .from("customer_automations")
+    .select("id,buyer_id,automation_id,order_id")
+    .eq("id", customerAutomationId)
+    .maybeSingle();
+  if (error || !customerAutomation) throw new Error(error?.message || "Customer automation not found.");
+  if (cleanString(customerAutomation.buyer_id) !== cleanString(buyerId)) {
+    throw new Error("You do not have access to this customer automation.");
+  }
+
+  const { data: product, error: productError } = await adminClient
+    .from("automations")
+    .select("id,title,developer_credential_requirements")
+    .eq("id", customerAutomation.automation_id)
+    .maybeSingle();
+  if (productError || !product) throw new Error(productError?.message || "Product not found.");
+
+  return { customerAutomation, product, requirements: buyerOAuthRequirements(product) };
+}
+
+async function createBuyerOAuthState(adminClient: any, buyerId: string, body: Record<string, any>) {
+  const target = await loadBuyerOAuthTarget(adminClient, buyerId, cleanString(body.customer_automation_id));
+  const requirementKey = cleanString(body.requirement_key);
+  const requirement = target.requirements.find((item: any) => item.requirement_key === requirementKey);
+  if (!requirement) {
+    throw new Error("This product does not declare that account as buyer-connected. Ask Nexus to review the product credential ownership.");
+  }
+
+  const verifier = `${randomToken()}${randomToken()}`;
+  const challenge = await pkceChallenge(verifier);
+  const stateToken = `buyer-${crypto.randomUUID()}-${randomToken()}`;
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const label = `${requirement.provider_label} · ${cleanString(target.product.title) || "Nexus automation"}`;
+
+  const { data, error } = await adminClient
+    .from("buyer_oauth_connection_states")
+    .insert({
+      state_token: stateToken,
+      buyer_id: buyerId,
+      customer_automation_id: target.customerAutomation.id,
+      automation_id: target.product.id,
+      provider: requirement.provider,
+      requirement_key: requirement.requirement_key,
+      credential_type: requirement.n8n_credential_type,
+      label,
+      scope: scopesForGoogleCredential(requirement.provider, requirement.n8n_credential_type, requirement.scopes, false),
+      slot: { ...requirement.slot, nodes: requirement.nodes },
+      code_verifier: verifier,
+      code_challenge: challenge,
+      return_url: sanitizedReturnUrl(body.return_url),
+      expires_at: expiresAt,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function upsertBuyerOAuthConnection(adminClient: any, state: any, tokenData: any, userInfo: any, encryptedPayload: any) {
+  const { data: existing, error: existingError } = await adminClient
+    .from("buyer_oauth_connections")
+    .select("*")
+    .eq("customer_automation_id", state.customer_automation_id)
+    .eq("requirement_key", state.requirement_key)
+    .neq("status", "revoked")
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+
+  const email = lower(userInfo.email || tokenData.email);
+  const scopes = cleanString(tokenData.scope || state.scope).split(/\s+/).map((value) => value.trim()).filter(Boolean);
+  const patch = {
+    buyer_id: state.buyer_id,
+    customer_automation_id: state.customer_automation_id,
+    automation_id: state.automation_id,
+    provider: state.provider,
+    provider_label: providerLabel(state.provider, state.credential_type),
+    requirement_key: state.requirement_key,
+    label: state.label,
+    provider_account_email: email || null,
+    provider_account_id: cleanString(userInfo.sub || userInfo.id || email) || null,
+    scopes,
+    status: "active",
+    encrypted_payload: encryptedPayload,
+    token_expires_at: tokenData.expires_in ? new Date(Date.now() + Number(tokenData.expires_in) * 1000).toISOString() : null,
+    n8n_credential_type: state.credential_type,
+    n8n_credential_id: existing?.n8n_credential_id || null,
+    n8n_credential_name: existing?.n8n_credential_name || state.label,
+    last_error: null,
+    metadata: {
+      google_scope: tokenData.scope || state.scope,
+      redirect_uri: googleRedirectUri(),
+      nodes: asObject(state.slot).nodes || [],
+    },
+    updated_at: new Date().toISOString(),
+  };
+
+  const request = existing?.id
+    ? adminClient.from("buyer_oauth_connections").update(patch).eq("id", existing.id)
+    : adminClient.from("buyer_oauth_connections").insert(patch);
+  const { data, error } = await request.select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+function safeBuyerConnection(connection: any) {
+  return {
+    id: connection?.id || null,
+    customer_automation_id: connection?.customer_automation_id || null,
+    requirement_key: connection?.requirement_key || "",
+    provider: connection?.provider || "",
+    provider_label: connection?.provider_label || "",
+    label: connection?.label || "",
+    provider_account_email: connection?.provider_account_email || "",
+    scopes: Array.isArray(connection?.scopes) ? connection.scopes : [],
+    status: connection?.status || "not_connected",
+    n8n_credential_type: connection?.n8n_credential_type || "",
+    last_error: connection?.last_error || "",
+    created_at: connection?.created_at || null,
+    updated_at: connection?.updated_at || null,
+  };
+}
+
+async function listBuyerOAuthConnections(adminClient: any, buyerId: string, body: Record<string, any>) {
+  const target = await loadBuyerOAuthTarget(adminClient, buyerId, cleanString(body.customer_automation_id));
+  if (!target.requirements.length) {
+    return { requirements: [], connections: [] };
+  }
+  const { data, error } = await adminClient
+    .from("buyer_oauth_connections")
+    .select("id,customer_automation_id,requirement_key,provider,provider_label,label,provider_account_email,scopes,status,n8n_credential_type,last_error,created_at,updated_at")
+    .eq("buyer_id", buyerId)
+    .eq("customer_automation_id", target.customerAutomation.id)
+    .neq("status", "revoked")
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  return {
+    requirements: target.requirements.map((requirement: any) => ({
+      requirement_key: requirement.requirement_key,
+      provider: requirement.provider,
+      provider_label: requirement.provider_label,
+      n8n_credential_type: requirement.n8n_credential_type,
+      required: requirement.required,
+      nodes: requirement.nodes,
+    })),
+    connections: (data || []).map(safeBuyerConnection),
+  };
+}
+
+async function disconnectBuyerOAuthConnection(adminClient: any, buyerId: string, body: Record<string, any>) {
+  const target = await loadBuyerOAuthTarget(adminClient, buyerId, cleanString(body.customer_automation_id));
+  const requirementKey = cleanString(body.requirement_key);
+  const { data: connection, error } = await adminClient
+    .from("buyer_oauth_connections")
+    .select("*")
+    .eq("buyer_id", buyerId)
+    .eq("customer_automation_id", target.customerAutomation.id)
+    .eq("requirement_key", requirementKey)
+    .neq("status", "revoked")
+    .maybeSingle();
+  if (error || !connection) throw new Error(error?.message || "Connected account not found.");
+
+  try {
+    const credentialSecret = cleanString(env("NEXUS_CREDENTIAL_SECRET"));
+    if (credentialSecret && connection.encrypted_payload) {
+      const tokenPayload = await decryptCredentialPayload(connection.encrypted_payload, credentialSecret);
+      const revokeToken = cleanString(tokenPayload.refresh_token || tokenPayload.access_token);
+      if (revokeToken) {
+        await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(revokeToken)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+      }
+    }
+  } catch (revokeError) {
+    console.warn("Could not revoke Google token during buyer disconnect:", revokeError);
+  }
+
+  const { data: updated, error: updateError } = await adminClient
+    .from("buyer_oauth_connections")
+    .update({
+      status: "revoked",
+      encrypted_payload: null,
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", connection.id)
+    .select()
+    .single();
+  if (updateError) throw new Error(updateError.message);
+  return safeBuyerConnection(updated);
 }
 
 async function createOAuthState(adminClient: any, operator: any, body: Record<string, any>) {
@@ -263,10 +594,15 @@ function googleAuthUrl(state: any) {
     state: cleanString(state.state_token),
   });
 
+  if (cleanString(state.code_challenge)) {
+    params.set("code_challenge", cleanString(state.code_challenge));
+    params.set("code_challenge_method", "S256");
+  }
+
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-async function exchangeGoogleCode(code: string) {
+async function exchangeGoogleCode(code: string, codeVerifier = "") {
   const clientId = cleanString(env("GOOGLE_OAUTH_CLIENT_ID"));
   const clientSecret = cleanString(env("GOOGLE_OAUTH_CLIENT_SECRET"));
   if (!clientId || !clientSecret) {
@@ -282,6 +618,7 @@ async function exchangeGoogleCode(code: string) {
       client_secret: clientSecret,
       redirect_uri: googleRedirectUri(),
       grant_type: "authorization_code",
+      ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
     }),
   });
 
@@ -467,6 +804,107 @@ async function syncCredentialIfPossible(adminClient: any, state: any, credential
   }
 }
 
+function callbackTargetOrigin(returnUrl: unknown) {
+  try {
+    return new URL(cleanString(returnUrl)).origin;
+  } catch {
+    return nexusSiteUrl();
+  }
+}
+
+async function handleBuyerCallback(adminClient: any, url: URL, stateToken: string) {
+  const code = cleanString(url.searchParams.get("code"));
+  const googleError = cleanString(url.searchParams.get("error"));
+  const { data: state, error: stateError } = await adminClient
+    .from("buyer_oauth_connection_states")
+    .select("*")
+    .eq("state_token", stateToken)
+    .maybeSingle();
+
+  const eventPayload = {
+    event_type: "nexus:buyer-google-oauth-complete",
+    target_origin: callbackTargetOrigin(state?.return_url),
+    customer_automation_id: state?.customer_automation_id || "",
+    requirement_key: state?.requirement_key || "",
+  };
+
+  if (stateError || !state) {
+    return callbackHtml({ ...eventPayload, ok: false, error: "OAuth session was not found. Start the account connection again from Nexus." });
+  }
+  if (state.consumed_at || new Date(state.expires_at).getTime() < Date.now()) {
+    return callbackHtml({ ...eventPayload, ok: false, error: "OAuth session expired. Start the account connection again from Nexus." });
+  }
+  if (googleError) {
+    await adminClient.from("buyer_oauth_connection_states").update({ consumed_at: new Date().toISOString() }).eq("id", state.id);
+    return callbackHtml({ ...eventPayload, ok: false, error: googleError });
+  }
+  if (!code) {
+    return callbackHtml({ ...eventPayload, ok: false, error: "Google did not return an authorization code." });
+  }
+
+  try {
+    const tokenData = await exchangeGoogleCode(code, cleanString(state.code_verifier));
+    const accessToken = cleanString(tokenData.access_token);
+    const refreshToken = cleanString(tokenData.refresh_token);
+    if (!refreshToken) {
+      throw new Error("Google did not return offline access. Choose the account again and approve the requested access.");
+    }
+
+    const userInfo = await fetchGoogleUserInfo(accessToken);
+    const scope = cleanString(tokenData.scope || state.scope);
+    const tokenPayload: Record<string, any> = {
+      client_id: cleanString(env("GOOGLE_OAUTH_CLIENT_ID")),
+      client_secret: cleanString(env("GOOGLE_OAUTH_CLIENT_SECRET")),
+      refresh_token: refreshToken,
+      access_token: accessToken,
+      scope,
+      token_url: "https://oauth2.googleapis.com/token",
+      auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
+      redirect_uri: googleRedirectUri(),
+      connected_email: cleanString(userInfo.email),
+    };
+    const credentialSecret = cleanString(env("NEXUS_CREDENTIAL_SECRET"));
+    if (!credentialSecret) throw new Error("Missing NEXUS_CREDENTIAL_SECRET.");
+
+    const encryptedPayload = await encryptCredentialPayload(tokenPayload, credentialSecret);
+    let connection = await upsertBuyerOAuthConnection(adminClient, state, tokenData, userInfo, encryptedPayload);
+
+    try {
+      connection = await syncCredentialToN8n({
+        adminClient,
+        credential: connection,
+        credentialSecret,
+        n8nBaseUrl: cleanBaseUrl(env("N8N_BASE_URL")),
+        n8nApiKey: cleanString(env("N8N_API_KEY")),
+        credentialType: state.credential_type,
+        credentialName: state.label,
+        slot: asObject(state.slot),
+        persistenceTable: "buyer_oauth_connections",
+        forceSyncNativeCredential: true,
+      });
+    } catch (syncError) {
+      const syncMessage = syncError instanceof Error ? syncError.message : "Could not prepare the connected account in n8n.";
+      await adminClient
+        .from("buyer_oauth_connections")
+        .update({ status: "needs_attention", last_error: syncMessage, updated_at: new Date().toISOString() })
+        .eq("id", connection.id);
+      throw new Error(`Google connected, but Nexus could not prepare the workflow account: ${syncMessage}`);
+    }
+
+    await adminClient.from("buyer_oauth_connection_states").update({ consumed_at: new Date().toISOString() }).eq("id", state.id);
+    return callbackHtml({
+      ...eventPayload,
+      ok: true,
+      connection: safeBuyerConnection(connection),
+      message: `Connected ${cleanString(userInfo.email) || "Google account"}. Return to Nexus to finish setup.`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Google OAuth connection failed.";
+    await adminClient.from("buyer_oauth_connection_states").update({ consumed_at: new Date().toISOString() }).eq("id", state.id);
+    return callbackHtml({ ...eventPayload, ok: false, error: message });
+  }
+}
+
 async function handleCallback(adminClient: any, url: URL) {
   const stateToken = cleanString(url.searchParams.get("state"));
   const code = cleanString(url.searchParams.get("code"));
@@ -474,6 +912,10 @@ async function handleCallback(adminClient: any, url: URL) {
 
   if (!stateToken) {
     return callbackHtml({ ok: false, error: "Missing OAuth state. Start the connection again from Nexus." });
+  }
+
+  if (stateToken.startsWith("buyer-")) {
+    return handleBuyerCallback(adminClient, url, stateToken);
   }
 
   const { data: state, error: stateError } = await adminClient
@@ -634,11 +1076,32 @@ Deno.serve(async (req) => {
     const user = await getUserFromRequest(req, supabaseUrl, anonKey);
     if (!user) return errorResponse("Login required.", 401);
 
-    const operator = await getOperatorContext(adminClient, user.id);
-    if (!operator) return errorResponse("Admin or developer access required.", 403);
-
     const body = await req.json().catch(() => ({}));
     const action = cleanString(body.action || "list");
+
+    if (action === "start_buyer_google") {
+      const state = await createBuyerOAuthState(adminClient, user.id, body);
+      return jsonResponse({
+        ok: true,
+        auth_url: googleAuthUrl(state),
+        state_token: state.state_token,
+        redirect_uri: googleRedirectUri(),
+        expires_at: state.expires_at,
+      });
+    }
+
+    if (action === "list_buyer") {
+      const result = await listBuyerOAuthConnections(adminClient, user.id, body);
+      return jsonResponse({ ok: true, ...result });
+    }
+
+    if (action === "disconnect_buyer") {
+      const connection = await disconnectBuyerOAuthConnection(adminClient, user.id, body);
+      return jsonResponse({ ok: true, connection, message: "Account disconnected. Connect an account again before the automation can run." });
+    }
+
+    const operator = await getOperatorContext(adminClient, user.id);
+    if (!operator) return errorResponse("Admin or developer access required.", 403);
 
     if (action === "start_google") {
       const state = await createOAuthState(adminClient, operator, body);
