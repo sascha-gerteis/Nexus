@@ -133,7 +133,8 @@ function cleanSchema(value: unknown) {
     .map((item) => {
       if (!isRecord(item)) return null;
 
-      const name = cleanString(item.name)
+      const sourceName = cleanString(item.name || item.key || item.credential_key);
+      const name = sourceName
         .toLowerCase()
         .replace(/[^a-z0-9_]+/g, "_")
         .replace(/^_+|_+$/g, "")
@@ -142,8 +143,13 @@ function cleanSchema(value: unknown) {
       if (!name) return null;
 
       return {
+        // Keep supported schema metadata (ownership, grouping, skip rules,
+        // provider hints, original aliases, and guide metadata) intact across
+        // draft saves. Runtime consumers already ignore unknown metadata, while
+        // rebuilding only the basic fields here used to silently erase it.
+        ...item,
         name,
-        label: cleanString(item.label || item.name).slice(0, 120),
+        label: cleanString(item.label || sourceName).slice(0, 120),
         type: cleanString(item.type || "text").slice(0, 40),
         required: boolValue(item.required),
         placeholder: cleanString(item.placeholder).slice(0, 240),
@@ -505,6 +511,40 @@ function cleanCustomizations(value: unknown) {
 
 function stableJson(value: unknown) {
   return JSON.stringify(value || null);
+}
+
+function canonicalPersistenceValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalPersistenceValue);
+  if (isRecord(value)) {
+    return Object.keys(value)
+      .sort()
+      .reduce((output, key) => {
+        output[key] = canonicalPersistenceValue(value[key]);
+        return output;
+      }, {} as Record<string, unknown>);
+  }
+  return value;
+}
+
+function persistedValuesMatch(expected: unknown, actual: unknown) {
+  if (typeof expected === "number") return Number(actual) === expected;
+  if (typeof expected === "boolean") return Boolean(actual) === expected;
+  if (expected && typeof expected === "object") {
+    return JSON.stringify(canonicalPersistenceValue(actual)) ===
+      JSON.stringify(canonicalPersistenceValue(expected));
+  }
+  return (actual ?? null) === (expected ?? null);
+}
+
+function assertProductPayloadPersisted(payload: Record<string, unknown>, product: Record<string, unknown>) {
+  const missing = Object.entries(payload)
+    .filter(([key]) => key !== "updated_at")
+    .filter(([key, expected]) => !persistedValuesMatch(expected, product?.[key]))
+    .map(([key]) => key);
+
+  if (missing.length) {
+    throw new Error(`Product save could not be verified for: ${missing.join(", ")}. Refresh and try again.`);
+  }
 }
 
 function isPassingWorkflowTest(status: unknown) {
@@ -1282,6 +1322,7 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
       .single();
 
     if (error) throw new Error(error.message);
+    assertProductPayloadPersisted(payload, data);
 
     if (submitForReview) {
       await createProductReviewNotification(adminClient, developer, data);
@@ -1302,6 +1343,7 @@ async function saveProduct(adminClient: any, developer: any, body: Record<string
     .single();
 
   if (error) throw new Error(error.message);
+  assertProductPayloadPersisted(payload, data);
 
   if (submitForReview) {
     await createProductReviewNotification(adminClient, developer, data);

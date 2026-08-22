@@ -2216,6 +2216,19 @@ company_url = context["inputs"].get("company_url")
       return state.products.find((product) => String(product.id || "") === String(state.selectedProductId || "")) || null;
     }
 
+    function selectedProductStorageKey() {
+      const developerId = String(getDeveloper()?.id || "anonymous");
+      return `nexus:selected-developer-product:${developerId}`;
+    }
+
+    function restoredSelectedProductId() {
+      try {
+        return String(sessionStorage.getItem(selectedProductStorageKey()) || "");
+      } catch (_error) {
+        return "";
+      }
+    }
+
     function syncPythonEditorFromForm() {
       const form = document.getElementById("developerProductForm");
       if (!form) return;
@@ -2307,6 +2320,16 @@ company_url = context["inputs"].get("company_url")
 
     function setSelectedProductId(id = "") {
       state.selectedProductId = String(id || "");
+      try {
+        if (state.selectedProductId) {
+          sessionStorage.setItem(selectedProductStorageKey(), state.selectedProductId);
+        } else {
+          sessionStorage.removeItem(selectedProductStorageKey());
+        }
+      } catch (_error) {
+        // Storage can be unavailable in privacy-restricted browsers. The in-page
+        // state still works and the newest draft remains the safe fallback.
+      }
       const select = document.getElementById("developerCredentialProductSelect");
       if (select) select.value = state.selectedProductId;
     }
@@ -5970,12 +5993,19 @@ company_url = context["inputs"].get("company_url")
         NexusUI.toast(`${pausedCount} live product${pausedCount === 1 ? " was" : "s were"} paused because workflow runtime is not ready.`);
       }
 
+      if (!state.selectedProductId) {
+        const restoredId = restoredSelectedProductId();
+        if (restoredId && state.products.some((product) => String(product.id || "") === restoredId)) {
+          state.selectedProductId = restoredId;
+        }
+      }
+
       if (state.selectedProductId && !state.products.some((product) => String(product.id || "") === String(state.selectedProductId))) {
-        state.selectedProductId = "";
+        setSelectedProductId("");
       }
 
       if (!state.selectedProductId && state.products.length) {
-        state.selectedProductId = state.products[0].id || "";
+        setSelectedProductId(state.products[0].id || "");
       }
 
       renderProducts();
